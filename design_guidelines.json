@@ -1,0 +1,143 @@
+{
+  "identity": {
+    "name": "Task Accountability Manager",
+    "persona": "E1: The Anti-AI Designer",
+    "tone": "Serious, Disciplined, High-Contrast, Swiss-Style",
+    "archetype": "Swiss & High-Contrast"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Outfit",
+      "body": "Inter",
+      "mono": "JetBrains Mono"
+    },
+    "weights": {
+      "heading": "600",
+      "body": "400",
+      "bold": "700"
+    },
+    "sizes": {
+      "h1": "text-4xl md:text-5xl tracking-tight",
+      "h2": "text-3xl tracking-tight",
+      "h3": "text-2xl tracking-tight",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-muted-foreground"
+    },
+    "imports": [
+      "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap');"
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": "#ffffff",
+      "foreground": "#09090b",
+      "card": "#ffffff",
+      "card_foreground": "#09090b",
+      "popover": "#ffffff",
+      "popover_foreground": "#09090b",
+      "primary": "#18181b",
+      "primary_foreground": "#fafafa",
+      "secondary": "#f4f4f5",
+      "secondary_foreground": "#18181b",
+      "muted": "#f4f4f5",
+      "muted_foreground": "#71717a",
+      "accent": "#f4f4f5",
+      "accent_foreground": "#18181b",
+      "destructive": "#ef4444",
+      "destructive_foreground": "#fafafa",
+      "border": "#e4e4e7",
+      "input": "#e4e4e7",
+      "ring": "#18181b",
+      "chart_1": "#18181b",
+      "chart_2": "#71717a",
+      "chart_3": "#a1a1aa",
+      "chart_4": "#d4d4d8",
+      "chart_5": "#e4e4e7"
+    },
+    "status": {
+      "success": "#22c55e",
+      "warning": "#f97316",
+      "error": "#ef4444",
+      "info": "#3b82f6"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-6 md:p-12",
+      "section_gap": "gap-8 md:gap-12",
+      "card_padding": "p-6"
+    },
+    "grids": {
+      "dashboard_manager": "grid grid-cols-1 md:grid-cols-12 gap-6",
+      "dashboard_admin": "grid grid-cols-1 md:grid-cols-4 gap-6",
+      "form": "max-w-2xl mx-auto space-y-8"
+    },
+    "border_radius": {
+      "default": "rounded-none",
+      "card": "rounded-sm",
+      "button": "rounded-md",
+      "input": "rounded-md"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
+      "ghost": "hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95"
+    },
+    "cards": {
+      "default": "bg-card text-card-foreground border border-border shadow-sm rounded-sm p-6",
+      "interactive": "bg-card text-card-foreground border border-border shadow-sm rounded-sm p-6 hover:border-primary/50 transition-colors cursor-pointer"
+    },
+    "inputs": {
+      "default": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "badges": {
+      "default": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+      "secondary": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      "outline": "text-foreground inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "bg-white/80 backdrop-blur-md border-b border-white/20",
+    "noise_texture": "opacity-5 pointer-events-none fixed inset-0 z-50 mix-blend-overlay",
+    "grid_lines": "bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"
+  },
+  "motion": {
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -20 },
+      "transition": { "duration": 0.3, "ease": "easeOut" }
+    },
+    "list_item": {
+      "initial": { "opacity": 0, "x": -20 },
+      "animate": { "opacity": 1, "x": 0 },
+      "transition": { "duration": 0.2 }
+    }
+  },
+  "image_urls": {
+    "login_background": "https://images.pexels.com/photos/1106476/pexels-photo-1106476.jpeg",
+    "placeholder_avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+  },
+  "instructions_to_main_agent": [
+    "Implement the 'Swiss & High-Contrast' theme strictly. Use black and white for 90% of the UI.",
+    "Use the 'Outfit' font for all headings and 'Inter' for body text.",
+    "For the Dashboard, use the 'Bento' grid layout defined in the guidelines.",
+    "Use 'recharts' for all charts and data visualization. Keep charts minimal (monochrome with 1 accent color).",
+    "Ensure all interactive elements have 'data-testid' attributes.",
+    "Use 'framer-motion' for subtle entrance animations on dashboard cards.",
+    "Do not use gradients. Use solid colors and borders.",
+    "For the Login page, use a split layout: Left side form, Right side image (use the login_background URL).",
+    "Implement a 'Trends & Insights' page using a line chart to show task completion speed over time."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI slop' aesthetics (generic centered layouts, gradients).",
+    "Use generous spacing (p-6, p-8, p-12).",
+    "Ensure high contrast for text (WCAG AA/AAA).",
+    "Use 'sonner' for toast notifications.",
+    "Do not use 'Inter' for headings.",
+    "Use 'lucide-react' for icons."
+  ]
+}
