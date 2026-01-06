@@ -1,34 +1,48 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+.task-card-hover {
+    transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.task-card-hover:hover {
+    border-color: hsl(240 6% 10% / 0.5);
+    transform: translateY(-2px);
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
+.status-badge-pending {
+    background-color: hsl(45 93% 47%);
     color: white;
 }
 
-.App-link {
-    color: #61dafb;
+.status-badge-accepted {
+    background-color: hsl(142 71% 45%);
+    color: white;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.status-badge-declined {
+    background-color: hsl(0 84% 60%);
+    color: white;
+}
+
+.status-badge-counter {
+    background-color: hsl(217 91% 60%);
+    color: white;
+}
+
+.status-badge-completed {
+    background-color: hsl(240 6% 10%);
+    color: white;
+}
+
+.priority-high {
+    color: hsl(0 84% 60%);
+    font-weight: 600;
+}
+
+.priority-medium {
+    color: hsl(45 93% 47%);
+    font-weight: 600;
+}
+
+.priority-low {
+    color: hsl(142 71% 45%);
+    font-weight: 600;
 }
