@@ -185,26 +185,33 @@ async def register(user: UserCreate):
     # Extract domain from email
     domain = user.email.split('@')[1]
     
-    # Check if this is the first user (admin)
-    user_count = await db.users.count_documents({})
-    
-    if user_count == 0:
-        # First user must provide admin code
-        if not user.admin_code or user.admin_code != "ADMIN2025":
-            raise HTTPException(status_code=400, detail="Invalid admin code")
+    # Check if admin code is provided
+    if user.admin_code and user.admin_code == "ADMIN2025":
+        # Valid admin code - create as admin
         role = "admin"
-        company_domain = domain
-    else:
-        # Subsequent users must match company domain
-        first_user = await db.users.find_one({"role": "admin"}, {"_id": 0})
-        if not first_user:
-            raise HTTPException(status_code=400, detail="System configuration error")
         
-        if domain != first_user["company_domain"]:
-            raise HTTPException(status_code=400, detail=f"Email must be from {first_user['company_domain']} domain")
+        # Check if there's already an admin to get company domain
+        existing_admin = await db.users.find_one({"role": "admin"}, {"_id": 0})
+        if existing_admin:
+            # Must match existing company domain
+            if domain != existing_admin["company_domain"]:
+                raise HTTPException(status_code=400, detail=f"Email must be from {existing_admin['company_domain']} domain")
+            company_domain = existing_admin["company_domain"]
+        else:
+            # First admin - set company domain
+            company_domain = domain
+    else:
+        # No admin code - create as manager
+        # Must have an existing admin to get company domain
+        existing_admin = await db.users.find_one({"role": "admin"}, {"_id": 0})
+        if not existing_admin:
+            raise HTTPException(status_code=400, detail="Please register first admin with admin code ADMIN2025")
+        
+        if domain != existing_admin["company_domain"]:
+            raise HTTPException(status_code=400, detail=f"Email must be from {existing_admin['company_domain']} domain")
         
         role = "manager"
-        company_domain = first_user["company_domain"]
+        company_domain = existing_admin["company_domain"]
     
     # Create user
     user_id = str(uuid.uuid4())
