@@ -1,10 +1,10 @@
-.task-card-hover {
-    transition: border-color 0.2s ease, transform 0.2s ease;
+.task-card {
+    transition: all 0.3s ease;
 }
 
-.task-card-hover:hover {
-    border-color: hsl(240 6% 10% / 0.5);
+.task-card:hover {
     transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
 }
 
 .status-badge-pending {
@@ -23,12 +23,12 @@
 }
 
 .status-badge-counter {
-    background-color: hsl(217 91% 60%);
+    background-color: hsl(190 90% 40%);
     color: white;
 }
 
 .status-badge-completed {
-    background-color: hsl(240 6% 10%);
+    background-color: hsl(230 60% 55%);
     color: white;
 }
 
@@ -45,4 +45,48 @@
 .priority-low {
     color: hsl(142 71% 45%);
     font-weight: 600;
+}
+
+.gradient-mesh {
+    background: radial-gradient(ellipse at top right, hsl(230 60% 95%) 0%, hsl(210 20% 98%) 50%, white 100%);
+}
+
+.glass-header {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.subscription-badge-free {
+    background: linear-gradient(135deg, hsl(215 16% 47%) 0%, hsl(222 47% 11%) 100%);
+    color: white;
+}
+
+.subscription-badge-pro {
+    background: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(230 60% 55%) 100%);
+    color: white;
+}
+
+/* Onboarding walkthrough styles */
+.walkthrough-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9998;
+}
+
+.walkthrough-spotlight {
+    position: relative;
+    z-index: 9999;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
+}
+
+.walkthrough-tooltip {
+    position: absolute;
+    z-index: 10000;
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+    max-width: 320px;
 }
