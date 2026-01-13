@@ -56,6 +56,8 @@ class UserResponse(BaseModel):
     email: str
     subscription_tier: str
     email_verified: bool
+    is_team_owner: Optional[bool] = False
+    team_owner_email: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
