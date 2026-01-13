@@ -1,18 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import { Toaster } from '@/components/ui/sonner';
-import { toast } from 'sonner';
 import '@/App.css';
 
+import RegistrationPage from '@/pages/RegistrationPage';
+import VerifyEmailPage from '@/pages/VerifyEmailPage';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPassword from '@/pages/ForgotPassword';
-import ManagerDashboard from '@/pages/ManagerDashboard';
-import AdminDashboard from '@/pages/AdminDashboard';
-import CreateTask from '@/pages/CreateTask';
+import TaskHub from '@/pages/TaskHub';
 import TaskDetail from '@/pages/TaskDetail';
-import PerformancePage from '@/pages/PerformancePage';
-import TrendsPage from '@/pages/TrendsPage';
+import AnalyticsPage from '@/pages/AnalyticsPage';
+import SettingsPage from '@/pages/SettingsPage';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -68,29 +67,25 @@ const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+        <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser: fetchCurrentUser }}>
             {children}
         </AuthContext.Provider>
     );
 };
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-lg">Loading...</div>
+            <div className="flex items-center justify-center min-h-screen gradient-mesh">
+                <div className="text-lg font-medium">Loading...</div>
             </div>
         );
     }
 
     if (!user) {
         return <Navigate to="/login" replace />;
-    }
-
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-        return <Navigate to="/" replace />;
     }
 
     return children;
@@ -101,13 +96,15 @@ function App() {
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
+                    <Route path="/register" element={<RegistrationPage />} />
+                    <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route
                         path="/"
                         element={
                             <ProtectedRoute>
-                                <DashboardRouter />
+                                <TaskHub />
                             </ProtectedRoute>
                         }
                     />
@@ -120,26 +117,18 @@ function App() {
                         }
                     />
                     <Route
-                        path="/admin/create-task"
+                        path="/analytics"
                         element={
-                            <ProtectedRoute allowedRoles={['admin']}>
-                                <CreateTask />
+                            <ProtectedRoute>
+                                <AnalyticsPage />
                             </ProtectedRoute>
                         }
                     />
                     <Route
-                        path="/admin/performance"
+                        path="/settings"
                         element={
-                            <ProtectedRoute allowedRoles={['admin']}>
-                                <PerformancePage />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/trends"
-                        element={
-                            <ProtectedRoute allowedRoles={['admin']}>
-                                <TrendsPage />
+                            <ProtectedRoute>
+                                <SettingsPage />
                             </ProtectedRoute>
                         }
                     />
@@ -149,11 +138,6 @@ function App() {
         </AuthProvider>
     );
 }
-
-const DashboardRouter = () => {
-    const { user } = useAuth();
-    return user?.role === 'admin' ? <AdminDashboard /> : <ManagerDashboard />;
-};
 
 export default App;
 export { API };
