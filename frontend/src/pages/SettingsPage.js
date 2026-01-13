@@ -230,8 +230,12 @@ const SettingsPage = () => {
                                             </p>
                                         </div>
                                     ) : (
-                                        <Button className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-indigo-600 hover:bg-indigo-700">
-                                            Upgrade to Teams
+                                        <Button 
+                                            onClick={() => handleUpgrade('teams')}
+                                            disabled={upgrading !== null}
+                                            className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-indigo-600 hover:bg-indigo-700"
+                                        >
+                                            {upgrading === 'teams' ? 'Processing...' : 'Upgrade to Teams'}
                                         </Button>
                                     )}
                                 </CardContent>
