@@ -135,6 +135,14 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+                    <Route
+                        path="/team"
+                        element={
+                            <ProtectedRoute>
+                                <TeamManagementPage />
+                            </ProtectedRoute>
+                        }
+                    />
                 </Routes>
             </BrowserRouter>
             <Toaster position="top-right" />
