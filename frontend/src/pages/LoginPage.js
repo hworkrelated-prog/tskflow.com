@@ -148,6 +148,18 @@ const LoginPage = () => {
                                     {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
                                 </button>
                             </div>
+                            {isLogin && (
+                                <div className="mt-2 text-center">
+                                    <button
+                                        data-testid="forgot-password-link"
+                                        type="button"
+                                        className="text-sm text-muted-foreground hover:text-foreground underline"
+                                        onClick={() => navigate('/forgot-password')}
+                                    >
+                                        Forgot password?
+                                    </button>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </motion.div>
