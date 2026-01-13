@@ -470,7 +470,24 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
 
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
 async def get_dashboard(current_user: dict = Depends(get_current_user)):
-    all_tasks = await db.tasks.find({}, {"_id": 0}).to_list(1000)
+    # For Teams tier, only show tasks within company domain
+    if current_user["subscription_tier"] == "teams":
+        # Get all users from same domain
+        domain_users = await db.users.find(
+            {"company_domain": current_user["company_domain"]}, 
+            {"_id": 0}
+        ).to_list(1000)
+        domain_user_ids = [u["id"] for u in domain_users]
+        
+        # Filter tasks to only those involving domain users
+        all_tasks = await db.tasks.find({
+            "$or": [
+                {"assigned_to": {"$in": domain_user_ids}},
+                {"created_by": {"$in": domain_user_ids}}
+            ]
+        }, {"_id": 0}).to_list(1000)
+    else:
+        all_tasks = await db.tasks.find({}, {"_id": 0}).to_list(1000)
     
     assigned_to_me = []
     self_assigned = []
