@@ -192,11 +192,30 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Generate verification code
-    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    
     # Extract company domain
     company_domain = user.email.split('@')[1]
+    
+    # Check if there's a team owner with this domain
+    team_owner = await db.users.find_one({
+        "company_domain": company_domain,
+        "subscription_tier": "teams",
+        "is_team_owner": True
+    }, {"_id": 0})
+    
+    # Determine subscription tier
+    if team_owner:
+        # Auto-enroll in team if team owner exists
+        subscription_tier = "teams"
+        is_team_owner = False
+        team_owner_email = team_owner["email"]
+    else:
+        # New user, starts on free
+        subscription_tier = "free"
+        is_team_owner = False
+        team_owner_email = None
+    
+    # Generate verification code
+    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
     
     # Create user
     user_id = str(uuid.uuid4())
@@ -205,10 +224,13 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         "name": user.name,
         "email": user.email,
         "password_hash": get_password_hash(user.password),
-        "subscription_tier": "free",
+        "subscription_tier": subscription_tier,
         "company_domain": company_domain,
         "email_verified": False,
         "verification_code": verification_code,
+        "is_team_owner": is_team_owner,
+        "team_owner_email": team_owner_email,
+        "last_active": get_pst_now().isoformat(),
         "created_at": get_pst_now().isoformat()
     }
     
