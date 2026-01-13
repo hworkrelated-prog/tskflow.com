@@ -16,7 +16,8 @@ const SettingsPage = () => {
             'Up to 5 active tasks',
             'Basic task management',
             'Email notifications',
-            'Task analytics'
+            'Task analytics',
+            'Assign to anyone'
         ],
         pro: [
             'Unlimited tasks',
@@ -24,7 +25,16 @@ const SettingsPage = () => {
             'Advanced analytics',
             'Custom categories',
             'Export reports',
-            'Team collaboration'
+            'Assign to anyone'
+        ],
+        teams: [
+            'Everything in Pro',
+            'Team workspace (domain-based)',
+            'Collaborate within company only',
+            'Team analytics dashboard',
+            'Shared task visibility',
+            'Admin controls',
+            'Dedicated account manager'
         ]
     };
 
