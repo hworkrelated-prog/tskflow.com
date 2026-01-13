@@ -87,6 +87,11 @@ const SettingsPage = () => {
                                             <Crown className="w-4 h-4" />
                                             PRO
                                         </Badge>
+                                    ) : user?.subscription_tier === 'teams' ? (
+                                        <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
+                                            <Users className="w-4 h-4" />
+                                            TEAMS
+                                        </Badge>
                                     ) : (
                                         <Badge className="subscription-badge-free rounded-full px-3 py-1 text-sm font-semibold">
                                             FREE
