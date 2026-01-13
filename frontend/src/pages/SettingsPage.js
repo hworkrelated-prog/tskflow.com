@@ -184,8 +184,12 @@ const SettingsPage = () => {
                                             Current Plan
                                         </Badge>
                                     ) : (
-                                        <Button className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5">
-                                            Upgrade to Pro
+                                        <Button 
+                                            onClick={() => handleUpgrade('pro')}
+                                            disabled={upgrading !== null}
+                                            className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                                        >
+                                            {upgrading === 'pro' ? 'Processing...' : 'Upgrade to Pro'}
                                         </Button>
                                     )}
                                 </CardContent>
