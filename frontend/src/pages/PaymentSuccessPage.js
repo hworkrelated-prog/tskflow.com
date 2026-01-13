@@ -61,39 +61,39 @@ const PaymentSuccessPage = () => {
     };
 
     return (
-        <div className=\"min-h-screen gradient-mesh flex items-center justify-center p-6\">
+        <div className="min-h-screen gradient-mesh flex items-center justify-center p-6">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5 }}
-                className=\"w-full max-w-md\"
+                className="w-full max-w-md"
             >
-                <Card className=\"border-2 shadow-soft rounded-2xl\">
-                    <CardHeader className=\"text-center\">
+                <Card className="border-2 shadow-soft rounded-2xl">
+                    <CardHeader className="text-center">
                         {status === 'checking' && (
                             <>
-                                <div className=\"mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4\">
-                                    <Loader2 className=\"w-8 h-8 text-blue-600 animate-spin\" />
+                                <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                                 </div>
-                                <CardTitle className=\"text-2xl\">Verifying Payment...</CardTitle>
-                                <p className=\"text-muted-foreground mt-2\">Please wait while we confirm your subscription</p>
+                                <CardTitle className="text-2xl">Verifying Payment...</CardTitle>
+                                <p className="text-muted-foreground mt-2">Please wait while we confirm your subscription</p>
                             </>
                         )}
 
                         {status === 'success' && (
                             <>
-                                <div className=\"mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4\">
-                                    <CheckCircle className=\"w-8 h-8 text-green-600\" />
+                                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                                    <CheckCircle className="w-8 h-8 text-green-600" />
                                 </div>
-                                <CardTitle className=\"text-2xl text-green-700\">Payment Successful!</CardTitle>
-                                <p className=\"text-muted-foreground mt-2\">Your subscription has been activated</p>
+                                <CardTitle className="text-2xl text-green-700">Payment Successful!</CardTitle>
+                                <p className="text-muted-foreground mt-2">Your subscription has been activated</p>
                             </>
                         )}
 
                         {(status === 'timeout' || status === 'error' || status === 'expired') && (
                             <>
-                                <CardTitle className=\"text-2xl text-red-700\">Payment Verification Failed</CardTitle>
-                                <p className=\"text-muted-foreground mt-2\">
+                                <CardTitle className="text-2xl text-red-700">Payment Verification Failed</CardTitle>
+                                <p className="text-muted-foreground mt-2">
                                     {status === 'expired' ? 'Session expired. Please try again.' : 'Unable to verify payment. Please check your email for confirmation.'}
                                 </p>
                             </>
@@ -101,13 +101,13 @@ const PaymentSuccessPage = () => {
                     </CardHeader>
                     <CardContent>
                         {status === 'success' && (
-                            <p className=\"text-center text-sm text-muted-foreground\">Redirecting to dashboard in 3 seconds...</p>
+                            <p className="text-center text-sm text-muted-foreground">Redirecting to dashboard in 3 seconds...</p>
                         )}
 
                         {(status === 'timeout' || status === 'error' || status === 'expired') && (
                             <Button
                                 onClick={() => navigate('/settings')}
-                                className=\"w-full rounded-full\"
+                                className="w-full rounded-full"
                             >
                                 Back to Settings
                             </Button>
