@@ -347,7 +347,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         name=current_user["name"],
         email=current_user["email"],
         subscription_tier=current_user["subscription_tier"],
-        email_verified=current_user["email_verified"]
+        email_verified=current_user["email_verified"],
+        is_team_owner=current_user.get("is_team_owner", False),
+        team_owner_email=current_user.get("team_owner_email")
     )
 
 @api_router.post("/auth/forgot-password")
