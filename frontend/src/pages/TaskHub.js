@@ -101,7 +101,12 @@ const TaskHub = () => {
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <h1 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>Task Hub</h1>
-                        {user?.subscription_tier === 'pro' ? (
+                        {user?.subscription_tier === 'teams' ? (
+                            <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
+                                <Crown className="w-3 h-3" />
+                                TEAMS
+                            </Badge>
+                        ) : user?.subscription_tier === 'pro' ? (
                             <Badge className="subscription-badge-pro rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 PRO
