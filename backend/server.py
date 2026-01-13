@@ -686,7 +686,15 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
 
 @api_router.get("/users")
 async def get_users(current_user: dict = Depends(get_current_user)):
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0, "verification_code": 0}).to_list(1000)
+    # For Teams tier, only show users from same company domain
+    if current_user["subscription_tier"] == "teams":
+        users = await db.users.find(
+            {"company_domain": current_user["company_domain"]}, 
+            {"_id": 0, "password_hash": 0, "verification_code": 0}
+        ).to_list(1000)
+    else:
+        # Free and Pro can see all users
+        users = await db.users.find({}, {"_id": 0, "password_hash": 0, "verification_code": 0}).to_list(1000)
     return users
 
 # Include router
