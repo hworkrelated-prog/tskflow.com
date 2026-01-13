@@ -1,22 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth, API } from '@/App';
+import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { LogIn } from 'lucide-react';
 
-const LoginPage = () => {
+const RegistrationPage = () => {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
+        name: '',
         email: '',
         password: ''
     });
-    const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
@@ -24,24 +23,24 @@ const LoginPage = () => {
         setLoading(true);
 
         try {
-            const response = await axios.post(`${API}/auth/login`, formData);
-            login(response.data.access_token, response.data.user);
-            toast.success('Welcome back!');
-            navigate('/');
-        } catch (error) {
-            if (error.response?.status === 403) {
-                toast.error('Please verify your email first');
-                navigate('/verify-email', { state: { email: formData.email } });
+            const response = await axios.post(`${API}/auth/register`, formData);
+            
+            if (response.data.verification_code) {
+                toast.success(`Verification code: ${response.data.verification_code}`);
             } else {
-                toast.error(error.response?.data?.detail || 'Login failed');
+                toast.success('Verification code sent to your email');
             }
+            
+            navigate('/verify-email', { state: { email: formData.email } });
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Registration failed');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div data-testid="login-page" className="min-h-screen gradient-mesh flex items-center justify-center p-6">
+        <div data-testid="registration-page" className="min-h-screen gradient-mesh flex items-center justify-center p-6">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -50,18 +49,28 @@ const LoginPage = () => {
             >
                 <Card className="border-2 shadow-soft rounded-2xl">
                     <CardHeader className="space-y-2 text-center">
-                        <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <LogIn className="w-8 h-8 text-primary" />
-                        </div>
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome Back
+                            Welcome to Task Hub
                         </CardTitle>
                         <CardDescription className="text-base">
-                            Sign in to your Task Hub account
+                            Create your account to start managing tasks
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="name">Full Name</Label>
+                                <Input
+                                    id="name"
+                                    data-testid="name-input"
+                                    type="text"
+                                    placeholder="John Doe"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    required
+                                    className="rounded-xl h-12"
+                                />
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
                                 <Input
@@ -94,25 +103,17 @@ const LoginPage = () => {
                                 className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
                                 disabled={loading}
                             >
-                                {loading ? 'Signing in...' : 'Sign In'}
+                                {loading ? 'Creating account...' : 'Create Account'}
                             </Button>
                         </form>
-                        <div className="mt-6 text-center space-y-3">
+                        <div className="mt-6 text-center">
                             <button
-                                data-testid="forgot-password-link"
+                                data-testid="go-to-login"
                                 type="button"
-                                className="text-sm text-muted-foreground hover:text-foreground underline block"
-                                onClick={() => navigate('/forgot-password')}
+                                className="text-sm text-muted-foreground hover:text-foreground underline"
+                                onClick={() => navigate('/login')}
                             >
-                                Forgot password?
-                            </button>
-                            <button
-                                data-testid="go-to-register"
-                                type="button"
-                                className="text-sm text-muted-foreground hover:text-foreground underline block"
-                                onClick={() => navigate('/register')}
-                            >
-                                Don't have an account? Sign up
+                                Already have an account? Sign in
                             </button>
                         </div>
                     </CardContent>
@@ -122,4 +123,4 @@ const LoginPage = () => {
     );
 };
 
-export default LoginPage;
+export default RegistrationPage;
