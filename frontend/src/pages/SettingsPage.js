@@ -12,6 +12,23 @@ import { toast } from 'sonner';
 const SettingsPage = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const [upgrading, setUpgrading] = React.useState(null);
+
+    const handleUpgrade = async (packageType) => {
+        setUpgrading(packageType);
+        try {
+            const response = await axios.post(`${API}/payments/create-checkout`, {
+                package: packageType,
+                origin_url: window.location.origin
+            });
+            
+            // Redirect to Stripe checkout
+            window.location.href = response.data.url;
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Failed to create checkout session');
+            setUpgrading(null);
+        }
+    };
 
     const features = {
         free: [
