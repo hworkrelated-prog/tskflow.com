@@ -396,7 +396,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
             "status": {"$ne": "Completed"}
         })
         if active_tasks >= 5:
-            raise HTTPException(status_code=403, detail="Free tier limit reached. Upgrade to Pro for unlimited tasks.")
+            raise HTTPException(status_code=403, detail="Free tier limit reached. Upgrade to Pro or Teams for unlimited tasks.")
     
     # Get assigned user
     if task.assigned_to == "self":
@@ -406,6 +406,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         assigned_user = await db.users.find_one({"id": task.assigned_to}, {"_id": 0})
         if not assigned_user:
             raise HTTPException(status_code=404, detail="Assigned user not found")
+        
+        # For Teams tier, enforce domain restriction
+        if current_user["subscription_tier"] == "teams":
+            if assigned_user["company_domain"] != current_user["company_domain"]:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Teams plan: Can only assign tasks to users from your company domain ({current_user['company_domain']})"
+                )
+        
         assigned_to_id = task.assigned_to
     
     task_id = str(uuid.uuid4())
