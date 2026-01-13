@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import '@/App.css';
 
 import LoginPage from '@/pages/LoginPage';
+import ForgotPassword from '@/pages/ForgotPassword';
 import ManagerDashboard from '@/pages/ManagerDashboard';
 import AdminDashboard from '@/pages/AdminDashboard';
 import CreateTask from '@/pages/CreateTask';
