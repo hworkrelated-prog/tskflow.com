@@ -99,7 +99,7 @@ const SettingsPage = () => {
 
                     <div>
                         <h2 className="text-3xl font-bold mb-6 text-center" style={{ fontFamily: 'Outfit' }}>Subscription Plans</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Free Plan */}
                             <Card className={`border-2 rounded-2xl ${
                                 user?.subscription_tier === 'free' 
@@ -118,7 +118,7 @@ const SettingsPage = () => {
                                         {features.free.map((feature, index) => (
                                             <li key={index} className="flex items-center gap-2">
                                                 <Check className="w-5 h-5 text-green-600" />
-                                                <span>{feature}</span>
+                                                <span className="text-sm">{feature}</span>
                                             </li>
                                         ))}
                                     </ul>
@@ -151,7 +151,7 @@ const SettingsPage = () => {
                                         {features.pro.map((feature, index) => (
                                             <li key={index} className="flex items-center gap-2">
                                                 <Check className="w-5 h-5 text-green-600" />
-                                                <span>{feature}</span>
+                                                <span className="text-sm">{feature}</span>
                                             </li>
                                         ))}
                                     </ul>
@@ -162,6 +162,48 @@ const SettingsPage = () => {
                                     ) : (
                                         <Button className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5">
                                             Upgrade to Pro
+                                        </Button>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* Teams Plan */}
+                            <Card className={`border-2 rounded-2xl ${
+                                user?.subscription_tier === 'teams' 
+                                    ? 'border-primary shadow-lg' 
+                                    : 'border-border shadow-soft'
+                            }`}>
+                                <CardHeader>
+                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <Users className="w-6 h-6 text-indigo-600" />
+                                        Teams
+                                    </CardTitle>
+                                    <CardDescription>
+                                        <span className="text-4xl font-bold" style={{ fontFamily: 'Outfit' }}>$12</span>
+                                        <span className="text-muted-foreground">/user/month</span>
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <ul className="space-y-3">
+                                        {features.teams.map((feature, index) => (
+                                            <li key={index} className="flex items-center gap-2">
+                                                <Check className="w-5 h-5 text-green-600" />
+                                                <span className="text-sm">{feature}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {user?.subscription_tier === 'teams' ? (
+                                        <div className="space-y-2">
+                                            <Badge className="w-full justify-center py-2 rounded-full bg-indigo-600 text-white">
+                                                Current Plan
+                                            </Badge>
+                                            <p className="text-xs text-center text-muted-foreground">
+                                                Domain: {user?.email?.split('@')[1]}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <Button className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-indigo-600 hover:bg-indigo-700">
+                                            Upgrade to Teams
                                         </Button>
                                     )}
                                 </CardContent>
