@@ -101,15 +101,15 @@ const SettingsPage = () => {
                             <div>
                                 <p className="text-sm text-muted-foreground">Current Plan</p>
                                 <div className="flex items-center gap-2 mt-1">
-                                    {user?.subscription_tier === 'pro' ? (
-                                        <Badge className="subscription-badge-pro rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
-                                            <Crown className="w-4 h-4" />
-                                            PRO
-                                        </Badge>
-                                    ) : user?.subscription_tier === 'teams' ? (
+                                    {user?.subscription_tier === 'teams' ? (
                                         <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
                                             <Users className="w-4 h-4" />
                                             TEAMS
+                                        </Badge>
+                                    ) : user?.subscription_tier === 'pro' ? (
+                                        <Badge className="subscription-badge-pro rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
+                                            <Crown className="w-4 h-4" />
+                                            PRO
                                         </Badge>
                                     ) : (
                                         <Badge className="subscription-badge-free rounded-full px-3 py-1 text-sm font-semibold">
@@ -117,6 +117,21 @@ const SettingsPage = () => {
                                         </Badge>
                                     )}
                                 </div>
+                                {user?.subscription_tier === 'teams' && user?.is_team_owner && (
+                                    <Button
+                                        onClick={() => navigate('/team')}
+                                        variant="outline"
+                                        className="mt-3 rounded-full"
+                                    >
+                                        <Users className="w-4 h-4 mr-2" />
+                                        Manage Team
+                                    </Button>
+                                )}
+                                {user?.subscription_tier === 'teams' && !user?.is_team_owner && (
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        Managed by: {user?.team_owner_email}
+                                    </p>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
