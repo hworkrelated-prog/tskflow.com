@@ -822,9 +822,15 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
     if checkout_status.payment_status == "paid" and transaction["payment_status"] != "paid":
         # Update user subscription
         package = transaction["package"]
+        update_data = {"subscription_tier": package}
+        
+        # If upgrading to teams, mark as team owner
+        if package == "teams":
+            update_data["is_team_owner"] = True
+        
         await db.users.update_one(
             {"id": transaction["user_id"]},
-            {"$set": {"subscription_tier": package}}
+            {"$set": update_data}
         )
         
         # Update transaction
