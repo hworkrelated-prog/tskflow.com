@@ -94,6 +94,14 @@ class TaskAction(BaseModel):
     message: Optional[str] = None
     proposed_due_date: Optional[str] = None
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    reset_code: str
+    new_password: str
+
 class ManagerDashboard(BaseModel):
     today_tasks: List[TaskResponse]
     overdue_tasks: List[TaskResponse]
