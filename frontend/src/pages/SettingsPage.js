@@ -198,6 +198,10 @@ const SettingsPage = () => {
                                         <Badge className="w-full justify-center py-2 rounded-full subscription-badge-pro">
                                             Current Plan
                                         </Badge>
+                                    ) : (user?.subscription_tier === 'teams' && !user?.is_team_owner) ? (
+                                        <Badge className="w-full justify-center py-2 rounded-full bg-gray-100 text-gray-600">
+                                            Contact Team Owner
+                                        </Badge>
                                     ) : (
                                         <Button 
                                             onClick={() => handleUpgrade('pro')}
