@@ -870,9 +870,13 @@ async def stripe_webhook(http_request: HTTPRequest):
             
             # Update user subscription
             if "user_id" in metadata and "package" in metadata:
+                update_data = {"subscription_tier": metadata["package"]}
+                if metadata["package"] == "teams":
+                    update_data["is_team_owner"] = True
+                    
                 await db.users.update_one(
                     {"id": metadata["user_id"]},
-                    {"$set": {"subscription_tier": metadata["package"]}}
+                    {"$set": update_data}
                 )
                 
                 logging.info(f"Webhook processed: {metadata['user_email']} -> {metadata['package']}")
@@ -881,6 +885,185 @@ async def stripe_webhook(http_request: HTTPRequest):
     except Exception as e:
         logging.error(f"Webhook error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+# Team Management Routes
+class InviteUserRequest(BaseModel):
+    email: EmailStr
+
+class TeamMemberResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    last_active: str
+    status: str  # active, inactive
+    days_inactive: int
+
+@api_router.get("/team/members")
+async def get_team_members(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_team_owner"):
+        raise HTTPException(status_code=403, detail="Only team owners can view team members")
+    
+    # Get all team members from same domain
+    members = await db.users.find({
+        "company_domain": current_user["company_domain"],
+        "subscription_tier": "teams"
+    }, {"_id": 0, "password_hash": 0, "verification_code": 0}).to_list(1000)
+    
+    now = get_pst_now()
+    team_members = []
+    
+    for member in members:
+        last_active = datetime.fromisoformat(member.get("last_active", member["created_at"]))
+        days_inactive = (now - last_active.replace(tzinfo=PST)).days
+        status = "inactive" if days_inactive > 60 else "active"
+        
+        team_members.append(TeamMemberResponse(
+            id=member["id"],
+            name=member["name"],
+            email=member["email"],
+            last_active=member.get("last_active", member["created_at"]),
+            status=status,
+            days_inactive=days_inactive
+        ))
+    
+    return team_members
+
+@api_router.post("/team/invite")
+async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_team_owner"):
+        raise HTTPException(status_code=403, detail="Only team owners can invite users")
+    
+    # Check if email domain matches
+    invite_domain = invite.email.split('@')[1]
+    if invite_domain != current_user["company_domain"]:
+        raise HTTPException(status_code=400, detail=f"Can only invite users from your company domain ({current_user['company_domain']})")
+    
+    # Check if user already exists
+    existing = await db.users.find_one({"email": invite.email}, {"_id": 0})
+    if existing:
+        if existing["subscription_tier"] == "teams":
+            raise HTTPException(status_code=400, detail="User is already on your team")
+        else:
+            # Upgrade existing user to teams
+            await db.users.update_one(
+                {"email": invite.email},
+                {"$set": {
+                    "subscription_tier": "teams",
+                    "team_owner_email": current_user["email"]
+                }}
+            )
+            return {"message": f"User {invite.email} added to team"}
+    
+    # Send invitation email
+    email_content = f"""
+    <html>
+        <body>
+            <h2>You've been invited to join {current_user['company_domain']} on Task Hub!</h2>
+            <p>{current_user['name']} ({current_user['email']}) has invited you to join their team workspace.</p>
+            <p><strong>What's included:</strong></p>
+            <ul>
+                <li>Teams subscription (Unlimited tasks)</li>
+                <li>Collaborate with your company</li>
+                <li>No payment required</li>
+            </ul>
+            <p>Click the link below to create your account and start working:</p>
+            <p><a href="{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/register">Join Team</a></p>
+        </body>
+    </html>
+    """
+    background_tasks.add_task(send_email_notification, invite.email, f"Join {current_user['company_domain']} on Task Hub", email_content)
+    
+    # Store pending invitation
+    await db.team_invitations.insert_one({
+        "email": invite.email,
+        "invited_by": current_user["id"],
+        "invited_by_email": current_user["email"],
+        "company_domain": current_user["company_domain"],
+        "status": "pending",
+        "created_at": get_pst_now().isoformat()
+    })
+    
+    return {"message": f"Invitation sent to {invite.email}"}
+
+@api_router.delete("/team/members/{user_id}")
+async def remove_team_member(user_id: str, current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_team_owner"):
+        raise HTTPException(status_code=403, detail="Only team owners can remove members")
+    
+    # Get member
+    member = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if same domain
+    if member["company_domain"] != current_user["company_domain"]:
+        raise HTTPException(status_code=403, detail="Can only remove users from your domain")
+    
+    # Can't remove self
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself")
+    
+    # Downgrade to free tier
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "subscription_tier": "free",
+            "team_owner_email": None
+        }}
+    )
+    
+    return {"message": f"Removed {member['email']} from team"}
+
+@api_router.get("/team/billing")
+async def get_team_billing(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_team_owner"):
+        raise HTTPException(status_code=403, detail="Only team owners can view billing")
+    
+    # Count active team members
+    active_members = await db.users.count_documents({
+        "company_domain": current_user["company_domain"],
+        "subscription_tier": "teams"
+    })
+    
+    cost_per_user = 12.00
+    total_cost = active_members * cost_per_user
+    
+    return {
+        "active_users": active_members,
+        "cost_per_user": cost_per_user,
+        "total_monthly_cost": total_cost,
+        "currency": "USD"
+    }
+
+# Cleanup inactive users (run periodically)
+@api_router.post("/admin/cleanup-inactive")
+async def cleanup_inactive_users():
+    # This should be called by a cron job or scheduled task
+    now = get_pst_now()
+    sixty_days_ago = now - timedelta(days=60)
+    
+    # Find inactive team members (not owners)
+    inactive_users = await db.users.find({
+        "subscription_tier": "teams",
+        "is_team_owner": False,
+        "last_active": {"$lt": sixty_days_ago.isoformat()}
+    }, {"_id": 0}).to_list(1000)
+    
+    removed_count = 0
+    for user in inactive_users:
+        # Downgrade to free
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "subscription_tier": "free",
+                "team_owner_email": None
+            }}
+        )
+        removed_count += 1
+        
+        logging.info(f"Removed inactive user from team: {user['email']}")
+    
+    return {"message": f"Removed {removed_count} inactive users from teams"}
 
 # Include router
 app.include_router(api_router)
