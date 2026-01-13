@@ -101,6 +101,7 @@ function App() {
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/payment-success" element={<PaymentSuccessPage />} />
                     <Route
                         path="/"
                         element={
