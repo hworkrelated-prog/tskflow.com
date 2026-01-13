@@ -736,6 +736,22 @@ async def get_users(current_user: dict = Depends(get_current_user)):
             {"company_domain": current_user["company_domain"]}, 
             {"_id": 0, "password_hash": 0, "verification_code": 0}
         ).to_list(1000)
+        
+        # Also add pending invitations as options
+        invitations = await db.team_invitations.find({
+            "company_domain": current_user["company_domain"],
+            "status": "pending"
+        }, {"_id": 0}).to_list(100)
+        
+        # Add invited emails as pseudo-users
+        for inv in invitations:
+            users.append({
+                "id": f"invite_{inv['email']}",
+                "name": f"Invited: {inv['email']}",
+                "email": inv['email'],
+                "subscription_tier": "pending",
+                "is_invited": True
+            })
     else:
         # Free and Pro can see all users
         users = await db.users.find({}, {"_id": 0, "password_hash": 0, "verification_code": 0}).to_list(1000)
