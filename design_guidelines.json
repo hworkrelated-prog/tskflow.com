@@ -1,143 +1,174 @@
 {
-  "identity": {
-    "name": "Task Accountability Manager",
-    "persona": "E1: The Anti-AI Designer",
-    "tone": "Serious, Disciplined, High-Contrast, Swiss-Style",
-    "archetype": "Swiss & High-Contrast"
-  },
-  "typography": {
-    "fonts": {
-      "heading": "Outfit",
-      "body": "Inter",
-      "mono": "JetBrains Mono"
+  "design_system": {
+    "identity": {
+      "name": "Task Hub",
+      "persona": "E1: The Anti-AI Designer",
+      "aesthetic": "Soft SaaS / Notion-Plus",
+      "core_principles": [
+        "Fusion over Imitation: Mix Notion's utility with Apple's softness",
+        "Emotion First: Calm, focused, optimistic",
+        "Content is King: Data is beautiful, whitespace is structure",
+        "Negative Space: 3x standard spacing for breathing room"
+      ]
     },
-    "weights": {
-      "heading": "600",
-      "body": "400",
-      "bold": "700"
+    "typography": {
+      "font_family": {
+        "headings": "Outfit, sans-serif",
+        "body": "Inter, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "usage": {
+        "h1": "text-5xl md:text-6xl font-bold tracking-tight text-foreground",
+        "h2": "text-3xl md:text-4xl font-semibold tracking-tight text-foreground/90",
+        "h3": "text-2xl font-medium tracking-tight text-foreground/80",
+        "body": "text-base leading-relaxed text-muted-foreground",
+        "caption": "text-sm font-medium text-muted-foreground/70 uppercase tracking-wider"
+      }
     },
-    "sizes": {
-      "h1": "text-4xl md:text-5xl tracking-tight",
-      "h2": "text-3xl tracking-tight",
-      "h3": "text-2xl tracking-tight",
-      "body": "text-base leading-relaxed",
-      "small": "text-sm text-muted-foreground"
+    "colors": {
+      "palette_name": "Calm Productivity (Archetype 3 Refined)",
+      "theme_strategy": "Light Mode Primary (Soft Paper)",
+      "variables": {
+        "background": "210 20% 98%",
+        "foreground": "222 47% 11%",
+        "card": "0 0% 100%",
+        "card_foreground": "222 47% 11%",
+        "popover": "0 0% 100%",
+        "popover_foreground": "222 47% 11%",
+        "primary": "230 60% 55%",
+        "primary_foreground": "210 40% 98%",
+        "secondary": "210 40% 96%",
+        "secondary_foreground": "222 47% 11%",
+        "muted": "210 40% 96%",
+        "muted_foreground": "215 16% 47%",
+        "accent": "210 40% 96%",
+        "accent_foreground": "222 47% 11%",
+        "destructive": "0 84% 60%",
+        "destructive_foreground": "210 40% 98%",
+        "border": "214 32% 91%",
+        "input": "214 32% 91%",
+        "ring": "230 60% 55%"
+      },
+      "semantic_colors": {
+        "success": "142 71% 45%",
+        "warning": "45 93% 47%",
+        "info": "190 90% 40%"
+      }
     },
-    "imports": [
-      "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap');"
-    ]
-  },
-  "colors": {
-    "palette": {
-      "background": "#ffffff",
-      "foreground": "#09090b",
-      "card": "#ffffff",
-      "card_foreground": "#09090b",
-      "popover": "#ffffff",
-      "popover_foreground": "#09090b",
-      "primary": "#18181b",
-      "primary_foreground": "#fafafa",
-      "secondary": "#f4f4f5",
-      "secondary_foreground": "#18181b",
-      "muted": "#f4f4f5",
-      "muted_foreground": "#71717a",
-      "accent": "#f4f4f5",
-      "accent_foreground": "#18181b",
-      "destructive": "#ef4444",
-      "destructive_foreground": "#fafafa",
-      "border": "#e4e4e7",
-      "input": "#e4e4e7",
-      "ring": "#18181b",
-      "chart_1": "#18181b",
-      "chart_2": "#71717a",
-      "chart_3": "#a1a1aa",
-      "chart_4": "#d4d4d8",
-      "chart_5": "#e4e4e7"
+    "spacing": {
+      "scale": "Generous (2x standard)",
+      "container_padding": "p-6 md:p-12",
+      "section_gap": "gap-8 md:gap-16",
+      "component_gap": "gap-4"
     },
-    "status": {
-      "success": "#22c55e",
-      "warning": "#f97316",
-      "error": "#ef4444",
-      "info": "#3b82f6"
+    "visual_enhancers": {
+      "radius": "1rem (rounded-2xl)",
+      "shadows": {
+        "soft": "0 4px 20px -2px rgba(0, 0, 0, 0.05)",
+        "hover": "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01)"
+      },
+      "glassmorphism": "bg-white/70 backdrop-blur-xl border border-white/20 shadow-sm",
+      "gradients": {
+        "subtle_mesh": "bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100/50 via-slate-50 to-white"
+      }
     }
   },
-  "layout": {
-    "spacing": {
-      "container_padding": "p-6 md:p-12",
-      "section_gap": "gap-8 md:gap-12",
-      "card_padding": "p-6"
+  "layout_strategy": {
+    "dashboard_grid": {
+      "name": "The Task Triad",
+      "structure": "grid grid-cols-1 lg:grid-cols-3 gap-8",
+      "sections": [
+        {
+          "id": "assigned_to_me",
+          "title": "Assigned to Me",
+          "style": "bg-white/50 border-l-4 border-indigo-500"
+        },
+        {
+          "id": "self_assigned",
+          "title": "My Focus",
+          "style": "bg-white/50 border-l-4 border-emerald-500"
+        },
+        {
+          "id": "assigned_by_me",
+          "title": "Delegated",
+          "style": "bg-white/50 border-l-4 border-amber-500"
+        }
+      ]
     },
-    "grids": {
-      "dashboard_manager": "grid grid-cols-1 md:grid-cols-12 gap-6",
-      "dashboard_admin": "grid grid-cols-1 md:grid-cols-4 gap-6",
-      "form": "max-w-2xl mx-auto space-y-8"
-    },
-    "border_radius": {
-      "default": "rounded-none",
-      "card": "rounded-sm",
-      "button": "rounded-md",
-      "input": "rounded-md"
+    "marketing_page": {
+      "hero": "Centered, high-impact text with 3D abstract visual",
+      "features": "Bento grid layout (Mode A: Tetris)",
+      "pricing": "Simple 2-card comparison (Free vs Pro)"
     }
   },
   "components": {
     "buttons": {
-      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
-      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
-      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95",
-      "ghost": "hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-md font-medium transition-all active:scale-95"
+      "primary": "rounded-full px-8 py-6 text-base font-medium shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5",
+      "secondary": "rounded-full px-8 py-6 bg-secondary text-secondary-foreground hover:bg-secondary/80"
     },
     "cards": {
-      "default": "bg-card text-card-foreground border border-border shadow-sm rounded-sm p-6",
-      "interactive": "bg-card text-card-foreground border border-border shadow-sm rounded-sm p-6 hover:border-primary/50 transition-colors cursor-pointer"
+      "task": "group relative overflow-hidden rounded-xl border bg-card p-6 transition-all hover:shadow-md hover:border-primary/20",
+      "feature": "rounded-3xl bg-slate-50 p-8 border border-slate-100"
     },
     "inputs": {
-      "default": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      "default": "rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 focus:bg-white transition-colors"
     },
     "badges": {
-      "default": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-      "secondary": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      "outline": "text-foreground inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      "status": "rounded-md px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide"
     }
   },
-  "visual_enhancers": {
-    "glassmorphism": "bg-white/80 backdrop-blur-md border-b border-white/20",
-    "noise_texture": "opacity-5 pointer-events-none fixed inset-0 z-50 mix-blend-overlay",
-    "grid_lines": "bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"
+  "assets": {
+    "images": {
+      "hero_abstract": {
+        "url": "https://images.unsplash.com/photo-1751646563987-d5720fb773cb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHw0fHxzb2Z0JTIwM2QlMjBhYnN0cmFjdCUyMHNoYXBlcyUyMHBhc3RlbHxlbnwwfHx8fDE3NjgzMTIxMTl8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Soft pastel 3D cylinders",
+        "usage": "Hero section background or floating element"
+      },
+      "team_collaboration": {
+        "url": "https://images.unsplash.com/photo-1568658176307-bfbd2873abda?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwyfHxkaXZlcnNlJTIwc3RhcnR1cCUyMHRlYW0lMjB3b3JraW5nJTIwdG9nZXRoZXJ8ZW58MHx8fHwxNzY4MzEyMTE2fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Two smiling men looking at MacBook",
+        "usage": "About section or Features proof"
+      },
+      "workspace_minimal": {
+        "url": "https://images.pexels.com/photos/5712501/pexels-photo-5712501.jpeg",
+        "alt": "Minimalist white workspace",
+        "usage": "Login/Signup background or subtle overlay"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px (Light/Elegant)"
+    }
   },
   "motion": {
-    "page_transition": {
+    "transitions": "transition-all duration-300 ease-out",
+    "hover_lift": "hover:-translate-y-1 hover:shadow-lg",
+    "page_enter": {
       "initial": { "opacity": 0, "y": 20 },
       "animate": { "opacity": 1, "y": 0 },
-      "exit": { "opacity": 0, "y": -20 },
-      "transition": { "duration": 0.3, "ease": "easeOut" }
-    },
-    "list_item": {
-      "initial": { "opacity": 0, "x": -20 },
-      "animate": { "opacity": 1, "x": 0 },
-      "transition": { "duration": 0.2 }
+      "exit": { "opacity": 0, "y": -20 }
     }
   },
-  "image_urls": {
-    "login_background": "https://images.pexels.com/photos/1106476/pexels-photo-1106476.jpeg",
-    "placeholder_avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+  "accessibility": {
+    "contrast": "Ensure text is slate-700+ on light backgrounds",
+    "focus_states": "Ring-2 ring-offset-2 ring-primary/50",
+    "aria": "Use aria-label for all icon-only buttons"
   },
   "instructions_to_main_agent": [
-    "Implement the 'Swiss & High-Contrast' theme strictly. Use black and white for 90% of the UI.",
-    "Use the 'Outfit' font for all headings and 'Inter' for body text.",
-    "For the Dashboard, use the 'Bento' grid layout defined in the guidelines.",
-    "Use 'recharts' for all charts and data visualization. Keep charts minimal (monochrome with 1 accent color).",
-    "Ensure all interactive elements have 'data-testid' attributes.",
-    "Use 'framer-motion' for subtle entrance animations on dashboard cards.",
-    "Do not use gradients. Use solid colors and borders.",
-    "For the Login page, use a split layout: Left side form, Right side image (use the login_background URL).",
-    "Implement a 'Trends & Insights' page using a line chart to show task completion speed over time."
+    "Implement the 'Calm Productivity' color palette in tailwind.config.js immediately.",
+    "Use 'Outfit' font for all headings and 'Inter' for body text.",
+    "Create a 'TaskCard' component that uses the 'task' card style defined above.",
+    "Build the Dashboard using the 'Task Triad' 3-column grid layout.",
+    "Ensure the 'Create Task' modal allows selecting 'Self' or 'Other' with clear visual distinction.",
+    "Use the provided image URLs for the Landing Page and Auth screens.",
+    "Apply 'glassmorphism' classes to the sticky header.",
+    "Do NOT use default Shadcn styles; override radius to '1rem' and shadows to 'soft'."
   ],
   "universal_guidelines": [
-    "Avoid 'AI slop' aesthetics (generic centered layouts, gradients).",
-    "Use generous spacing (p-6, p-8, p-12).",
-    "Ensure high contrast for text (WCAG AA/AAA).",
-    "Use 'sonner' for toast notifications.",
-    "Do not use 'Inter' for headings.",
-    "Use 'lucide-react' for icons."
+    "Avoid generic centered layouts; use asymmetry.",
+    "Use 2-3x more spacing than typical designs.",
+    "Never use pure black (#000000); use Slate-900 or Indigo-950.",
+    "All interactive elements must have a data-testid.",
+    "Use 'sonner' for toasts."
   ]
 }
