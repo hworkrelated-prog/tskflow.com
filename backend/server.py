@@ -192,6 +192,9 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     # Generate verification code
     verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
     
+    # Extract company domain
+    company_domain = user.email.split('@')[1]
+    
     # Create user
     user_id = str(uuid.uuid4())
     user_doc = {
@@ -200,6 +203,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         "email": user.email,
         "password_hash": get_password_hash(user.password),
         "subscription_tier": "free",
+        "company_domain": company_domain,
         "email_verified": False,
         "verification_code": verification_code,
         "created_at": get_pst_now().isoformat()
