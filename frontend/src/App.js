@@ -12,6 +12,7 @@ import TaskHub from '@/pages/TaskHub';
 import TaskDetail from '@/pages/TaskDetail';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
+import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
