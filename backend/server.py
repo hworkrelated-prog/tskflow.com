@@ -280,6 +280,80 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         company_domain=current_user["company_domain"]
     )
 
+@api_router.post("/auth/forgot-password")
+async def forgot_password(request: PasswordResetRequest, background_tasks: BackgroundTasks):
+    # Check if user exists
+    user = await db.users.find_one({"email": request.email}, {"_id": 0})
+    if not user:
+        # Don't reveal if email exists or not for security
+        return {"message": "If the email exists, a reset code has been sent", "reset_code": None}
+    
+    # Generate 6-digit reset code
+    import random
+    reset_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    
+    # Store reset code with expiration (15 minutes)
+    expiration = datetime.now(timezone.utc) + timedelta(minutes=15)
+    await db.password_resets.insert_one({
+        "email": request.email,
+        "reset_code": reset_code,
+        "expires_at": expiration.isoformat(),
+        "used": False
+    })
+    
+    # Try to send email
+    sendgrid_key = os.getenv('SENDGRID_API_KEY')
+    sender_email = os.getenv('SENDER_EMAIL')
+    
+    if sendgrid_key and sender_email:
+        email_content = f"""
+        <html>
+            <body>
+                <h2>Password Reset Request</h2>
+                <p>Your password reset code is: <strong>{reset_code}</strong></p>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+            </body>
+        </html>
+        """
+        background_tasks.add_task(send_email_notification, request.email, "Password Reset Code", email_content)
+        return {"message": "Reset code sent to your email", "reset_code": None}
+    else:
+        # Email not configured - return code directly (for development)
+        return {"message": "Email not configured. Use this reset code", "reset_code": reset_code}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(request: PasswordResetConfirm):
+    # Find valid reset code
+    reset_doc = await db.password_resets.find_one({
+        "email": request.email,
+        "reset_code": request.reset_code,
+        "used": False
+    }, {"_id": 0})
+    
+    if not reset_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+    
+    # Check expiration
+    expires_at = datetime.fromisoformat(reset_doc["expires_at"])
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=400, detail="Reset code has expired")
+    
+    # Update password
+    new_hash = get_password_hash(request.new_password)
+    await db.users.update_one(
+        {"email": request.email},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    # Mark reset code as used
+    await db.password_resets.update_one(
+        {"email": request.email, "reset_code": request.reset_code},
+        {"$set": {"used": True}}
+    )
+    
+    return {"message": "Password reset successful"}
+
 # Task Routes
 @api_router.post("/tasks", response_model=TaskResponse)
 async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
