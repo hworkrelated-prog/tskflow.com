@@ -102,6 +102,7 @@ function App() {
             <BrowserRouter>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route
                         path="/"
                         element={
