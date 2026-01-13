@@ -248,6 +248,10 @@ const SettingsPage = () => {
                                                 Domain: {user?.email?.split('@')[1]}
                                             </p>
                                         </div>
+                                    ) : (user?.subscription_tier === 'teams' && !user?.is_team_owner) ? (
+                                        <Badge className="w-full justify-center py-2 rounded-full bg-gray-100 text-gray-600">
+                                            Contact Team Owner
+                                        </Badge>
                                     ) : (
                                         <Button 
                                             onClick={() => handleUpgrade('teams')}
