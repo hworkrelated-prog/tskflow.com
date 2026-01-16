@@ -502,9 +502,10 @@ async def get_dashboard(current_user: dict = Depends(get_current_user)):
         # Get all users from same domain
         domain_users = await db.users.find(
             {"company_domain": current_user["company_domain"]}, 
-            {"_id": 0}
+            {"_id": 0, "id": 1, "name": 1}
         ).to_list(1000)
         domain_user_ids = [u["id"] for u in domain_users]
+        user_map = {u["id"]: u["name"] for u in domain_users}
         
         # Filter tasks to only those involving domain users
         all_tasks = await db.tasks.find({
@@ -514,25 +515,40 @@ async def get_dashboard(current_user: dict = Depends(get_current_user)):
             ]
         }, {"_id": 0}).to_list(1000)
     else:
-        all_tasks = await db.tasks.find({}, {"_id": 0}).to_list(1000)
+        # Fetch only tasks relevant to current user
+        all_tasks = await db.tasks.find({
+            "$or": [
+                {"assigned_to": current_user["id"]},
+                {"created_by": current_user["id"]}
+            ]
+        }, {"_id": 0}).to_list(1000)
+        
+        # Get unique user IDs from tasks
+        user_ids = set()
+        for task in all_tasks:
+            user_ids.add(task["assigned_to"])
+            user_ids.add(task["created_by"])
+        
+        # Batch fetch all users
+        users = await db.users.find(
+            {"id": {"$in": list(user_ids)}},
+            {"_id": 0, "id": 1, "name": 1}
+        ).to_list(len(user_ids))
+        user_map = {u["id"]: u["name"] for u in users}
     
     assigned_to_me = []
     self_assigned = []
     assigned_by_me = []
     
     for task in all_tasks:
-        # Enrich with user names
-        assigned_user = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
-        created_user = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
-        
         task_resp = TaskResponse(
             id=task["id"],
             title=task["title"],
             description=task["description"],
             assigned_to=task["assigned_to"],
-            assigned_to_name=assigned_user["name"] if assigned_user else "Unknown",
+            assigned_to_name=user_map.get(task["assigned_to"], "Unknown"),
             created_by=task["created_by"],
-            created_by_name=created_user["name"] if created_user else "Unknown",
+            created_by_name=user_map.get(task["created_by"], "Unknown"),
             due_date=task["due_date"],
             status=task["status"],
             priority=task["priority"],
