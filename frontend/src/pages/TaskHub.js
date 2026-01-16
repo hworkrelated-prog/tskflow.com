@@ -203,7 +203,7 @@ const TaskHub = () => {
                                                 required
                                             >
                                                 <SelectTrigger data-testid="assign-to-select" className="rounded-xl">
-                                                    <SelectValue placeholder="Select assignee" />
+                                                    <SelectValue placeholder="Select or type email" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="self">Self (Me)</SelectItem>
@@ -214,6 +214,16 @@ const TaskHub = () => {
                                                     ))}
                                                 </SelectContent>
                                             </Select>
+                                            <Input
+                                                placeholder="Or type email address"
+                                                value={taskForm.assigned_to.includes('@') ? taskForm.assigned_to : ''}
+                                                onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
+                                                className="rounded-xl mt-2"
+                                                type="email"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Can assign to anyone by email - they'll receive an invitation
+                                            </p>
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="priority">Priority</Label>
