@@ -327,7 +327,7 @@ const TaskHub = () => {
                                     <p className="text-sm text-muted-foreground text-center py-8">No tasks assigned</p>
                                 ) : (
                                     dashboard?.assigned_to_me.map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} />
+                                        <TaskCard key={task.id} task={task} index={index} onQuickComplete={handleQuickComplete} />
                                     ))
                                 )}
                             </CardContent>
