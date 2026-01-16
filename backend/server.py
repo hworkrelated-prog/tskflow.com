@@ -824,32 +824,89 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
 
 @api_router.get("/users")
 async def get_users(current_user: dict = Depends(get_current_user)):
-    # For Teams tier, only show users from same company domain
+    # Get user's saved contacts first
+    contacts = await db.user_contacts.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("last_used", -1).to_list(100)
+    
+    contact_list = []
+    for contact in contacts:
+        # Check if contact is registered
+        user = await db.users.find_one({"email": contact["contact_email"]}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+        if user:
+            contact_list.append(user)
+        else:
+            # Unregistered contact
+            contact_list.append({
+                "id": f"email_{contact['contact_email']}",
+                "name": contact["contact_name"],
+                "email": contact["contact_email"],
+                "is_invited": True
+            })
+    
+    # For Teams tier, add team members
     if current_user["subscription_tier"] == "teams":
-        users = await db.users.find(
-            {"company_domain": current_user["company_domain"]}, 
+        team_users = await db.users.find(
+            {"company_domain": current_user["company_domain"], "id": {"$ne": current_user["id"]}}, 
             {"_id": 0, "password_hash": 0, "verification_code": 0}
         ).to_list(1000)
         
-        # Also add pending invitations as options
-        invitations = await db.team_invitations.find({
-            "company_domain": current_user["company_domain"],
-            "status": "pending"
-        }, {"_id": 0}).to_list(100)
-        
-        # Add invited emails as pseudo-users
-        for inv in invitations:
-            users.append({
-                "id": f"invite_{inv['email']}",
-                "name": f"Invited: {inv['email']}",
-                "email": inv['email'],
-                "subscription_tier": "pending",
-                "is_invited": True
-            })
-    else:
-        # Free and Pro can see all users
-        users = await db.users.find({}, {"_id": 0, "password_hash": 0, "verification_code": 0}).to_list(1000)
-    return users
+        # Add team members not in contacts
+        existing_emails = {c["email"] for c in contact_list}
+        for team_user in team_users:
+            if team_user["email"] not in existing_emails:
+                contact_list.append(team_user)
+    
+    # Pro and Free users only see their contacts (privacy)
+    return contact_list
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    
+    @validator('new_password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.islower() for c in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
+
+@api_router.post("/auth/change-password")
+async def change_password(request: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    # Verify current password
+    if not verify_password(request.current_password, current_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Update password
+    new_hash = get_password_hash(request.new_password)
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    return {"message": "Password updated successfully"}
+
+class UserPreferences(BaseModel):
+    theme: str  # 'light', 'dark', 'minimal'
+
+@api_router.put("/auth/preferences")
+async def update_preferences(prefs: UserPreferences, current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"preferences": prefs.dict()}}
+    )
+    return {"message": "Preferences updated"}
+
+@api_router.get("/auth/preferences")
+async def get_preferences(current_user: dict = Depends(get_current_user)):
+    prefs = current_user.get("preferences", {"theme": "light"})
+    return prefs
 
 # Stripe Payment Routes
 class CheckoutRequest(BaseModel):
