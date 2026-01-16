@@ -425,14 +425,50 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         if active_tasks >= 5:
             raise HTTPException(status_code=403, detail="Free tier limit reached. Upgrade to Pro or Teams for unlimited tasks.")
     
-    # Get assigned user
+    # Handle email-based assignment or user ID
     if task.assigned_to == "self":
         assigned_user = current_user
         assigned_to_id = current_user["id"]
+        assigned_to_email = current_user["email"]
+        is_self_assigned = True
+    elif "@" in task.assigned_to:
+        # Email-based assignment
+        assigned_to_email = task.assigned_to
+        existing_user = await db.users.find_one({"email": assigned_to_email}, {"_id": 0})
+        
+        if existing_user:
+            assigned_user = existing_user
+            assigned_to_id = existing_user["id"]
+            is_self_assigned = (assigned_to_id == current_user["id"])
+        else:
+            # Non-registered user - create placeholder
+            assigned_user = {"name": f"Invited: {assigned_to_email}", "email": assigned_to_email}
+            assigned_to_id = f"email_{assigned_to_email}"
+            is_self_assigned = False
+            
+            # Send invitation email
+            email_content = f"""
+            <html>
+                <body>
+                    <h2>You've been assigned a task on Task Hub!</h2>
+                    <p><strong>{current_user['name']}</strong> has assigned you a task:</p>
+                    <p><strong>Task:</strong> {task.title}</p>
+                    <p><strong>Priority:</strong> {task.priority}</p>
+                    <p><strong>Due:</strong> {task.due_date}</p>
+                    <p>Create your account to view details and respond:</p>
+                    <p><a href="{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/register">Create Account</a></p>
+                </body>
+            </html>
+            """
+            background_tasks.add_task(send_email_notification, assigned_to_email, f"New Task from {current_user['name']}", email_content)
     else:
         assigned_user = await db.users.find_one({"id": task.assigned_to}, {"_id": 0})
         if not assigned_user:
             raise HTTPException(status_code=404, detail="Assigned user not found")
+        
+        assigned_to_id = task.assigned_to
+        assigned_to_email = assigned_user["email"]
+        is_self_assigned = (assigned_to_id == current_user["id"])
         
         # For Teams tier, enforce domain restriction
         if current_user["subscription_tier"] == "teams":
@@ -441,22 +477,39 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     status_code=403, 
                     detail=f"Teams plan: Can only assign tasks to users from your company domain ({current_user['company_domain']})"
                 )
-        
-        assigned_to_id = task.assigned_to
+    
+    # Save assigned email for future use
+    if assigned_to_email and not is_self_assigned:
+        await db.user_contacts.update_one(
+            {"user_id": current_user["id"], "contact_email": assigned_to_email},
+            {"$set": {
+                "user_id": current_user["id"],
+                "contact_email": assigned_to_email,
+                "contact_name": assigned_user.get("name", assigned_to_email),
+                "last_used": get_pst_now().isoformat()
+            }},
+            upsert=True
+        )
     
     task_id = str(uuid.uuid4())
+    
+    # Auto-accept self-assigned tasks
+    initial_status = "Accepted" if is_self_assigned else "Pending"
+    accepted_at = get_pst_now().isoformat() if is_self_assigned else None
+    
     task_doc = {
         "id": task_id,
         "title": task.title,
         "description": task.description,
         "assigned_to": assigned_to_id,
+        "assigned_to_email": assigned_to_email,
         "created_by": current_user["id"],
         "due_date": task.due_date,
-        "status": "Pending",
+        "status": initial_status,
         "priority": task.priority,
         "category": task.category,
         "created_at": get_pst_now().isoformat(),
-        "accepted_at": None,
+        "accepted_at": accepted_at,
         "completed_at": None,
         "reason_for_decline": None,
         "counter_proposal_message": None,
@@ -465,8 +518,8 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     
     await db.tasks.insert_one(task_doc)
     
-    # Send email notification if assigning to others
-    if assigned_to_id != current_user["id"]:
+    # Send email notification if assigning to others and they're registered
+    if not is_self_assigned and assigned_to_id and not assigned_to_id.startswith("email_"):
         email_content = f"""
         <html>
             <body>
@@ -485,14 +538,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         title=task.title,
         description=task.description,
         assigned_to=assigned_to_id,
-        assigned_to_name=assigned_user["name"],
+        assigned_to_name=assigned_user.get("name", assigned_to_email),
         created_by=current_user["id"],
         created_by_name=current_user["name"],
         due_date=task.due_date,
-        status="Pending",
+        status=initial_status,
         priority=task.priority,
         category=task.category,
-        created_at=task_doc["created_at"]
+        created_at=task_doc["created_at"],
+        accepted_at=accepted_at
     )
 
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
