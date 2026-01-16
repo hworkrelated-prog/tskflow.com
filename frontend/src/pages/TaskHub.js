@@ -66,6 +66,8 @@ const TaskHub = () => {
             toast.error('Failed to complete task');
         }
     };
+
+    const handleCreateTask = async (e) => {
         e.preventDefault();
         
         if (dashboard?.task_limit_reached) {
