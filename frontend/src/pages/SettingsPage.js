@@ -192,6 +192,102 @@ const SettingsPage = () => {
                         </CardContent>
                     </Card>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Password Change */}
+                        <Card className="border-2 shadow-soft rounded-2xl">
+                            <CardHeader>
+                                <CardTitle className="text-xl flex items-center gap-2">
+                                    <Lock className="w-5 h-5" />
+                                    Security
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="rounded-full w-full">
+                                            Change Password
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="rounded-2xl">
+                                        <DialogHeader>
+                                            <DialogTitle>Change Password</DialogTitle>
+                                            <DialogDescription>Update your account password</DialogDescription>
+                                        </DialogHeader>
+                                        <form onSubmit={handlePasswordChange} className="space-y-4 pt-4">
+                                            <div className="space-y-2">
+                                                <Label>Current Password</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={passwordForm.current}
+                                                    onChange={(e) => setPasswordForm({...passwordForm, current: e.target.value})}
+                                                    required
+                                                    className="rounded-xl"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>New Password</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={passwordForm.new}
+                                                    onChange={(e) => setPasswordForm({...passwordForm, new: e.target.value})}
+                                                    required
+                                                    className="rounded-xl"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Min 8 characters, 1 uppercase, 1 lowercase, 1 number
+                                                </p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Confirm New Password</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={passwordForm.confirm}
+                                                    onChange={(e) => setPasswordForm({...passwordForm, confirm: e.target.value})}
+                                                    required
+                                                    className="rounded-xl"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2 justify-end">
+                                                <Button type="button" variant="outline" onClick={() => setShowPasswordDialog(false)} className="rounded-full">
+                                                    Cancel
+                                                </Button>
+                                                <Button type="submit" disabled={changingPassword} className="rounded-full">
+                                                    {changingPassword ? 'Updating...' : 'Update Password'}
+                                                </Button>
+                                            </div>
+                                        </form>
+                                    </DialogContent>
+                                </Dialog>
+                            </CardContent>
+                        </Card>
+
+                        {/* Theme Selection */}
+                        <Card className="border-2 shadow-soft rounded-2xl">
+                            <CardHeader>
+                                <CardTitle className="text-xl flex items-center gap-2">
+                                    <Palette className="w-5 h-5" />
+                                    Appearance
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {['light', 'dark', 'minimal'].map((t) => (
+                                    <button
+                                        key={t}
+                                        onClick={() => handleThemeChange(t)}
+                                        className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                                            theme === t ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium capitalize">{t}</span>
+                                            {theme === t && <Check className="w-5 h-5 text-primary" />}
+                                        </div>
+                                    </button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </div>
+
                     <div>
                         <h2 className="text-3xl font-bold mb-6 text-center" style={{ fontFamily: 'Outfit' }}>Subscription Plans</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
