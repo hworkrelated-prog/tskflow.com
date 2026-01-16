@@ -13,6 +13,59 @@ const SettingsPage = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [upgrading, setUpgrading] = React.useState(null);
+    const [showPasswordDialog, setShowPasswordDialog] = React.useState(false);
+    const [passwordForm, setPasswordForm] = React.useState({ current: '', new: '', confirm: '' });
+    const [changingPassword, setChangingPassword] = React.useState(false);
+    const [theme, setTheme] = React.useState('light');
+
+    React.useEffect(() => {
+        fetchPreferences();
+    }, []);
+
+    const fetchPreferences = async () => {
+        try {
+            const response = await axios.get(`${API}/auth/preferences`);
+            setTheme(response.data.theme || 'light');
+            document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
+        } catch (error) {
+            console.error('Failed to fetch preferences');
+        }
+    };
+
+    const handleThemeChange = async (newTheme) => {
+        try {
+            await axios.put(`${API}/auth/preferences`, { theme: newTheme });
+            setTheme(newTheme);
+            document.documentElement.setAttribute('data-theme', newTheme);
+            toast.success('Theme updated');
+        } catch (error) {
+            toast.error('Failed to update theme');
+        }
+    };
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        
+        if (passwordForm.new !== passwordForm.confirm) {
+            toast.error('New passwords do not match');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await axios.post(`${API}/auth/change-password`, {
+                current_password: passwordForm.current,
+                new_password: passwordForm.new
+            });
+            toast.success('Password changed successfully');
+            setShowPasswordDialog(false);
+            setPasswordForm({ current: '', new: '', confirm: '' });
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Failed to change password');
+        } finally {
+            setChangingPassword(false);
+        }
+    };
 
     const handleUpgrade = async (packageType) => {
         setUpgrading(packageType);
