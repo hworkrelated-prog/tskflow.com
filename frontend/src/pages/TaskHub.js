@@ -224,7 +224,7 @@ const TaskHub = () => {
                                                 type="email"
                                             />
                                             <p className="text-xs text-muted-foreground">
-                                                Can assign to anyone by email - they'll receive an invitation
+                                                Can assign to anyone by email - they&apos;ll receive an invitation
                                             </p>
                                         </div>
                                         <div className="space-y-2">
