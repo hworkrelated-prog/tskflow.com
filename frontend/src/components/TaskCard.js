@@ -6,8 +6,36 @@ import { Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
-const TaskCard = ({ task, index = 0 }) => {
+const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) => {
     const navigate = useNavigate();
+    const [showUndo, setShowUndo] = useState(false);
+    const [completing, setCompleting] = useState(false);
+
+    const handleCheckboxChange = (e) => {
+        e.stopPropagation();
+        if (task.status === 'Completed') return;
+        
+        setCompleting(true);
+        setShowUndo(true);
+        
+        const timeout = setTimeout(() => {
+            if (onQuickComplete) {
+                onQuickComplete(task.id);
+            }
+            setShowUndo(false);
+            setCompleting(false);
+        }, 5000);
+        
+        // Store timeout for undo
+        window[`timeout_${task.id}`] = timeout;
+    };
+
+    const handleUndo = (e) => {
+        e.stopPropagation();
+        clearTimeout(window[`timeout_${task.id}`]);
+        setShowUndo(false);
+        setCompleting(false);
+    };
 
     const getStatusBadge = (status) => {
         const statusMap = {
