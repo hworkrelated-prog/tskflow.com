@@ -712,29 +712,41 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
     start = datetime.fromisoformat(query.start_date)
     end = datetime.fromisoformat(query.end_date)
     
-    tasks = await db.tasks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Filter by date range
-    filtered_tasks = []
-    for task in tasks:
-        created_date = datetime.fromisoformat(task["created_at"])
-        if start <= created_date <= end:
-            filtered_tasks.append(task)
+    # Only fetch tasks where user is involved (created or assigned)
+    tasks = await db.tasks.find({
+        "$or": [
+            {"assigned_to": current_user["id"]},
+            {"created_by": current_user["id"]}
+        ],
+        "created_at": {
+            "$gte": start.isoformat(),
+            "$lte": end.isoformat()
+        }
+    }, {"_id": 0}).to_list(1000)
     
     # Calculate metrics
-    assigned_to_others = [t for t in filtered_tasks if t["created_by"] == current_user["id"] and t["assigned_to"] != current_user["id"]]
-    assigned_to_self = [t for t in filtered_tasks if t["created_by"] == current_user["id"] and t["assigned_to"] == current_user["id"]]
-    received_from_others = [t for t in filtered_tasks if t["assigned_to"] == current_user["id"] and t["created_by"] != current_user["id"]]
-    completed = [t for t in filtered_tasks if t["status"] == "Completed" and (t["assigned_to"] == current_user["id"] or t["created_by"] == current_user["id"])]
+    assigned_to_others = [t for t in tasks if t["created_by"] == current_user["id"] and t["assigned_to"] != current_user["id"]]
+    assigned_to_self = [t for t in tasks if t["created_by"] == current_user["id"] and t["assigned_to"] == current_user["id"]]
+    received_from_others = [t for t in tasks if t["assigned_to"] == current_user["id"] and t["created_by"] != current_user["id"]]
+    completed = [t for t in tasks if t["status"] == "Completed"]
     
-    # Breakdown by assignee
+    # Breakdown by assignee - batch fetch users
+    unique_assignee_ids = list(set([t["assigned_to"] for t in assigned_to_others]))
+    
     assignee_breakdown = {}
-    for task in assigned_to_others:
-        assignee_id = task["assigned_to"]
-        if assignee_id not in assignee_breakdown:
-            user = await db.users.find_one({"id": assignee_id}, {"_id": 0})
-            assignee_breakdown[assignee_id] = {"name": user["name"] if user else "Unknown", "count": 0}
-        assignee_breakdown[assignee_id]["count"] += 1
+    if unique_assignee_ids:
+        assignees = await db.users.find(
+            {"id": {"$in": unique_assignee_ids}},
+            {"_id": 0, "id": 1, "name": 1}
+        ).to_list(len(unique_assignee_ids))
+        
+        for assignee in assignees:
+            assignee_breakdown[assignee["id"]] = {"name": assignee["name"], "count": 0}
+        
+        for task in assigned_to_others:
+            assignee_id = task["assigned_to"]
+            if assignee_id in assignee_breakdown:
+                assignee_breakdown[assignee_id]["count"] += 1
     
     return AnalyticsResponse(
         assigned_to_others_count=len(assigned_to_others),
