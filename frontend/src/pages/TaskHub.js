@@ -57,7 +57,15 @@ const TaskHub = () => {
         }
     };
 
-    const handleCreateTask = async (e) => {
+    const handleQuickComplete = async (taskId) => {
+        try {
+            await axios.put(`${API}/tasks/${taskId}/complete`);
+            toast.success('Task completed!');
+            fetchDashboard();
+        } catch (error) {
+            toast.error('Failed to complete task');
+        }
+    };
         e.preventDefault();
         
         if (dashboard?.task_limit_reached) {
