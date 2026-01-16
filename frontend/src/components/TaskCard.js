@@ -71,9 +71,35 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
             >
                 <CardContent className="p-0 space-y-3">
                     <div className="flex items-start justify-between">
-                        <h3 className="font-semibold text-lg line-clamp-2">{task.title}</h3>
+                        <div className="flex items-center gap-3 flex-1">
+                            {task.status !== 'Completed' && (
+                                <input
+                                    type="checkbox"
+                                    checked={completing}
+                                    onChange={handleCheckboxChange}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-5 h-5 rounded border-2 border-gray-300 cursor-pointer"
+                                    data-testid={`quick-complete-${task.id}`}
+                                />
+                            )}
+                            <h3 className="font-semibold text-lg line-clamp-2 flex-1">{task.title}</h3>
+                        </div>
                         {getStatusBadge(task.status)}
                     </div>
+                    
+                    {showUndo && (
+                        <div className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                            <span className="text-sm text-amber-800">Completing in 5 seconds...</span>
+                            <button
+                                onClick={handleUndo}
+                                className="text-xs font-semibold text-amber-900 underline"
+                                data-testid={`undo-complete-${task.id}`}
+                            >
+                                Undo
+                            </button>
+                        </div>
+                    )}
+                    
                     <p className="text-sm text-muted-foreground line-clamp-2">{task.description}</p>
                     <div className="flex items-center justify-between text-sm">
                         <span className={getPriorityClass(task.priority)}>{task.priority}</span>
@@ -82,12 +108,13 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
                             {format(new Date(task.due_date), 'MMM dd')}
                         </span>
                     </div>
-                    {task.created_by !== task.assigned_to && (
+                    {showAssignedTo ? (
                         <div className="text-xs text-muted-foreground pt-2 border-t">
-                            {task.created_by_name === task.assigned_to_name ? 
-                                `Self-assigned` : 
-                                `From ${task.created_by_name}`
-                            }
+                            Assigned to: <span className="font-medium">{task.assigned_to_name}</span>
+                        </div>
+                    ) : task.created_by !== task.assigned_to && (
+                        <div className="text-xs text-muted-foreground pt-2 border-t">
+                            From {task.created_by_name}
                         </div>
                     )}
                 </CardContent>
