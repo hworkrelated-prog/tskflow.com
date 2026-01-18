@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta
 
 class TaskAccountabilityTester:
-    def __init__(self, base_url="https://accountabuddy-9.preview.emergentagent.com"):
+    def __init__(self, base_url="https://team-pulse-68.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.admin_token = None
