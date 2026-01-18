@@ -64,7 +64,15 @@ const SettingsPage = () => {
             setShowPasswordDialog(false);
             setPasswordForm({ current: '', new: '', confirm: '' });
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Failed to change password');
+            const errorMsg = error.response?.data?.detail;
+            if (Array.isArray(errorMsg)) {
+                // Pydantic validation errors
+                toast.error(errorMsg[0]?.msg || 'Password validation failed');
+            } else if (typeof errorMsg === 'string') {
+                toast.error(errorMsg);
+            } else {
+                toast.error('Failed to change password');
+            }
         } finally {
             setChangingPassword(false);
         }
