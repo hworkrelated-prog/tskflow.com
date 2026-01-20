@@ -181,19 +181,19 @@ const SettingsPage = () => {
                                         </Badge>
                                     )}
                                 </div>
-                                {user?.subscription_tier === 'teams' && user?.is_team_owner && (
+                                {user?.subscription_tier === 'teams' && (
                                     <Button
                                         onClick={() => navigate('/team')}
                                         variant="outline"
                                         className="mt-3 rounded-full"
                                     >
                                         <Users className="w-4 h-4 mr-2" />
-                                        Manage Team
+                                        {user?.is_team_owner ? 'Manage Team' : 'My Team & Reports'}
                                     </Button>
                                 )}
-                                {user?.subscription_tier === 'teams' && !user?.is_team_owner && (
+                                {user?.subscription_tier === 'teams' && !user?.is_team_owner && user?.team_owner_email && (
                                     <p className="text-xs text-muted-foreground mt-2">
-                                        Managed by: {user?.team_owner_email}
+                                        Team Owner: {user?.team_owner_email}
                                     </p>
                                 )}
                             </div>
