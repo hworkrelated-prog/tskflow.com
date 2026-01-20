@@ -42,7 +42,7 @@ const PaymentSuccessPage = () => {
                 setStatus('success');
                 await refreshUser();
                 toast.success('Subscription activated successfully!');
-                setTimeout(() => navigate('/'), 3000);
+                setTimeout(() => navigate('/dashboard'), 3000);
                 return;
             } else if (response.data.status === 'expired') {
                 setStatus('expired');

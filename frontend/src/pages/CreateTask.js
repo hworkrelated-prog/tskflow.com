@@ -45,7 +45,7 @@ const CreateTask = () => {
         try {
             await axios.post(`${API}/tasks`, formData);
             toast.success('Task created successfully');
-            navigate('/');
+            navigate('/dashboard');
         } catch (error) {
             toast.error(error.response?.data?.detail || 'Failed to create task');
         } finally {
@@ -61,7 +61,7 @@ const CreateTask = () => {
                     <Button
                         data-testid="back-button"
                         variant="ghost"
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate('/dashboard')}
                         className="mb-2 rounded-md"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
@@ -187,7 +187,7 @@ const CreateTask = () => {
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    onClick={() => navigate('/')}
+                                    onClick={() => navigate('/dashboard')}
                                     className="rounded-md"
                                 >
                                     Cancel

@@ -27,7 +27,7 @@ const LoginPage = () => {
             const response = await axios.post(`${API}/auth/login`, formData);
             login(response.data.access_token, response.data.user);
             toast.success('Welcome back!');
-            navigate('/');
+            navigate('/dashboard');
         } catch (error) {
             if (error.response?.status === 403) {
                 toast.error('Please verify your email first');

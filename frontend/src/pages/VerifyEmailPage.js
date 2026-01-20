@@ -30,7 +30,7 @@ const VerifyEmailPage = () => {
             });
             login(response.data.access_token, response.data.user);
             toast.success('Email verified successfully!');
-            navigate('/');
+            navigate('/dashboard');
         } catch (error) {
             toast.error(error.response?.data?.detail || 'Verification failed');
         } finally {

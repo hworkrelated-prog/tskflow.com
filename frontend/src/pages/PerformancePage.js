@@ -44,7 +44,7 @@ const PerformancePage = () => {
                     <Button
                         data-testid="back-button"
                         variant="ghost"
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate('/dashboard')}
                         className="mb-2 rounded-md"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />

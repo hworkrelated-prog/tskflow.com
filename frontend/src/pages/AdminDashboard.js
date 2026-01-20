@@ -90,7 +90,7 @@ const AdminDashboard = () => {
                 <div className="container mx-auto px-6 py-3 flex gap-4">
                     <Button
                         variant="ghost"
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate('/dashboard')}
                         className="rounded-md text-sm"
                     >
                         Overview
