@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Toaster } from '@/components/ui/sonner';
 import '@/App.css';
 
+import LandingPage from '@/pages/LandingPage';
 import RegistrationPage from '@/pages/RegistrationPage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
 import LoginPage from '@/pages/LoginPage';
@@ -93,18 +94,42 @@ const ProtectedRoute = ({ children }) => {
     return children;
 };
 
+// Public route that redirects to dashboard if logged in
+const PublicRoute = ({ children }) => {
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen gradient-mesh">
+                <div className="text-lg font-medium">Loading...</div>
+            </div>
+        );
+    }
+
+    if (user) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return children;
+};
+
 function App() {
     return (
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
+                    <Route path="/" element={
+                        <PublicRoute>
+                            <LandingPage />
+                        </PublicRoute>
+                    } />
                     <Route path="/register" element={<RegistrationPage />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/payment-success" element={<PaymentSuccessPage />} />
                     <Route
-                        path="/"
+                        path="/dashboard"
                         element={
                             <ProtectedRoute>
                                 <TaskHub />
