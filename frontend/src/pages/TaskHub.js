@@ -200,12 +200,11 @@ const TaskHub = () => {
                                         <div className="space-y-2">
                                             <Label htmlFor="assigned_to">Assign To</Label>
                                             <Select
-                                                value={taskForm.assigned_to}
+                                                value={taskForm.assigned_to.includes('@') ? '' : taskForm.assigned_to}
                                                 onValueChange={(value) => setTaskForm({ ...taskForm, assigned_to: value })}
-                                                required
                                             >
                                                 <SelectTrigger data-testid="assign-to-select" className="rounded-xl">
-                                                    <SelectValue placeholder="Select or type email" />
+                                                    <SelectValue placeholder="Select from list" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="self">Self (Me)</SelectItem>
@@ -216,13 +215,24 @@ const TaskHub = () => {
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            <Input
-                                                placeholder="Or type email address"
-                                                value={taskForm.assigned_to.includes('@') ? taskForm.assigned_to : ''}
-                                                onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
-                                                className="rounded-xl mt-2"
-                                                type="email"
-                                            />
+                                            <div className="relative">
+                                                <Input
+                                                    placeholder="Or type any email address"
+                                                    value={taskForm.assigned_to.includes('@') ? taskForm.assigned_to : ''}
+                                                    onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
+                                                    className="rounded-xl"
+                                                    type="email"
+                                                />
+                                                {taskForm.assigned_to.includes('@') && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setTaskForm({ ...taskForm, assigned_to: '' })}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-muted-foreground">
                                                 Can assign to anyone by email - they&apos;ll receive an invitation
                                             </p>
