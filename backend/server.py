@@ -1249,6 +1249,227 @@ async def cleanup_inactive_users():
     
     return {"message": f"Removed {removed_count} inactive users from teams"}
 
+# Hierarchical Team Structure - Direct Reports Management
+
+@api_router.get("/team/my-manager")
+async def get_my_manager(current_user: dict = Depends(get_current_user)):
+    """Get who the current user reports to"""
+    reports_to = current_user.get("reports_to")
+    if not reports_to:
+        return {"manager": None}
+    
+    manager = await db.users.find_one({"id": reports_to}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+    return {"manager": manager}
+
+@api_router.post("/team/set-manager")
+async def set_manager(request: SetManagerRequest, current_user: dict = Depends(get_current_user)):
+    """Set who you report to (your manager)"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    if request.manager_id:
+        # Validate manager exists and is in same domain
+        manager = await db.users.find_one({"id": request.manager_id}, {"_id": 0})
+        if not manager:
+            raise HTTPException(status_code=404, detail="Manager not found")
+        
+        if manager["company_domain"] != current_user["company_domain"]:
+            raise HTTPException(status_code=403, detail="Can only report to someone in your organization")
+        
+        if manager["id"] == current_user["id"]:
+            raise HTTPException(status_code=400, detail="Cannot report to yourself")
+        
+        # Prevent circular reporting (A reports to B, B reports to A)
+        if manager.get("reports_to") == current_user["id"]:
+            raise HTTPException(status_code=400, detail="Circular reporting not allowed")
+    
+    # Update current user's reports_to field
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"reports_to": request.manager_id}}
+    )
+    
+    if request.manager_id:
+        manager = await db.users.find_one({"id": request.manager_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+        return {"message": f"Now reporting to {manager['name']}", "manager": manager}
+    else:
+        return {"message": "Manager removed", "manager": None}
+
+@api_router.post("/team/add-direct-report")
+async def add_direct_report(request: AddDirectReportRequest, current_user: dict = Depends(get_current_user)):
+    """Add someone as your direct report (they will report to you)"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Validate user exists and is in same domain
+    direct_report = await db.users.find_one({"id": request.user_id}, {"_id": 0})
+    if not direct_report:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if direct_report["company_domain"] != current_user["company_domain"]:
+        raise HTTPException(status_code=403, detail="Can only add direct reports from your organization")
+    
+    if direct_report["id"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot add yourself as direct report")
+    
+    # Prevent circular reporting
+    if current_user.get("reports_to") == direct_report["id"]:
+        raise HTTPException(status_code=400, detail="Circular reporting not allowed - you already report to this person")
+    
+    # Update the user's reports_to field to current user
+    await db.users.update_one(
+        {"id": request.user_id},
+        {"$set": {"reports_to": current_user["id"]}}
+    )
+    
+    return {"message": f"{direct_report['name']} now reports to you"}
+
+@api_router.delete("/team/direct-report/{user_id}")
+async def remove_direct_report(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Remove someone from your direct reports (they will no longer report to you)"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Check if this user actually reports to current user
+    direct_report = await db.users.find_one({"id": user_id, "reports_to": current_user["id"]}, {"_id": 0})
+    if not direct_report:
+        raise HTTPException(status_code=404, detail="This user does not report to you")
+    
+    # Remove the reports_to relationship
+    await db.users.update_one(
+        {"id": user_id},
+        {"$unset": {"reports_to": ""}}
+    )
+    
+    return {"message": f"{direct_report['name']} no longer reports to you"}
+
+@api_router.get("/team/direct-reports")
+async def get_direct_reports(current_user: dict = Depends(get_current_user)):
+    """Get all direct reports with task metrics (privacy-respecting)"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Find all users who report to current user
+    direct_reports = await db.users.find(
+        {"reports_to": current_user["id"]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1}
+    ).to_list(1000)
+    
+    if not direct_reports:
+        return []
+    
+    report_ids = [dr["id"] for dr in direct_reports]
+    
+    # Get tasks assigned BY current user TO direct reports (privacy-respecting)
+    tasks = await db.tasks.find({
+        "created_by": current_user["id"],
+        "assigned_to": {"$in": report_ids}
+    }, {"_id": 0}).to_list(10000)
+    
+    # Calculate metrics per direct report
+    result = []
+    for dr in direct_reports:
+        dr_tasks = [t for t in tasks if t["assigned_to"] == dr["id"]]
+        pending = [t for t in dr_tasks if t["status"] not in ["Completed", "Declined"]]
+        completed = [t for t in dr_tasks if t["status"] == "Completed"]
+        
+        # Calculate average completion time for completed tasks
+        avg_days = None
+        if completed:
+            completion_times = []
+            for t in completed:
+                if t.get("completed_at") and t.get("created_at"):
+                    try:
+                        created = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                        completed_at = datetime.fromisoformat(t["completed_at"].replace('Z', '+00:00'))
+                        days = (completed_at - created).total_seconds() / 86400
+                        completion_times.append(days)
+                    except:
+                        pass
+            if completion_times:
+                avg_days = round(sum(completion_times) / len(completion_times), 1)
+        
+        result.append(DirectReportTaskMetrics(
+            user_id=dr["id"],
+            name=dr["name"],
+            email=dr["email"],
+            tasks_from_you_pending=len(pending),
+            tasks_from_you_completed=len(completed),
+            avg_completion_days=avg_days
+        ))
+    
+    return result
+
+@api_router.get("/team/potential-reports")
+async def get_potential_reports(current_user: dict = Depends(get_current_user)):
+    """Get team members who could be added as direct reports"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Get all team members from same domain who don't already report to current user
+    # and are not the current user
+    potential = await db.users.find({
+        "company_domain": current_user["company_domain"],
+        "subscription_tier": "teams",
+        "id": {"$ne": current_user["id"]},
+        "$or": [
+            {"reports_to": {"$ne": current_user["id"]}},
+            {"reports_to": {"$exists": False}}
+        ]
+    }, {"_id": 0, "id": 1, "name": 1, "email": 1, "reports_to": 1}).to_list(1000)
+    
+    # Get current user's manager to exclude (can't add your manager as direct report)
+    my_manager_id = current_user.get("reports_to")
+    
+    # Fetch manager names for context
+    result = []
+    for p in potential:
+        # Skip if this is your manager (circular prevention)
+        if my_manager_id and p["id"] == my_manager_id:
+            continue
+            
+        current_manager = None
+        if p.get("reports_to"):
+            mgr = await db.users.find_one({"id": p["reports_to"]}, {"_id": 0, "name": 1})
+            current_manager = mgr["name"] if mgr else None
+        
+        result.append({
+            "id": p["id"],
+            "name": p["name"],
+            "email": p["email"],
+            "current_manager": current_manager
+        })
+    
+    return result
+
+@api_router.get("/team/org-structure")
+async def get_org_structure(current_user: dict = Depends(get_current_user)):
+    """Get organizational hierarchy for the team"""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Get all team members
+    members = await db.users.find({
+        "company_domain": current_user["company_domain"],
+        "subscription_tier": "teams"
+    }, {"_id": 0, "id": 1, "name": 1, "email": 1, "reports_to": 1, "is_team_owner": 1}).to_list(1000)
+    
+    # Build hierarchy
+    member_map = {m["id"]: m for m in members}
+    
+    # Find top-level members (no reports_to or team owner)
+    top_level = []
+    for m in members:
+        m["direct_reports_count"] = len([x for x in members if x.get("reports_to") == m["id"]])
+        if not m.get("reports_to") or m.get("is_team_owner"):
+            top_level.append(m)
+    
+    return {
+        "members": members,
+        "top_level": top_level,
+        "total_members": len(members)
+    }
+
 # Include router
 app.include_router(api_router)
 
