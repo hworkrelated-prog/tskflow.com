@@ -1067,6 +1067,21 @@ class TeamMemberResponse(BaseModel):
     status: str  # active, inactive
     days_inactive: int
 
+class SetManagerRequest(BaseModel):
+    manager_id: Optional[str] = None  # None to remove manager
+
+class AddDirectReportRequest(BaseModel):
+    user_id: str
+
+class DirectReportTaskMetrics(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    tasks_from_you_pending: int
+    tasks_from_you_completed: int
+    avg_completion_days: Optional[float] = None
+    reports_to_you: bool = True
+
 @api_router.get("/team/members")
 async def get_team_members(current_user: dict = Depends(get_current_user)):
     if not current_user.get("is_team_owner"):
