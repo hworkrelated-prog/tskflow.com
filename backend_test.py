@@ -2,18 +2,29 @@ import requests
 import sys
 import json
 from datetime import datetime, timedelta
+import pymongo
+import os
 
-class TaskAccountabilityTester:
+class TaskHubHierarchicalTester:
     def __init__(self, base_url="https://team-pulse-68.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
-        self.admin_token = None
-        self.manager_token = None
-        self.admin_user = None
-        self.manager_user = None
+        self.user1_token = None
+        self.user2_token = None
+        self.user1_data = None
+        self.user2_data = None
         self.test_task_id = None
         self.tests_run = 0
         self.tests_passed = 0
+        
+        # MongoDB connection for direct database operations
+        try:
+            self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017")
+            self.db = self.mongo_client["test_database"]
+        except Exception as e:
+            print(f"⚠️ MongoDB connection failed: {e}")
+            self.mongo_client = None
+            self.db = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, token=None):
         """Run a single API test"""
@@ -32,6 +43,8 @@ class TaskAccountabilityTester:
                 response = requests.post(url, json=data, headers=headers)
             elif method == 'PUT':
                 response = requests.put(url, json=data, headers=headers)
+            elif method == 'DELETE':
+                response = requests.delete(url, headers=headers)
 
             success = response.status_code == expected_status
             if success:
@@ -55,361 +68,413 @@ class TaskAccountabilityTester:
             print(f"❌ Failed - Error: {str(e)}")
             return False, {}
 
-    def test_admin_registration(self):
-        """Test admin registration with admin code"""
+    def test_user1_registration(self):
+        """Test user1@testcompany.com registration"""
         success, response = self.run_test(
-            "Admin Registration",
+            "User1 Registration",
             "POST",
             "auth/register",
             200,
             data={
-                "name": "Admin User",
-                "email": "admin@company.com",
-                "password": "AdminPass123!",
-                "admin_code": "ADMIN2025"
+                "name": "User One",
+                "email": "user1@testcompany.com",
+                "password": "TestPass123!"
             }
         )
-        if success and 'access_token' in response:
-            self.admin_token = response['access_token']
-            self.admin_user = response['user']
+        if success:
+            self.user1_data = {
+                "email": "user1@testcompany.com",
+                "verification_code": response.get("verification_code"),
+                "user_id": response.get("user_id")
+            }
             return True
         return False
 
-    def test_manager_registration(self):
-        """Test manager registration with same domain"""
+    def test_user2_registration(self):
+        """Test user2@testcompany.com registration"""
         success, response = self.run_test(
-            "Manager Registration",
+            "User2 Registration",
             "POST",
             "auth/register",
             200,
             data={
-                "name": "Manager User",
-                "email": "manager@company.com",
-                "password": "ManagerPass123!"
+                "name": "User Two",
+                "email": "user2@testcompany.com",
+                "password": "TestPass123!"
             }
         )
-        if success and 'access_token' in response:
-            self.manager_token = response['access_token']
-            self.manager_user = response['user']
+        if success:
+            self.user2_data = {
+                "email": "user2@testcompany.com",
+                "verification_code": response.get("verification_code"),
+                "user_id": response.get("user_id")
+            }
             return True
         return False
 
-    def test_admin_login(self):
-        """Test admin login"""
+    def test_user1_verification(self):
+        """Test user1 email verification"""
+        if not self.user1_data or not self.user1_data.get("verification_code"):
+            print("❌ No verification code for user1")
+            return False
+            
         success, response = self.run_test(
-            "Admin Login",
+            "User1 Email Verification",
+            "POST",
+            "auth/verify-email",
+            200,
+            data={
+                "email": self.user1_data["email"],
+                "verification_code": self.user1_data["verification_code"]
+            }
+        )
+        if success and 'access_token' in response:
+            self.user1_token = response['access_token']
+            self.user1_data.update(response['user'])
+            return True
+        return False
+
+    def test_user2_verification(self):
+        """Test user2 email verification"""
+        if not self.user2_data or not self.user2_data.get("verification_code"):
+            print("❌ No verification code for user2")
+            return False
+            
+        success, response = self.run_test(
+            "User2 Email Verification",
+            "POST",
+            "auth/verify-email",
+            200,
+            data={
+                "email": self.user2_data["email"],
+                "verification_code": self.user2_data["verification_code"]
+            }
+        )
+        if success and 'access_token' in response:
+            self.user2_token = response['access_token']
+            self.user2_data.update(response['user'])
+            return True
+        return False
+
+    def test_user1_login(self):
+        """Test user1 login"""
+        success, response = self.run_test(
+            "User1 Login",
             "POST",
             "auth/login",
             200,
             data={
-                "email": "admin@company.com",
-                "password": "AdminPass123!"
+                "email": "user1@testcompany.com",
+                "password": "TestPass123!"
             }
         )
         if success and 'access_token' in response:
-            self.admin_token = response['access_token']
+            self.user1_token = response['access_token']
+            self.user1_data = response['user']
             return True
         return False
 
-    def test_manager_login(self):
-        """Test manager login"""
+    def test_user2_login(self):
+        """Test user2 login"""
         success, response = self.run_test(
-            "Manager Login",
+            "User2 Login",
             "POST",
             "auth/login",
             200,
             data={
-                "email": "manager@company.com",
-                "password": "ManagerPass123!"
+                "email": "user2@testcompany.com",
+                "password": "TestPass123!"
             }
         )
         if success and 'access_token' in response:
-            self.manager_token = response['access_token']
+            self.user2_token = response['access_token']
+            self.user2_data = response['user']
             return True
         return False
 
-    def test_get_current_user(self):
-        """Test getting current user info"""
+    def upgrade_user1_to_teams_owner(self):
+        """Upgrade user1 to teams tier as team owner via database"""
+        if not self.db:
+            print("❌ No database connection available")
+            return False
+            
+        try:
+            result = self.db.users.update_one(
+                {"email": "user1@testcompany.com"},
+                {"$set": {
+                    "subscription_tier": "teams",
+                    "is_team_owner": True
+                }}
+            )
+            if result.modified_count > 0:
+                print("✅ User1 upgraded to teams tier (team owner)")
+                return True
+            else:
+                print("❌ Failed to upgrade user1")
+                return False
+        except Exception as e:
+            print(f"❌ Database upgrade failed: {e}")
+            return False
+
+    def upgrade_user2_to_teams_member(self):
+        """Upgrade user2 to teams tier as team member via database"""
+        if not self.db:
+            print("❌ No database connection available")
+            return False
+            
+        try:
+            result = self.db.users.update_one(
+                {"email": "user2@testcompany.com"},
+                {"$set": {
+                    "subscription_tier": "teams",
+                    "team_owner_email": "user1@testcompany.com"
+                }}
+            )
+            if result.modified_count > 0:
+                print("✅ User2 upgraded to teams tier (team member)")
+                return True
+            else:
+                print("❌ Failed to upgrade user2")
+                return False
+        except Exception as e:
+            print(f"❌ Database upgrade failed: {e}")
+            return False
+
+    def test_get_my_manager_user1(self):
+        """Test GET /api/team/my-manager for user1 (should be null initially)"""
         success, response = self.run_test(
-            "Get Current User (Admin)",
+            "Get My Manager (User1)",
             "GET",
-            "auth/me",
+            "team/my-manager",
             200,
-            token=self.admin_token
+            token=self.user1_token
+        )
+        if success and response.get("manager") is None:
+            print("✅ User1 has no manager initially (correct)")
+            return True
+        elif success:
+            print(f"❌ Expected null manager, got: {response}")
+            return False
+        return False
+
+    def test_get_potential_reports_user1(self):
+        """Test GET /api/team/potential-reports for user1 (should return user2)"""
+        success, response = self.run_test(
+            "Get Potential Reports (User1)",
+            "GET",
+            "team/potential-reports",
+            200,
+            token=self.user1_token
+        )
+        if success and isinstance(response, list) and len(response) > 0:
+            # Check if user2 is in the potential reports
+            user2_found = any(user.get("email") == "user2@testcompany.com" for user in response)
+            if user2_found:
+                print("✅ User2 found in potential reports")
+                return True
+            else:
+                print(f"❌ User2 not found in potential reports: {response}")
+                return False
+        return False
+
+    def test_add_direct_report_user1(self):
+        """Test POST /api/team/add-direct-report with user2's ID"""
+        if not self.user2_data or not self.user2_data.get("id"):
+            print("❌ No user2 ID available")
+            return False
+            
+        success, response = self.run_test(
+            "Add Direct Report (User1 adds User2)",
+            "POST",
+            "team/add-direct-report",
+            200,
+            data={"user_id": self.user2_data["id"]},
+            token=self.user1_token
         )
         return success
 
-    def test_get_users(self):
-        """Test getting list of users (admin only)"""
+    def test_get_direct_reports_user1(self):
+        """Test GET /api/team/direct-reports for user1 (should return user2 with metrics)"""
         success, response = self.run_test(
-            "Get Users List",
+            "Get Direct Reports (User1)",
             "GET",
-            "users",
+            "team/direct-reports",
             200,
-            token=self.admin_token
+            token=self.user1_token
         )
-        return success
+        if success and isinstance(response, list) and len(response) > 0:
+            # Check if user2 is in the direct reports
+            user2_report = next((user for user in response if user.get("email") == "user2@testcompany.com"), None)
+            if user2_report:
+                print(f"✅ User2 found in direct reports with metrics: {user2_report}")
+                return True
+            else:
+                print(f"❌ User2 not found in direct reports: {response}")
+                return False
+        return False
 
-    def test_create_task(self):
-        """Test creating a task"""
+    def test_create_task_assigned_to_user2(self):
+        """Test creating a task assigned to user2"""
         due_date = (datetime.now() + timedelta(days=2)).isoformat()
         success, response = self.run_test(
-            "Create Task",
+            "Create Task Assigned to User2",
             "POST",
             "tasks",
             200,
             data={
-                "title": "Test Task",
-                "description": "This is a test task for the accountability manager",
-                "assigned_to": self.manager_user['id'],
+                "title": "Test Hierarchical Task",
+                "description": "This task is assigned to user2 by user1 for testing hierarchy",
+                "assigned_to": self.user2_data["id"],
                 "due_date": due_date,
                 "priority": "High",
                 "category": "Testing"
             },
-            token=self.admin_token
+            token=self.user1_token
         )
         if success and 'id' in response:
             self.test_task_id = response['id']
+            print(f"✅ Task created with ID: {self.test_task_id}")
             return True
         return False
 
-    def test_get_tasks_admin(self):
-        """Test getting all tasks as admin"""
+    def test_get_direct_reports_with_task_metrics(self):
+        """Test GET /api/team/direct-reports after creating task (should show 1 pending task)"""
         success, response = self.run_test(
-            "Get All Tasks (Admin)",
+            "Get Direct Reports with Task Metrics",
             "GET",
-            "tasks",
+            "team/direct-reports",
             200,
-            token=self.admin_token
+            token=self.user1_token
         )
-        return success
-
-    def test_get_tasks_manager(self):
-        """Test getting assigned tasks as manager"""
-        success, response = self.run_test(
-            "Get Assigned Tasks (Manager)",
-            "GET",
-            "tasks",
-            200,
-            token=self.manager_token
-        )
-        return success
-
-    def test_get_task_detail(self):
-        """Test getting task details"""
-        if not self.test_task_id:
-            print("❌ No test task ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Get Task Detail",
-            "GET",
-            f"tasks/{self.test_task_id}",
-            200,
-            token=self.manager_token
-        )
-        return success
-
-    def test_accept_task(self):
-        """Test accepting a task"""
-        if not self.test_task_id:
-            print("❌ No test task ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Accept Task",
-            "PUT",
-            f"tasks/{self.test_task_id}/accept",
-            200,
-            token=self.manager_token
-        )
-        return success
-
-    def test_complete_task(self):
-        """Test completing a task"""
-        if not self.test_task_id:
-            print("❌ No test task ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Complete Task",
-            "PUT",
-            f"tasks/{self.test_task_id}/complete",
-            200,
-            token=self.manager_token
-        )
-        return success
-
-    def test_decline_task(self):
-        """Test declining a task (create new task first)"""
-        # Create another task for decline test
-        due_date = (datetime.now() + timedelta(days=1)).isoformat()
-        success, response = self.run_test(
-            "Create Task for Decline Test",
-            "POST",
-            "tasks",
-            200,
-            data={
-                "title": "Task to Decline",
-                "description": "This task will be declined",
-                "assigned_to": self.manager_user['id'],
-                "due_date": due_date,
-                "priority": "Medium",
-                "category": "Testing"
-            },
-            token=self.admin_token
-        )
-        
-        if success and 'id' in response:
-            decline_task_id = response['id']
-            success, response = self.run_test(
-                "Decline Task",
-                "PUT",
-                f"tasks/{decline_task_id}/decline",
-                200,
-                data={"reason": "Not enough time to complete this task"},
-                token=self.manager_token
-            )
-            return success
+        if success and isinstance(response, list) and len(response) > 0:
+            user2_report = next((user for user in response if user.get("email") == "user2@testcompany.com"), None)
+            if user2_report and user2_report.get("tasks_from_you_pending", 0) >= 1:
+                print(f"✅ User2 has pending tasks: {user2_report['tasks_from_you_pending']}")
+                return True
+            else:
+                print(f"❌ Expected pending tasks for user2, got: {user2_report}")
+                return False
         return False
 
-    def test_counter_propose_task(self):
-        """Test counter-proposing a task"""
-        # Create another task for counter-propose test
-        due_date = (datetime.now() + timedelta(days=1)).isoformat()
+    def test_set_manager_user2(self):
+        """Test POST /api/team/set-manager with user1's ID (user2 reports to user1)"""
+        if not self.user1_data or not self.user1_data.get("id"):
+            print("❌ No user1 ID available")
+            return False
+            
         success, response = self.run_test(
-            "Create Task for Counter-Propose Test",
+            "Set Manager (User2 reports to User1)",
             "POST",
-            "tasks",
+            "team/set-manager",
             200,
-            data={
-                "title": "Task to Counter-Propose",
-                "description": "This task will have a counter-proposal",
-                "assigned_to": self.manager_user['id'],
-                "due_date": due_date,
-                "priority": "Low",
-                "category": "Testing"
-            },
-            token=self.admin_token
-        )
-        
-        if success and 'id' in response:
-            counter_task_id = response['id']
-            new_due_date = (datetime.now() + timedelta(days=3)).isoformat()
-            success, response = self.run_test(
-                "Counter-Propose Task",
-                "PUT",
-                f"tasks/{counter_task_id}/counter-propose",
-                200,
-                data={
-                    "message": "Need more time due to other priorities",
-                    "proposed_due_date": new_due_date
-                },
-                token=self.manager_token
-            )
-            return success
-        return False
-
-    def test_manager_dashboard(self):
-        """Test manager dashboard"""
-        success, response = self.run_test(
-            "Manager Dashboard",
-            "GET",
-            "dashboard/manager",
-            200,
-            token=self.manager_token
+            data={"manager_id": self.user1_data["id"]},
+            token=self.user2_token
         )
         return success
 
-    def test_admin_dashboard(self):
-        """Test admin dashboard"""
+    def test_circular_reporting_prevention(self):
+        """Test that user1 cannot report to user2 if user2 reports to user1"""
+        if not self.user2_data or not self.user2_data.get("id"):
+            print("❌ No user2 ID available")
+            return False
+            
         success, response = self.run_test(
-            "Admin Dashboard",
-            "GET",
-            "dashboard/admin",
-            200,
-            token=self.admin_token
-        )
-        return success
-
-    def test_admin_performance(self):
-        """Test admin performance page"""
-        success, response = self.run_test(
-            "Admin Performance",
-            "GET",
-            "dashboard/admin/performance",
-            200,
-            token=self.admin_token
-        )
-        return success
-
-    def test_invalid_admin_code(self):
-        """Test registration with invalid admin code"""
-        success, response = self.run_test(
-            "Invalid Admin Code",
+            "Circular Reporting Prevention (User1 tries to report to User2)",
             "POST",
-            "auth/register",
-            400,
-            data={
-                "name": "Invalid Admin",
-                "email": "invalid@company.com",
-                "password": "InvalidPass123!",
-                "admin_code": "WRONG_CODE"
-            }
+            "team/set-manager",
+            400,  # Should fail with 400
+            data={"manager_id": self.user2_data["id"]},
+            token=self.user1_token
         )
         return success
 
-    def test_wrong_domain_registration(self):
-        """Test manager registration with wrong domain"""
+    def test_remove_direct_report(self):
+        """Test DELETE /api/team/direct-report/{user_id}"""
+        if not self.user2_data or not self.user2_data.get("id"):
+            print("❌ No user2 ID available")
+            return False
+            
         success, response = self.run_test(
-            "Wrong Domain Registration",
-            "POST",
-            "auth/register",
-            400,
-            data={
-                "name": "Wrong Domain User",
-                "email": "user@wrongdomain.com",
-                "password": "WrongPass123!"
-            }
+            "Remove Direct Report (User1 removes User2)",
+            "DELETE",
+            f"team/direct-report/{self.user2_data['id']}",
+            200,
+            token=self.user1_token
         )
         return success
+
+    def test_get_dashboard(self):
+        """Test dashboard functionality"""
+        success, response = self.run_test(
+            "Get Dashboard (User1)",
+            "GET",
+            "dashboard",
+            200,
+            token=self.user1_token
+        )
+        return success
+
+    def cleanup_test_data(self):
+        """Clean up test data from database"""
+        if not self.db:
+            return
+            
+        try:
+            # Remove test users
+            self.db.users.delete_many({"email": {"$in": ["user1@testcompany.com", "user2@testcompany.com"]}})
+            # Remove test tasks
+            if self.test_task_id:
+                self.db.tasks.delete_one({"id": self.test_task_id})
+            print("✅ Test data cleaned up")
+        except Exception as e:
+            print(f"⚠️ Cleanup failed: {e}")
 
 def main():
-    print("🚀 Starting Task Accountability Manager API Tests")
-    print("=" * 60)
+    print("🚀 Starting Task Hub Hierarchical Team Structure API Tests")
+    print("=" * 70)
     
-    tester = TaskAccountabilityTester()
+    tester = TaskHubHierarchicalTester()
     
-    # Test sequence
+    # Clean up any existing test data first
+    tester.cleanup_test_data()
+    
+    # Test sequence following the exact scenario from the review request
     test_sequence = [
-        # Authentication Tests
-        ("Admin Registration", tester.test_admin_registration),
-        ("Manager Registration", tester.test_manager_registration),
-        ("Admin Login", tester.test_admin_login),
-        ("Manager Login", tester.test_manager_login),
-        ("Get Current User", tester.test_get_current_user),
+        # 1. Register two users with same domain
+        ("User1 Registration", tester.test_user1_registration),
+        ("User2 Registration", tester.test_user2_registration),
         
-        # User Management Tests
-        ("Get Users List", tester.test_get_users),
+        # 2. Verify both emails and login
+        ("User1 Email Verification", tester.test_user1_verification),
+        ("User2 Email Verification", tester.test_user2_verification),
+        ("User1 Login", tester.test_user1_login),
+        ("User2 Login", tester.test_user2_login),
         
-        # Task Management Tests
-        ("Create Task", tester.test_create_task),
-        ("Get All Tasks (Admin)", tester.test_get_tasks_admin),
-        ("Get Assigned Tasks (Manager)", tester.test_get_tasks_manager),
-        ("Get Task Detail", tester.test_get_task_detail),
-        ("Accept Task", tester.test_accept_task),
-        ("Complete Task", tester.test_complete_task),
-        ("Decline Task", tester.test_decline_task),
-        ("Counter-Propose Task", tester.test_counter_propose_task),
+        # 3. Upgrade users to teams tier
+        ("Upgrade User1 to Teams Owner", tester.upgrade_user1_to_teams_owner),
+        ("Upgrade User2 to Teams Member", tester.upgrade_user2_to_teams_member),
         
-        # Dashboard Tests
-        ("Manager Dashboard", tester.test_manager_dashboard),
-        ("Admin Dashboard", tester.test_admin_dashboard),
-        ("Admin Performance", tester.test_admin_performance),
+        # 4. Test hierarchical team APIs
+        ("Get My Manager (User1 - should be null)", tester.test_get_my_manager_user1),
+        ("Get Potential Reports (User1 - should return User2)", tester.test_get_potential_reports_user1),
+        ("Add Direct Report (User1 adds User2)", tester.test_add_direct_report_user1),
+        ("Get Direct Reports (User1)", tester.test_get_direct_reports_user1),
         
-        # Error Handling Tests
-        ("Invalid Admin Code", tester.test_invalid_admin_code),
-        ("Wrong Domain Registration", tester.test_wrong_domain_registration),
+        # 5. Create task and test metrics
+        ("Create Task Assigned to User2", tester.test_create_task_assigned_to_user2),
+        ("Get Direct Reports with Task Metrics", tester.test_get_direct_reports_with_task_metrics),
+        
+        # 6. Test bidirectional reporting
+        ("Set Manager (User2 reports to User1)", tester.test_set_manager_user2),
+        
+        # 7. Test circular reporting prevention
+        ("Circular Reporting Prevention", tester.test_circular_reporting_prevention),
+        
+        # 8. Test removal of direct report
+        ("Remove Direct Report", tester.test_remove_direct_report),
+        
+        # 9. Test dashboard
+        ("Get Dashboard", tester.test_get_dashboard),
     ]
     
     # Run all tests
@@ -419,8 +484,11 @@ def main():
         except Exception as e:
             print(f"❌ {test_name} failed with exception: {str(e)}")
     
+    # Clean up test data
+    tester.cleanup_test_data()
+    
     # Print results
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 70)
     print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} tests passed")
     print(f"✅ Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%")
     
