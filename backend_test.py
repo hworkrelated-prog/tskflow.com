@@ -93,7 +93,7 @@ class TaskHubRecentChangesTester:
                 print("✅ SECURITY: verification_code correctly hidden from response")
             
             # Get verification code from database for testing
-            if self.db:
+            if self.db is not None:
                 user_doc = self.db.users.find_one({"email": "alice.manager@tskboxtest.com"})
                 if user_doc and "verification_code" in user_doc:
                     verification_code = user_doc["verification_code"]
