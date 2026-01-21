@@ -416,7 +416,7 @@ class TaskHubHierarchicalTester:
 
     def cleanup_test_data(self):
         """Clean up test data from database"""
-        if not self.db:
+        if self.db is None:
             return
             
         try:
