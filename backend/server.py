@@ -144,12 +144,22 @@ class AnalyticsQuery(BaseModel):
     start_date: str
     end_date: str
 
+class AssigneeBreakdown(BaseModel):
+    name: str
+    email: str
+    tasks_assigned: int
+    tasks_completed: int
+    tasks_pending: int
+    completion_rate: float
+    avg_completion_days: Optional[float] = None
+
 class AnalyticsResponse(BaseModel):
     assigned_to_others_count: int
     assigned_to_self_count: int
     received_from_others_count: int
     completed_count: int
     task_breakdown: dict
+    assignee_breakdown: List[AssigneeBreakdown] = []
 
 # Helper functions
 def get_password_hash(password: str):
