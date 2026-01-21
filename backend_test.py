@@ -312,6 +312,10 @@ class TaskHubRecentChangesTester:
 
     def test_professional_email_notifications(self):
         """Test creating a task assigned to another user and verify email is sent"""
+        if not self.user1_token or not self.user2_data:
+            print("❌ Missing authentication or user data")
+            return False
+            
         due_date = (datetime.now() + timedelta(days=3)).isoformat()
         
         print("\n🔍 Testing Professional Email Notifications...")
@@ -346,8 +350,8 @@ class TaskHubRecentChangesTester:
 
     def test_task_edit_email_notification(self):
         """Test editing a task and verify update notification is sent"""
-        if not self.test_task_id:
-            print("❌ No test task ID available for editing")
+        if not self.test_task_id or not self.user1_token:
+            print("❌ No test task ID or token available for editing")
             return False
             
         print("\n🔍 Testing Task Edit Email Notifications...")
