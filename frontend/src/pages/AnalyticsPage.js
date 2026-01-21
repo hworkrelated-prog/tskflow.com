@@ -6,10 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { format, parseISO } from 'date-fns';
+import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
+import { getErrorMessage } from '@/lib/utils';
 
 const AnalyticsPage = () => {
     const { user } = useAuth();
@@ -18,6 +21,9 @@ const AnalyticsPage = () => {
     const [analytics, setAnalytics] = useState(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    
+    // Onboarding
+    const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('analytics');
 
     const handleFetchAnalytics = async (e) => {
         e.preventDefault();
@@ -30,7 +36,7 @@ const AnalyticsPage = () => {
             });
             setAnalytics(response.data);
         } catch (error) {
-            toast.error('Failed to fetch analytics');
+            toast.error(getErrorMessage(error, 'Failed to fetch analytics'));
         } finally {
             setLoading(false);
         }
@@ -38,8 +44,15 @@ const AnalyticsPage = () => {
 
     return (
         <div data-testid="analytics-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+            {/* Onboarding Popup */}
+            <AnimatePresence>
+                {showOnboarding && (
+                    <OnboardingPopup page="analytics" onClose={closeOnboarding} />
+                )}
+            </AnimatePresence>
+
             <header className="glass-header border-b">
-                <div className="container mx-auto px-6 py-4">
+                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
                         variant="ghost"
@@ -47,7 +60,16 @@ const AnalyticsPage = () => {
                         className="rounded-full"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Hub
+                        Back to Dashboard
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={reopenOnboarding}
+                        className="rounded-full"
+                        title="Help & Walkthrough"
+                    >
+                        <HelpCircle className="w-5 h-5" />
                     </Button>
                 </div>
             </header>
@@ -61,7 +83,7 @@ const AnalyticsPage = () => {
                 >
                     <div className="text-center">
                         <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Analytics</h1>
-                        <p className="text-muted-foreground text-lg">Track your task management patterns</p>
+                        <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
                     </div>
 
                     <Card className="border-2 shadow-soft rounded-2xl">
@@ -111,6 +133,7 @@ const AnalyticsPage = () => {
 
                     {analytics && (
                         <>
+                            {/* Summary Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <Card className="border-2 shadow-soft rounded-2xl">
                                     <CardContent className="p-6">
@@ -169,21 +192,127 @@ const AnalyticsPage = () => {
                                 </Card>
                             </div>
 
-                            {Object.keys(analytics.task_breakdown).length > 0 && (
+                            {/* Detailed Assignee Breakdown */}
+                            {analytics.assignee_breakdown && analytics.assignee_breakdown.length > 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl">
                                     <CardHeader>
-                                        <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Task Distribution</CardTitle>
-                                        <CardDescription>Tasks assigned to team members</CardDescription>
+                                        <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                            <TrendingUp className="w-6 h-6" />
+                                            Team Performance Breakdown
+                                        </CardTitle>
+                                        <CardDescription>Detailed metrics per assignee</CardDescription>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="space-y-4">
-                                            {Object.entries(analytics.task_breakdown).map(([userId, data]) => (
-                                                <div key={userId} className="flex items-center justify-between p-4 bg-secondary/50 rounded-xl">
-                                                    <span className="font-medium">{data.name}</span>
-                                                    <span className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>{data.count}</span>
-                                                </div>
+                                        {/* Table Header */}
+                                        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 rounded-xl mb-4 text-sm font-semibold text-muted-foreground">
+                                            <div className="col-span-3">Team Member</div>
+                                            <div className="col-span-2 text-center">Assigned</div>
+                                            <div className="col-span-2 text-center">Completed</div>
+                                            <div className="col-span-2 text-center">Pending</div>
+                                            <div className="col-span-2 text-center">Completion Rate</div>
+                                            <div className="col-span-1 text-center">Avg Days</div>
+                                        </div>
+
+                                        {/* Table Rows */}
+                                        <div className="space-y-3">
+                                            {analytics.assignee_breakdown.map((assignee, index) => (
+                                                <motion.div
+                                                    key={assignee.email}
+                                                    initial={{ opacity: 0, x: -20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ duration: 0.2, delay: index * 0.05 }}
+                                                >
+                                                    <Card className="border rounded-xl hover:shadow-md transition-shadow">
+                                                        <CardContent className="p-4">
+                                                            <div className="grid grid-cols-12 gap-4 items-center">
+                                                                {/* Name & Email */}
+                                                                <div className="col-span-3 flex items-center gap-3">
+                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                                                        <span className="font-semibold text-indigo-700">
+                                                                            {assignee.name.charAt(0).toUpperCase()}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className="font-semibold truncate">{assignee.name}</p>
+                                                                        <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Tasks Assigned */}
+                                                                <div className="col-span-2 text-center">
+                                                                    <Badge variant="secondary" className="text-lg px-3 py-1">
+                                                                        {assignee.tasks_assigned}
+                                                                    </Badge>
+                                                                </div>
+
+                                                                {/* Tasks Completed */}
+                                                                <div className="col-span-2 text-center">
+                                                                    <Badge className="bg-green-100 text-green-700 text-lg px-3 py-1">
+                                                                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                                                                        {assignee.tasks_completed}
+                                                                    </Badge>
+                                                                </div>
+
+                                                                {/* Tasks Pending */}
+                                                                <div className="col-span-2 text-center">
+                                                                    {assignee.tasks_pending > 0 ? (
+                                                                        <Badge className="bg-amber-100 text-amber-700 text-lg px-3 py-1">
+                                                                            <Clock className="w-4 h-4 mr-1" />
+                                                                            {assignee.tasks_pending}
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge className="bg-gray-100 text-gray-500 text-lg px-3 py-1">
+                                                                            0
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Completion Rate */}
+                                                                <div className="col-span-2">
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className={`text-lg font-bold ${
+                                                                            assignee.completion_rate >= 80 ? 'text-green-600' :
+                                                                            assignee.completion_rate >= 50 ? 'text-amber-600' :
+                                                                            'text-red-600'
+                                                                        }`}>
+                                                                            {assignee.completion_rate}%
+                                                                        </span>
+                                                                        <Progress 
+                                                                            value={assignee.completion_rate} 
+                                                                            className="h-2 w-full mt-1"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Avg Completion Days */}
+                                                                <div className="col-span-1 text-center">
+                                                                    {assignee.avg_completion_days !== null ? (
+                                                                        <span className="text-sm font-medium">
+                                                                            {assignee.avg_completion_days}d
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-sm text-muted-foreground">—</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                </motion.div>
                                             ))}
                                         </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* Empty State */}
+                            {(!analytics.assignee_breakdown || analytics.assignee_breakdown.length === 0) && analytics.assigned_to_others_count === 0 && (
+                                <Card className="border-2 shadow-soft rounded-2xl">
+                                    <CardContent className="p-12 text-center">
+                                        <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                                        <h3 className="text-lg font-semibold mb-2">No Team Data Yet</h3>
+                                        <p className="text-muted-foreground">
+                                            Assign tasks to team members to see their performance metrics here.
+                                        </p>
                                     </CardContent>
                                 </Card>
                             )}
