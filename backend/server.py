@@ -1105,14 +1105,18 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
     completed = [t for t in tasks if t["status"] == "Completed"]
     
     # Breakdown by assignee - batch fetch users
-    unique_assignee_ids = list(set([t["assigned_to"] for t in assigned_to_others]))
+    unique_assignee_ids = list(set([t["assigned_to"] for t in assigned_to_others if not t["assigned_to"].startswith("email_")]))
     
     assignee_breakdown = {}
+    assignee_details = []
+    
     if unique_assignee_ids:
         assignees = await db.users.find(
             {"id": {"$in": unique_assignee_ids}},
-            {"_id": 0, "id": 1, "name": 1}
+            {"_id": 0, "id": 1, "name": 1, "email": 1}
         ).to_list(len(unique_assignee_ids))
+        
+        assignee_map = {a["id"]: a for a in assignees}
         
         for assignee in assignees:
             assignee_breakdown[assignee["id"]] = {"name": assignee["name"], "count": 0}
@@ -1121,13 +1125,51 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
             assignee_id = task["assigned_to"]
             if assignee_id in assignee_breakdown:
                 assignee_breakdown[assignee_id]["count"] += 1
+        
+        # Calculate detailed breakdown per assignee
+        for assignee_id, assignee_data in assignee_map.items():
+            assignee_tasks = [t for t in assigned_to_others if t["assigned_to"] == assignee_id]
+            completed_tasks = [t for t in assignee_tasks if t["status"] == "Completed"]
+            pending_tasks = [t for t in assignee_tasks if t["status"] not in ["Completed", "Declined"]]
+            
+            # Calculate average completion time
+            avg_days = None
+            if completed_tasks:
+                completion_times = []
+                for t in completed_tasks:
+                    if t.get("completed_at") and t.get("created_at"):
+                        try:
+                            created = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                            completed_at = datetime.fromisoformat(t["completed_at"].replace('Z', '+00:00'))
+                            days = (completed_at - created).total_seconds() / 86400
+                            completion_times.append(days)
+                        except:
+                            pass
+                if completion_times:
+                    avg_days = round(sum(completion_times) / len(completion_times), 1)
+            
+            completion_rate = round((len(completed_tasks) / len(assignee_tasks) * 100), 1) if assignee_tasks else 0
+            
+            assignee_details.append(AssigneeBreakdown(
+                name=assignee_data["name"],
+                email=assignee_data["email"],
+                tasks_assigned=len(assignee_tasks),
+                tasks_completed=len(completed_tasks),
+                tasks_pending=len(pending_tasks),
+                completion_rate=completion_rate,
+                avg_completion_days=avg_days
+            ))
+    
+    # Sort by tasks assigned (descending)
+    assignee_details.sort(key=lambda x: x.tasks_assigned, reverse=True)
     
     return AnalyticsResponse(
         assigned_to_others_count=len(assigned_to_others),
         assigned_to_self_count=len(assigned_to_self),
         received_from_others_count=len(received_from_others),
         completed_count=len(completed),
-        task_breakdown=assignee_breakdown
+        task_breakdown=assignee_breakdown,
+        assignee_breakdown=assignee_details
     )
 
 @api_router.get("/users")
