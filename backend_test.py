@@ -71,22 +71,43 @@ class TaskHubRecentChangesTester:
             return False, {}
 
     def test_user1_registration(self):
-        """Test user1@testcompany.com registration"""
+        """Test user1@testcompany.com registration - VERIFY NO VERIFICATION CODE IN RESPONSE"""
         success, response = self.run_test(
-            "User1 Registration",
+            "User1 Registration (Email Verification Flow)",
             "POST",
             "auth/register",
             200,
             data={
-                "name": "User One",
-                "email": "user1@testcompany.com",
-                "password": "TestPass123!"
+                "name": "Alice Manager",
+                "email": "alice.manager@tskboxtest.com",
+                "password": "SecurePass123!"
             }
         )
         if success:
+            # CRITICAL: Verify that verification_code is null in response
+            verification_code_in_response = response.get("verification_code")
+            if verification_code_in_response is not None:
+                print(f"❌ SECURITY ISSUE: verification_code exposed in response: {verification_code_in_response}")
+                return False
+            else:
+                print("✅ SECURITY: verification_code correctly hidden from response")
+            
+            # Get verification code from database for testing
+            if self.db:
+                user_doc = self.db.users.find_one({"email": "alice.manager@tskboxtest.com"})
+                if user_doc and "verification_code" in user_doc:
+                    verification_code = user_doc["verification_code"]
+                    print(f"✅ Retrieved verification code from database: {verification_code}")
+                else:
+                    print("❌ No verification code found in database")
+                    return False
+            else:
+                print("❌ Cannot retrieve verification code - no database connection")
+                return False
+                
             self.user1_data = {
-                "email": "user1@testcompany.com",
-                "verification_code": response.get("verification_code"),
+                "email": "alice.manager@tskboxtest.com",
+                "verification_code": verification_code,
                 "user_id": response.get("user_id")
             }
             return True
