@@ -380,6 +380,10 @@ class TaskHubRecentChangesTester:
 
     def test_analytics_with_assignee_breakdown(self):
         """Test POST /api/analytics with date range and verify assignee_breakdown array"""
+        if not self.user1_token:
+            print("❌ No authentication token available")
+            return False
+            
         start_date = (datetime.now() - timedelta(days=30)).isoformat()
         end_date = datetime.now().isoformat()
         
@@ -430,6 +434,10 @@ class TaskHubRecentChangesTester:
 
     def test_bulk_task_creation(self):
         """Test POST /api/tasks/bulk with multiple assignees"""
+        if not self.user1_token or not self.user2_data:
+            print("❌ Missing authentication or user data")
+            return False
+            
         due_date = (datetime.now() + timedelta(days=5)).isoformat()
         
         print("\n🔍 Testing Bulk Task Creation...")
