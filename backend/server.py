@@ -258,25 +258,44 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     
     await db.users.insert_one(user_doc)
     
-    # Send verification email
-    sendgrid_key = os.getenv('SENDGRID_API_KEY')
-    sender_email = os.getenv('SENDER_EMAIL')
+    # Always send verification email via Resend
+    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    email_content = f"""
+    <html>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome to tskbox</h1>
+                <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Your task management journey begins here</p>
+            </div>
+            <div style="padding: 40px 30px; background: white;">
+                <p style="font-size: 16px; color: #374151;">Hi {user.name},</p>
+                <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                    Thank you for registering with tskbox. To complete your account setup, please use the verification code below:
+                </p>
+                <div style="background: #F3F4F6; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0;">
+                    <p style="font-size: 14px; color: #6B7280; margin: 0 0 10px 0;">Your Verification Code</p>
+                    <p style="font-size: 36px; font-weight: 700; color: #4F46E5; margin: 0; letter-spacing: 4px;">{verification_code}</p>
+                </div>
+                <p style="font-size: 14px; color: #6B7280; line-height: 1.6;">
+                    This code will expire in 24 hours. If you didn't create an account with tskbox, please disregard this email.
+                </p>
+                <div style="margin-top: 30px; text-align: center;">
+                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        Verify Your Account
+                    </a>
+                </div>
+            </div>
+            <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
+                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
+                    © 2025 tskbox. All rights reserved.
+                </p>
+            </div>
+        </body>
+    </html>
+    """
+    background_tasks.add_task(send_email_notification, user.email, "Verify your tskbox account", email_content)
     
-    if sendgrid_key and sender_email:
-        email_content = f"""
-        <html>
-            <body>
-                <h2>Welcome to Task Hub!</h2>
-                <p>Your verification code is: <strong>{verification_code}</strong></p>
-                <p>Please enter this code to verify your email and start using Task Hub.</p>
-            </body>
-        </html>
-        """
-        background_tasks.add_task(send_email_notification, user.email, "Verify your Task Hub account", email_content)
-        return {"message": "Registration successful. Verification code sent to email.", "verification_code": None, "user_id": user_id}
-    else:
-        # Development mode - return code
-        return {"message": "Registration successful. Use this verification code.", "verification_code": verification_code, "user_id": user_id}
+    return {"message": "Registration successful. Verification code sent to your email.", "verification_code": None, "user_id": user_id}
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)
 async def verify_email(request: EmailVerifyRequest):
