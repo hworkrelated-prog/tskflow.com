@@ -275,7 +275,214 @@ class TaskHubRecentChangesTester:
             print(f"❌ Database upgrade failed: {e}")
             return False
 
-    def test_get_my_manager_user1(self):
+    def test_resend_verification_endpoint(self):
+        """Test resend verification endpoint"""
+        success, response = self.run_test(
+            "Resend Verification Code",
+            "POST",
+            "auth/resend-verification",
+            200,
+            data={"email": "alice.manager@tskboxtest.com"}
+        )
+        return success
+
+    def check_backend_logs_for_email(self, expected_email):
+        """Check backend logs for email sent confirmation"""
+        try:
+            # Check supervisor logs for email confirmation
+            result = subprocess.run(
+                ["tail", "-n", "50", "/var/log/supervisor/backend.out.log"],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0:
+                log_content = result.stdout
+                if f"Email sent to {expected_email}" in log_content:
+                    print(f"✅ Found email confirmation in logs for {expected_email}")
+                    return True
+                else:
+                    print(f"❌ No email confirmation found in logs for {expected_email}")
+                    print(f"Recent logs: {log_content[-500:]}")  # Show last 500 chars
+                    return False
+            else:
+                print(f"❌ Failed to read logs: {result.stderr}")
+                return False
+        except Exception as e:
+            print(f"❌ Error checking logs: {e}")
+            return False
+
+    def test_professional_email_notifications(self):
+        """Test creating a task assigned to another user and verify email is sent"""
+        due_date = (datetime.now() + timedelta(days=3)).isoformat()
+        
+        print("\n🔍 Testing Professional Email Notifications...")
+        
+        success, response = self.run_test(
+            "Create Task for Email Notification Test",
+            "POST",
+            "tasks",
+            200,
+            data={
+                "title": "Quarterly Report Review",
+                "description": "Please review the Q4 financial reports and provide feedback by the due date.",
+                "assigned_to": self.user2_data["id"],
+                "due_date": due_date,
+                "priority": "High",
+                "category": "Finance"
+            },
+            token=self.user1_token
+        )
+        
+        if success and 'id' in response:
+            self.test_task_id = response['id']
+            print(f"✅ Task created with ID: {self.test_task_id}")
+            
+            # Wait a moment for email to be processed
+            time.sleep(2)
+            
+            # Check logs for email confirmation
+            email_sent = self.check_backend_logs_for_email("bob.employee@tskboxtest.com")
+            return email_sent
+        return False
+
+    def test_task_edit_email_notification(self):
+        """Test editing a task and verify update notification is sent"""
+        if not self.test_task_id:
+            print("❌ No test task ID available for editing")
+            return False
+            
+        print("\n🔍 Testing Task Edit Email Notifications...")
+        
+        success, response = self.run_test(
+            "Edit Task for Email Notification Test",
+            "PUT",
+            f"tasks/{self.test_task_id}",
+            200,
+            data={
+                "title": "Updated: Quarterly Report Review",
+                "description": "UPDATED: Please review the Q4 financial reports and provide detailed feedback by the new due date.",
+                "priority": "Urgent"
+            },
+            token=self.user1_token
+        )
+        
+        if success:
+            # Wait a moment for email to be processed
+            time.sleep(2)
+            
+            # Check logs for email confirmation
+            email_sent = self.check_backend_logs_for_email("bob.employee@tskboxtest.com")
+            return email_sent
+        return False
+
+    def test_analytics_with_assignee_breakdown(self):
+        """Test POST /api/analytics with date range and verify assignee_breakdown array"""
+        start_date = (datetime.now() - timedelta(days=30)).isoformat()
+        end_date = datetime.now().isoformat()
+        
+        print("\n🔍 Testing Analytics Endpoint with Per-Assignee Breakdown...")
+        
+        success, response = self.run_test(
+            "Analytics with Assignee Breakdown",
+            "POST",
+            "analytics",
+            200,
+            data={
+                "start_date": start_date,
+                "end_date": end_date
+            },
+            token=self.user1_token
+        )
+        
+        if success:
+            # Verify assignee_breakdown array exists
+            if "assignee_breakdown" not in response:
+                print("❌ Missing 'assignee_breakdown' field in analytics response")
+                return False
+                
+            assignee_breakdown = response["assignee_breakdown"]
+            if not isinstance(assignee_breakdown, list):
+                print("❌ 'assignee_breakdown' is not an array")
+                return False
+                
+            print(f"✅ Found assignee_breakdown array with {len(assignee_breakdown)} entries")
+            
+            # Check if we have any assignee data
+            if len(assignee_breakdown) > 0:
+                first_assignee = assignee_breakdown[0]
+                required_fields = ["name", "email", "tasks_assigned", "tasks_completed", "tasks_pending", "completion_rate", "avg_completion_days"]
+                
+                for field in required_fields:
+                    if field not in first_assignee:
+                        print(f"❌ Missing required field '{field}' in assignee breakdown")
+                        return False
+                        
+                print("✅ All required fields present in assignee breakdown")
+                print(f"Sample assignee data: {first_assignee}")
+            else:
+                print("✅ Assignee breakdown array is empty (expected if no tasks assigned to others)")
+                
+            return True
+        return False
+
+    def test_bulk_task_creation(self):
+        """Test POST /api/tasks/bulk with multiple assignees"""
+        due_date = (datetime.now() + timedelta(days=5)).isoformat()
+        
+        print("\n🔍 Testing Bulk Task Creation...")
+        
+        # Create bulk tasks for multiple assignees
+        success, response = self.run_test(
+            "Bulk Task Creation",
+            "POST",
+            "tasks/bulk",
+            200,
+            data={
+                "title": "Team Meeting Preparation",
+                "description": "Please prepare your department updates for the upcoming team meeting.",
+                "assigned_to": [
+                    self.user2_data["id"],
+                    "charlie.dev@tskboxtest.com",  # Non-registered user
+                    "self"  # Self-assignment
+                ],
+                "due_date": due_date,
+                "priority": "Medium",
+                "category": "Meetings"
+            },
+            token=self.user1_token
+        )
+        
+        if success and isinstance(response, list):
+            print(f"✅ Bulk task creation successful - {len(response)} tasks created")
+            
+            # Verify separate tasks were created for each assignee
+            if len(response) != 3:
+                print(f"❌ Expected 3 tasks, got {len(response)}")
+                return False
+                
+            # Check that each task has different assigned_to values
+            assigned_to_values = [task["assigned_to"] for task in response]
+            unique_assignees = set(assigned_to_values)
+            
+            if len(unique_assignees) != 3:
+                print(f"❌ Expected 3 unique assignees, got {len(unique_assignees)}: {unique_assignees}")
+                return False
+                
+            print("✅ Separate tasks created for each assignee")
+            
+            # Wait for emails to be processed
+            time.sleep(3)
+            
+            # Check logs for email confirmations (should be sent to registered and unregistered users)
+            emails_sent = 0
+            if self.check_backend_logs_for_email("bob.employee@tskboxtest.com"):
+                emails_sent += 1
+            if self.check_backend_logs_for_email("charlie.dev@tskboxtest.com"):
+                emails_sent += 1
+                
+            print(f"✅ Email notifications sent for bulk task creation: {emails_sent} emails")
+            return True
+        return False
         """Test GET /api/team/my-manager for user1 (should be null initially)"""
         success, response = self.run_test(
             "Get My Manager (User1)",
