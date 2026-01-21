@@ -89,7 +89,7 @@ const TeamManagementPage = () => {
             setShowInviteDialog(false);
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to send invitation');
+            toast.error(getErrorMessage(error, 'Failed to send invitation'));
         } finally {
             setInviting(false);
         }
@@ -103,7 +103,7 @@ const TeamManagementPage = () => {
             toast.success('Member removed from team');
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to remove member');
+            toast.error(getErrorMessage(error, 'Failed to remove member'));
         }
     };
 
@@ -118,7 +118,7 @@ const TeamManagementPage = () => {
             setSelectedReport('');
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to add direct report');
+            toast.error(getErrorMessage(error, 'Failed to add direct report'));
         } finally {
             setAddingReport(false);
         }
@@ -132,7 +132,7 @@ const TeamManagementPage = () => {
             toast.success(`${userName} removed from your direct reports`);
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to remove direct report');
+            toast.error(getErrorMessage(error, 'Failed to remove direct report'));
         }
     };
 
@@ -148,7 +148,7 @@ const TeamManagementPage = () => {
             setSelectedManager('');
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to update manager');
+            toast.error(getErrorMessage(error, 'Failed to update manager'));
         } finally {
             setSettingManager(false);
         }
