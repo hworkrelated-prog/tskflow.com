@@ -91,7 +91,7 @@ const TaskHub = () => {
             });
             fetchDashboard();
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Failed to create task');
+            toast.error(getErrorMessage(error, 'Failed to create task'));
         } finally {
             setCreateLoading(false);
         }
