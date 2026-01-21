@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Mail, RefreshCw } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 
 const VerifyEmailPage = () => {
     const location = useLocation();
@@ -32,7 +33,7 @@ const VerifyEmailPage = () => {
             toast.success('Email verified successfully!');
             navigate('/dashboard');
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Verification failed');
+            toast.error(getErrorMessage(error, 'Verification failed'));
         } finally {
             setLoading(false);
         }
