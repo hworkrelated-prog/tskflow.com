@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { LogIn } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 
 const LoginPage = () => {
     const [loading, setLoading] = useState(false);
@@ -33,7 +34,7 @@ const LoginPage = () => {
                 toast.error('Please verify your email first');
                 navigate('/verify-email', { state: { email: formData.email } });
             } else {
-                toast.error(error.response?.data?.detail || 'Login failed');
+                toast.error(getErrorMessage(error, 'Login failed'));
             }
         } finally {
             setLoading(false);
