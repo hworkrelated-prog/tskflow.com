@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 
 const ForgotPassword = () => {
     const [step, setStep] = useState(1); // 1: email, 2: reset code
