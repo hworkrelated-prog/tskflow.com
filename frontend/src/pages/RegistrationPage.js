@@ -33,7 +33,19 @@ const RegistrationPage = () => {
             
             navigate('/verify-email', { state: { email: formData.email } });
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Registration failed');
+            const errorDetail = error.response?.data?.detail;
+            let errorMessage = 'Registration failed';
+            
+            if (typeof errorDetail === 'string') {
+                errorMessage = errorDetail;
+            } else if (Array.isArray(errorDetail) && errorDetail.length > 0) {
+                // Pydantic validation errors come as array of objects
+                errorMessage = errorDetail[0]?.msg || errorDetail[0]?.message || 'Validation error';
+            } else if (errorDetail && typeof errorDetail === 'object') {
+                errorMessage = errorDetail.msg || errorDetail.message || 'An error occurred';
+            }
+            
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
