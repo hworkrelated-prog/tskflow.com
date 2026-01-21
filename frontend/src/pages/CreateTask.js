@@ -48,7 +48,7 @@ const CreateTask = () => {
             toast.success('Task created successfully');
             navigate('/dashboard');
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to create task');
+            toast.error(getErrorMessage(error, 'Failed to create task'));
         } finally {
             setLoading(false);
         }
