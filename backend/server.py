@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from typing import List, Optional, Dict
@@ -12,14 +13,16 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import resend
 import pytz
 import random
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Configure Resend
+resend.api_key = os.getenv("RESEND_API_KEY")
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
