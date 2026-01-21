@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,6 @@ import {
     Shield, 
     Clock, 
     GitBranch,
-    Star,
     ChevronRight,
     Play,
     Sparkles,
@@ -28,9 +27,6 @@ import {
 const LandingPage = () => {
     const navigate = useNavigate();
     const [isScrolled, setIsScrolled] = useState(false);
-    const { scrollYProgress } = useScroll();
-    const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
-    const scale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -70,30 +66,6 @@ const LandingPage = () => {
             icon: <Clock className="w-6 h-6" />,
             title: "Time Tracking",
             description: "Monitor average completion times and identify bottlenecks."
-        }
-    ];
-
-    const testimonials = [
-        {
-            name: "Sarah Chen",
-            role: "VP of Operations",
-            company: "TechFlow Inc",
-            image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-            content: "Task Hub transformed how our team operates. The direct reports feature gives me visibility without micromanaging."
-        },
-        {
-            name: "Marcus Johnson",
-            role: "Engineering Manager",
-            company: "DevScale",
-            image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-            content: "Finally, a task manager that understands org structure. My team loves the clean interface and smart notifications."
-        },
-        {
-            name: "Emily Rodriguez",
-            role: "COO",
-            company: "StartupXYZ",
-            image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-            content: "We went from 5 different tools to just Task Hub. The ROI was immediate - 40% faster task completion."
         }
     ];
 
@@ -148,10 +120,10 @@ const LandingPage = () => {
     ];
 
     const stats = [
-        { value: "50K+", label: "Tasks Completed" },
-        { value: "2,500+", label: "Happy Teams" },
+        { value: "10K+", label: "Tasks Created" },
+        { value: "500+", label: "Active Users" },
         { value: "99.9%", label: "Uptime" },
-        { value: "4.9/5", label: "User Rating" }
+        { value: "24/7", label: "Support" }
     ];
 
     return (
@@ -173,13 +145,13 @@ const LandingPage = () => {
                             <Target className="w-6 h-6 text-white" />
                         </div>
                         <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>
-                            Task Hub
+                            tskbox
                         </span>
                     </div>
                     <div className="hidden md:flex items-center gap-8">
                         <a href="#features" className="text-gray-600 hover:text-gray-900 transition-colors font-medium">Features</a>
                         <a href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors font-medium">Pricing</a>
-                        <a href="#testimonials" className="text-gray-600 hover:text-gray-900 transition-colors font-medium">Testimonials</a>
+                        <a href="#how-it-works" className="text-gray-600 hover:text-gray-900 transition-colors font-medium">How It Works</a>
                     </div>
                     <div className="flex items-center gap-3">
                         <Button 
@@ -219,7 +191,7 @@ const LandingPage = () => {
                         >
                             <Badge className="mb-6 bg-indigo-100 text-indigo-700 hover:bg-indigo-100 rounded-full px-4 py-2 text-sm font-medium">
                                 <Sparkles className="w-4 h-4 mr-2" />
-                                Now with Team Hierarchy
+                                Simple. Powerful. Effective.
                             </Badge>
                             
                             <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6" style={{ fontFamily: 'Outfit' }}>
@@ -247,30 +219,26 @@ const LandingPage = () => {
                                     variant="outline"
                                     size="lg"
                                     className="rounded-full h-14 px-8 text-lg font-medium border-2 hover:bg-gray-50"
+                                    onClick={() => navigate('/login')}
                                 >
                                     <Play className="w-5 h-5 mr-2" />
-                                    Watch Demo
+                                    Sign In
                                 </Button>
                             </div>
 
-                            {/* Social Proof */}
-                            <div className="flex items-center gap-6">
-                                <div className="flex -space-x-3">
-                                    {[1,2,3,4,5].map((i) => (
-                                        <div key={i} className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-400 border-2 border-white flex items-center justify-center text-white text-xs font-bold">
-                                            {String.fromCharCode(64 + i)}
-                                        </div>
-                                    ))}
+                            {/* Value Props */}
+                            <div className="flex flex-wrap gap-6">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <span>Free forever plan</span>
                                 </div>
-                                <div>
-                                    <div className="flex items-center gap-1 mb-1">
-                                        {[1,2,3,4,5].map((i) => (
-                                            <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                                        ))}
-                                    </div>
-                                    <p className="text-sm text-gray-600">
-                                        <span className="font-semibold">2,500+ teams</span> already productive
-                                    </p>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <span>No credit card required</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <span>Setup in 2 minutes</span>
                                 </div>
                             </div>
                         </motion.div>
@@ -293,13 +261,13 @@ const LandingPage = () => {
                                         </div>
                                         <div className="flex-1 mx-4">
                                             <div className="bg-white rounded-lg px-4 py-1.5 text-sm text-gray-500 border">
-                                                taskhub.app/dashboard
+                                                app.tskbox.io/dashboard
                                             </div>
                                         </div>
                                     </div>
                                     <img 
                                         src="https://images.pexels.com/photos/5257005/pexels-photo-5257005.jpeg?auto=compress&cs=tinysrgb&w=800" 
-                                        alt="Task Hub Dashboard"
+                                        alt="tskbox Dashboard"
                                         className="w-full h-auto"
                                     />
                                 </div>
@@ -419,7 +387,7 @@ const LandingPage = () => {
             </section>
 
             {/* How It Works Section */}
-            <section className="py-24 bg-white">
+            <section id="how-it-works" className="py-24 bg-white">
                 <div className="container mx-auto px-6">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -471,68 +439,8 @@ const LandingPage = () => {
                 </div>
             </section>
 
-            {/* Testimonials Section */}
-            <section id="testimonials" className="py-24 bg-gradient-to-br from-gray-900 to-indigo-900 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:24px_24px]" />
-                <div className="container mx-auto px-6 relative z-10">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-center mb-16"
-                    >
-                        <Badge className="mb-4 bg-white/10 text-white hover:bg-white/10 rounded-full px-4 py-2 border border-white/20">
-                            Testimonials
-                        </Badge>
-                        <h2 className="text-4xl md:text-5xl font-bold text-white mb-4" style={{ fontFamily: 'Outfit' }}>
-                            Loved by teams
-                            <br />
-                            <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                                everywhere
-                            </span>
-                        </h2>
-                    </motion.div>
-
-                    <div className="grid md:grid-cols-3 gap-8">
-                        {testimonials.map((testimonial, index) => (
-                            <motion.div
-                                key={index}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
-                            >
-                                <Card className="h-full bg-white/10 backdrop-blur-sm border-white/10 rounded-2xl">
-                                    <CardContent className="p-8">
-                                        <div className="flex items-center gap-1 mb-6">
-                                            {[1,2,3,4,5].map((i) => (
-                                                <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                                            ))}
-                                        </div>
-                                        <p className="text-white/90 text-lg mb-6 leading-relaxed">
-                                            "{testimonial.content}"
-                                        </p>
-                                        <div className="flex items-center gap-4">
-                                            <img 
-                                                src={testimonial.image} 
-                                                alt={testimonial.name}
-                                                className="w-12 h-12 rounded-full object-cover"
-                                            />
-                                            <div>
-                                                <p className="font-semibold text-white">{testimonial.name}</p>
-                                                <p className="text-sm text-white/60">{testimonial.role}, {testimonial.company}</p>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
             {/* Pricing Section */}
-            <section id="pricing" className="py-24 bg-white">
+            <section id="pricing" className="py-24 bg-gray-50">
                 <div className="container mx-auto px-6">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -620,7 +528,7 @@ const LandingPage = () => {
 
             {/* CTA Section */}
             <section className="py-24 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px]" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear_gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px]" />
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-3xl" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-3xl" />
                 
@@ -632,10 +540,10 @@ const LandingPage = () => {
                         className="text-center max-w-3xl mx-auto"
                     >
                         <h2 className="text-4xl md:text-6xl font-bold text-white mb-6" style={{ fontFamily: 'Outfit' }}>
-                            Ready to transform how your team works?
+                            Ready to get organized?
                         </h2>
                         <p className="text-xl text-white/80 mb-10">
-                            Join thousands of teams who've already made the switch. Start free, no credit card required.
+                            Join teams who are already shipping faster with tskbox. Start free, no credit card required.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <Button 
@@ -645,13 +553,6 @@ const LandingPage = () => {
                             >
                                 Get Started Free
                                 <ArrowRight className="w-5 h-5 ml-2" />
-                            </Button>
-                            <Button 
-                                variant="outline"
-                                size="lg"
-                                className="rounded-full h-14 px-8 text-lg font-medium border-2 border-white/30 text-white hover:bg-white/10 hover:text-white"
-                            >
-                                Talk to Sales
                             </Button>
                         </div>
                     </motion.div>
@@ -668,7 +569,7 @@ const LandingPage = () => {
                                     <Target className="w-6 h-6 text-white" />
                                 </div>
                                 <span className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>
-                                    Task Hub
+                                    tskbox
                                 </span>
                             </div>
                             <p className="text-gray-400 mb-6">
@@ -720,11 +621,11 @@ const LandingPage = () => {
                     
                     <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-gray-400 text-sm">
-                            © 2025 Task Hub. All rights reserved.
+                            © 2025 tskbox. All rights reserved.
                         </p>
                         <div className="flex items-center gap-2 text-gray-400 text-sm">
                             <Mail className="w-4 h-4" />
-                            <span>hello@taskhub.app</span>
+                            <span>hello@tskbox.io</span>
                         </div>
                     </div>
                 </div>
