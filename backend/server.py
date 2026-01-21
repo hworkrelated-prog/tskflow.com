@@ -688,32 +688,41 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         
         await db.tasks.insert_one(task_doc)
         
-        # Send email notification if assigning to others
+        # Send professional email notification if assigning to others
+        app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
         if not is_self_assigned:
             email_to_send = assigned_user.get("email") if assigned_user else assigned_to_email
+            recipient_name = assigned_user.get("name", "there") if assigned_user else assigned_to_email.split('@')[0]
             if email_to_send:
                 email_content = f"""
                 <html>
-                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0;">New Task Assigned</h1>
+                    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                        <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                         </div>
-                        <div style="padding: 30px; background: #f9fafb;">
-                            <p style="font-size: 16px;">Hi {assigned_user.get('name', 'there')},</p>
-                            <p style="font-size: 16px;"><strong>{current_user['name']}</strong> has assigned you a new task:</p>
-                            <div style="background: white; border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
-                                <h2 style="margin-top: 0; color: #1f2937;">{task.title}</h2>
-                                <p style="color: #6b7280;">{task.description[:200]}{'...' if len(task.description) > 200 else ''}</p>
-                                <div style="display: flex; gap: 20px; margin-top: 15px;">
-                                    <span style="background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 20px; font-size: 14px;">
-                                        Priority: {task.priority}
+                        <div style="padding: 40px 30px; background: white;">
+                            <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                            <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                                You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below.
+                            </p>
+                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                                <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
+                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.description[:300]}{'...' if len(task.description) > 300 else ''}</p>
+                                <div>
+                                    <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
+                                        {task.priority} Priority
                                     </span>
-                                    <span style="color: #6b7280; font-size: 14px;">
-                                        Due: {task.due_date}
-                                    </span>
+                                    <span style="color: #6B7280; font-size: 14px;">Due: {task.due_date.replace('T', ' at ').split('.')[0]}</span>
                                 </div>
                             </div>
-                            <p style="font-size: 14px; color: #6b7280;">Log in to Task Hub to accept or respond to this task.</p>
+                            <div style="text-align: center; margin-top: 30px;">
+                                <a href="{app_url}/dashboard" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                    View Task in tskbox
+                                </a>
+                            </div>
+                        </div>
+                        <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
+                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
                         </div>
                     </body>
                 </html>
