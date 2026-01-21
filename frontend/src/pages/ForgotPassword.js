@@ -37,7 +37,7 @@ const ForgotPassword = () => {
             }
             setStep(2);
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to request reset');
+            toast.error(getErrorMessage(error, 'Failed to request reset'));
         } finally {
             setLoading(false);
         }
