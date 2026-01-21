@@ -773,6 +773,101 @@ async def complete_task(task_id: str, current_user: dict = Depends(get_current_u
     
     return {"message": "Task completed"}
 
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+
+@api_router.put("/tasks/{task_id}")
+async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only the creator can edit the task
+    if task["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the task creator can edit this task")
+    
+    # Build update dict with only provided fields
+    update_data = {}
+    if task_update.title is not None:
+        update_data["title"] = task_update.title
+    if task_update.description is not None:
+        update_data["description"] = task_update.description
+    if task_update.due_date is not None:
+        update_data["due_date"] = task_update.due_date
+    if task_update.priority is not None:
+        update_data["priority"] = task_update.priority
+    if task_update.category is not None:
+        update_data["category"] = task_update.category
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    update_data["updated_at"] = get_pst_now().isoformat()
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": update_data}
+    )
+    
+    # Send notification to assignee if task is assigned to someone else
+    if task["assigned_to"] != current_user["id"]:
+        assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+        if assignee:
+            # Build change summary
+            changes = []
+            if task_update.title and task_update.title != task.get("title"):
+                changes.append(f"Title: {task_update.title}")
+            if task_update.description and task_update.description != task.get("description"):
+                changes.append("Description updated")
+            if task_update.due_date and task_update.due_date != task.get("due_date"):
+                changes.append(f"Due date: {task_update.due_date}")
+            if task_update.priority and task_update.priority != task.get("priority"):
+                changes.append(f"Priority: {task_update.priority}")
+            
+            changes_html = "<br>".join(changes) if changes else "Task details updated"
+            
+            email_content = f"""
+            <html>
+                <body>
+                    <h2>Task Updated</h2>
+                    <p><strong>{current_user['name']}</strong> has updated a task assigned to you:</p>
+                    <p><strong>Task:</strong> {task_update.title or task['title']}</p>
+                    <p><strong>Changes:</strong><br>{changes_html}</p>
+                    <p><strong>Priority:</strong> {task_update.priority or task['priority']}</p>
+                    <p><strong>Due:</strong> {task_update.due_date or task['due_date']}</p>
+                </body>
+            </html>
+            """
+            background_tasks.add_task(send_email_notification, assignee["email"], f"Task Updated: {task_update.title or task['title']}", email_content)
+    
+    # Fetch and return updated task
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    assigned_user = await db.users.find_one({"id": updated_task["assigned_to"]}, {"_id": 0})
+    
+    return TaskResponse(
+        id=updated_task["id"],
+        title=updated_task["title"],
+        description=updated_task["description"],
+        assigned_to=updated_task["assigned_to"],
+        assigned_to_name=assigned_user["name"] if assigned_user else "Unknown",
+        created_by=updated_task["created_by"],
+        created_by_name=current_user["name"],
+        due_date=updated_task["due_date"],
+        status=updated_task["status"],
+        priority=updated_task["priority"],
+        category=updated_task.get("category"),
+        created_at=updated_task["created_at"],
+        accepted_at=updated_task.get("accepted_at"),
+        completed_at=updated_task.get("completed_at"),
+        reason_for_decline=updated_task.get("reason_for_decline"),
+        counter_proposal_message=updated_task.get("counter_proposal_message"),
+        proposed_due_date=updated_task.get("proposed_due_date")
+    )
+
 @api_router.post("/analytics", response_model=AnalyticsResponse)
 async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_current_user)):
     start = datetime.fromisoformat(query.start_date)
