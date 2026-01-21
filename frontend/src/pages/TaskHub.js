@@ -16,6 +16,7 @@ import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User } 
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
+import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 
 const TaskHub = () => {
     const { user, logout } = useAuth();
@@ -37,6 +38,9 @@ const TaskHub = () => {
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
     const navigate = useNavigate();
+    
+    // Onboarding
+    const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
     useEffect(() => {
         fetchDashboard();
