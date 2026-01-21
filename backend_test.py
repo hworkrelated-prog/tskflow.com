@@ -663,60 +663,58 @@ class TaskHubRecentChangesTester:
             
         try:
             # Remove test users
-            self.db.users.delete_many({"email": {"$in": ["user1@testcompany.com", "user2@testcompany.com"]}})
+            self.db.users.delete_many({"email": {"$in": [
+                "alice.manager@tskboxtest.com", 
+                "bob.employee@tskboxtest.com",
+                "charlie.dev@tskboxtest.com"
+            ]}})
             # Remove test tasks
             if self.test_task_id:
                 self.db.tasks.delete_one({"id": self.test_task_id})
+            # Remove any bulk tasks created
+            self.db.tasks.delete_many({"title": {"$in": [
+                "Quarterly Report Review",
+                "Updated: Quarterly Report Review", 
+                "Team Meeting Preparation"
+            ]}})
             print("✅ Test data cleaned up")
         except Exception as e:
             print(f"⚠️ Cleanup failed: {e}")
 
 def main():
-    print("🚀 Starting Task Hub Hierarchical Team Structure API Tests")
-    print("=" * 70)
+    print("🚀 Starting Task Hub Recent Changes API Tests")
+    print("Testing: Email Verification Flow, Professional Email Notifications, Analytics, Bulk Tasks")
+    print("=" * 80)
     
-    tester = TaskHubHierarchicalTester()
+    tester = TaskHubRecentChangesTester()
     
     # Clean up any existing test data first
     tester.cleanup_test_data()
     
-    # Test sequence following the exact scenario from the review request
+    # Test sequence focusing on the 4 key areas from review request
     test_sequence = [
-        # 1. Register two users with same domain
-        ("User1 Registration", tester.test_user1_registration),
+        # 1. EMAIL VERIFICATION FLOW
+        ("User1 Registration (Email Verification Flow)", tester.test_user1_registration),
         ("User2 Registration", tester.test_user2_registration),
-        
-        # 2. Verify both emails and login
         ("User1 Email Verification", tester.test_user1_verification),
         ("User2 Email Verification", tester.test_user2_verification),
+        ("Resend Verification Endpoint", tester.test_resend_verification_endpoint),
         ("User1 Login", tester.test_user1_login),
         ("User2 Login", tester.test_user2_login),
         
-        # 3. Upgrade users to teams tier
+        # 2. Upgrade users for testing
         ("Upgrade User1 to Teams Owner", tester.upgrade_user1_to_teams_owner),
         ("Upgrade User2 to Teams Member", tester.upgrade_user2_to_teams_member),
         
-        # 4. Test hierarchical team APIs
-        ("Get My Manager (User1 - should be null)", tester.test_get_my_manager_user1),
-        ("Get Potential Reports (User1 - should return User2)", tester.test_get_potential_reports_user1),
-        ("Add Direct Report (User1 adds User2)", tester.test_add_direct_report_user1),
-        ("Get Direct Reports (User1)", tester.test_get_direct_reports_user1),
+        # 3. PROFESSIONAL EMAIL NOTIFICATIONS
+        ("Professional Email Notifications (Task Creation)", tester.test_professional_email_notifications),
+        ("Professional Email Notifications (Task Edit)", tester.test_task_edit_email_notification),
         
-        # 5. Create task and test metrics
-        ("Create Task Assigned to User2", tester.test_create_task_assigned_to_user2),
-        ("Get Direct Reports with Task Metrics", tester.test_get_direct_reports_with_task_metrics),
+        # 4. ANALYTICS ENDPOINT WITH PER-ASSIGNEE BREAKDOWN
+        ("Analytics with Assignee Breakdown", tester.test_analytics_with_assignee_breakdown),
         
-        # 6. Test bidirectional reporting
-        ("Set Manager (User2 reports to User1)", tester.test_set_manager_user2),
-        
-        # 7. Test circular reporting prevention
-        ("Circular Reporting Prevention", tester.test_circular_reporting_prevention),
-        
-        # 8. Test removal of direct report
-        ("Remove Direct Report", tester.test_remove_direct_report),
-        
-        # 9. Test dashboard
-        ("Get Dashboard", tester.test_get_dashboard),
+        # 5. BULK TASK CREATION
+        ("Bulk Task Creation", tester.test_bulk_task_creation),
     ]
     
     # Run all tests
@@ -730,7 +728,7 @@ def main():
     tester.cleanup_test_data()
     
     # Print results
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} tests passed")
     print(f"✅ Success Rate: {(tester.tests_passed/tester.tests_run*100):.1f}%")
     
