@@ -218,7 +218,7 @@ class TaskHubHierarchicalTester:
 
     def upgrade_user2_to_teams_member(self):
         """Upgrade user2 to teams tier as team member via database"""
-        if not self.db:
+        if self.db is None:
             print("❌ No database connection available")
             return False
             
