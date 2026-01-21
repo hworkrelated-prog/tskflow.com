@@ -288,9 +288,9 @@ class TaskHubRecentChangesTester:
     def check_backend_logs_for_email(self, expected_email):
         """Check backend logs for email sent confirmation"""
         try:
-            # Check supervisor logs for email confirmation
+            # Check supervisor error logs for email confirmation (emails are logged there)
             result = subprocess.run(
-                ["tail", "-n", "50", "/var/log/supervisor/backend.out.log"],
+                ["tail", "-n", "50", "/var/log/supervisor/backend.err.log"],
                 capture_output=True, text=True, timeout=10
             )
             
