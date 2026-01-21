@@ -121,15 +121,27 @@ class TaskHubRecentChangesTester:
             "auth/register",
             200,
             data={
-                "name": "User Two",
-                "email": "user2@testcompany.com",
-                "password": "TestPass123!"
+                "name": "Bob Employee",
+                "email": "bob.employee@tskboxtest.com",
+                "password": "SecurePass123!"
             }
         )
         if success:
+            # Get verification code from database
+            if self.db:
+                user_doc = self.db.users.find_one({"email": "bob.employee@tskboxtest.com"})
+                if user_doc and "verification_code" in user_doc:
+                    verification_code = user_doc["verification_code"]
+                else:
+                    print("❌ No verification code found in database for user2")
+                    return False
+            else:
+                print("❌ Cannot retrieve verification code - no database connection")
+                return False
+                
             self.user2_data = {
-                "email": "user2@testcompany.com",
-                "verification_code": response.get("verification_code"),
+                "email": "bob.employee@tskboxtest.com",
+                "verification_code": verification_code,
                 "user_id": response.get("user_id")
             }
             return True
