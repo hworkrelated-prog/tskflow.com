@@ -187,7 +187,7 @@ async def send_email_notification(to_email: str, subject: str, content: str):
     
     try:
         params = {
-            "from": "Task Hub <onboarding@resend.dev>",
+            "from": "Task Hub <notifications@notifications.unbiassly.com>",
             "to": [to_email],
             "subject": subject,
             "html": content
