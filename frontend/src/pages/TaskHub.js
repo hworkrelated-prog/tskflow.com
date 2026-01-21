@@ -218,11 +218,18 @@ const TaskHub = () => {
 
     return (
         <div data-testid="task-hub" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+            {/* Onboarding Popup */}
+            <AnimatePresence>
+                {showOnboarding && (
+                    <OnboardingPopup page="dashboard" onClose={closeOnboarding} />
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="sticky top-0 z-50 glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <h1 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>Task Hub</h1>
+                        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>tskbox</h1>
                         {user?.subscription_tier === 'teams' ? (
                             <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
                                 <Crown className="w-3 h-3" />
@@ -236,6 +243,15 @@ const TaskHub = () => {
                         ) : null}
                     </div>
                     <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={reopenOnboarding}
+                            className="rounded-full"
+                            title="Help & Walkthrough"
+                        >
+                            <HelpCircle className="w-5 h-5" />
+                        </Button>
                         <Button
                             data-testid="analytics-button"
                             variant="ghost"
