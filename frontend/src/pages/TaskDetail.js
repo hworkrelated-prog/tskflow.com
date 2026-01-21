@@ -9,10 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/lib/utils';
 
 const TaskDetail = () => {
     const { taskId } = useParams();
@@ -22,9 +24,18 @@ const TaskDetail = () => {
     const [actionLoading, setActionLoading] = useState(false);
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
     const [showCounterDialog, setShowCounterDialog] = useState(false);
+    const [showEditDialog, setShowEditDialog] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [counterMessage, setCounterMessage] = useState('');
     const [proposedDate, setProposedDate] = useState('');
+    const [editForm, setEditForm] = useState({
+        title: '',
+        description: '',
+        due_date: '',
+        priority: '',
+        category: ''
+    });
+    const [editLoading, setEditLoading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -35,8 +46,16 @@ const TaskDetail = () => {
         try {
             const response = await axios.get(`${API}/tasks/${taskId}`);
             setTask(response.data);
+            // Pre-populate edit form
+            setEditForm({
+                title: response.data.title,
+                description: response.data.description || '',
+                due_date: response.data.due_date ? response.data.due_date.slice(0, 16) : '',
+                priority: response.data.priority,
+                category: response.data.category || ''
+            });
         } catch (error) {
-            toast.error('Failed to load task');
+            toast.error(getErrorMessage(error, 'Failed to load task'));
             navigate('/dashboard');
         } finally {
             setLoading(false);
@@ -50,7 +69,7 @@ const TaskDetail = () => {
             toast.success('Task accepted!');
             fetchTask();
         } catch (error) {
-            toast.error('Failed to accept task');
+            toast.error(getErrorMessage(error, 'Failed to accept task'));
         } finally {
             setActionLoading(false);
         }
@@ -68,7 +87,7 @@ const TaskDetail = () => {
             setShowDeclineDialog(false);
             fetchTask();
         } catch (error) {
-            toast.error('Failed to decline task');
+            toast.error(getErrorMessage(error, 'Failed to decline task'));
         } finally {
             setActionLoading(false);
         }
@@ -89,7 +108,7 @@ const TaskDetail = () => {
             setShowCounterDialog(false);
             fetchTask();
         } catch (error) {
-            toast.error('Failed to submit proposal');
+            toast.error(getErrorMessage(error, 'Failed to submit proposal'));
         } finally {
             setActionLoading(false);
         }
@@ -102,9 +121,23 @@ const TaskDetail = () => {
             toast.success('Task completed!');
             fetchTask();
         } catch (error) {
-            toast.error('Failed to complete task');
+            toast.error(getErrorMessage(error, 'Failed to complete task'));
         } finally {
             setActionLoading(false);
+        }
+    };
+
+    const handleEditTask = async () => {
+        setEditLoading(true);
+        try {
+            const response = await axios.put(`${API}/tasks/${taskId}`, editForm);
+            toast.success('Task updated! Assignee has been notified.');
+            setTask(response.data);
+            setShowEditDialog(false);
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to update task'));
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -123,6 +156,8 @@ const TaskDetail = () => {
             </Badge>
         );
     };
+
+    const canEdit = user?.id === task?.created_by && task?.status !== 'Completed';
 
     if (loading) {
         return (
@@ -158,7 +193,113 @@ const TaskDetail = () => {
                         <CardHeader>
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
-                                    <CardTitle className="text-4xl mb-2" style={{ fontFamily: 'Outfit' }}>{task.title}</CardTitle>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <CardTitle className="text-4xl" style={{ fontFamily: 'Outfit' }}>{task.title}</CardTitle>
+                                        {canEdit && (
+                                            <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                                                <DialogTrigger asChild>
+                                                    <Button
+                                                        data-testid="edit-task-button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="rounded-full hover:bg-indigo-100"
+                                                    >
+                                                        <Pencil className="w-4 h-4 text-indigo-600" />
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent className="rounded-2xl max-w-lg">
+                                                    <DialogHeader>
+                                                        <DialogTitle>Edit Task</DialogTitle>
+                                                        <DialogDescription>
+                                                            Update task details. The assignee will be notified of changes.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className="space-y-4 pt-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="edit-title">Title</Label>
+                                                            <Input
+                                                                id="edit-title"
+                                                                data-testid="edit-title-input"
+                                                                value={editForm.title}
+                                                                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                                                className="rounded-xl"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="edit-description">Description</Label>
+                                                            <Textarea
+                                                                id="edit-description"
+                                                                data-testid="edit-description-input"
+                                                                value={editForm.description}
+                                                                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                                                rows={4}
+                                                                className="rounded-xl"
+                                                            />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="edit-due-date">Due Date</Label>
+                                                                <Input
+                                                                    id="edit-due-date"
+                                                                    data-testid="edit-due-date-input"
+                                                                    type="datetime-local"
+                                                                    value={editForm.due_date}
+                                                                    onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                                                                    className="rounded-xl"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="edit-priority">Priority</Label>
+                                                                <Select
+                                                                    value={editForm.priority}
+                                                                    onValueChange={(value) => setEditForm({ ...editForm, priority: value })}
+                                                                >
+                                                                    <SelectTrigger data-testid="edit-priority-select" className="rounded-xl">
+                                                                        <SelectValue placeholder="Select priority" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="Low">Low</SelectItem>
+                                                                        <SelectItem value="Medium">Medium</SelectItem>
+                                                                        <SelectItem value="High">High</SelectItem>
+                                                                        <SelectItem value="Urgent">Urgent</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="edit-category">Category (optional)</Label>
+                                                            <Input
+                                                                id="edit-category"
+                                                                data-testid="edit-category-input"
+                                                                value={editForm.category}
+                                                                onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                                                                placeholder="e.g., Marketing, Development"
+                                                                className="rounded-xl"
+                                                            />
+                                                        </div>
+                                                        <div className="flex gap-2 justify-end pt-4">
+                                                            <Button
+                                                                variant="outline"
+                                                                onClick={() => setShowEditDialog(false)}
+                                                                className="rounded-full"
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                data-testid="save-edit-button"
+                                                                onClick={handleEditTask}
+                                                                disabled={editLoading || !editForm.title.trim()}
+                                                                className="rounded-full"
+                                                            >
+                                                                <Save className="w-4 h-4 mr-2" />
+                                                                {editLoading ? 'Saving...' : 'Save Changes'}
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        )}
+                                    </div>
                                     <CardDescription className="text-base">
                                         Created by {task.created_by_name} | Assigned to {task.assigned_to_name}
                                     </CardDescription>
