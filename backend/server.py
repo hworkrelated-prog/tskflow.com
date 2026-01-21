@@ -350,23 +350,37 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
     await db.users.update_one({"email": email}, {"$set": {"verification_code": verification_code}})
     
-    # Send email
-    sendgrid_key = os.getenv('SENDGRID_API_KEY')
-    sender_email = os.getenv('SENDER_EMAIL')
-    
-    if sendgrid_key and sender_email:
-        email_content = f"""
-        <html>
-            <body>
-                <h2>Email Verification</h2>
-                <p>Your new verification code is: <strong>{verification_code}</strong></p>
-            </body>
-        </html>
-        """
-        background_tasks.add_task(send_email_notification, email, "Task Hub Verification Code", email_content)
-        return {"message": "Verification code sent", "verification_code": None}
-    else:
-        return {"message": "Verification code generated", "verification_code": verification_code}
+    # Send email via Resend
+    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    email_content = f"""
+    <html>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">tskbox</h1>
+                <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Email Verification</p>
+            </div>
+            <div style="padding: 40px 30px; background: white;">
+                <p style="font-size: 16px; color: #374151;">Hi {user.get('name', 'there')},</p>
+                <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                    Here is your new verification code:
+                </p>
+                <div style="background: #F3F4F6; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0;">
+                    <p style="font-size: 36px; font-weight: 700; color: #4F46E5; margin: 0; letter-spacing: 4px;">{verification_code}</p>
+                </div>
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        Verify Your Account
+                    </a>
+                </div>
+            </div>
+            <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
+                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
+            </div>
+        </body>
+    </html>
+    """
+    background_tasks.add_task(send_email_notification, email, "Your tskbox Verification Code", email_content)
+    return {"message": "Verification code sent to your email"}
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user: UserLogin):
