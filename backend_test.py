@@ -4,8 +4,10 @@ import json
 from datetime import datetime, timedelta
 import pymongo
 import os
+import time
+import subprocess
 
-class TaskHubHierarchicalTester:
+class TaskHubRecentChangesTester:
     def __init__(self, base_url="https://team-pulse-68.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
