@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ArrowLeft, Crown, Check, Users, Lock, Palette } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/utils';
 
 const SettingsPage = () => {
     const { user } = useAuth();
