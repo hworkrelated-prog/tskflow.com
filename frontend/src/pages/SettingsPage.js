@@ -89,7 +89,7 @@ const SettingsPage = () => {
             // Redirect to Stripe checkout
             window.location.href = response.data.url;
         } catch (error) {
-            toast.error(error.response?.data?.detail || 'Failed to create checkout session');
+            toast.error(getErrorMessage(error, 'Failed to create checkout session');
             setUpgrading(null);
         }
     };
