@@ -42,14 +42,10 @@ const VerifyEmailPage = () => {
     const handleResend = async () => {
         setResending(true);
         try {
-            const response = await axios.post(`${API}/auth/resend-verification?email=${email}`);
-            if (response.data.verification_code) {
-                toast.success(`New code: ${response.data.verification_code}`);
-            } else {
-                toast.success('Verification code sent!');
-            }
+            await axios.post(`${API}/auth/resend-verification?email=${email}`);
+            toast.success('Verification code sent to your email!');
         } catch (error) {
-            toast.error('Failed to resend code');
+            toast.error(getErrorMessage(error, 'Failed to resend code'));
         } finally {
             setResending(false);
         }
