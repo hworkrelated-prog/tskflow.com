@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/lib/utils';
 
 const RegistrationPage = () => {
     const [loading, setLoading] = useState(false);
