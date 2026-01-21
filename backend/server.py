@@ -559,20 +559,53 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     
     await db.tasks.insert_one(task_doc)
     
-    # Send email notification if assigning to others and they're registered
-    if not is_self_assigned and assigned_to_id and not assigned_to_id.startswith("email_"):
+    # Send professional email notification if assigning to others
+    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    if not is_self_assigned and assigned_to_id:
+        recipient_email = assigned_user.get("email") or assigned_to_email
+        recipient_name = assigned_user.get("name", "there")
+        
         email_content = f"""
         <html>
-            <body>
-                <h2>New Task Assigned</h2>
-                <p><strong>Task:</strong> {task.title}</p>
-                <p><strong>Priority:</strong> {task.priority}</p>
-                <p><strong>Due Date:</strong> {task.due_date}</p>
-                <p><strong>From:</strong> {current_user['name']}</p>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
+                </div>
+                <div style="padding: 40px 30px; background: white;">
+                    <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                        You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below and take appropriate action.
+                    </p>
+                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
+                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.description[:300]}{'...' if len(task.description) > 300 else ''}</p>
+                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                            <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+                                {task.priority} Priority
+                            </div>
+                            <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
+                                Due: {task.due_date.replace('T', ' at ').split('.')[0]}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{app_url}/dashboard" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            View Task in tskbox
+                        </a>
+                    </div>
+                    <p style="font-size: 13px; color: #9CA3AF; margin-top: 25px; text-align: center;">
+                        You can accept, decline, or propose a new deadline directly from tskbox.
+                    </p>
+                </div>
+                <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
+                    <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
+                        © 2025 tskbox. All rights reserved.
+                    </p>
+                </div>
             </body>
         </html>
         """
-        background_tasks.add_task(send_email_notification, assigned_user["email"], "New Task Assigned", email_content)
+        background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {task.title}", email_content)
     
     return TaskResponse(
         id=task_id,
