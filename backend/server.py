@@ -91,6 +91,14 @@ class TaskCreate(BaseModel):
     priority: str
     category: Optional[str] = None
 
+class BulkTaskCreate(BaseModel):
+    title: str
+    description: str
+    assigned_to: List[str]  # List of user IDs or email addresses
+    due_date: str
+    priority: str
+    category: Optional[str] = None
+
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
