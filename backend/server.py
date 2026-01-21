@@ -571,6 +571,121 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         accepted_at=accepted_at
     )
 
+@api_router.post("/tasks/bulk", response_model=List[TaskResponse])
+async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Create the same task for multiple assignees at once"""
+    # Check task limit for free users
+    if current_user["subscription_tier"] == "free":
+        existing_tasks = await db.tasks.count_documents({
+            "created_by": current_user["id"],
+            "status": {"$nin": ["Completed", "Declined"]}
+        })
+        if existing_tasks + len(task.assigned_to) > 5:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Free tier limited to 5 active tasks. You have {existing_tasks} active tasks and are trying to create {len(task.assigned_to)} more. Upgrade to Pro for unlimited tasks."
+            )
+    
+    created_tasks = []
+    
+    for assignee in task.assigned_to:
+        task_id = str(uuid.uuid4())
+        assigned_to_id = assignee
+        assigned_to_email = None
+        assigned_user = None
+        is_self_assigned = False
+        initial_status = "Pending"
+        accepted_at = None
+        
+        # Handle "self" assignment
+        if assignee == "self" or assignee == current_user["id"]:
+            assigned_to_id = current_user["id"]
+            assigned_user = current_user
+            is_self_assigned = True
+            initial_status = "Accepted"
+            accepted_at = get_pst_now().isoformat()
+        # Handle email assignment
+        elif '@' in assignee:
+            assigned_to_email = assignee
+            existing_user = await db.users.find_one({"email": assignee}, {"_id": 0})
+            if existing_user:
+                assigned_to_id = existing_user["id"]
+                assigned_user = existing_user
+            else:
+                assigned_to_id = f"email_{assignee}"
+                assigned_user = {"name": assignee.split('@')[0], "email": assignee}
+        else:
+            # Handle user ID assignment
+            assigned_user = await db.users.find_one({"id": assignee}, {"_id": 0})
+            if not assigned_user:
+                continue  # Skip invalid user IDs
+        
+        task_doc = {
+            "id": task_id,
+            "title": task.title,
+            "description": task.description,
+            "assigned_to": assigned_to_id,
+            "created_by": current_user["id"],
+            "due_date": task.due_date,
+            "status": initial_status,
+            "priority": task.priority,
+            "category": task.category,
+            "created_at": get_pst_now().isoformat(),
+            "accepted_at": accepted_at
+        }
+        
+        await db.tasks.insert_one(task_doc)
+        
+        # Send email notification if assigning to others
+        if not is_self_assigned:
+            email_to_send = assigned_user.get("email") if assigned_user else assigned_to_email
+            if email_to_send:
+                email_content = f"""
+                <html>
+                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                            <h1 style="color: white; margin: 0;">New Task Assigned</h1>
+                        </div>
+                        <div style="padding: 30px; background: #f9fafb;">
+                            <p style="font-size: 16px;">Hi {assigned_user.get('name', 'there')},</p>
+                            <p style="font-size: 16px;"><strong>{current_user['name']}</strong> has assigned you a new task:</p>
+                            <div style="background: white; border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
+                                <h2 style="margin-top: 0; color: #1f2937;">{task.title}</h2>
+                                <p style="color: #6b7280;">{task.description[:200]}{'...' if len(task.description) > 200 else ''}</p>
+                                <div style="display: flex; gap: 20px; margin-top: 15px;">
+                                    <span style="background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 20px; font-size: 14px;">
+                                        Priority: {task.priority}
+                                    </span>
+                                    <span style="color: #6b7280; font-size: 14px;">
+                                        Due: {task.due_date}
+                                    </span>
+                                </div>
+                            </div>
+                            <p style="font-size: 14px; color: #6b7280;">Log in to Task Hub to accept or respond to this task.</p>
+                        </div>
+                    </body>
+                </html>
+                """
+                background_tasks.add_task(send_email_notification, email_to_send, f"New Task: {task.title}", email_content)
+        
+        created_tasks.append(TaskResponse(
+            id=task_id,
+            title=task.title,
+            description=task.description,
+            assigned_to=assigned_to_id,
+            assigned_to_name=assigned_user.get("name", assigned_to_email or "Unknown"),
+            created_by=current_user["id"],
+            created_by_name=current_user["name"],
+            due_date=task.due_date,
+            status=initial_status,
+            priority=task.priority,
+            category=task.category,
+            created_at=task_doc["created_at"],
+            accepted_at=accepted_at
+        ))
+    
+    return created_tasks
+
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
 async def get_dashboard(current_user: dict = Depends(get_current_user)):
     # For Teams tier, only show tasks within company domain
