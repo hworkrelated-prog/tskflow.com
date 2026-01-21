@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/lib/utils';
 
 const TaskHub = () => {
     const { user, logout } = useAuth();
