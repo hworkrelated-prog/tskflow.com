@@ -179,23 +179,22 @@ def to_pst(dt_str: str):
     return dt.astimezone(PST)
 
 async def send_email_notification(to_email: str, subject: str, content: str):
-    sendgrid_key = os.getenv('SENDGRID_API_KEY')
-    sender_email = os.getenv('SENDER_EMAIL')
+    resend_key = os.getenv('RESEND_API_KEY')
     
-    if not sendgrid_key or not sender_email:
-        logging.warning("SendGrid not configured, skipping email")
+    if not resend_key:
+        logging.warning("Resend API key not configured, skipping email")
         return
     
     try:
-        message = Mail(
-            from_email=sender_email,
-            to_emails=to_email,
-            subject=subject,
-            html_content=content
-        )
-        sg = SendGridAPIClient(sendgrid_key)
-        sg.send(message)
-        logging.info(f"Email sent to {to_email}")
+        params = {
+            "from": "Task Hub <onboarding@resend.dev>",
+            "to": [to_email],
+            "subject": subject,
+            "html": content
+        }
+        # Run sync SDK in thread to keep FastAPI non-blocking
+        email = await asyncio.to_thread(resend.Emails.send, params)
+        logging.info(f"Email sent to {to_email}, id: {email.get('id') if isinstance(email, dict) else email}")
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
 
