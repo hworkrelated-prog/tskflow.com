@@ -280,9 +280,8 @@ class TaskHubRecentChangesTester:
         success, response = self.run_test(
             "Resend Verification Code",
             "POST",
-            "auth/resend-verification",
-            200,
-            data={"email": "alice.manager@tskboxtest.com"}
+            "auth/resend-verification?email=alice.manager@tskboxtest.com",
+            200
         )
         return success
 
