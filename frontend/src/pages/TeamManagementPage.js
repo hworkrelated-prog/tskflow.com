@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { ArrowLeft, UserPlus, Trash2, DollarSign, Users as UsersIcon, GitBranch, ChevronRight, Clock, CheckCircle2, AlertCircle, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getErrorMessage } from '@/lib/utils';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
