@@ -128,7 +128,7 @@ class TaskHubRecentChangesTester:
         )
         if success:
             # Get verification code from database
-            if self.db:
+            if self.db is not None:
                 user_doc = self.db.users.find_one({"email": "bob.employee@tskboxtest.com"})
                 if user_doc and "verification_code" in user_doc:
                     verification_code = user_doc["verification_code"]
