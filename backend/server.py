@@ -1000,31 +1000,48 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
     )
     
     # Send notification to assignee if task is assigned to someone else
+    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
     if task["assigned_to"] != current_user["id"]:
         assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
         if assignee:
             # Build change summary
             changes = []
             if task_update.title and task_update.title != task.get("title"):
-                changes.append(f"Title: {task_update.title}")
+                changes.append(f"Title changed to: {task_update.title}")
             if task_update.description and task_update.description != task.get("description"):
-                changes.append("Description updated")
+                changes.append("Description has been updated")
             if task_update.due_date and task_update.due_date != task.get("due_date"):
-                changes.append(f"Due date: {task_update.due_date}")
+                changes.append(f"Due date changed to: {task_update.due_date.replace('T', ' at ')}")
             if task_update.priority and task_update.priority != task.get("priority"):
-                changes.append(f"Priority: {task_update.priority}")
+                changes.append(f"Priority changed to: {task_update.priority}")
             
-            changes_html = "<br>".join(changes) if changes else "Task details updated"
+            changes_html = "".join([f"<li style='margin: 5px 0;'>{c}</li>" for c in changes]) if changes else "<li>Task details updated</li>"
             
             email_content = f"""
             <html>
-                <body>
-                    <h2>Task Updated</h2>
-                    <p><strong>{current_user['name']}</strong> has updated a task assigned to you:</p>
-                    <p><strong>Task:</strong> {task_update.title or task['title']}</p>
-                    <p><strong>Changes:</strong><br>{changes_html}</p>
-                    <p><strong>Priority:</strong> {task_update.priority or task['priority']}</p>
-                    <p><strong>Due:</strong> {task_update.due_date or task['due_date']}</p>
+                <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                    <div style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); padding: 40px 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Task Updated</h1>
+                    </div>
+                    <div style="padding: 40px 30px; background: white;">
+                        <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
+                        <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                            <strong>{current_user['name']}</strong> has made changes to a task assigned to you.
+                        </p>
+                        <div style="background: #FFFBEB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #F59E0B;">
+                            <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task_update.title or task['title']}</h2>
+                            <p style="font-size: 14px; color: #6B7280; margin: 0 0 10px 0;">Changes made:</p>
+                            <ul style="color: #374151; margin: 0; padding-left: 20px;">{changes_html}</ul>
+                        </div>
+                        <div style="text-align: center; margin-top: 30px;">
+                            <a href="{app_url}/dashboard" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                View Updated Task
+                            </a>
+                        </div>
+                    </div>
+                    <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
+                        <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
+                    </div>
                 </body>
             </html>
             """
