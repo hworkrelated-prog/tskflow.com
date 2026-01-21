@@ -235,7 +235,7 @@ class TaskHubRecentChangesTester:
             
         try:
             result = self.db.users.update_one(
-                {"email": "user1@testcompany.com"},
+                {"email": "alice.manager@tskboxtest.com"},
                 {"$set": {
                     "subscription_tier": "teams",
                     "is_team_owner": True
@@ -259,10 +259,10 @@ class TaskHubRecentChangesTester:
             
         try:
             result = self.db.users.update_one(
-                {"email": "user2@testcompany.com"},
+                {"email": "bob.employee@tskboxtest.com"},
                 {"$set": {
                     "subscription_tier": "teams",
-                    "team_owner_email": "user1@testcompany.com"
+                    "team_owner_email": "alice.manager@tskboxtest.com"
                 }}
             )
             if result.modified_count > 0:
