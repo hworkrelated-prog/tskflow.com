@@ -199,8 +199,8 @@ class TaskHubRecentChangesTester:
             "auth/login",
             200,
             data={
-                "email": "user1@testcompany.com",
-                "password": "TestPass123!"
+                "email": "alice.manager@tskboxtest.com",
+                "password": "SecurePass123!"
             }
         )
         if success and 'access_token' in response:
@@ -217,8 +217,8 @@ class TaskHubRecentChangesTester:
             "auth/login",
             200,
             data={
-                "email": "user2@testcompany.com",
-                "password": "TestPass123!"
+                "email": "bob.employee@tskboxtest.com",
+                "password": "SecurePass123!"
             }
         )
         if success and 'access_token' in response:
