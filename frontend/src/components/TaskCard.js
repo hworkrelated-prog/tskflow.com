@@ -38,7 +38,9 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
     };
 
     const handleSelectionToggle = (e) => {
-        e.stopPropagation();
+        if (e && typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
         if (onSelect) {
             onSelect(task.id);
         }
