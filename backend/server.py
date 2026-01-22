@@ -801,6 +801,9 @@ async def get_dashboard(
             {"created_by": current_user["id"]}
         ]
     
+    # Exclude deleted tasks from normal views
+    query_filter["deleted"] = {"$ne": True}
+    
     # Apply status filter
     if status_filter == "active":
         query_filter["status"] = {"$ne": "Completed"}
@@ -1015,6 +1018,38 @@ class TaskUpdate(BaseModel):
     due_date: Optional[str] = None
     priority: Optional[str] = None
     category: Optional[str] = None
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator or assignee can delete
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Soft delete - mark as deleted but keep for analytics
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
+    )
+    
+    return {"message": "Task deleted"}
+
+@api_router.post("/tasks/bulk-delete")
+async def bulk_delete_tasks(task_ids: List[str], current_user: dict = Depends(get_current_user)):
+    deleted_count = 0
+    for task_id in task_ids:
+        task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+        if task and (task["created_by"] == current_user["id"] or task["assigned_to"] == current_user["id"]):
+            await db.tasks.update_one(
+                {"id": task_id},
+                {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
+            )
+            deleted_count += 1
+    
+    return {"message": f"{deleted_count} tasks deleted", "deleted_count": deleted_count}
 
 @api_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
