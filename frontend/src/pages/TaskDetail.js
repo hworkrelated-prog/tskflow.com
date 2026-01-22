@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -25,6 +25,7 @@ const TaskDetail = () => {
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
     const [showCounterDialog, setShowCounterDialog] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [counterMessage, setCounterMessage] = useState('');
     const [proposedDate, setProposedDate] = useState('');
@@ -36,6 +37,7 @@ const TaskDetail = () => {
         category: ''
     });
     const [editLoading, setEditLoading] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -46,7 +48,6 @@ const TaskDetail = () => {
         try {
             const response = await axios.get(`${API}/tasks/${taskId}`);
             setTask(response.data);
-            // Pre-populate edit form
             setEditForm({
                 title: response.data.title,
                 description: response.data.description || '',
@@ -141,6 +142,20 @@ const TaskDetail = () => {
         }
     };
 
+    const handleDeleteTask = async () => {
+        setDeleteLoading(true);
+        try {
+            await axios.delete(`${API}/tasks/${taskId}`);
+            toast.success('Task deleted');
+            navigate('/dashboard');
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to delete task'));
+        } finally {
+            setDeleteLoading(false);
+            setShowDeleteDialog(false);
+        }
+    };
+
     const getStatusBadge = (status) => {
         const statusMap = {
             'Pending': { class: 'status-badge-pending', label: 'Pending' },
@@ -158,6 +173,7 @@ const TaskDetail = () => {
     };
 
     const canEdit = user?.id === task?.created_by && task?.status !== 'Completed';
+    const canDelete = user?.id === task?.created_by || user?.id === task?.assigned_to;
 
     if (loading) {
         return (
@@ -170,7 +186,7 @@ const TaskDetail = () => {
     return (
         <div data-testid="task-detail-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
             <header className="glass-header border-b">
-                <div className="container mx-auto px-6 py-4">
+                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
                         variant="ghost"
@@ -180,6 +196,47 @@ const TaskDetail = () => {
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
                     </Button>
+                    {canDelete && (
+                        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    data-testid="delete-task-button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="rounded-full text-red-500 hover:text-red-700 hover:bg-red-50"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="rounded-2xl">
+                                <DialogHeader>
+                                    <DialogTitle>Delete Task</DialogTitle>
+                                    <DialogDescription>
+                                        Are you sure you want to delete this task? This action cannot be undone.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="flex gap-2 justify-end pt-4">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setShowDeleteDialog(false)}
+                                        className="rounded-full"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        data-testid="confirm-delete-button"
+                                        variant="destructive"
+                                        onClick={handleDeleteTask}
+                                        disabled={deleteLoading}
+                                        className="rounded-full"
+                                    >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        {deleteLoading ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    )}
                 </div>
             </header>
 
