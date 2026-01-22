@@ -2,31 +2,31 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
-const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) => {
+const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected = false, onSelect, selectionMode = false }) => {
     const navigate = useNavigate();
-    const [showUndo, setShowUndo] = useState(false);
     const [completing, setCompleting] = useState(false);
+    const [showUndo, setShowUndo] = useState(false);
 
     const handleCheckboxChange = (e) => {
         e.stopPropagation();
-        if (task.status === 'Completed') return;
+        if (task.status === 'Completed' || task.status !== 'Accepted') return;
         
         setCompleting(true);
         setShowUndo(true);
         
         const timeout = setTimeout(() => {
-            if (onQuickComplete) {
-                onQuickComplete(task.id);
+            if (onComplete) {
+                onComplete(task.id);
             }
             setShowUndo(false);
             setCompleting(false);
-        }, 5000);
+        }, 3000);
         
-        // Store timeout for undo
         window[`timeout_${task.id}`] = timeout;
     };
 
@@ -35,6 +35,13 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
         clearTimeout(window[`timeout_${task.id}`]);
         setShowUndo(false);
         setCompleting(false);
+    };
+
+    const handleSelectionToggle = (e) => {
+        e.stopPropagation();
+        if (onSelect) {
+            onSelect(task.id);
+        }
     };
 
     const getStatusBadge = (status) => {
@@ -54,7 +61,7 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
     };
 
     const getPriorityClass = (priority) => {
-        const map = { 'High': 'priority-high', 'Medium': 'priority-medium', 'Low': 'priority-low' };
+        const map = { 'High': 'priority-high', 'Urgent': 'priority-high', 'Medium': 'priority-medium', 'Low': 'priority-low' };
         return map[priority] || '';
     };
 
@@ -66,19 +73,27 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
         >
             <Card
                 data-testid={`task-card-${task.id}`}
-                className="group relative overflow-hidden rounded-xl border bg-card p-6 transition-all cursor-pointer task-card"
-                onClick={() => navigate(`/task/${task.id}`)}
+                className={`group relative overflow-hidden rounded-xl border bg-card p-6 transition-all cursor-pointer task-card ${selected ? 'ring-2 ring-indigo-500 bg-indigo-50/50' : ''}`}
+                onClick={() => !selectionMode && navigate(`/task/${task.id}`)}
             >
                 <CardContent className="p-0 space-y-3">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3 flex-1">
-                            {task.status !== 'Completed' && (
+                            {selectionMode ? (
+                                <Checkbox
+                                    checked={selected}
+                                    onCheckedChange={handleSelectionToggle}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-5 h-5"
+                                    data-testid={`select-task-${task.id}`}
+                                />
+                            ) : task.status === 'Accepted' && (
                                 <input
                                     type="checkbox"
                                     checked={completing}
                                     onChange={handleCheckboxChange}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="w-5 h-5 rounded border-2 border-gray-300 cursor-pointer"
+                                    className="w-5 h-5 rounded border-2 border-gray-300 cursor-pointer accent-green-600"
                                     data-testid={`quick-complete-${task.id}`}
                                 />
                             )}
@@ -88,11 +103,11 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
                     </div>
                     
                     {showUndo && (
-                        <div className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                            <span className="text-sm text-amber-800">Completing in 5 seconds...</span>
+                        <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded-lg">
+                            <span className="text-sm text-green-800">Completing...</span>
                             <button
                                 onClick={handleUndo}
-                                className="text-xs font-semibold text-amber-900 underline"
+                                className="text-xs font-semibold text-green-900 underline"
                                 data-testid={`undo-complete-${task.id}`}
                             >
                                 Undo
@@ -108,7 +123,7 @@ const TaskCard = ({ task, index = 0, showAssignedTo = false, onQuickComplete }) 
                             {format(new Date(task.due_date), 'MMM dd')}
                         </span>
                     </div>
-                    {showAssignedTo ? (
+                    {showAssignee ? (
                         <div className="text-xs text-muted-foreground pt-2 border-t">
                             Assigned to: <span className="font-medium">{task.assigned_to_name}</span>
                         </div>
