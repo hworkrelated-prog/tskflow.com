@@ -772,7 +772,15 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
     return created_tasks
 
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
-async def get_dashboard(current_user: dict = Depends(get_current_user)):
+async def get_dashboard(
+    current_user: dict = Depends(get_current_user),
+    status_filter: str = "active",  # "active", "completed", "all"
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    # Build query filter
+    query_filter = {}
+    
     # For Teams tier, only show tasks within company domain
     if current_user["subscription_tier"] == "teams":
         # Get all users from same domain
@@ -783,33 +791,47 @@ async def get_dashboard(current_user: dict = Depends(get_current_user)):
         domain_user_ids = [u["id"] for u in domain_users]
         user_map = {u["id"]: u["name"] for u in domain_users}
         
-        # Filter tasks to only those involving domain users
-        all_tasks = await db.tasks.find({
-            "$or": [
-                {"assigned_to": {"$in": domain_user_ids}},
-                {"created_by": {"$in": domain_user_ids}}
-            ]
-        }, {"_id": 0}).to_list(1000)
+        query_filter["$or"] = [
+            {"assigned_to": {"$in": domain_user_ids}},
+            {"created_by": {"$in": domain_user_ids}}
+        ]
     else:
-        # Fetch only tasks relevant to current user
-        all_tasks = await db.tasks.find({
-            "$or": [
-                {"assigned_to": current_user["id"]},
-                {"created_by": current_user["id"]}
-            ]
-        }, {"_id": 0}).to_list(1000)
-        
-        # Get unique user IDs from tasks
+        query_filter["$or"] = [
+            {"assigned_to": current_user["id"]},
+            {"created_by": current_user["id"]}
+        ]
+    
+    # Apply status filter
+    if status_filter == "active":
+        query_filter["status"] = {"$ne": "Completed"}
+    elif status_filter == "completed":
+        query_filter["status"] = "Completed"
+    # "all" means no status filter
+    
+    # Apply date range filter on due_date
+    if date_from or date_to:
+        date_filter = {}
+        if date_from:
+            date_filter["$gte"] = date_from
+        if date_to:
+            date_filter["$lte"] = date_to
+        if date_filter:
+            query_filter["due_date"] = date_filter
+    
+    # Fetch tasks
+    all_tasks = await db.tasks.find(query_filter, {"_id": 0}).to_list(1000)
+    
+    # For non-teams tier, build user map
+    if current_user["subscription_tier"] != "teams":
         user_ids = set()
         for task in all_tasks:
             user_ids.add(task["assigned_to"])
             user_ids.add(task["created_by"])
         
-        # Batch fetch all users
         users = await db.users.find(
             {"id": {"$in": list(user_ids)}},
             {"_id": 0, "id": 1, "name": 1}
-        ).to_list(len(user_ids))
+        ).to_list(len(user_ids)) if user_ids else []
         user_map = {u["id"]: u["name"] for u in users}
     
     assigned_to_me = []
@@ -845,8 +867,12 @@ async def get_dashboard(current_user: dict = Depends(get_current_user)):
         elif task["created_by"] == current_user["id"]:
             assigned_by_me.append(task_resp)
     
-    # Check task limit
-    active_tasks = len([t for t in all_tasks if t["created_by"] == current_user["id"] and t["status"] != "Completed"])
+    # Check task limit (always count active tasks regardless of filter)
+    active_count_query = {
+        "created_by": current_user["id"],
+        "status": {"$ne": "Completed"}
+    }
+    active_tasks = await db.tasks.count_documents(active_count_query)
     task_limit_reached = current_user["subscription_tier"] == "free" and active_tasks >= 5
     
     counts = {
