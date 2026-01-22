@@ -11,12 +11,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const TaskHub = () => {
     const { user, logout } = useAuth();
@@ -42,10 +45,49 @@ const TaskHub = () => {
     // Onboarding
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
+    // View state: active vs completed
+    const [viewMode, setViewMode] = useState('active'); // 'active' or 'completed'
+    
+    // Date filter state
+    const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'this_week', 'next_week', 'this_month', 'next_month', 'overdue', 'custom'
+    const [customDateRange, setCustomDateRange] = useState({ from: null, to: null });
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // Calculate date ranges
+    const getDateRange = (filter) => {
+        const now = new Date();
+        const today = startOfDay(now);
+        
+        switch (filter) {
+            case 'today':
+                return { from: format(today, "yyyy-MM-dd'T'00:00"), to: format(endOfDay(today), "yyyy-MM-dd'T'23:59") };
+            case 'this_week':
+                return { from: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd'T'00:00"), to: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd'T'23:59") };
+            case 'next_week':
+                const nextWeekStart = addWeeks(startOfWeek(today, { weekStartsOn: 1 }), 1);
+                return { from: format(nextWeekStart, "yyyy-MM-dd'T'00:00"), to: format(endOfWeek(nextWeekStart, { weekStartsOn: 1 }), "yyyy-MM-dd'T'23:59") };
+            case 'this_month':
+                return { from: format(startOfMonth(today), "yyyy-MM-dd'T'00:00"), to: format(endOfMonth(today), "yyyy-MM-dd'T'23:59") };
+            case 'next_month':
+                const nextMonthStart = addMonths(startOfMonth(today), 1);
+                return { from: format(nextMonthStart, "yyyy-MM-dd'T'00:00"), to: format(endOfMonth(nextMonthStart), "yyyy-MM-dd'T'23:59") };
+            case 'custom':
+                if (customDateRange.from && customDateRange.to) {
+                    return { 
+                        from: format(customDateRange.from, "yyyy-MM-dd'T'00:00"), 
+                        to: format(customDateRange.to, "yyyy-MM-dd'T'23:59") 
+                    };
+                }
+                return { from: null, to: null };
+            default:
+                return { from: null, to: null };
+        }
+    };
+
     useEffect(() => {
         fetchDashboard();
         fetchUsers();
-    }, []);
+    }, [viewMode, dateFilter, customDateRange]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -60,7 +102,14 @@ const TaskHub = () => {
 
     const fetchDashboard = async () => {
         try {
-            const response = await axios.get(`${API}/dashboard`);
+            const params = new URLSearchParams();
+            params.append('status_filter', viewMode);
+            
+            const dateRange = getDateRange(dateFilter);
+            if (dateRange.from) params.append('date_from', dateRange.from);
+            if (dateRange.to) params.append('date_to', dateRange.to);
+            
+            const response = await axios.get(`${API}/dashboard?${params.toString()}`);
             setDashboard(response.data);
         } catch (error) {
             toast.error('Failed to load dashboard');
@@ -88,9 +137,24 @@ const TaskHub = () => {
         }
     };
 
+    // Filter overdue tasks from the current view
+    const filterOverdueTasks = (tasks) => {
+        const now = new Date();
+        return tasks.filter(task => {
+            const dueDate = parseISO(task.due_date);
+            return isBefore(dueDate, now) && task.status !== 'Completed';
+        });
+    };
+
+    // Get overdue counts for badge
+    const getOverdueCount = () => {
+        if (!dashboard) return 0;
+        const allTasks = [...(dashboard.assigned_to_me || []), ...(dashboard.self_assigned || []), ...(dashboard.assigned_by_me || [])];
+        return filterOverdueTasks(allTasks).length;
+    };
+
     // Add assignee to selection
     const addAssignee = (assignee) => {
-        // assignee can be {type: 'user', id, name, email} or {type: 'email', email} or {type: 'self'}
         const exists = selectedAssignees.some(a => 
             (a.type === 'user' && assignee.type === 'user' && a.id === assignee.id) ||
             (a.type === 'email' && assignee.type === 'email' && a.email === assignee.email) ||
@@ -113,7 +177,6 @@ const TaskHub = () => {
         if (e.key === 'Enter' && emailInput.trim()) {
             e.preventDefault();
             if (emailInput.includes('@')) {
-                // Check if it's an existing user
                 const existingUser = users.find(u => u.email.toLowerCase() === emailInput.toLowerCase());
                 if (existingUser) {
                     addAssignee({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email });
@@ -151,7 +214,6 @@ const TaskHub = () => {
 
         setCreateLoading(true);
         try {
-            // Convert selectedAssignees to list of IDs/emails
             const assigneeList = selectedAssignees.map(a => {
                 if (a.type === 'self') return 'self';
                 if (a.type === 'user') return a.id;
@@ -160,14 +222,12 @@ const TaskHub = () => {
             }).filter(Boolean);
 
             if (assigneeList.length === 1) {
-                // Single assignee - use regular endpoint
                 await axios.post(`${API}/tasks`, {
                     ...taskForm,
                     assigned_to: assigneeList[0]
                 });
                 toast.success('Task created successfully!');
             } else {
-                // Multiple assignees - use bulk endpoint
                 await axios.post(`${API}/tasks/bulk`, {
                     ...taskForm,
                     assigned_to: assigneeList
@@ -208,6 +268,23 @@ const TaskHub = () => {
         }
     };
 
+    const dateFilterOptions = [
+        { value: 'all', label: 'All Dates' },
+        { value: 'overdue', label: 'Overdue', badge: true },
+        { value: 'today', label: 'Today' },
+        { value: 'this_week', label: 'This Week' },
+        { value: 'next_week', label: 'Next Week' },
+        { value: 'this_month', label: 'This Month' },
+        { value: 'next_month', label: 'Next Month' },
+        { value: 'custom', label: 'Custom Range' }
+    ];
+
+    // For overdue filter, we need client-side filtering since overdue means due_date < now
+    const getFilteredTasks = (tasks) => {
+        if (dateFilter !== 'overdue') return tasks;
+        return filterOverdueTasks(tasks);
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen gradient-mesh">
@@ -215,6 +292,8 @@ const TaskHub = () => {
             </div>
         );
     }
+
+    const overdueCount = getOverdueCount();
 
     return (
         <div data-testid="task-hub" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
@@ -284,7 +363,7 @@ const TaskHub = () => {
             </header>
 
             <main className="container mx-auto px-6 py-8">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>Welcome, {user?.name}</h2>
                         <p className="text-muted-foreground">Manage your tasks and stay productive</p>
@@ -519,6 +598,100 @@ const TaskHub = () => {
                     </Dialog>
                 </div>
 
+                {/* Filter Bar */}
+                <div className="flex flex-wrap items-center gap-4 mb-6">
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center bg-gray-100 rounded-full p-1">
+                        <button
+                            data-testid="view-active-tasks"
+                            onClick={() => setViewMode('active')}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                                viewMode === 'active' 
+                                    ? 'bg-white shadow-sm text-indigo-600' 
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            Active Tasks
+                        </button>
+                        <button
+                            data-testid="view-completed-tasks"
+                            onClick={() => setViewMode('completed')}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+                                viewMode === 'completed' 
+                                    ? 'bg-white shadow-sm text-green-600' 
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Completed
+                        </button>
+                    </div>
+
+                    {/* Date Filter Buttons */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {dateFilterOptions.slice(0, -1).map((option) => (
+                            <button
+                                key={option.value}
+                                data-testid={`date-filter-${option.value}`}
+                                onClick={() => setDateFilter(option.value)}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
+                                    dateFilter === option.value
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'
+                                }`}
+                            >
+                                {option.value === 'overdue' && <AlertCircle className="w-3.5 h-3.5" />}
+                                {option.label}
+                                {option.badge && overdueCount > 0 && viewMode === 'active' && (
+                                    <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+                                        dateFilter === 'overdue' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
+                                    }`}>
+                                        {overdueCount}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                        
+                        {/* Custom Date Range Picker */}
+                        <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+                            <PopoverTrigger asChild>
+                                <button
+                                    data-testid="date-filter-custom"
+                                    onClick={() => {
+                                        setDateFilter('custom');
+                                        setShowDatePicker(true);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
+                                        dateFilter === 'custom'
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'
+                                    }`}
+                                >
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    {dateFilter === 'custom' && customDateRange.from && customDateRange.to
+                                        ? `${format(customDateRange.from, 'MMM d')} - ${format(customDateRange.to, 'MMM d')}`
+                                        : 'Custom'}
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <CalendarComponent
+                                    mode="range"
+                                    selected={{ from: customDateRange.from, to: customDateRange.to }}
+                                    onSelect={(range) => {
+                                        setCustomDateRange({ from: range?.from || null, to: range?.to || null });
+                                        if (range?.from && range?.to) {
+                                            setShowDatePicker(false);
+                                        }
+                                    }}
+                                    numberOfMonths={2}
+                                    className="rounded-xl"
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+
                 {dashboard?.task_limit_reached && (
                     <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
                         <CardContent className="py-4">
@@ -540,14 +713,14 @@ const TaskHub = () => {
                 )}
 
                 {/* Task Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     {/* Assigned to Me */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3 }}
                     >
-                        <Card className="border-2 shadow-soft rounded-2xl h-full">
+                        <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
@@ -556,10 +729,12 @@ const TaskHub = () => {
                                 <CardDescription>Tasks from others</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                {dashboard?.assigned_to_me?.length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">No tasks assigned to you</p>
+                                {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
+                                    <p className="text-center text-muted-foreground py-8">
+                                        {viewMode === 'completed' ? 'No completed tasks' : 'No tasks assigned to you'}
+                                    </p>
                                 ) : (
-                                    dashboard?.assigned_to_me?.map((task, index) => (
+                                    getFilteredTasks(dashboard?.assigned_to_me || []).map((task, index) => (
                                         <motion.div
                                             key={task.id}
                                             initial={{ opacity: 0, x: -20 }}
@@ -584,7 +759,7 @@ const TaskHub = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: 0.1 }}
                     >
-                        <Card className="border-2 shadow-soft rounded-2xl h-full">
+                        <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-purple-500"></div>
@@ -593,10 +768,12 @@ const TaskHub = () => {
                                 <CardDescription>Your personal tasks</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                {dashboard?.self_assigned?.length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">No self-assigned tasks</p>
+                                {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
+                                    <p className="text-center text-muted-foreground py-8">
+                                        {viewMode === 'completed' ? 'No completed tasks' : 'No self-assigned tasks'}
+                                    </p>
                                 ) : (
-                                    dashboard?.self_assigned?.map((task, index) => (
+                                    getFilteredTasks(dashboard?.self_assigned || []).map((task, index) => (
                                         <motion.div
                                             key={task.id}
                                             initial={{ opacity: 0, x: -20 }}
@@ -621,7 +798,7 @@ const TaskHub = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.3, delay: 0.2 }}
                     >
-                        <Card className="border-2 shadow-soft rounded-2xl h-full">
+                        <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                                     <div className="w-3 h-3 rounded-full bg-green-500"></div>
@@ -630,10 +807,12 @@ const TaskHub = () => {
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                {dashboard?.assigned_by_me?.length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">No delegated tasks</p>
+                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 ? (
+                                    <p className="text-center text-muted-foreground py-8">
+                                        {viewMode === 'completed' ? 'No completed tasks' : 'No delegated tasks'}
+                                    </p>
                                 ) : (
-                                    dashboard?.assigned_by_me?.map((task, index) => (
+                                    getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
                                         <motion.div
                                             key={task.id}
                                             initial={{ opacity: 0, x: -20 }}
