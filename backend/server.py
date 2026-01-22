@@ -269,7 +269,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     await db.users.insert_one(user_doc)
     
     # Always send verification email via Resend
-    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -351,7 +351,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     await db.users.update_one({"email": email}, {"$set": {"verification_code": verification_code}})
     
     # Send email via Resend
-    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -584,7 +584,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     await db.tasks.insert_one(task_doc)
     
     # Send professional email notification if assigning to others
-    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
     if not is_self_assigned and assigned_to_id:
         recipient_email = assigned_user.get("email") or assigned_to_email
         recipient_name = assigned_user.get("name", "there")
@@ -713,7 +713,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         await db.tasks.insert_one(task_doc)
         
         # Send professional email notification if assigning to others
-        app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+        app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
         if not is_self_assigned:
             email_to_send = assigned_user.get("email") if assigned_user else assigned_to_email
             recipient_name = assigned_user.get("name", "there") if assigned_user else assigned_to_email.split('@')[0]
@@ -1024,7 +1024,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
     )
     
     # Send notification to assignee if task is assigned to someone else
-    app_url = os.getenv('APP_URL', 'https://team-pulse-68.preview.emergentagent.com')
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
     if task["assigned_to"] != current_user["id"]:
         assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
         if assignee:
