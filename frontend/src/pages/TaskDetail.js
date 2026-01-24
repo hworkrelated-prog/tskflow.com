@@ -123,14 +123,51 @@ const TaskDetail = () => {
     const handleComplete = async () => {
         setActionLoading(true);
         try {
-            await axios.put(`${API}/tasks/${taskId}/complete`);
-            toast.success('Task completed!');
+            await axios.put(`${API}/tasks/${taskId}/complete`, {
+                completion_note: completionNote || null,
+                completion_note_images: completionImages.length > 0 ? completionImages : null
+            });
+            toast.success(task?.assigned_to === task?.created_by ? 'Task completed!' : 'Task submitted for review');
+            setShowCompleteDialog(false);
+            setCompletionNote('');
+            setCompletionImages([]);
             fetchTask();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to complete task'));
         } finally {
             setActionLoading(false);
         }
+    };
+
+    const handleReviewAction = async (action) => {
+        setActionLoading(true);
+        try {
+            await axios.put(`${API}/tasks/${taskId}/review`, {
+                action,
+                feedback: action === 'send_back' ? reviewFeedback : null
+            });
+            toast.success(action === 'accept' ? 'Task approved!' : 'Task sent back for revision');
+            setShowReviewDialog(false);
+            setReviewFeedback('');
+            fetchTask();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to review task'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleCompletionImageUpload = (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setCompletionImages(prev => [...prev, event.target.result]);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
     };
 
     const handleEditTask = async () => {
