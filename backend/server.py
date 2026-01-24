@@ -1348,6 +1348,7 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
     end = datetime.fromisoformat(query.end_date)
     
     # Only fetch tasks where user is involved (created or assigned)
+    # Exclude tasks deleted before completion (for analytics accuracy)
     tasks = await db.tasks.find({
         "$or": [
             {"assigned_to": current_user["id"]},
@@ -1356,7 +1357,11 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
         "created_at": {
             "$gte": start.isoformat(),
             "$lte": end.isoformat()
-        }
+        },
+        "$or": [
+            {"deleted": {"$ne": True}},  # Not deleted
+            {"$and": [{"deleted": True}, {"completed_at": {"$ne": None}}]}  # Deleted but was completed first
+        ]
     }, {"_id": 0}).to_list(1000)
     
     # Calculate metrics
