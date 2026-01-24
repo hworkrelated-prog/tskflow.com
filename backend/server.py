@@ -1619,7 +1619,7 @@ async def create_checkout(checkout_req: CheckoutRequest, http_request: HTTPReque
     package = SUBSCRIPTION_PACKAGES[checkout_req.package]
     
     # Initialize Stripe
-    stripe_key = os.getenv("STRIPE_API_KEY")
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment system not configured")
     
@@ -1672,7 +1672,7 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
         return {"status": "complete", "payment_status": "paid"}
     
     # Check with Stripe
-    stripe_key = os.getenv("STRIPE_API_KEY")
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
     host_url = str(http_request.base_url)
     webhook_url = f"{host_url}api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
@@ -1713,7 +1713,7 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(http_request: HTTPRequest):
-    stripe_key = os.getenv("STRIPE_API_KEY")
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
     host_url = str(http_request.base_url)
     webhook_url = f"{host_url}api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
