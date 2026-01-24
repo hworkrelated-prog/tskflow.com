@@ -646,15 +646,48 @@ const TaskDetail = () => {
 
                             {user?.id === task.assigned_to && task.status === 'Accepted' && (
                                 <div className="pt-4 border-t">
-                                    <Button
-                                        data-testid="complete-task-button"
-                                        onClick={handleComplete}
-                                        disabled={actionLoading}
-                                        className="rounded-full"
-                                    >
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Mark as Complete
-                                    </Button>
+                                    <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+                                        <DialogTrigger asChild>
+                                            <Button data-testid="complete-task-button" className="rounded-full">
+                                                <CheckCircle className="w-4 h-4 mr-2" />
+                                                Mark as Complete
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="rounded-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle>Complete Task</DialogTitle>
+                                                <DialogDescription>Add an optional completion note</DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-4">
+                                                <Textarea placeholder="Add notes about the completed work (optional)" value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} rows={4} className="rounded-xl" />
+                                                <div className="flex items-center gap-2">
+                                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                                                        <Image className="w-4 h-4" />
+                                                        <span>Attach Screenshots</span>
+                                                        <input type="file" accept="image/*" multiple onChange={handleCompletionImageUpload} className="hidden" />
+                                                    </label>
+                                                    {completionImages.length > 0 && <span className="text-xs text-muted-foreground">{completionImages.length} image(s)</span>}
+                                                </div>
+                                                {completionImages.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {completionImages.map((img, i) => (
+                                                            <div key={i} className="relative">
+                                                                <img src={img} alt="" className="w-16 h-16 object-cover rounded-lg" />
+                                                                <button type="button" onClick={() => setCompletionImages(completionImages.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="flex gap-2 justify-end">
+                                                    <Button variant="outline" onClick={() => setShowCompleteDialog(false)} className="rounded-full">Cancel</Button>
+                                                    <Button onClick={handleComplete} disabled={actionLoading} className="rounded-full">
+                                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                                        {actionLoading ? 'Submitting...' : 'Submit'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
                                 </div>
                             )}
                         </CardContent>
