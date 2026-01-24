@@ -440,6 +440,21 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         team_owner_email=current_user.get("team_owner_email")
     )
 
+class UpdateProfileRequest(BaseModel):
+    name: str
+
+@api_router.put("/auth/profile")
+async def update_profile(request: UpdateProfileRequest, current_user: dict = Depends(get_current_user)):
+    if not request.name or len(request.name.strip()) < 1:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"name": request.name.strip()}}
+    )
+    
+    return {"message": "Profile updated", "name": request.name.strip()}
+
 @api_router.post("/auth/forgot-password")
 async def forgot_password(request: PasswordResetRequest, background_tasks: BackgroundTasks):
     user = await db.users.find_one({"email": request.email}, {"_id": 0})
