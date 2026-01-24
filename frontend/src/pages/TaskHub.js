@@ -34,8 +34,10 @@ const TaskHub = () => {
         description: '',
         due_date: '',
         priority: 'Medium',
-        category: ''
+        category: '',
+        note: ''
     });
+    const [noteImages, setNoteImages] = useState([]);
     const [selectedAssignees, setSelectedAssignees] = useState([]);
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -54,6 +56,10 @@ const TaskHub = () => {
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
+
+    // Recently deleted
+    const [deletedTasks, setDeletedTasks] = useState([]);
+    const [showDeleted, setShowDeleted] = useState(false);
 
     const getDateRange = (filter) => {
         const now = new Date();
@@ -88,6 +94,7 @@ const TaskHub = () => {
     useEffect(() => {
         fetchDashboard();
         fetchUsers();
+        fetchDeletedTasks();
     }, [viewMode, dateFilter, customDateRange]);
 
     useEffect(() => {
