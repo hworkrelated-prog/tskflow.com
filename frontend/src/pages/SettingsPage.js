@@ -148,9 +148,9 @@ const SettingsPage = () => {
                 <div className="container mx-auto px-6 py-4">
                     <Button
                         data-testid="back-button"
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => navigate('/dashboard')}
-                        className="rounded-full"
+                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
@@ -166,18 +166,55 @@ const SettingsPage = () => {
                     className="space-y-8"
                 >
                     <div className="text-center">
-                        <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Settings</h1>
+                        <h1 className="text-5xl font-bold mb-2 text-foreground" style={{ fontFamily: 'Outfit' }}>Settings</h1>
                         <p className="text-muted-foreground text-lg">Manage your account and subscription</p>
                     </div>
 
+                    {/* Profile Section */}
                     <Card className="border-2 shadow-soft rounded-2xl">
                         <CardHeader>
-                            <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Account Information</CardTitle>
+                            <CardTitle className="text-2xl flex items-center gap-2 text-foreground" style={{ fontFamily: 'Outfit' }}>
+                                <User className="w-6 h-6" />
+                                Profile
+                            </CardTitle>
+                            <CardDescription>Update your display name</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-end gap-3">
+                                <div className="flex-1 space-y-2">
+                                    <Label htmlFor="displayName" className="text-foreground">Display Name</Label>
+                                    <Input
+                                        id="displayName"
+                                        value={displayName}
+                                        onChange={(e) => setDisplayName(e.target.value)}
+                                        placeholder="Enter your name"
+                                        className="rounded-xl"
+                                    />
+                                </div>
+                                <Button
+                                    onClick={handleNameUpdate}
+                                    disabled={savingName || displayName === user?.name}
+                                    className="rounded-full"
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {savingName ? 'Saving...' : 'Save'}
+                                </Button>
+                            </div>
+                            <div>
+                                <p className="text-sm text-muted-foreground">Email</p>
+                                <p className="font-semibold text-foreground">{user?.email}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-2 shadow-soft rounded-2xl">
+                        <CardHeader>
+                            <CardTitle className="text-2xl text-foreground" style={{ fontFamily: 'Outfit' }}>Account Information</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div>
                                 <p className="text-sm text-muted-foreground">Name</p>
-                                <p className="font-semibold text-lg">{user?.name}</p>
+                                <p className="font-semibold text-lg text-foreground">{user?.name}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">Email</p>
