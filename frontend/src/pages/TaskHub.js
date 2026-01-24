@@ -675,6 +675,38 @@ const TaskHub = () => {
                         </Card>
                     </motion.div>
                 </div>
+
+                {/* Recently Deleted Section */}
+                {deletedTasks.length > 0 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-8">
+                        <button onClick={() => setShowDeleted(!showDeleted)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4">
+                            <Trash2 className="w-4 h-4" />
+                            <span className="font-medium">Recently Deleted ({deletedTasks.length})</span>
+                            <ChevronDown className={`w-4 h-4 transition-transform ${showDeleted ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showDeleted && (
+                            <Card className="border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50/50">
+                                <CardContent className="p-4">
+                                    <p className="text-xs text-muted-foreground mb-3">Tasks are permanently deleted after 3 days</p>
+                                    <div className="space-y-2">
+                                        {deletedTasks.map((task) => (
+                                            <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-xl border">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium truncate text-gray-600">{task.title}</p>
+                                                    <p className="text-xs text-muted-foreground">Deleted {task.deleted_at ? format(parseISO(task.deleted_at), 'MMM d, h:mm a') : 'recently'}</p>
+                                                </div>
+                                                <Button variant="ghost" size="sm" onClick={() => handleRestoreTask(task.id)} className="rounded-full">
+                                                    <RotateCcw className="w-4 h-4 mr-1" />
+                                                    Restore
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </motion.div>
+                )}
             </main>
         </div>
     );
