@@ -135,6 +135,14 @@ class TaskAction(BaseModel):
     message: Optional[str] = None
     proposed_due_date: Optional[str] = None
 
+class TaskComplete(BaseModel):
+    completion_note: Optional[str] = None
+    completion_note_images: Optional[List[str]] = None
+
+class ReviewAction(BaseModel):
+    action: str  # "accept" or "send_back"
+    feedback: Optional[str] = None
+
 class PasswordResetRequest(BaseModel):
     email: EmailStr
 
