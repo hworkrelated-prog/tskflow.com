@@ -55,9 +55,9 @@ const AnalyticsPage = () => {
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => navigate('/dashboard')}
-                        className="rounded-full"
+                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Dashboard
