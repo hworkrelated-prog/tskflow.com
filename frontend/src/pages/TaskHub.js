@@ -523,6 +523,28 @@ const TaskHub = () => {
                                                 <Label htmlFor="category">Category (Optional)</Label>
                                                 <Input id="category" data-testid="category-input" value={taskForm.category} onChange={(e) => setTaskForm({ ...taskForm, category: e.target.value })} placeholder="e.g., Marketing, Development, Sales" className="rounded-xl" />
                                             </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="note">Note (Optional)</Label>
+                                                <Textarea id="note" value={taskForm.note} onChange={(e) => setTaskForm({ ...taskForm, note: e.target.value })} placeholder="Add any additional notes..." rows={2} className="rounded-xl" />
+                                                <div className="flex items-center gap-2">
+                                                    <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                                                        <Image className="w-4 h-4" />
+                                                        <span>Attach Images</span>
+                                                        <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                                                    </label>
+                                                    {noteImages.length > 0 && <span className="text-xs text-muted-foreground">{noteImages.length} image(s)</span>}
+                                                </div>
+                                                {noteImages.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                        {noteImages.map((img, i) => (
+                                                            <div key={i} className="relative">
+                                                                <img src={img} alt="" className="w-16 h-16 object-cover rounded-lg" />
+                                                                <button type="button" onClick={() => setNoteImages(noteImages.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <Button data-testid="submit-task-button" type="submit" className="w-full rounded-full" disabled={createLoading || selectedAssignees.length === 0}>
                                                 {createLoading ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
                                             </Button>
