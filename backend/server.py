@@ -954,7 +954,17 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         completed_at=task.get("completed_at"),
         reason_for_decline=task.get("reason_for_decline"),
         counter_proposal_message=task.get("counter_proposal_message"),
-        proposed_due_date=task.get("proposed_due_date")
+        proposed_due_date=task.get("proposed_due_date"),
+        note=task.get("note"),
+        note_images=task.get("note_images"),
+        completion_note=task.get("completion_note"),
+        completion_note_images=task.get("completion_note_images"),
+        review_pending_at=task.get("review_pending_at"),
+        review_feedback=task.get("review_feedback"),
+        assigned_to_email=assigned_user["email"] if assigned_user else task.get("assigned_to_email"),
+        created_by_email=created_user["email"] if created_user else None,
+        previous_completion_note=task.get("previous_completion_note"),
+        previous_completion_images=task.get("previous_completion_images")
     )
 
 @api_router.put("/tasks/{task_id}/accept")
