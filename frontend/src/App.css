@@ -90,3 +90,38 @@
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
     max-width: 320px;
 }
+
+/* Theme-safe button fixes */
+.btn-theme-safe {
+    color: rgb(55, 65, 81) !important;
+    border-color: rgb(209, 213, 219) !important;
+}
+
+.btn-theme-safe:hover {
+    background-color: rgb(243, 244, 246) !important;
+    color: rgb(17, 24, 39) !important;
+}
+
+[data-theme="dark"] .btn-theme-safe,
+.dark .btn-theme-safe {
+    color: rgb(229, 231, 235) !important;
+    border-color: rgb(75, 85, 99) !important;
+}
+
+[data-theme="dark"] .btn-theme-safe:hover,
+.dark .btn-theme-safe:hover {
+    background-color: rgb(55, 65, 81) !important;
+    color: rgb(255, 255, 255) !important;
+}
+
+/* Ensure ghost buttons are visible */
+[data-theme="dark"] button[class*="ghost"],
+.dark button[class*="ghost"] {
+    color: rgb(229, 231, 235);
+}
+
+[data-theme="dark"] button[class*="ghost"]:hover,
+.dark button[class*="ghost"]:hover {
+    background-color: rgb(55, 65, 81);
+    color: rgb(255, 255, 255);
+}
