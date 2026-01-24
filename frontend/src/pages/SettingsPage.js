@@ -8,23 +8,26 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Crown, Check, Users, Lock, Palette } from 'lucide-react';
+import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
 
 const SettingsPage = () => {
-    const { user } = useAuth();
+    const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
     const [upgrading, setUpgrading] = React.useState(null);
     const [showPasswordDialog, setShowPasswordDialog] = React.useState(false);
     const [passwordForm, setPasswordForm] = React.useState({ current: '', new: '', confirm: '' });
     const [changingPassword, setChangingPassword] = React.useState(false);
     const [theme, setTheme] = React.useState('light');
+    const [displayName, setDisplayName] = React.useState('');
+    const [savingName, setSavingName] = React.useState(false);
 
     React.useEffect(() => {
         fetchPreferences();
-    }, []);
+        if (user?.name) setDisplayName(user.name);
+    }, [user]);
 
     const fetchPreferences = async () => {
         try {
@@ -44,6 +47,23 @@ const SettingsPage = () => {
             toast.success('Theme updated');
         } catch (error) {
             toast.error('Failed to update theme');
+        }
+    };
+
+    const handleNameUpdate = async () => {
+        if (!displayName.trim()) {
+            toast.error('Name cannot be empty');
+            return;
+        }
+        setSavingName(true);
+        try {
+            await axios.put(`${API}/auth/profile`, { name: displayName.trim() });
+            toast.success('Name updated');
+            if (refreshUser) refreshUser();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to update name'));
+        } finally {
+            setSavingName(false);
         }
     };
 
