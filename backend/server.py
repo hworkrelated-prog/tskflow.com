@@ -1433,6 +1433,66 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
         assignee_breakdown=assignee_details
     )
 
+# Teams Performance Analytics
+@api_router.get("/team/performance")
+async def get_team_performance(current_user: dict = Depends(get_current_user)):
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    
+    # Get direct reports
+    direct_reports = await db.users.find(
+        {"reports_to": current_user["id"]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1}
+    ).to_list(100)
+    
+    performance_data = []
+    
+    for report in direct_reports:
+        # Get all tasks assigned to this report by current user
+        tasks = await db.tasks.find({
+            "assigned_to": report["id"],
+            "created_by": current_user["id"],
+            "deleted": {"$ne": True}
+        }, {"_id": 0}).to_list(1000)
+        
+        completed_tasks = [t for t in tasks if t["status"] == "Completed"]
+        
+        # Calculate avg completion time
+        avg_completion_time = None
+        if completed_tasks:
+            completion_times = []
+            for t in completed_tasks:
+                if t.get("completed_at") and t.get("created_at"):
+                    try:
+                        created = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                        completed_at = datetime.fromisoformat(t["completed_at"].replace('Z', '+00:00'))
+                        days = (completed_at - created).total_seconds() / 86400
+                        completion_times.append(days)
+                    except:
+                        pass
+            if completion_times:
+                avg_completion_time = round(sum(completion_times) / len(completion_times), 1)
+        
+        completion_rate = round((len(completed_tasks) / len(tasks) * 100), 1) if tasks else 0
+        
+        performance_data.append({
+            "user_id": report["id"],
+            "name": report["name"],
+            "email": report["email"],
+            "tasks_assigned": len(tasks),
+            "tasks_completed": len(completed_tasks),
+            "completion_rate": completion_rate,
+            "avg_completion_time": avg_completion_time
+        })
+    
+    # Sort by completion rate for leaderboard
+    leaderboard = sorted(performance_data, key=lambda x: (-x["completion_rate"], -x["tasks_completed"]))
+    
+    return {
+        "direct_reports": performance_data,
+        "leaderboard": leaderboard
+    }
+
 @api_router.get("/users")
 async def get_users(current_user: dict = Depends(get_current_user)):
     # Get user's saved contacts first
