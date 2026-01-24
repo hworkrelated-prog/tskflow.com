@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Toaster } from '@/components/ui/sonner';
 import '@/App.css';
@@ -33,6 +33,7 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [loading, setLoading] = useState(true);
+    const [pendingRedirect, setPendingRedirect] = useState(localStorage.getItem('pendingTaskRedirect'));
 
     useEffect(() => {
         if (token) {
@@ -64,20 +65,41 @@ const AuthProvider = ({ children }) => {
 
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('pendingTaskRedirect');
         setToken(null);
         setUser(null);
+        setPendingRedirect(null);
         delete axios.defaults.headers.common['Authorization'];
     };
 
+    const setPendingTaskRedirect = (taskId) => {
+        localStorage.setItem('pendingTaskRedirect', taskId);
+        setPendingRedirect(taskId);
+    };
+
+    const clearPendingRedirect = () => {
+        localStorage.removeItem('pendingTaskRedirect');
+        setPendingRedirect(null);
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser: fetchCurrentUser }}>
+        <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser: fetchCurrentUser, pendingRedirect, setPendingTaskRedirect, clearPendingRedirect }}>
             {children}
         </AuthContext.Provider>
     );
 };
 
 const ProtectedRoute = ({ children }) => {
-    const { user, loading } = useAuth();
+    const { user, loading, pendingRedirect, clearPendingRedirect } = useAuth();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!loading && user && pendingRedirect) {
+            const taskId = pendingRedirect;
+            clearPendingRedirect();
+            navigate(`/task/${taskId}`);
+        }
+    }, [loading, user, pendingRedirect]);
 
     if (loading) {
         return (
@@ -96,7 +118,16 @@ const ProtectedRoute = ({ children }) => {
 
 // Public route that redirects to dashboard if logged in
 const PublicRoute = ({ children }) => {
-    const { user, loading } = useAuth();
+    const { user, loading, pendingRedirect, clearPendingRedirect } = useAuth();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!loading && user && pendingRedirect) {
+            const taskId = pendingRedirect;
+            clearPendingRedirect();
+            navigate(`/task/${taskId}`);
+        }
+    }, [loading, user, pendingRedirect]);
 
     if (loading) {
         return (
@@ -111,6 +142,64 @@ const PublicRoute = ({ children }) => {
     }
 
     return children;
+};
+
+// Invite link handler
+const InviteHandler = () => {
+    const [searchParams] = useSearchParams();
+    const { user, setPendingTaskRedirect } = useAuth();
+    const navigate = useNavigate();
+    const inviteToken = searchParams.get('token');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const handleInvite = async () => {
+            if (!inviteToken) {
+                setError('Invalid invite link');
+                setLoading(false);
+                return;
+            }
+
+            try {
+                const response = await axios.get(`${API}/invite/${inviteToken}`);
+                const { task_id, assigned_to_email } = response.data;
+
+                if (user) {
+                    // Already logged in, redirect to task
+                    navigate(`/task/${task_id}`);
+                } else {
+                    // Store task ID and redirect to login
+                    setPendingTaskRedirect(task_id);
+                    navigate(`/login?email=${encodeURIComponent(assigned_to_email || '')}`);
+                }
+            } catch (err) {
+                setError('Invalid or expired invite link');
+                setLoading(false);
+            }
+        };
+
+        handleInvite();
+    }, [inviteToken, user]);
+
+    if (loading && !error) {
+        return (
+            <div className="flex items-center justify-center min-h-screen gradient-mesh">
+                <div className="text-lg font-medium">Loading invite...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen gradient-mesh">
+                <div className="text-lg font-medium text-red-600">{error}</div>
+                <button onClick={() => navigate('/login')} className="mt-4 text-indigo-600 underline">Go to Login</button>
+            </div>
+        );
+    }
+
+    return null;
 };
 
 function App() {
