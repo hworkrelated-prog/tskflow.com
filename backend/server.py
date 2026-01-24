@@ -129,6 +129,10 @@ class TaskResponse(BaseModel):
     review_pending_at: Optional[str] = None
     review_feedback: Optional[str] = None
     invite_token: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    created_by_email: Optional[str] = None
+    previous_completion_note: Optional[str] = None
+    previous_completion_images: Optional[List[str]] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
