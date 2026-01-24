@@ -233,9 +233,9 @@ const TaskDetail = () => {
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => navigate('/dashboard')}
-                        className="rounded-full"
+                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
@@ -245,16 +245,16 @@ const TaskDetail = () => {
                             <DialogTrigger asChild>
                                 <Button
                                     data-testid="delete-task-button"
-                                    variant="ghost"
+                                    variant="outline"
                                     size="icon"
-                                    className="rounded-full text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    className="rounded-full border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50"
                                 >
                                     <Trash2 className="w-5 h-5" />
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="rounded-2xl">
                                 <DialogHeader>
-                                    <DialogTitle>Delete Task</DialogTitle>
+                                    <DialogTitle className="text-foreground">Delete Task</DialogTitle>
                                     <DialogDescription>
                                         Are you sure you want to delete this task? This action cannot be undone.
                                     </DialogDescription>
@@ -272,7 +272,7 @@ const TaskDetail = () => {
                                         variant="destructive"
                                         onClick={handleDeleteTask}
                                         disabled={deleteLoading}
-                                        className="rounded-full"
+                                        className="rounded-full bg-red-600 hover:bg-red-700 text-white"
                                     >
                                         <Trash2 className="w-4 h-4 mr-2" />
                                         {deleteLoading ? 'Deleting...' : 'Delete'}
