@@ -1478,16 +1478,16 @@ async def get_team_performance(current_user: dict = Depends(get_current_user)):
         
         completed_tasks = [t for t in tasks if t["status"] == "Completed"]
         
-        # Calculate avg completion time
+        # Calculate avg completion time (from Accepted to Completed)
         avg_completion_time = None
         if completed_tasks:
             completion_times = []
             for t in completed_tasks:
-                if t.get("completed_at") and t.get("created_at"):
+                if t.get("completed_at") and t.get("accepted_at"):
                     try:
-                        created = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                        accepted = datetime.fromisoformat(t["accepted_at"].replace('Z', '+00:00'))
                         completed_at = datetime.fromisoformat(t["completed_at"].replace('Z', '+00:00'))
-                        days = (completed_at - created).total_seconds() / 86400
+                        days = (completed_at - accepted).total_seconds() / 86400
                         completion_times.append(days)
                     except:
                         pass
