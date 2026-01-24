@@ -1102,6 +1102,8 @@ async def review_task(task_id: str, review: ReviewAction, background_tasks: Back
                 "status": "Accepted",
                 "review_feedback": review.feedback,
                 "review_pending_at": None,
+                "previous_completion_note": task.get("completion_note"),
+                "previous_completion_images": task.get("completion_note_images"),
                 "completion_note": None,
                 "completion_note_images": None
             }}
