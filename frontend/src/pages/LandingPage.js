@@ -261,7 +261,7 @@ const LandingPage = () => {
                                         </div>
                                         <div className="flex-1 mx-4">
                                             <div className="bg-white rounded-lg px-4 py-1.5 text-sm text-gray-500 border">
-                                                app.tskbox.io/dashboard
+                                                tskbox.com
                                             </div>
                                         </div>
                                     </div>
