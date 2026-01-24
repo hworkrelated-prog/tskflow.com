@@ -671,7 +671,10 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         priority=task.priority,
         category=task.category,
         created_at=task_doc["created_at"],
-        accepted_at=accepted_at
+        accepted_at=accepted_at,
+        note=task.note,
+        note_images=task.note_images,
+        invite_token=invite_token
     )
 
 @api_router.post("/tasks/bulk", response_model=List[TaskResponse])
