@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -26,9 +26,14 @@ const TaskDetail = () => {
     const [showCounterDialog, setShowCounterDialog] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+    const [showReviewDialog, setShowReviewDialog] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [counterMessage, setCounterMessage] = useState('');
     const [proposedDate, setProposedDate] = useState('');
+    const [completionNote, setCompletionNote] = useState('');
+    const [completionImages, setCompletionImages] = useState([]);
+    const [reviewFeedback, setReviewFeedback] = useState('');
     const [editForm, setEditForm] = useState({
         title: '',
         description: '',
