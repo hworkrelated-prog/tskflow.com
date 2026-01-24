@@ -287,15 +287,21 @@ const TaskHub = () => {
                 return null;
             }).filter(Boolean);
 
+            const taskData = {
+                ...taskForm,
+                note: taskForm.note || null,
+                note_images: noteImages.length > 0 ? noteImages : null
+            };
+
             if (assigneeList.length === 1) {
                 await axios.post(`${API}/tasks`, {
-                    ...taskForm,
+                    ...taskData,
                     assigned_to: assigneeList[0]
                 });
                 toast.success('Task created successfully!');
             } else {
                 await axios.post(`${API}/tasks/bulk`, {
-                    ...taskForm,
+                    ...taskData,
                     assigned_to: assigneeList
                 });
                 toast.success(`${assigneeList.length} tasks created successfully!`);
@@ -307,8 +313,10 @@ const TaskHub = () => {
                 description: '',
                 due_date: '',
                 priority: 'Medium',
-                category: ''
+                category: '',
+                note: ''
             });
+            setNoteImages([]);
             setSelectedAssignees([]);
             fetchDashboard();
         } catch (error) {
@@ -323,12 +331,14 @@ const TaskHub = () => {
         if (!open) {
             setSelectedAssignees([]);
             setEmailInput('');
+            setNoteImages([]);
             setTaskForm({
                 title: '',
                 description: '',
                 due_date: '',
                 priority: 'Medium',
-                category: ''
+                category: '',
+                note: ''
             });
         }
     };
