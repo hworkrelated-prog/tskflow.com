@@ -167,10 +167,13 @@ const TaskHub = () => {
         });
     };
 
-    const handleQuickComplete = async (taskId) => {
+    const handleQuickComplete = async (taskId, completionNote, completionImages) => {
         try {
-            await axios.put(`${API}/tasks/${taskId}/complete`);
-            toast.success('Task completed!');
+            await axios.put(`${API}/tasks/${taskId}/complete`, {
+                completion_note: completionNote,
+                completion_note_images: completionImages
+            });
+            toast.success('Task submitted!');
             fetchDashboard();
         } catch (error) {
             toast.error('Failed to complete task');
