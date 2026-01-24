@@ -403,6 +403,9 @@ const TaskDetail = () => {
                                     </div>
                                     <CardDescription className="text-base">
                                         Created by {task.created_by_name} | Assigned to {task.assigned_to_name}
+                                        {task.assigned_to_email && (
+                                            <span className="text-xs text-gray-400 ml-2">({task.assigned_to_email})</span>
+                                        )}
                                     </CardDescription>
                                 </div>
                                 {getStatusBadge(task.status)}
