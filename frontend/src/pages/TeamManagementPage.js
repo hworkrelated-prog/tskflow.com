@@ -173,12 +173,12 @@ const TeamManagementPage = () => {
                 <div className="container mx-auto px-6 py-4">
                     <Button
                         data-testid="back-button"
-                        variant="ghost"
-                        onClick={() => navigate('/settings')}
-                        className="rounded-full"
+                        variant="outline"
+                        onClick={() => navigate('/dashboard')}
+                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Settings
+                        Back to Dashboard
                     </Button>
                 </div>
             </header>
@@ -191,12 +191,12 @@ const TeamManagementPage = () => {
                     className="space-y-8"
                 >
                     <div className="text-center">
-                        <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Team Management</h1>
+                        <h1 className="text-5xl font-bold mb-2 text-foreground" style={{ fontFamily: 'Outfit' }}>Team Management</h1>
                         <p className="text-muted-foreground text-lg">Manage your team, direct reports, and hierarchy</p>
                     </div>
 
                     <Tabs defaultValue="direct-reports" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3 mb-8">
+                        <TabsList className="grid w-full grid-cols-4 mb-8">
                             <TabsTrigger value="direct-reports" className="rounded-full">
                                 <GitBranch className="w-4 h-4 mr-2" />
                                 Direct Reports
