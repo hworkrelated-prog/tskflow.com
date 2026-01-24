@@ -35,6 +35,9 @@ const TeamManagementPage = () => {
     const [addingReport, setAddingReport] = useState(false);
     const [settingManager, setSettingManager] = useState(false);
     
+    // Performance Analytics State
+    const [performance, setPerformance] = useState(null);
+    
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -51,7 +54,8 @@ const TeamManagementPage = () => {
             const promises = [
                 axios.get(`${API}/team/direct-reports`),
                 axios.get(`${API}/team/potential-reports`),
-                axios.get(`${API}/team/my-manager`)
+                axios.get(`${API}/team/my-manager`),
+                axios.get(`${API}/team/performance`)
             ];
             
             // Only fetch billing if team owner
@@ -65,10 +69,11 @@ const TeamManagementPage = () => {
             setDirectReports(results[0].data);
             setPotentialReports(results[1].data);
             setMyManager(results[2].data.manager);
+            setPerformance(results[3].data);
             
             if (user?.is_team_owner) {
-                setMembers(results[3].data);
-                setBilling(results[4].data);
+                setMembers(results[4].data);
+                setBilling(results[5].data);
             }
         } catch (error) {
             console.error('Failed to load team data:', error);
