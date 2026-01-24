@@ -1506,8 +1506,11 @@ async def get_team_performance(current_user: dict = Depends(get_current_user)):
             "avg_completion_time": avg_completion_time
         })
     
-    # Sort by completion rate for leaderboard
-    leaderboard = sorted(performance_data, key=lambda x: (-x["completion_rate"], -x["tasks_completed"]))
+    # Sort by fastest avg completion time for leaderboard (None values go last)
+    leaderboard = sorted(
+        performance_data, 
+        key=lambda x: (x["avg_completion_time"] is None, x["avg_completion_time"] if x["avg_completion_time"] is not None else float('inf'))
+    )
     
     return {
         "direct_reports": performance_data,
