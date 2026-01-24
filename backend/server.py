@@ -576,6 +576,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         )
     
     task_id = str(uuid.uuid4())
+    invite_token = str(uuid.uuid4())[:8]
     
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
@@ -592,12 +593,19 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "status": initial_status,
         "priority": task.priority,
         "category": task.category,
+        "note": task.note,
+        "note_images": task.note_images,
         "created_at": get_pst_now().isoformat(),
         "accepted_at": accepted_at,
         "completed_at": None,
         "reason_for_decline": None,
         "counter_proposal_message": None,
-        "proposed_due_date": None
+        "proposed_due_date": None,
+        "completion_note": None,
+        "completion_note_images": None,
+        "review_pending_at": None,
+        "review_feedback": None,
+        "invite_token": invite_token
     }
     
     await db.tasks.insert_one(task_doc)
