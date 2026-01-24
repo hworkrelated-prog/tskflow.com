@@ -134,6 +134,39 @@ const TaskHub = () => {
         }
     };
 
+    const fetchDeletedTasks = async () => {
+        try {
+            const response = await axios.get(`${API}/tasks/deleted`);
+            setDeletedTasks(response.data);
+        } catch (error) {
+            console.error('Failed to fetch deleted tasks');
+        }
+    };
+
+    const handleRestoreTask = async (taskId) => {
+        try {
+            await axios.put(`${API}/tasks/${taskId}/restore`);
+            toast.success('Task restored');
+            fetchDashboard();
+            fetchDeletedTasks();
+        } catch (error) {
+            toast.error('Failed to restore task');
+        }
+    };
+
+    const handleImageUpload = (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setNoteImages(prev => [...prev, event.target.result]);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    };
+
     const handleQuickComplete = async (taskId) => {
         try {
             await axios.put(`${API}/tasks/${taskId}/complete`);
