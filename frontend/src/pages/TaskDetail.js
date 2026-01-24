@@ -448,6 +448,82 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
+                            {/* Task Note (from creation) */}
+                            {task.note && (
+                                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                                    <Label className="text-gray-700">Note</Label>
+                                    <p className="mt-1 text-gray-900">{task.note}</p>
+                                    {task.note_images && task.note_images.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {task.note_images.map((img, i) => (
+                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Completion Note */}
+                            {task.completion_note && (
+                                <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                                    <Label className="text-green-700">Completion Note</Label>
+                                    <p className="mt-1 text-green-900">{task.completion_note}</p>
+                                    {task.completion_note_images && task.completion_note_images.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {task.completion_note_images.map((img, i) => (
+                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Review Feedback */}
+                            {task.review_feedback && (
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                                    <Label className="text-amber-700 flex items-center gap-2"><RotateCcw className="w-4 h-4" />Revision Requested</Label>
+                                    <p className="mt-1 text-amber-900">{task.review_feedback}</p>
+                                </div>
+                            )}
+
+                            {/* Review Pending Indicator for Creator */}
+                            {canReview && (
+                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                                    <div className="flex items-center gap-2 text-amber-800 font-medium mb-2">
+                                        <AlertCircle className="w-5 h-5" />
+                                        Your Review Pending
+                                    </div>
+                                    <p className="text-sm text-amber-700 mb-4">The assignee has submitted this task for your review. Please approve or send back with feedback.</p>
+                                    <div className="flex gap-2">
+                                        <Button onClick={() => handleReviewAction('accept')} disabled={actionLoading} className="rounded-full bg-green-600 hover:bg-green-700">
+                                            <CheckCircle className="w-4 h-4 mr-2" />
+                                            Approve
+                                        </Button>
+                                        <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
+                                            <DialogTrigger asChild>
+                                                <Button variant="outline" className="rounded-full">
+                                                    <RotateCcw className="w-4 h-4 mr-2" />
+                                                    Send Back
+                                                </Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="rounded-2xl">
+                                                <DialogHeader>
+                                                    <DialogTitle>Send Back for Revision</DialogTitle>
+                                                    <DialogDescription>Provide feedback for the assignee</DialogDescription>
+                                                </DialogHeader>
+                                                <div className="space-y-4 pt-4">
+                                                    <Textarea placeholder="What needs to be changed?" value={reviewFeedback} onChange={(e) => setReviewFeedback(e.target.value)} rows={4} className="rounded-xl" />
+                                                    <div className="flex gap-2 justify-end">
+                                                        <Button variant="outline" onClick={() => setShowReviewDialog(false)} className="rounded-full">Cancel</Button>
+                                                        <Button onClick={() => handleReviewAction('send_back')} disabled={actionLoading} className="rounded-full">Send Back</Button>
+                                                    </div>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+                                    </div>
+                                </div>
+                            )}
+
                             {user?.id === task.assigned_to && task.status === 'Pending' && (
                                 <div className="flex flex-wrap gap-3 pt-4 border-t">
                                     <Button
