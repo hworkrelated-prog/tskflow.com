@@ -466,11 +466,11 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
-                            {/* Completion Note */}
-                            {task.completion_note && (
+                            {/* Completion Note - visible to both assigner and assignee */}
+                            {(task.completion_note || (task.completion_note_images && task.completion_note_images.length > 0)) && (
                                 <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                                    <Label className="text-green-700">Completion Note</Label>
-                                    <p className="mt-1 text-green-900">{task.completion_note}</p>
+                                    <Label className="text-green-700">Completion Note from {task.assigned_to_name}</Label>
+                                    {task.completion_note && <p className="mt-1 text-green-900">{task.completion_note}</p>}
                                     {task.completion_note_images && task.completion_note_images.length > 0 && (
                                         <div className="flex flex-wrap gap-2 mt-2">
                                             {task.completion_note_images.map((img, i) => (
@@ -481,10 +481,31 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
-                            {/* Review Feedback */}
+                            {/* Previous Completion Note (shown when sent back) */}
+                            {(task.previous_completion_note || (task.previous_completion_images && task.previous_completion_images.length > 0)) && (
+                                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                                    <Label className="text-gray-600">Previous Submission</Label>
+                                    {task.previous_completion_note && <p className="mt-1 text-gray-700">{task.previous_completion_note}</p>}
+                                    {task.previous_completion_images && task.previous_completion_images.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {task.previous_completion_images.map((img, i) => (
+                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Review Feedback - visible to assignee when sent back */}
                             {task.review_feedback && (
                                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                                    <Label className="text-amber-700 flex items-center gap-2"><RotateCcw className="w-4 h-4" />Revision Requested</Label>
+                                    <Label className="text-amber-700 flex items-center gap-2">
+                                        <RotateCcw className="w-4 h-4" />
+                                        Revision Requested by {task.created_by_name}
+                                        {task.created_by_email && (
+                                            <span className="text-xs text-amber-500 font-normal">({task.created_by_email})</span>
+                                        )}
+                                    </Label>
                                     <p className="mt-1 text-amber-900">{task.review_feedback}</p>
                                 </div>
                             )}
