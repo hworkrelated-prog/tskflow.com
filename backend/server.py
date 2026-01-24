@@ -1027,7 +1027,7 @@ async def counter_propose(task_id: str, action: TaskAction, background_tasks: Ba
     return {"message": "Counter-proposal submitted"}
 
 @api_router.put("/tasks/{task_id}/complete")
-async def complete_task(task_id: str, current_user: dict = Depends(get_current_user)):
+async def complete_task(task_id: str, completion: Optional[TaskComplete] = None, current_user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1035,12 +1035,96 @@ async def complete_task(task_id: str, current_user: dict = Depends(get_current_u
     if task["assigned_to"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
+    # If self-assigned, mark as completed directly
+    is_self_assigned = task["assigned_to"] == task["created_by"]
+    
+    update_data = {
+        "completion_note": completion.completion_note if completion else None,
+        "completion_note_images": completion.completion_note_images if completion else None,
+    }
+    
+    if is_self_assigned:
+        update_data["status"] = "Completed"
+        update_data["completed_at"] = get_pst_now().isoformat()
+    else:
+        # Set to Review Pending for non-self-assigned tasks
+        update_data["status"] = "Review Pending"
+        update_data["review_pending_at"] = get_pst_now().isoformat()
+    
     await db.tasks.update_one(
         {"id": task_id},
-        {"$set": {"status": "Completed", "completed_at": get_pst_now().isoformat()}}
+        {"$set": update_data}
     )
     
-    return {"message": "Task completed"}
+    return {"message": "Task submitted for review" if not is_self_assigned else "Task completed"}
+
+@api_router.put("/tasks/{task_id}/review")
+async def review_task(task_id: str, review: ReviewAction, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the task creator can review")
+    
+    if task["status"] != "Review Pending":
+        raise HTTPException(status_code=400, detail="Task is not pending review")
+    
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+    
+    if review.action == "accept":
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {"status": "Completed", "completed_at": get_pst_now().isoformat()}}
+        )
+        if assignee:
+            email_content = f"""
+            <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Task Approved!</h1>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Great work! Your task "<strong>{task['title']}</strong>" has been approved by {current_user['name']}.</p>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{app_url}/task/{task_id}" style="background: #10B981; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
+                    </div>
+                </div>
+            </body></html>
+            """
+            background_tasks.add_task(send_email_notification, assignee["email"], f"Task Approved: {task['title']}", email_content)
+        return {"message": "Task approved and completed"}
+    
+    elif review.action == "send_back":
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {
+                "status": "Accepted",
+                "review_feedback": review.feedback,
+                "review_pending_at": None,
+                "completion_note": None,
+                "completion_note_images": None
+            }}
+        )
+        if assignee:
+            email_content = f"""
+            <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Task Needs Revision</h1>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Your task "<strong>{task['title']}</strong>" needs additional work.</p>
+                    {f'<div style="background: #FEF3C7; padding: 15px; border-radius: 8px; margin: 15px 0;"><strong>Feedback:</strong> {review.feedback}</div>' if review.feedback else ''}
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{app_url}/task/{task_id}" style="background: #F59E0B; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
+                    </div>
+                </div>
+            </body></html>
+            """
+            background_tasks.add_task(send_email_notification, assignee["email"], f"Task Needs Revision: {task['title']}", email_content)
+        return {"message": "Task sent back for revision"}
+    
+    raise HTTPException(status_code=400, detail="Invalid action")
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
