@@ -90,6 +90,8 @@ class TaskCreate(BaseModel):
     due_date: str
     priority: str
     category: Optional[str] = None
+    note: Optional[str] = None
+    note_images: Optional[List[str]] = None  # Base64 or URLs
 
 class BulkTaskCreate(BaseModel):
     title: str
@@ -98,6 +100,8 @@ class BulkTaskCreate(BaseModel):
     due_date: str
     priority: str
     category: Optional[str] = None
+    note: Optional[str] = None
+    note_images: Optional[List[str]] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -118,6 +122,13 @@ class TaskResponse(BaseModel):
     reason_for_decline: Optional[str] = None
     counter_proposal_message: Optional[str] = None
     proposed_due_date: Optional[str] = None
+    note: Optional[str] = None
+    note_images: Optional[List[str]] = None
+    completion_note: Optional[str] = None
+    completion_note_images: Optional[List[str]] = None
+    review_pending_at: Optional[str] = None
+    review_feedback: Optional[str] = None
+    invite_token: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
