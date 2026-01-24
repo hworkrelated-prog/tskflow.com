@@ -399,16 +399,21 @@ const TaskHub = () => {
                         ) : null}
                     </div>
                     <div className="flex items-center gap-3">
-                        <Button variant="ghost" size="icon" onClick={reopenOnboarding} className="rounded-full" title="Help & Walkthrough">
+                        <Button variant="outline" size="icon" onClick={reopenOnboarding} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help & Walkthrough">
                             <HelpCircle className="w-5 h-5" />
                         </Button>
-                        <Button data-testid="analytics-button" variant="ghost" size="icon" onClick={() => navigate('/analytics')} className="rounded-full">
+                        {user?.subscription_tier === 'teams' && (
+                            <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Manage Team">
+                                <Users className="w-5 h-5" />
+                            </Button>
+                        )}
+                        <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                             <BarChart3 className="w-5 h-5" />
                         </Button>
-                        <Button data-testid="settings-button" variant="ghost" size="icon" onClick={() => navigate('/settings')} className="rounded-full">
+                        <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                             <Settings className="w-5 h-5" />
                         </Button>
-                        <Button data-testid="logout-button" variant="ghost" size="icon" onClick={logout} className="rounded-full">
+                        <Button data-testid="logout-button" variant="outline" size="icon" onClick={logout} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                             <LogOut className="w-5 h-5" />
                         </Button>
                     </div>
