@@ -201,6 +201,10 @@ const TeamManagementPage = () => {
                                 <GitBranch className="w-4 h-4 mr-2" />
                                 Direct Reports
                             </TabsTrigger>
+                            <TabsTrigger value="performance" className="rounded-full">
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                                Performance
+                            </TabsTrigger>
                             <TabsTrigger value="my-hierarchy" className="rounded-full">
                                 <UserCheck className="w-4 h-4 mr-2" />
                                 My Hierarchy
@@ -212,6 +216,94 @@ const TeamManagementPage = () => {
                                 </TabsTrigger>
                             )}
                         </TabsList>
+
+                        {/* Performance Analytics Tab */}
+                        <TabsContent value="performance">
+                            <Card className="border-2 shadow-soft rounded-2xl">
+                                <CardHeader>
+                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <CheckCircle2 className="w-6 h-6" />
+                                        Team Performance
+                                    </CardTitle>
+                                    <CardDescription>Performance metrics for your direct reports</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {performance?.direct_reports?.length > 0 ? (
+                                        <div className="space-y-6">
+                                            {/* Leaderboard */}
+                                            <div>
+                                                <h3 className="font-semibold mb-3 text-foreground">Leaderboard (by Completion Rate)</h3>
+                                                <div className="space-y-2">
+                                                    {performance.leaderboard?.map((person, index) => (
+                                                        <div key={person.user_id} className={`flex items-center justify-between p-3 rounded-xl ${index === 0 ? 'bg-amber-50 border border-amber-200' : index === 1 ? 'bg-gray-100 border border-gray-200' : index === 2 ? 'bg-orange-50 border border-orange-200' : 'bg-background border'}`}>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${index === 0 ? 'bg-amber-500 text-white' : index === 1 ? 'bg-gray-400 text-white' : index === 2 ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                                                    {index + 1}
+                                                                </span>
+                                                                <div>
+                                                                    <p className="font-medium text-foreground">{person.name}</p>
+                                                                    <p className="text-xs text-muted-foreground">{person.email}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-bold text-foreground">{person.completion_rate}%</p>
+                                                                <p className="text-xs text-muted-foreground">{person.tasks_completed}/{person.tasks_assigned} tasks</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Detailed Stats Table */}
+                                            <div>
+                                                <h3 className="font-semibold mb-3 text-foreground">Detailed Statistics</h3>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm">
+                                                        <thead>
+                                                            <tr className="border-b">
+                                                                <th className="text-left py-2 px-3 text-foreground">Name</th>
+                                                                <th className="text-center py-2 px-3 text-foreground">Assigned</th>
+                                                                <th className="text-center py-2 px-3 text-foreground">Completed</th>
+                                                                <th className="text-center py-2 px-3 text-foreground">Rate</th>
+                                                                <th className="text-center py-2 px-3 text-foreground">Avg Time</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {performance.direct_reports?.map((person) => (
+                                                                <tr key={person.user_id} className="border-b last:border-0">
+                                                                    <td className="py-3 px-3">
+                                                                        <div>
+                                                                            <p className="font-medium text-foreground">{person.name}</p>
+                                                                            <p className="text-xs text-muted-foreground">{person.email}</p>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="text-center py-3 px-3 text-foreground">{person.tasks_assigned}</td>
+                                                                    <td className="text-center py-3 px-3 text-foreground">{person.tasks_completed}</td>
+                                                                    <td className="text-center py-3 px-3">
+                                                                        <Badge className={`${person.completion_rate >= 80 ? 'bg-green-100 text-green-800' : person.completion_rate >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                                                                            {person.completion_rate}%
+                                                                        </Badge>
+                                                                    </td>
+                                                                    <td className="text-center py-3 px-3 text-foreground">
+                                                                        {person.avg_completion_time ? `${person.avg_completion_time} days` : '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-12">
+                                            <CheckCircle2 className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                                            <p className="text-muted-foreground">No performance data yet</p>
+                                            <p className="text-sm text-muted-foreground">Add direct reports and assign them tasks to see metrics</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
 
                         {/* Direct Reports Tab */}
                         <TabsContent value="direct-reports">
