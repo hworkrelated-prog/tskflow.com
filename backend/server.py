@@ -1126,6 +1126,78 @@ async def review_task(task_id: str, review: ReviewAction, background_tasks: Back
     
     raise HTTPException(status_code=400, detail="Invalid action")
 
+# Invite link endpoint - public, no auth required
+@api_router.get("/invite/{invite_token}")
+async def get_invite_task(invite_token: str):
+    task = await db.tasks.find_one({"invite_token": invite_token, "deleted": {"$ne": True}}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Invalid or expired invite link")
+    return {"task_id": task["id"], "assigned_to_email": task.get("assigned_to_email")}
+
+# Deleted tasks endpoints
+@api_router.get("/tasks/deleted")
+async def get_deleted_tasks(current_user: dict = Depends(get_current_user)):
+    three_days_ago = (get_pst_now() - timedelta(days=3)).isoformat()
+    
+    # Auto-purge tasks deleted more than 3 days ago
+    await db.tasks.delete_many({
+        "deleted": True,
+        "deleted_at": {"$lt": three_days_ago}
+    })
+    
+    # Fetch remaining deleted tasks
+    deleted_tasks = await db.tasks.find({
+        "deleted": True,
+        "$or": [
+            {"created_by": current_user["id"]},
+            {"assigned_to": current_user["id"]}
+        ]
+    }, {"_id": 0}).to_list(100)
+    
+    # Get user names
+    user_ids = set()
+    for task in deleted_tasks:
+        user_ids.add(task["assigned_to"])
+        user_ids.add(task["created_by"])
+    
+    users = await db.users.find({"id": {"$in": list(user_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids)) if user_ids else []
+    user_map = {u["id"]: u["name"] for u in users}
+    
+    return [{
+        **task,
+        "assigned_to_name": user_map.get(task["assigned_to"], "Unknown"),
+        "created_by_name": user_map.get(task["created_by"], "Unknown")
+    } for task in deleted_tasks]
+
+@api_router.put("/tasks/{task_id}/restore")
+async def restore_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id, "deleted": True}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$unset": {"deleted": "", "deleted_at": "", "deleted_by": ""}}
+    )
+    return {"message": "Task restored"}
+
+# Auto-complete review pending tasks after 24 hours
+@api_router.post("/tasks/auto-complete-reviews")
+async def auto_complete_reviews():
+    twenty_four_hours_ago = (get_pst_now() - timedelta(hours=24)).isoformat()
+    
+    result = await db.tasks.update_many(
+        {
+            "status": "Review Pending",
+            "review_pending_at": {"$lt": twenty_four_hours_ago}
+        },
+        {"$set": {"status": "Completed", "completed_at": get_pst_now().isoformat()}}
+    )
+    return {"auto_completed": result.modified_count}
+
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
