@@ -204,7 +204,8 @@ const TaskDetail = () => {
             'Accepted': { class: 'status-badge-accepted', label: 'Accepted' },
             'Declined': { class: 'status-badge-declined', label: 'Declined' },
             'Counter-Proposed': { class: 'status-badge-counter', label: 'Counter-Proposed' },
-            'Completed': { class: 'status-badge-completed', label: 'Completed' }
+            'Completed': { class: 'status-badge-completed', label: 'Completed' },
+            'Review Pending': { class: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Review Pending' }
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
@@ -214,7 +215,8 @@ const TaskDetail = () => {
         );
     };
 
-    const canEdit = user?.id === task?.created_by && task?.status !== 'Completed';
+    const canEdit = user?.id === task?.created_by && task?.status !== 'Completed' && task?.status !== 'Review Pending';
+    const canReview = user?.id === task?.created_by && task?.status === 'Review Pending';
     const canDelete = user?.id === task?.created_by || user?.id === task?.assigned_to;
 
     if (loading) {
