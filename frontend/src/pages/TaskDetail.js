@@ -489,19 +489,27 @@ const TaskDetail = () => {
                             {/* Review Pending Indicator for Creator */}
                             {canReview && (
                                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                                    <div className="flex items-center gap-2 text-amber-800 font-medium mb-2">
-                                        <AlertCircle className="w-5 h-5" />
-                                        Your Review Pending
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2 text-amber-800 font-medium">
+                                            <AlertCircle className="w-5 h-5" />
+                                            Your Review Pending
+                                        </div>
+                                        {task.review_pending_at && (
+                                            <div className="text-xs text-amber-600 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                Auto-completes in {Math.max(0, Math.ceil(24 - (Date.now() - new Date(task.review_pending_at).getTime()) / 3600000))}h
+                                            </div>
+                                        )}
                                     </div>
                                     <p className="text-sm text-amber-700 mb-4">The assignee has submitted this task for your review. Please approve or send back with feedback.</p>
                                     <div className="flex gap-2">
-                                        <Button onClick={() => handleReviewAction('accept')} disabled={actionLoading} className="rounded-full bg-green-600 hover:bg-green-700">
+                                        <Button onClick={() => handleReviewAction('accept')} disabled={actionLoading} className="rounded-full bg-green-600 hover:bg-green-700 text-white">
                                             <CheckCircle className="w-4 h-4 mr-2" />
                                             Approve
                                         </Button>
                                         <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
                                             <DialogTrigger asChild>
-                                                <Button variant="outline" className="rounded-full">
+                                                <Button variant="outline" className="rounded-full border-amber-300 text-amber-800 hover:bg-amber-100">
                                                     <RotateCcw className="w-4 h-4 mr-2" />
                                                     Send Back
                                                 </Button>
@@ -521,6 +529,25 @@ const TaskDetail = () => {
                                             </DialogContent>
                                         </Dialog>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Review Pending Indicator for Assignee */}
+                            {user?.id === task.assigned_to && task.status === 'Review Pending' && (
+                                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-blue-800 font-medium">
+                                            <Clock className="w-5 h-5" />
+                                            Awaiting Review
+                                        </div>
+                                        {task.review_pending_at && (
+                                            <div className="text-xs text-blue-600 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                Auto-completes in {Math.max(0, Math.ceil(24 - (Date.now() - new Date(task.review_pending_at).getTime()) / 3600000))}h
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-blue-700 mt-2">Your submission is pending review by {task.created_by_name}.</p>
                                 </div>
                             )}
 
