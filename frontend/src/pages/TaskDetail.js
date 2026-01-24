@@ -402,9 +402,13 @@ const TaskDetail = () => {
                                         )}
                                     </div>
                                     <CardDescription className="text-base">
-                                        Created by {task.created_by_name} | Assigned to {task.assigned_to_name}
-                                        {task.assigned_to_email && (
-                                            <span className="text-xs text-gray-400 ml-2">({task.assigned_to_email})</span>
+                                        Created by {task.created_by_name}
+                                        {user?.id === task.assigned_to && task.created_by_email && (
+                                            <span className="text-xs text-gray-400 ml-1">({task.created_by_email})</span>
+                                        )}
+                                        {' | '}Assigned to {task.assigned_to_name}
+                                        {user?.id === task.created_by && task.assigned_to_email && (
+                                            <span className="text-xs text-gray-400 ml-1">({task.assigned_to_email})</span>
                                         )}
                                     </CardDescription>
                                 </div>
