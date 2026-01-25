@@ -578,7 +578,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     <p><strong>Priority:</strong> {task.priority}</p>
                     <p><strong>Due:</strong> {task.due_date}</p>
                     <p>Create your account to view details and respond:</p>
-                    <p><a href="{os.environ.get('FRONTEND_URL')}/register">Create Account</a></p>
+                    <p><a href="{app_url}/register">Create Account</a></p>
                 </body>
             </html>
             """
@@ -1894,7 +1894,7 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
                 <li>No payment required</li>
             </ul>
             <p>Click the link below to create your account and start working:</p>
-            <p><a href="{os.environ.get('FRONTEND_URL')}/register">Join Team</a></p>
+            <p><a href="{app_url}/register">Join Team</a></p>
         </body>
     </html>
     """
