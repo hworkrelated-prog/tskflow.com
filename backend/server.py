@@ -677,7 +677,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                         </div>
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                             View Task in Tskflow
                         </a>
                     </div>
@@ -797,7 +797,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                                 </div>
                             </div>
                             <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                                     View Task in Tskflow
                                 </a>
                             </div>
