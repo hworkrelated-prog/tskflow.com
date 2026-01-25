@@ -2216,6 +2216,11 @@ async def get_org_structure(current_user: dict = Depends(get_current_user)):
 # Include router
 app.include_router(api_router)
 
+# Health check endpoint for Kubernetes
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
