@@ -639,16 +639,38 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {dashboard?.task_limit_reached && (
+                {/* Upgrade Nudges */}
+                {showLightBanner && !showPersistentBanner && (
+                    <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between">
+                        <p className="text-sm text-indigo-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
+                        <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
+                    </div>
+                )}
+
+                {showPersistentBanner && (
                     <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
                         <CardContent className="py-4">
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3"><HelpCircle className="w-5 h-5 text-amber-600" /><p className="text-amber-800">You've reached the free tier limit of 5 active tasks.</p></div>
-                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600"><Crown className="w-4 h-4 mr-2" />Upgrade to Pro</Button>
+                                <div className="flex items-center gap-3"><Crown className="w-5 h-5 text-amber-600" /><p className="text-amber-800">You're managing {activeTaskCount} tasks! Upgrade to Pro or Teams for priority support and team features.</p></div>
+                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
                             </div>
                         </CardContent>
                     </Card>
                 )}
+
+                {/* Upgrade Modal (shown once at 20 tasks) */}
+                <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+                    <DialogContent className="rounded-2xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-foreground">You're Growing Fast!</DialogTitle>
+                            <DialogDescription>You now have {activeTaskCount} active tasks. Consider upgrading to Pro or Teams for team collaboration, analytics, and priority support.</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex gap-2 justify-end pt-4">
+                            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Maybe Later</Button>
+                            <Button onClick={() => { setShowUpgradeModal(false); navigate('/settings'); }} className="rounded-full"><Crown className="w-4 h-4 mr-2" />View Plans</Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
