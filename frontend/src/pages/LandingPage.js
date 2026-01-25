@@ -82,7 +82,7 @@ const LandingPage = () => {
                 "Assign to anyone",
                 "Mobile friendly"
             ],
-            cta: "Start Free",
+            cta: "Get Started",
             popular: false
         },
         {
