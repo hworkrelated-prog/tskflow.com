@@ -61,6 +61,28 @@ const TaskHub = () => {
     const [deletedTasks, setDeletedTasks] = useState([]);
     const [showDeleted, setShowDeleted] = useState(false);
 
+    // Upgrade nudges
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+    const [upgradeModalShown, setUpgradeModalShown] = useState(() => localStorage.getItem('upgradeModalShown') === 'true');
+
+    const getActiveTaskCount = () => {
+        if (!dashboard) return 0;
+        return (dashboard.assigned_to_me?.length || 0) + (dashboard.self_assigned?.length || 0) + (dashboard.assigned_by_me?.length || 0);
+    };
+
+    const activeTaskCount = getActiveTaskCount();
+    const isFreeUser = user?.subscription_tier === 'free';
+    const showLightBanner = isFreeUser && activeTaskCount >= 10;
+    const showPersistentBanner = isFreeUser && activeTaskCount >= 30;
+
+    React.useEffect(() => {
+        if (isFreeUser && activeTaskCount >= 20 && !upgradeModalShown) {
+            setShowUpgradeModal(true);
+            setUpgradeModalShown(true);
+            localStorage.setItem('upgradeModalShown', 'true');
+        }
+    }, [activeTaskCount, isFreeUser, upgradeModalShown]);
+
     const getDateRange = (filter) => {
         const now = new Date();
         const today = startOfDay(now);
