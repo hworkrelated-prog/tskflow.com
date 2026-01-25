@@ -148,8 +148,11 @@ const SettingsPage = () => {
 
     return (
         <div data-testid="settings-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+            <AnimatePresence>
+                {showHowItWorks && <OnboardingPopup page="howItWorks" onClose={() => setShowHowItWorks(false)} />}
+            </AnimatePresence>
             <header className="glass-header border-b">
-                <div className="container mx-auto px-6 py-4">
+                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
                         variant="outline"
@@ -158,6 +161,14 @@ const SettingsPage = () => {
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        onClick={() => setShowHowItWorks(true)}
+                        className="rounded-full"
+                    >
+                        <HelpCircle className="w-4 h-4 mr-2" />
+                        How Tskflow Works
                     </Button>
                 </div>
             </header>
