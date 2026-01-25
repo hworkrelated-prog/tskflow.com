@@ -1729,6 +1729,30 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
         "payment_status": checkout_status.payment_status
     }
 
+@api_router.post("/create-portal-session")
+async def create_portal_session(current_user: dict = Depends(get_current_user)):
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Payment system not configured")
+    
+    import stripe
+    stripe.api_key = stripe_key
+    
+    # Find customer by email
+    customers = stripe.Customer.list(email=current_user["email"], limit=1)
+    if not customers.data:
+        raise HTTPException(status_code=404, detail="No subscription found")
+    
+    customer_id = customers.data[0].id
+    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{app_url}/settings"
+    )
+    
+    return {"url": session.url}
+
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(http_request: HTTPRequest):
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
