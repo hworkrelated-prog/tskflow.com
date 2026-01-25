@@ -8,7 +8,7 @@ import time
 import subprocess
 
 class TaskHubRecentChangesTester:
-    def __init__(self, base_url="https://tskbox-manager.preview.emergentagent.com"):
+    def __init__(self, base_url="https://team-task-app.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.user1_token = None
