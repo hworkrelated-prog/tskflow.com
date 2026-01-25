@@ -117,7 +117,7 @@ const SettingsPage = () => {
 
     const features = {
         free: [
-            'Up to 5 active tasks',
+            'Unlimited tasks',
             'Basic task management',
             'Email notifications',
             'Task analytics',
@@ -128,7 +128,7 @@ const SettingsPage = () => {
             'Priority support',
             'Advanced analytics',
             'Custom categories',
-            'Export reports',
+            'File & image attachments',
             'Assign to anyone'
         ],
         teams: [
@@ -138,7 +138,9 @@ const SettingsPage = () => {
             'Team analytics dashboard',
             'Shared task visibility',
             'Admin controls',
-            'Dedicated account manager'
+            'Dedicated account manager',
+            'Export reports (Coming Soon)',
+            'API integrations (Coming Soon)'
         ]
     };
 

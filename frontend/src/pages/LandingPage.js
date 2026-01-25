@@ -95,8 +95,7 @@ const LandingPage = () => {
                 "Priority support",
                 "Advanced analytics",
                 "Custom categories",
-                "Export reports",
-                "API access"
+                "File & image attachments"
             ],
             cta: "Go Pro",
             popular: true
@@ -112,7 +111,9 @@ const LandingPage = () => {
                 "Org hierarchy & direct reports",
                 "Team analytics dashboard",
                 "Admin controls",
-                "SSO & advanced security"
+                "SSO & advanced security",
+                "Export reports (Coming Soon)",
+                "API integrations (Coming Soon)"
             ],
             cta: "Get Teams",
             popular: false
