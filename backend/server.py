@@ -1209,41 +1209,6 @@ async def get_invite_task(invite_token: str):
         raise HTTPException(status_code=404, detail="Invalid or expired invite link")
     return {"task_id": task["id"], "assigned_to_email": task.get("assigned_to_email")}
 
-# Deleted tasks endpoints
-@api_router.get("/tasks/deleted")
-async def get_deleted_tasks(current_user: dict = Depends(get_current_user)):
-    three_days_ago = (get_pst_now() - timedelta(days=3)).isoformat()
-    
-    # Auto-purge tasks deleted more than 3 days ago
-    await db.tasks.delete_many({
-        "deleted": True,
-        "deleted_at": {"$lt": three_days_ago}
-    })
-    
-    # Fetch remaining deleted tasks
-    deleted_tasks = await db.tasks.find({
-        "deleted": True,
-        "$or": [
-            {"created_by": current_user["id"]},
-            {"assigned_to": current_user["id"]}
-        ]
-    }, {"_id": 0}).to_list(100)
-    
-    # Get user names
-    user_ids = set()
-    for task in deleted_tasks:
-        user_ids.add(task["assigned_to"])
-        user_ids.add(task["created_by"])
-    
-    users = await db.users.find({"id": {"$in": list(user_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids)) if user_ids else []
-    user_map = {u["id"]: u["name"] for u in users}
-    
-    return [{
-        **task,
-        "assigned_to_name": user_map.get(task["assigned_to"], "Unknown"),
-        "created_by_name": user_map.get(task["created_by"], "Unknown")
-    } for task in deleted_tasks]
-
 @api_router.put("/tasks/{task_id}/restore")
 async def restore_task(task_id: str, current_user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id, "deleted": True}, {"_id": 0})
