@@ -545,14 +545,7 @@ async def reset_password(request: PasswordResetConfirm):
 # Task Routes
 @api_router.post("/tasks", response_model=TaskResponse)
 async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    # Check task limits for free tier
-    if current_user["subscription_tier"] == "free":
-        active_tasks = await db.tasks.count_documents({
-            "created_by": current_user["id"],
-            "status": {"$ne": "Completed"}
-        })
-        if active_tasks >= 5:
-            raise HTTPException(status_code=403, detail="Free tier limit reached. Upgrade to Pro or Teams for unlimited tasks.")
+    # Free tier: no hard limit, only soft nudges handled in frontend
     
     # Handle email-based assignment or user ID
     if task.assigned_to == "self":
@@ -725,17 +718,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
 @api_router.post("/tasks/bulk", response_model=List[TaskResponse])
 async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     """Create the same task for multiple assignees at once"""
-    # Check task limit for free users
-    if current_user["subscription_tier"] == "free":
-        existing_tasks = await db.tasks.count_documents({
-            "created_by": current_user["id"],
-            "status": {"$nin": ["Completed", "Declined"]}
-        })
-        if existing_tasks + len(task.assigned_to) > 5:
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Free tier limited to 5 active tasks. You have {existing_tasks} active tasks and are trying to create {len(task.assigned_to)} more. Upgrade to Pro for unlimited tasks."
-            )
+    # Free tier: no hard limit, only soft nudges handled in frontend
     
     created_tasks = []
     
@@ -951,7 +934,7 @@ async def get_dashboard(
         "status": {"$ne": "Completed"}
     }
     active_tasks = await db.tasks.count_documents(active_count_query)
-    task_limit_reached = current_user["subscription_tier"] == "free" and active_tasks >= 5
+    task_limit_reached = False  # No hard limit for free tier
     
     counts = {
         "assigned_to_me": len(assigned_to_me),
