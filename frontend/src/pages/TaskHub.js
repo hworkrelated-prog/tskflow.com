@@ -298,7 +298,7 @@ const TaskHub = () => {
             return;
         }
 
-        if (dashboard?.task_limit_reached && selectedAssignees.length > 0) {
+        if (false) {
             toast.error('Free tier limit reached. Upgrade to Pro for unlimited tasks!');
             return;
         }
@@ -466,7 +466,7 @@ const TaskHub = () => {
                                 </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
                                     <DialogTrigger asChild>
-                                        <Button data-testid="create-task-button" className="rounded-full gap-2" disabled={dashboard?.task_limit_reached}>
+                                        <Button data-testid="create-task-button" className="rounded-full gap-2" disabled={false}>
                                             <Plus className="w-4 h-4" />
                                             New Task
                                         </Button>
