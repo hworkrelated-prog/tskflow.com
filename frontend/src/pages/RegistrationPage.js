@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { Target } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
 
 const RegistrationPage = () => {
@@ -41,7 +43,13 @@ const RegistrationPage = () => {
     };
 
     return (
-        <div data-testid="registration-page" className="min-h-screen gradient-mesh flex items-center justify-center p-6">
+        <div data-testid="registration-page" className="min-h-screen gradient-mesh flex items-center justify-center p-6 relative">
+            <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
+                    <Target className="w-6 h-6 text-white" />
+                </div>
+                <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>Tskflow</span>
+            </Link>
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
