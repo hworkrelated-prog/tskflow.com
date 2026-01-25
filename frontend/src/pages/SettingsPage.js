@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
+import OnboardingPopup from '@/components/OnboardingPopup';
 
 const SettingsPage = () => {
     const { user, refreshUser } = useAuth();
@@ -23,6 +24,7 @@ const SettingsPage = () => {
     const [theme, setTheme] = React.useState('light');
     const [displayName, setDisplayName] = React.useState('');
     const [savingName, setSavingName] = React.useState(false);
+    const [showHowItWorks, setShowHowItWorks] = React.useState(false);
 
     React.useEffect(() => {
         fetchPreferences();
