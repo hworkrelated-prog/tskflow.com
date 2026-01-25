@@ -99,7 +99,7 @@ const ProtectedRoute = ({ children }) => {
             clearPendingRedirect();
             navigate(`/task/${taskId}`);
         }
-    }, [loading, user, pendingRedirect]);
+    }, [loading, user, pendingRedirect, clearPendingRedirect, navigate]);
 
     if (loading) {
         return (
@@ -127,7 +127,7 @@ const PublicRoute = ({ children }) => {
             clearPendingRedirect();
             navigate(`/task/${taskId}`);
         }
-    }, [loading, user, pendingRedirect]);
+    }, [loading, user, pendingRedirect, clearPendingRedirect, navigate]);
 
     if (loading) {
         return (
