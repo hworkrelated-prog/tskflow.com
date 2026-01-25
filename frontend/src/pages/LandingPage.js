@@ -76,7 +76,7 @@ const LandingPage = () => {
             period: "forever",
             description: "Perfect for individuals getting started",
             features: [
-                "Up to 5 active tasks",
+                "Unlimited tasks",
                 "Basic task management",
                 "Email notifications",
                 "Assign to anyone",
