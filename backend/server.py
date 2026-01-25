@@ -455,6 +455,32 @@ async def update_profile(request: UpdateProfileRequest, current_user: dict = Dep
     
     return {"message": "Profile updated", "name": request.name.strip()}
 
+@api_router.delete("/auth/deactivate")
+async def deactivate_account(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    
+    # Cancel Stripe subscription if exists
+    stripe_key = os.getenv("STRIPE_SECRET_KEY")
+    if stripe_key and current_user.get("subscription_tier") in ["pro", "teams"]:
+        try:
+            import stripe
+            stripe.api_key = stripe_key
+            customers = stripe.Customer.list(email=current_user["email"], limit=1)
+            if customers.data:
+                subs = stripe.Subscription.list(customer=customers.data[0].id, status="active")
+                for sub in subs.data:
+                    stripe.Subscription.cancel(sub.id)
+        except:
+            pass
+    
+    # Delete user's tasks
+    await db.tasks.delete_many({"$or": [{"created_by": user_id}, {"assigned_to": user_id}]})
+    
+    # Delete user
+    await db.users.delete_one({"id": user_id})
+    
+    return {"message": "Account deactivated"}
+
 @api_router.post("/auth/forgot-password")
 async def forgot_password(request: PasswordResetRequest, background_tasks: BackgroundTasks):
     user = await db.users.find_one({"email": request.email}, {"_id": 0})
