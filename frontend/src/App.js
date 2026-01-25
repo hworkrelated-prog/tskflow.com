@@ -180,7 +180,7 @@ const InviteHandler = () => {
         };
 
         handleInvite();
-    }, [inviteToken, user]);
+    }, [inviteToken, user, navigate, setPendingTaskRedirect]);
 
     if (loading && !error) {
         return (
