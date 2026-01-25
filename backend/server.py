@@ -578,7 +578,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     <p><strong>Priority:</strong> {task.priority}</p>
                     <p><strong>Due:</strong> {task.due_date}</p>
                     <p>Create your account to view details and respond:</p>
-                    <p><a href="{app_url}/register">Create Account</a></p>
+                    <p><a href="{app_url}/invite?token={invite_token}">View Task</a></p>
                 </body>
             </html>
             """
