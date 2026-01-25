@@ -650,7 +650,6 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     await db.tasks.insert_one(task_doc)
     
     # Send professional email notification if assigning to others
-    app_url = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://team-task-app.preview.emergentagent.com'
     if not is_self_assigned and assigned_to_id:
         recipient_email = assigned_user.get("email") or assigned_to_email
         recipient_name = assigned_user.get("name", "there")
