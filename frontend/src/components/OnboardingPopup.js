@@ -168,23 +168,33 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 pb-6 flex items-center justify-between">
-                    <Button
-                        variant="ghost"
-                        onClick={prevStep}
-                        disabled={currentStep === 0}
-                        className="rounded-full"
-                    >
-                        <ChevronLeft className="w-4 h-4 mr-1" />
-                        Back
-                    </Button>
-                    <Button
-                        onClick={nextStep}
-                        className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600"
-                    >
-                        {currentStep === steps.length - 1 ? "Get Started" : "Next"}
-                        {currentStep < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
-                    </Button>
+                <div className="px-6 pb-6 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                        <Button
+                            variant="ghost"
+                            onClick={prevStep}
+                            disabled={currentStep === 0}
+                            className="rounded-full"
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" />
+                            Back
+                        </Button>
+                        <Button
+                            onClick={nextStep}
+                            className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600"
+                        >
+                            {currentStep === steps.length - 1 ? "Get Started" : "Next"}
+                            {currentStep < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
+                        </Button>
+                    </div>
+                    <div className="text-center">
+                        <a 
+                            href="mailto:hashim@unbiassly.com?subject=tskbox Feedback" 
+                            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+                        >
+                            Report a Bug / Send Feedback
+                        </a>
+                    </div>
                 </div>
             </motion.div>
         </motion.div>
