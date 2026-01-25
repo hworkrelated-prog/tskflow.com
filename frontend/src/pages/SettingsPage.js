@@ -249,6 +249,23 @@ const SettingsPage = () => {
                                         {user?.is_team_owner ? 'Manage Team' : 'My Team & Reports'}
                                     </Button>
                                 )}
+                                {(user?.subscription_tier === 'pro' || user?.subscription_tier === 'teams') && (
+                                    <Button
+                                        onClick={async () => {
+                                            try {
+                                                const res = await axios.post(`${API}/create-portal-session`);
+                                                window.location.href = res.data.url;
+                                            } catch (e) {
+                                                toast.error('Unable to open subscription portal');
+                                            }
+                                        }}
+                                        variant="outline"
+                                        className="mt-3 rounded-full"
+                                    >
+                                        <Crown className="w-4 h-4 mr-2" />
+                                        Manage Subscription
+                                    </Button>
+                                )}
                                 {user?.subscription_tier === 'teams' && !user?.is_team_owner && user?.team_owner_email && (
                                     <p className="text-xs text-muted-foreground mt-2">
                                         Team Owner: {user?.team_owner_email}
