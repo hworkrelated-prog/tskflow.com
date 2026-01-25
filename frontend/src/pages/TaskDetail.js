@@ -457,10 +457,10 @@ const TaskDetail = () => {
                             )}
 
                             {/* Task Note (from creation) */}
-                            {task.note && (
+                            {(task.note || (task.note_images && task.note_images.length > 0)) && (
                                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                                     <Label className="text-gray-700">Note</Label>
-                                    <p className="mt-1 text-gray-900">{task.note}</p>
+                                    {task.note && <p className="mt-1 text-gray-900">{task.note}</p>}
                                     {task.note_images && task.note_images.length > 0 && (
                                         <div className="flex flex-wrap gap-2 mt-2">
                                             {task.note_images.map((img, i) => (
