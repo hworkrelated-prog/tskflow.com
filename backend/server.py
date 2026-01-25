@@ -292,7 +292,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     await db.users.insert_one(user_doc)
     
     # Always send verification email via Resend
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -374,7 +374,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     await db.users.update_one({"email": email}, {"$set": {"verification_code": verification_code}})
     
     # Send email via Resend
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -559,7 +559,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     <p><strong>Priority:</strong> {task.priority}</p>
                     <p><strong>Due:</strong> {task.due_date}</p>
                     <p>Create your account to view details and respond:</p>
-                    <p><a href="{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/register">Create Account</a></p>
+                    <p><a href="{os.environ.get('FRONTEND_URL')}/register">Create Account</a></p>
                 </body>
             </html>
             """
@@ -630,7 +630,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     await db.tasks.insert_one(task_doc)
     
     # Send professional email notification if assigning to others
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     if not is_self_assigned and assigned_to_id:
         recipient_email = assigned_user.get("email") or assigned_to_email
         recipient_name = assigned_user.get("name", "there")
@@ -762,7 +762,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         await db.tasks.insert_one(task_doc)
         
         # Send professional email notification if assigning to others
-        app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+        app_url = os.environ.get('APP_URL')
         if not is_self_assigned:
             email_to_send = assigned_user.get("email") if assigned_user else assigned_to_email
             recipient_name = assigned_user.get("name", "there") if assigned_user else assigned_to_email.split('@')[0]
@@ -1099,7 +1099,7 @@ async def review_task(task_id: str, review: ReviewAction, background_tasks: Back
     if task["status"] != "Review Pending":
         raise HTTPException(status_code=400, detail="Task is not pending review")
     
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
     
     if review.action == "accept":
@@ -1302,7 +1302,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
     )
     
     # Send notification to assignee if task is assigned to someone else
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     if task["assigned_to"] != current_user["id"]:
         assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
         if assignee:
@@ -1744,7 +1744,7 @@ async def create_portal_session(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="No subscription found")
     
     customer_id = customers.data[0].id
-    app_url = os.getenv('APP_URL', 'https://tskbox-manager.preview.emergentagent.com')
+    app_url = os.environ.get('APP_URL')
     
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
@@ -1885,7 +1885,7 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
                 <li>No payment required</li>
             </ul>
             <p>Click the link below to create your account and start working:</p>
-            <p><a href="{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/register">Join Team</a></p>
+            <p><a href="{os.environ.get('FRONTEND_URL')}/register">Join Team</a></p>
         </body>
     </html>
     """
