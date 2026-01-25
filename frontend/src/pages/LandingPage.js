@@ -145,7 +145,7 @@ const LandingPage = () => {
                             <Target className="w-6 h-6 text-white" />
                         </div>
                         <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>
-                            tskbox
+                            Tskflow
                         </span>
                     </div>
                     <div className="hidden md:flex items-center gap-8">
@@ -261,13 +261,13 @@ const LandingPage = () => {
                                         </div>
                                         <div className="flex-1 mx-4">
                                             <div className="bg-white rounded-lg px-4 py-1.5 text-sm text-gray-500 border">
-                                                tskbox.com
+                                                Tskflow.com
                                             </div>
                                         </div>
                                     </div>
                                     <img 
                                         src="https://images.pexels.com/photos/5257005/pexels-photo-5257005.jpeg?auto=compress&cs=tinysrgb&w=800" 
-                                        alt="tskbox Dashboard"
+                                        alt="Tskflow Dashboard"
                                         className="w-full h-auto"
                                     />
                                 </div>
@@ -543,7 +543,7 @@ const LandingPage = () => {
                             Ready to get organized?
                         </h2>
                         <p className="text-xl text-white/80 mb-10">
-                            Join teams who are already shipping faster with tskbox. Start free, no credit card required.
+                            Join teams who are already shipping faster with Tskflow. Start free, no credit card required.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <Button 
@@ -569,7 +569,7 @@ const LandingPage = () => {
                                     <Target className="w-6 h-6 text-white" />
                                 </div>
                                 <span className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>
-                                    tskbox
+                                    Tskflow
                                 </span>
                             </div>
                             <p className="text-gray-400 mb-6">
@@ -621,11 +621,11 @@ const LandingPage = () => {
                     
                     <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-gray-400 text-sm">
-                            © 2025 tskbox. All rights reserved.
+                            © 2025 Tskflow. All rights reserved.
                         </p>
                         <div className="flex items-center gap-2 text-gray-400 text-sm">
                             <Mail className="w-4 h-4" />
-                            <span>hello@tskbox.io</span>
+                            <span>hello@Tskflow.io</span>
                         </div>
                     </div>
                 </div>

@@ -51,7 +51,7 @@ const RegistrationPage = () => {
                 <Card className="border-2 shadow-soft rounded-2xl">
                     <CardHeader className="space-y-2 text-center">
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome to Task Hub
+                            Welcome to Tskflow
                         </CardTitle>
                         <CardDescription className="text-base">
                             Create your account to start managing tasks

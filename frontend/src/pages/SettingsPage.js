@@ -374,7 +374,7 @@ const SettingsPage = () => {
                     {/* Feedback Link */}
                     <div className="text-center">
                         <a 
-                            href="mailto:hashim@unbiassly.com?subject=tskbox Feedback" 
+                            href="mailto:hashim@unbiassly.com?subject=Tskflow Feedback" 
                             className="text-sm text-muted-foreground hover:text-primary transition-colors"
                         >
                             Report a Bug / Send Feedback

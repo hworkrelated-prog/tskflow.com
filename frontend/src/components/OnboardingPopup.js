@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 const walkthroughs = {
     dashboard: {
-        title: "Welcome to tskbox",
+        title: "Welcome to Tskflow",
         steps: [
             {
                 title: "Your Task Dashboard",
@@ -189,7 +189,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                     </div>
                     <div className="text-center">
                         <a 
-                            href="mailto:hashim@unbiassly.com?subject=tskbox Feedback" 
+                            href="mailto:hashim@unbiassly.com?subject=Tskflow Feedback" 
                             className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
                         >
                             Report a Bug / Send Feedback
@@ -203,7 +203,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
 
 // Hook to manage onboarding state
 export const useOnboarding = (pageName) => {
-    const storageKey = `tskbox_onboarding_${pageName}`;
+    const storageKey = `Tskflow_onboarding_${pageName}`;
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
 

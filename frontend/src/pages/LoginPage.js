@@ -58,7 +58,7 @@ const LoginPage = () => {
                             Welcome Back
                         </CardTitle>
                         <CardDescription className="text-base">
-                            Sign in to your Task Hub account
+                            Sign in to your Tskflow account
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

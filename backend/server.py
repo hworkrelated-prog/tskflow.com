@@ -228,7 +228,7 @@ async def send_email_notification(to_email: str, subject: str, content: str):
     
     try:
         params = {
-            "from": "Task Hub <notifications@notifications.unbiassly.com>",
+            "from": "Tskflow <notifications@notifications.unbiassly.com>",
             "to": [to_email],
             "subject": subject,
             "html": content
@@ -297,20 +297,20 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
             <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome to tskbox</h1>
+                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome to Tskflow</h1>
                 <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Your task management journey begins here</p>
             </div>
             <div style="padding: 40px 30px; background: white;">
                 <p style="font-size: 16px; color: #374151;">Hi {user.name},</p>
                 <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                    Thank you for registering with tskbox. To complete your account setup, please use the verification code below:
+                    Thank you for registering with Tskflow. To complete your account setup, please use the verification code below:
                 </p>
                 <div style="background: #F3F4F6; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0;">
                     <p style="font-size: 14px; color: #6B7280; margin: 0 0 10px 0;">Your Verification Code</p>
                     <p style="font-size: 36px; font-weight: 700; color: #4F46E5; margin: 0; letter-spacing: 4px;">{verification_code}</p>
                 </div>
                 <p style="font-size: 14px; color: #6B7280; line-height: 1.6;">
-                    This code will expire in 24 hours. If you didn't create an account with tskbox, please disregard this email.
+                    This code will expire in 24 hours. If you didn't create an account with Tskflow, please disregard this email.
                 </p>
                 <div style="margin-top: 30px; text-align: center;">
                     <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
@@ -320,13 +320,13 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
             </div>
             <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
                 <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                    © 2025 tskbox. All rights reserved.
+                    © 2025 Tskflow. All rights reserved.
                 </p>
             </div>
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, user.email, "Verify your tskbox account", email_content)
+    background_tasks.add_task(send_email_notification, user.email, "Verify your Tskflow account", email_content)
     
     return {"message": "Registration successful. Verification code sent to your email.", "verification_code": None, "user_id": user_id}
 
@@ -379,7 +379,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
             <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">tskbox</h1>
+                <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Tskflow</h1>
                 <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Email Verification</p>
             </div>
             <div style="padding: 40px 30px; background: white;">
@@ -397,12 +397,12 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
                 </div>
             </div>
             <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
+                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
             </div>
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, email, "Your tskbox Verification Code", email_content)
+    background_tasks.add_task(send_email_notification, email, "Your Tskflow Verification Code", email_content)
     return {"message": "Verification code sent to your email"}
 
 @api_router.post("/auth/login", response_model=TokenResponse)
@@ -579,7 +579,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
             email_content = f"""
             <html>
                 <body>
-                    <h2>You've been assigned a task on Task Hub!</h2>
+                    <h2>You've been assigned a task on Tskflow!</h2>
                     <p><strong>{current_user['name']}</strong> has assigned you a task:</p>
                     <p><strong>Task:</strong> {task.title}</p>
                     <p><strong>Priority:</strong> {task.priority}</p>
@@ -686,16 +686,16 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="{app_url}/dashboard" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                            View Task in tskbox
+                            View Task in Tskflow
                         </a>
                     </div>
                     <p style="font-size: 13px; color: #9CA3AF; margin-top: 25px; text-align: center;">
-                        You can accept, decline, or propose a new deadline directly from tskbox.
+                        You can accept, decline, or propose a new deadline directly from Tskflow.
                     </p>
                 </div>
                 <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
                     <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                        © 2025 tskbox. All rights reserved.
+                        © 2025 Tskflow. All rights reserved.
                     </p>
                 </div>
             </body>
@@ -816,12 +816,12 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                             </div>
                             <div style="text-align: center; margin-top: 30px;">
                                 <a href="{app_url}/dashboard" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                                    View Task in tskbox
+                                    View Task in Tskflow
                                 </a>
                             </div>
                         </div>
                         <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
+                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
                         </div>
                     </body>
                 </html>
@@ -1368,7 +1368,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
                         </div>
                     </div>
                     <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                        <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 tskbox. All rights reserved.</p>
+                        <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
                     </div>
                 </body>
             </html>
@@ -1902,7 +1902,7 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
     email_content = f"""
     <html>
         <body>
-            <h2>You've been invited to join {current_user['company_domain']} on Task Hub!</h2>
+            <h2>You've been invited to join {current_user['company_domain']} on Tskflow!</h2>
             <p>{current_user['name']} ({current_user['email']}) has invited you to join their team workspace.</p>
             <p><strong>What's included:</strong></p>
             <ul>
@@ -1915,7 +1915,7 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, invite.email, f"Join {current_user['company_domain']} on Task Hub", email_content)
+    background_tasks.add_task(send_email_notification, invite.email, f"Join {current_user['company_domain']} on Tskflow", email_content)
     
     # Store pending invitation
     await db.team_invitations.insert_one({
