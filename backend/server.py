@@ -496,10 +496,9 @@ async def forgot_password(request: PasswordResetRequest, background_tasks: Backg
         "used": False
     })
     
-    sendgrid_key = os.getenv('SENDGRID_API_KEY')
-    sender_email = os.getenv('SENDER_EMAIL')
+    resend_key = os.getenv('RESEND_API_KEY')
     
-    if sendgrid_key and sender_email:
+    if resend_key:
         email_content = f"""
         <html>
             <body>
