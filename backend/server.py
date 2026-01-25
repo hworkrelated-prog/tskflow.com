@@ -617,9 +617,6 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
             upsert=True
         )
     
-    task_id = str(uuid.uuid4())
-    invite_token = str(uuid.uuid4())[:8]
-    
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
     accepted_at = get_pst_now().isoformat() if is_self_assigned else None
