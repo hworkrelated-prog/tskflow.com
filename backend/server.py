@@ -546,6 +546,11 @@ async def reset_password(request: PasswordResetConfirm):
 async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     # Free tier: no hard limit, only soft nudges handled in frontend
     
+    # Generate these early as they're needed in multiple places
+    task_id = str(uuid.uuid4())
+    invite_token = str(uuid.uuid4())[:8]
+    app_url = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://team-task-app.preview.emergentagent.com'
+    
     # Handle email-based assignment or user ID
     if task.assigned_to == "self":
         assigned_user = current_user
