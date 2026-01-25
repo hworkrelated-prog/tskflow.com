@@ -753,6 +753,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             if not assigned_user:
                 continue  # Skip invalid user IDs
         
+        invite_token = str(uuid.uuid4())[:8]
         task_doc = {
             "id": task_id,
             "title": task.title,
@@ -764,7 +765,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "priority": task.priority,
             "category": task.category,
             "created_at": get_pst_now().isoformat(),
-            "accepted_at": accepted_at
+            "accepted_at": accepted_at,
+            "invite_token": invite_token
         }
         
         await db.tasks.insert_one(task_doc)
