@@ -513,7 +513,7 @@ const TaskHub = () => {
                                             New Task
                                         </Button>
                                     </DialogTrigger>
-                                    <DialogContent className="rounded-2xl max-w-xl">
+                                    <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader>
                                             <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
                                             <DialogDescription>Assign to one or multiple people at once</DialogDescription>
