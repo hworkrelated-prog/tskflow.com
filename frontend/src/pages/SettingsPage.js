@@ -381,6 +381,27 @@ const SettingsPage = () => {
                         </a>
                     </div>
 
+                    {/* Deactivate Account */}
+                    <div className="text-center pt-8 border-t">
+                        <Button
+                            variant="ghost"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={async () => {
+                                if (window.confirm('Are you sure? This will permanently delete your account, all tasks, and cancel any subscriptions.')) {
+                                    try {
+                                        await axios.delete(`${API}/auth/deactivate`);
+                                        localStorage.removeItem('token');
+                                        window.location.href = '/';
+                                    } catch (e) {
+                                        toast.error('Failed to deactivate account');
+                                    }
+                                }
+                            }}
+                        >
+                            Deactivate Account
+                        </Button>
+                    </div>
+
                     <div>
                         <h2 className="text-3xl font-bold mb-6 text-center text-foreground" style={{ fontFamily: 'Outfit' }}>Subscription Plans</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
