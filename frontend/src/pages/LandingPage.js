@@ -212,7 +212,7 @@ const LandingPage = () => {
                                     size="lg"
                                     className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-xl shadow-indigo-500/30 h-14 px-8 text-lg font-semibold"
                                 >
-                                    Start Free Today
+                                    Get Started
                                     <ArrowRight className="w-5 h-5 ml-2" />
                                 </Button>
                                 <Button 
