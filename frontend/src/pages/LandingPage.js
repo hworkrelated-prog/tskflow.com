@@ -120,10 +120,10 @@ const LandingPage = () => {
     ];
 
     const stats = [
-        { value: "10K+", label: "Tasks Created" },
-        { value: "500+", label: "Active Users" },
-        { value: "99.9%", label: "Uptime" },
-        { value: "24/7", label: "Support" }
+        { value: "Simple", label: "Task Assignment" },
+        { value: "Clear", label: "Team Visibility" },
+        { value: "Fast", label: "Task Completion" },
+        { value: "Easy", label: "Progress Tracking" }
     ];
 
     return (
