@@ -1,9 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, ChevronLeft, Plus, CheckCircle, Users, BarChart3, Settings } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Plus, CheckCircle, Users, BarChart3, Settings, Mail, FileText, Clock, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const walkthroughs = {
+    howItWorks: {
+        title: "How Tskflow Works",
+        steps: [
+            {
+                title: "Assign with clarity",
+                description: "Assign tasks to anyone by email. Even if they're not on Tskflow yet.",
+                icon: <Mail className="w-8 h-8" />
+            },
+            {
+                title: "Proof of completion",
+                description: "Tasks aren't just marked 'done'. Assignees add notes and context.",
+                icon: <FileText className="w-8 h-8" />
+            },
+            {
+                title: "Review before closure",
+                description: "Assigned tasks go into Review Pending so you can accept or send back.",
+                icon: <Eye className="w-8 h-8" />
+            },
+            {
+                title: "No micromanaging",
+                description: "If you don't act, tasks auto-complete after 24 hours.",
+                icon: <Clock className="w-8 h-8" />
+            },
+            {
+                title: "Team accountability",
+                description: "See completion rates, speed, and top performers at a glance.",
+                icon: <BarChart3 className="w-8 h-8" />
+            }
+        ]
+    },
     dashboard: {
         title: "Welcome to Tskflow",
         steps: [
