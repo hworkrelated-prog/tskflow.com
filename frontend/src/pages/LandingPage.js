@@ -114,7 +114,7 @@ const LandingPage = () => {
                 "Admin controls",
                 "SSO & advanced security"
             ],
-            cta: "Start Team Trial",
+            cta: "Get Teams",
             popular: false
         }
     ];
