@@ -443,61 +443,7 @@ const LandingPage = () => {
                             transition={{ duration: 0.8, delay: 0.2 }}
                             className="relative"
                         >
-                            <div className="relative">
-                                {/* Browser Chrome */}
-                                <div className="bg-white rounded-2xl shadow-2xl shadow-indigo-500/20 overflow-hidden border">
-                                    <div className="bg-gray-100 px-4 py-3 flex items-center gap-2 border-b">
-                                        <div className="flex gap-2">
-                                            <div className="w-3 h-3 rounded-full bg-red-400" />
-                                            <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                                            <div className="w-3 h-3 rounded-full bg-green-400" />
-                                        </div>
-                                        <div className="flex-1 mx-4">
-                                            <div className="bg-white rounded-lg px-4 py-1.5 text-sm text-gray-500 border">
-                                                Tskflow.com
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <img 
-                                        src="https://images.pexels.com/photos/5257005/pexels-photo-5257005.jpeg?auto=compress&cs=tinysrgb&w=800" 
-                                        alt="Tskflow Dashboard"
-                                        className="w-full h-auto"
-                                    />
-                                </div>
-
-                                {/* Floating Cards */}
-                                <motion.div 
-                                    className="absolute -left-8 top-1/4 bg-white rounded-xl shadow-xl p-4 border"
-                                    animate={{ y: [0, -10, 0] }}
-                                    transition={{ duration: 3, repeat: Infinity }}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                            <CheckCircle2 className="w-5 h-5 text-green-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-sm">Task Completed!</p>
-                                            <p className="text-xs text-gray-500">Q4 Planning Doc</p>
-                                        </div>
-                                    </div>
-                                </motion.div>
-
-                                <motion.div 
-                                    className="absolute -right-4 bottom-1/4 bg-white rounded-xl shadow-xl p-4 border"
-                                    animate={{ y: [0, 10, 0] }}
-                                    transition={{ duration: 3, repeat: Infinity, delay: 1.5 }}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                            <TrendingUp className="w-5 h-5 text-indigo-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-sm">Productivity Up</p>
-                                            <p className="text-xs text-green-600 font-medium">+34% this week</p>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            </div>
+                            <VisualDemo />
                         </motion.div>
                     </div>
                 </div>
