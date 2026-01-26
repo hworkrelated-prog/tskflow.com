@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
