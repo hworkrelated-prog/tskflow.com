@@ -538,13 +538,16 @@ const LandingPage = () => {
                             How It Works
                         </Badge>
                         <h2 className="text-4xl md:text-5xl font-bold mb-4" style={{ fontFamily: 'Outfit' }}>
-                            Three steps to
-                            <br />
-                            <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                                team clarity
-                            </span>
+                            See it in action
                         </h2>
+                        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+                            Watch how Tskflow helps teams stay accountable
+                        </p>
                     </motion.div>
+
+                    <div className="max-w-3xl mx-auto mb-16">
+                        <VisualDemo />
+                    </div>
 
                     <div className="grid md:grid-cols-3 gap-8 relative">
                         {/* Connection Line */}
