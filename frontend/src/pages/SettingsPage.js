@@ -108,23 +108,30 @@ const SettingsPage = () => {
     const handleUpgrade = async (packageType) => {
         setUpgrading(packageType);
         try {
-            console.log('[Stripe Debug] Creating checkout session for:', packageType);
-            console.log('[Stripe Debug] API URL:', `${API}/payments/create-checkout`);
-            
+            const stripe = await stripePromise;
+            if (!stripe) {
+                throw new Error('Stripe not initialized');
+            }
+
             const response = await axios.post(`${API}/payments/create-checkout`, {
                 package: packageType,
                 origin_url: window.location.origin
             });
+
+            const sessionId = response.data.session_id;
+            console.log('[Stripe] Session ID:', sessionId);
+            console.log('[Stripe] Is LIVE:', sessionId?.startsWith('cs_live'));
+
+            // Use Stripe.js redirectToCheckout with live publishable key
+            const { error } = await stripe.redirectToCheckout({ sessionId });
             
-            console.log('[Stripe Debug] Response received:', response.data);
-            console.log('[Stripe Debug] Checkout URL:', response.data.url);
-            console.log('[Stripe Debug] Session ID:', response.data.session_id);
-            console.log('[Stripe Debug] Is LIVE session:', response.data.session_id?.includes('cs_live'));
-            
-            // Redirect to Stripe checkout
-            window.location.href = response.data.url;
+            if (error) {
+                console.error('[Stripe] Redirect error:', error);
+                toast.error(error.message);
+                setUpgrading(null);
+            }
         } catch (error) {
-            console.error('[Stripe Debug] Error:', error);
+            console.error('[Stripe] Error:', error);
             toast.error(getErrorMessage(error, 'Failed to create checkout session'));
             setUpgrading(null);
         }
