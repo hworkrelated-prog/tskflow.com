@@ -74,51 +74,243 @@ const LandingPage = () => {
             name: "Free",
             price: "$0",
             period: "forever",
-            description: "Perfect for individuals getting started",
+            description: "Start organizing your work today",
             features: [
                 "Unlimited tasks",
-                "Basic task management",
-                "Email notifications",
-                "Assign to anyone",
+                "Assign tasks to anyone via email",
+                "Real-time notifications",
+                "Basic analytics",
                 "Mobile friendly"
             ],
-            cta: "Get Started",
+            cta: "Get Started Free",
             popular: false
         },
         {
             name: "Pro",
             price: "$9",
             period: "per month",
-            description: "For power users who need more",
+            description: "For individuals who need accountability",
             features: [
-                "Unlimited tasks",
+                "Everything in Free",
+                "File & image attachments",
+                "Advanced completion tracking",
                 "Priority support",
-                "Advanced analytics",
-                "Custom categories",
-                "File & image attachments"
+                "Custom task categories"
             ],
-            cta: "Go Pro",
+            cta: "Start Pro",
             popular: true
         },
         {
             name: "Teams",
             price: "$12",
             period: "per user/month",
-            description: "For organizations that scale",
+            description: "Built for teams who ship",
             features: [
                 "Everything in Pro",
-                "Team workspace",
-                "Org hierarchy & direct reports",
-                "Team analytics dashboard",
-                "Admin controls",
-                "SSO & advanced security",
-                "Export reports (Coming Soon)",
-                "API integrations (Coming Soon)"
+                "30-day free trial",
+                "Unlimited team members",
+                "Performance leaderboards",
+                "Org hierarchy & reporting",
+                "Domain-based workspace",
+                "Admin controls"
             ],
-            cta: "Get Teams",
-            popular: false
+            cta: "Start Free Trial",
+            popular: false,
+            trial: true
         }
     ];
+
+    // Visual Demo Component
+    const VisualDemo = () => {
+        const [step, setStep] = useState(0);
+        
+        useEffect(() => {
+            const timer = setInterval(() => {
+                setStep((prev) => (prev + 1) % 5);
+            }, 4000);
+            return () => clearInterval(timer);
+        }, []);
+
+        const demoSteps = [
+            { title: "Create Task", visual: "task-create" },
+            { title: "Assign", visual: "task-assign" },
+            { title: "Track Progress", visual: "task-track" },
+            { title: "Complete", visual: "task-complete" },
+            { title: "Leaderboard", visual: "leaderboard" }
+        ];
+
+        return (
+            <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+                <div className="absolute top-4 left-4 flex gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                </div>
+                
+                <div className="pt-12 pb-8 px-8">
+                    {/* Demo Screen */}
+                    <div className="bg-white rounded-xl p-6 min-h-[320px] relative overflow-hidden">
+                        {/* Step 0: Create Task */}
+                        <motion.div 
+                            className={`absolute inset-6 ${step === 0 ? 'opacity-100' : 'opacity-0'}`}
+                            animate={{ opacity: step === 0 ? 1 : 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                                    <Zap className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <span className="font-semibold text-slate-800">New Task</span>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="h-10 bg-slate-100 rounded-lg flex items-center px-3">
+                                    <span className="text-slate-600 text-sm">Review Q4 metrics report</span>
+                                    <motion.div 
+                                        className="w-0.5 h-5 bg-indigo-500 ml-1"
+                                        animate={{ opacity: [1, 0] }}
+                                        transition={{ repeat: Infinity, duration: 0.8 }}
+                                    />
+                                </div>
+                                <div className="h-20 bg-slate-50 rounded-lg p-3">
+                                    <span className="text-slate-400 text-sm">Description...</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">High</div>
+                                    <div className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-full text-xs">Due: Tomorrow</div>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Step 1: Assign */}
+                        <motion.div 
+                            className={`absolute inset-6 ${step === 1 ? 'opacity-100' : 'opacity-0'}`}
+                            animate={{ opacity: step === 1 ? 1 : 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                                    <Users className="w-5 h-5 text-purple-600" />
+                                </div>
+                                <span className="font-semibold text-slate-800">Assign To</span>
+                            </div>
+                            <div className="space-y-2">
+                                {['sarah@company.com', 'mike@company.com', 'alex@company.com'].map((email, i) => (
+                                    <motion.div 
+                                        key={email}
+                                        className={`p-3 rounded-lg flex items-center gap-3 ${i === 0 ? 'bg-indigo-50 border-2 border-indigo-200' : 'bg-slate-50'}`}
+                                        initial={{ x: -20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        transition={{ delay: i * 0.1 }}
+                                    >
+                                        <div className={`w-8 h-8 rounded-full ${i === 0 ? 'bg-indigo-200' : 'bg-slate-200'} flex items-center justify-center text-xs font-medium`}>
+                                            {email[0].toUpperCase()}
+                                        </div>
+                                        <span className="text-sm text-slate-700">{email}</span>
+                                        {i === 0 && <CheckCircle2 className="w-4 h-4 text-indigo-600 ml-auto" />}
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </motion.div>
+
+                        {/* Step 2: Track */}
+                        <motion.div 
+                            className={`absolute inset-6 ${step === 2 ? 'opacity-100' : 'opacity-0'}`}
+                            animate={{ opacity: step === 2 ? 1 : 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                                </div>
+                                <span className="font-semibold text-slate-800">My Dashboard</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-amber-50 rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-bold text-amber-600">3</div>
+                                    <div className="text-xs text-amber-700">Pending</div>
+                                </div>
+                                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-bold text-blue-600">5</div>
+                                    <div className="text-xs text-blue-700">In Progress</div>
+                                </div>
+                                <div className="bg-green-50 rounded-lg p-3 text-center">
+                                    <div className="text-2xl font-bold text-green-600">12</div>
+                                    <div className="text-xs text-green-700">Completed</div>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Step 3: Complete */}
+                        <motion.div 
+                            className={`absolute inset-6 ${step === 3 ? 'opacity-100' : 'opacity-0'}`}
+                            animate={{ opacity: step === 3 ? 1 : 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                </div>
+                                <span className="font-semibold text-slate-800">Task Complete</span>
+                            </div>
+                            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <span className="font-medium text-green-800">Review Q4 metrics report</span>
+                                </div>
+                                <div className="text-sm text-green-700 mb-3">Completed by Sarah • 2 hours ago</div>
+                                <div className="bg-white rounded-lg p-3">
+                                    <div className="text-xs text-slate-500 mb-1">Completion Note:</div>
+                                    <div className="text-sm text-slate-700">"Report attached. Key findings highlighted on page 3."</div>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Step 4: Leaderboard */}
+                        <motion.div 
+                            className={`absolute inset-6 ${step === 4 ? 'opacity-100' : 'opacity-0'}`}
+                            animate={{ opacity: step === 4 ? 1 : 0 }}
+                            transition={{ duration: 0.5 }}
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
+                                    <TrendingUp className="w-5 h-5 text-yellow-600" />
+                                </div>
+                                <span className="font-semibold text-slate-800">Team Leaderboard</span>
+                            </div>
+                            <div className="space-y-2">
+                                {[
+                                    { name: 'Sarah', tasks: 24, time: '1.2d avg', rank: 1 },
+                                    { name: 'Mike', tasks: 18, time: '1.8d avg', rank: 2 },
+                                    { name: 'Alex', tasks: 15, time: '2.1d avg', rank: 3 }
+                                ].map((person) => (
+                                    <div key={person.name} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50">
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${person.rank === 1 ? 'bg-yellow-400 text-yellow-900' : 'bg-slate-200 text-slate-600'}`}>
+                                            {person.rank}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="font-medium text-sm">{person.name}</div>
+                                            <div className="text-xs text-slate-500">{person.tasks} tasks • {person.time}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    </div>
+                    
+                    {/* Progress dots */}
+                    <div className="flex justify-center gap-2 mt-4">
+                        {demoSteps.map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => setStep(i)}
+                                className={`w-2 h-2 rounded-full transition-all ${step === i ? 'bg-white w-6' : 'bg-slate-600'}`}
+                            />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const stats = [
         { value: "Simple", label: "Task Assignment" },
