@@ -104,14 +104,23 @@ const SettingsPage = () => {
     const handleUpgrade = async (packageType) => {
         setUpgrading(packageType);
         try {
+            console.log('[Stripe Debug] Creating checkout session for:', packageType);
+            console.log('[Stripe Debug] API URL:', `${API}/payments/create-checkout`);
+            
             const response = await axios.post(`${API}/payments/create-checkout`, {
                 package: packageType,
                 origin_url: window.location.origin
             });
             
+            console.log('[Stripe Debug] Response received:', response.data);
+            console.log('[Stripe Debug] Checkout URL:', response.data.url);
+            console.log('[Stripe Debug] Session ID:', response.data.session_id);
+            console.log('[Stripe Debug] Is LIVE session:', response.data.session_id?.includes('cs_live'));
+            
             // Redirect to Stripe checkout
             window.location.href = response.data.url;
         } catch (error) {
+            console.error('[Stripe Debug] Error:', error);
             toast.error(getErrorMessage(error, 'Failed to create checkout session'));
             setUpgrading(null);
         }
