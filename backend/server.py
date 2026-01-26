@@ -1647,22 +1647,30 @@ async def create_checkout(checkout_req: CheckoutRequest, http_request: HTTPReque
     
     package = SUBSCRIPTION_PACKAGES[checkout_req.package]
     
-    # Initialize Stripe
+    # Initialize Stripe directly with live key
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment system not configured")
     
-    host_url = str(http_request.base_url)
-    webhook_url = f"{host_url}api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
+    import stripe
+    stripe.api_key = stripe_key
     
-    # Create checkout session
+    # Create checkout session directly with Stripe SDK
     success_url = f"{checkout_req.origin_url}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{checkout_req.origin_url}/settings"
     
-    checkout_request = CheckoutSessionRequest(
-        amount=package["price"],
-        currency="usd",
+    session = stripe.checkout.Session.create(
+        payment_method_types=['card'],
+        line_items=[{
+            'price_data': {
+                'currency': 'usd',
+                'product_data': {'name': package["name"]},
+                'unit_amount': package["price"],
+                'recurring': {'interval': 'month'}
+            },
+            'quantity': 1,
+        }],
+        mode='subscription',
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={
@@ -1672,11 +1680,9 @@ async def create_checkout(checkout_req: CheckoutRequest, http_request: HTTPReque
         }
     )
     
-    session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(checkout_request)
-    
     # Store transaction in database
     transaction_doc = {
-        "session_id": session.session_id,
+        "session_id": session.id,
         "user_id": current_user["id"],
         "user_email": current_user["email"],
         "package": checkout_req.package,
@@ -1687,7 +1693,7 @@ async def create_checkout(checkout_req: CheckoutRequest, http_request: HTTPReque
     }
     await db.payment_transactions.insert_one(transaction_doc)
     
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 @api_router.get("/payments/status/{session_id}")
 async def get_payment_status(session_id: str, http_request: HTTPRequest, current_user: dict = Depends(get_current_user)):
