@@ -2218,6 +2218,257 @@ async def get_org_structure(current_user: dict = Depends(get_current_user)):
         "total_members": len(members)
     }
 
+# Teams Trial Endpoints
+@api_router.post("/start-teams-trial")
+async def start_teams_trial(current_user: dict = Depends(get_current_user)):
+    """Start a 30-day Teams trial for the user's domain"""
+    if current_user["subscription_tier"] == "teams":
+        raise HTTPException(status_code=400, detail="Already on Teams plan")
+    
+    trial_end = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    
+    # Update user to teams trial
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {
+            "subscription_tier": "teams",
+            "trial_started": datetime.now(timezone.utc).isoformat(),
+            "trial_ends": trial_end,
+            "is_trial": True
+        }}
+    )
+    
+    # Update all users in the same domain to teams trial
+    if current_user.get("company_domain"):
+        await db.users.update_many(
+            {"company_domain": current_user["company_domain"], "id": {"$ne": current_user["id"]}},
+            {"$set": {
+                "subscription_tier": "teams",
+                "trial_started": datetime.now(timezone.utc).isoformat(),
+                "trial_ends": trial_end,
+                "is_trial": True,
+                "trial_admin": current_user["id"]
+            }}
+        )
+    
+    return {"message": "Teams trial started", "trial_ends": trial_end}
+
+@api_router.post("/request-trial-extension")
+async def request_trial_extension(current_user: dict = Depends(get_current_user)):
+    """Request a trial extension"""
+    admin_email = os.getenv("ANALYTICS_EMAIL", "connect@hashimmahmood.com")
+    
+    email_content = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Trial Extension Request</h2>
+            <p><strong>User:</strong> {current_user['name']} ({current_user['email']})</p>
+            <p><strong>Domain:</strong> {current_user.get('company_domain', 'N/A')}</p>
+            <p><strong>Current Trial Ends:</strong> {current_user.get('trial_ends', 'N/A')}</p>
+            <p>User is requesting an additional 30-day trial extension.</p>
+            <p><a href="{APP_BASE_URL}/admin/extend-trial/{current_user['id']}">Approve Extension</a></p>
+        </body>
+    </html>
+    """
+    
+    try:
+        resend.emails.send({
+            "from": "Tskflow <notifications@notifications.unbiassly.com>",
+            "to": [admin_email],
+            "subject": f"Trial Extension Request - {current_user['email']}",
+            "html": email_content
+        })
+    except:
+        pass
+    
+    return {"message": "Extension request submitted"}
+
+# Daily Analytics Job
+async def send_daily_analytics():
+    """Send daily product analytics email"""
+    admin_email = os.getenv("ANALYTICS_EMAIL", "connect@hashimmahmood.com")
+    today = datetime.now(timezone.utc).date()
+    yesterday = today - timedelta(days=1)
+    
+    # Get metrics
+    total_users = await db.users.count_documents({})
+    new_signups_today = await db.users.count_documents({
+        "created_at": {"$gte": yesterday.isoformat(), "$lt": today.isoformat()}
+    })
+    
+    # Active users (logged in within 24h)
+    dau = await db.users.count_documents({
+        "last_login": {"$gte": yesterday.isoformat()}
+    })
+    
+    # Tasks created today
+    tasks_today = await db.tasks.count_documents({
+        "created_at": {"$gte": yesterday.isoformat()}
+    })
+    
+    # Tasks completed today
+    completed_today = await db.tasks.count_documents({
+        "completed_at": {"$gte": yesterday.isoformat()}
+    })
+    
+    # Domain breakdown
+    domain_pipeline = [
+        {"$group": {"_id": "$company_domain", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]
+    domains = await db.users.aggregate(domain_pipeline).to_list(10)
+    
+    # Trial users expiring soon
+    week_from_now = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    expiring_trials = await db.users.count_documents({
+        "is_trial": True,
+        "trial_ends": {"$lte": week_from_now}
+    })
+    
+    # Conversion rate
+    verified_users = await db.users.count_documents({"email_verified": True})
+    conversion_rate = (verified_users / total_users * 100) if total_users > 0 else 0
+    
+    # First session abandonment (signed up but never created a task)
+    users_no_tasks = await db.users.count_documents({
+        "email_verified": True,
+        "id": {"$nin": await db.tasks.distinct("created_by")}
+    })
+    abandonment_rate = (users_no_tasks / verified_users * 100) if verified_users > 0 else 0
+    
+    domain_html = "".join([f"<tr><td>{d['_id'] or 'No domain'}</td><td>{d['count']}</td></tr>" for d in domains])
+    
+    email_content = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #4F46E5;">Tskflow Daily Analytics</h1>
+            <p style="color: #6B7280;">{today.strftime('%B %d, %Y')}</p>
+            
+            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px;">Core Metrics</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Total Users</strong></td><td>{total_users}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>New Signups (24h)</strong></td><td>{new_signups_today}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Daily Active Users</strong></td><td>{dau}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Created (24h)</strong></td><td>{tasks_today}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Completed (24h)</strong></td><td>{completed_today}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Signup → Verified Rate</strong></td><td>{conversion_rate:.1f}%</td></tr>
+            </table>
+            
+            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Domain Intelligence</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr style="background: #F3F4F6;"><th style="padding: 8px; text-align: left;">Domain</th><th style="padding: 8px; text-align: left;">Users</th></tr>
+                {domain_html}
+            </table>
+            
+            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Engagement & Activation</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>First-Session Abandonment</strong></td><td>{abandonment_rate:.1f}%</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Trials Expiring (7d)</strong></td><td>{expiring_trials}</td></tr>
+            </table>
+            
+            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Insights</h2>
+            <div style="background: #F0FDF4; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                <strong style="color: #166534;">What's Working:</strong>
+                <p style="margin: 5px 0; color: #166534;">{"Task creation active" if tasks_today > 0 else "Need more task engagement"}</p>
+            </div>
+            <div style="background: #FEF2F2; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                <strong style="color: #991B1B;">What's Not:</strong>
+                <p style="margin: 5px 0; color: #991B1B;">{"High abandonment - users signing up but not creating tasks" if abandonment_rate > 50 else "Activation funnel needs monitoring"}</p>
+            </div>
+            <div style="background: #EFF6FF; padding: 15px; border-radius: 8px;">
+                <strong style="color: #1E40AF;">Double Down On:</strong>
+                <p style="margin: 5px 0; color: #1E40AF;">{"Domain-based team adoption" if len(domains) > 0 else "First user acquisition"}</p>
+            </div>
+            
+            <p style="color: #9CA3AF; font-size: 12px; margin-top: 30px; text-align: center;">
+                Tskflow Analytics • {today.strftime('%Y')}
+            </p>
+        </body>
+    </html>
+    """
+    
+    try:
+        resend.emails.send({
+            "from": "Tskflow Analytics <notifications@notifications.unbiassly.com>",
+            "to": [admin_email],
+            "subject": f"Tskflow Daily Analytics - {today.strftime('%b %d')}",
+            "html": email_content
+        })
+        logger.info(f"Daily analytics sent to {admin_email}")
+    except Exception as e:
+        logger.error(f"Failed to send analytics: {e}")
+
+# Trial reminder job
+async def send_trial_reminders():
+    """Send trial expiration reminders from Day 27"""
+    now = datetime.now(timezone.utc)
+    
+    # Find trials ending in 1-3 days
+    for days_left in [3, 2, 1]:
+        target_date = (now + timedelta(days=days_left)).date().isoformat()
+        
+        trial_users = await db.users.find({
+            "is_trial": True,
+            "trial_ends": {"$regex": f"^{target_date}"}
+        }, {"_id": 0}).to_list(1000)
+        
+        for user in trial_users:
+            # Count domain users
+            domain_users = await db.users.count_documents({
+                "company_domain": user.get("company_domain"),
+                "subscription_tier": "teams"
+            }) if user.get("company_domain") else 1
+            
+            monthly_cost = domain_users * 12  # $12/user/month
+            
+            email_content = f"""
+            <html>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h1 style="color: #4F46E5;">Your Teams Trial Ends in {days_left} Day{'s' if days_left > 1 else ''}</h1>
+                    
+                    <div style="background: #F9FAFB; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                        <p><strong>Trial End Date:</strong> {user.get('trial_ends', 'N/A')[:10]}</p>
+                        <p><strong>Team Members:</strong> {domain_users}</p>
+                        <p><strong>Monthly Cost:</strong> ${monthly_cost}/month</p>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{APP_BASE_URL}/settings" style="background: #4F46E5; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block; margin: 5px;">
+                            Continue & Pay
+                        </a>
+                        <a href="{APP_BASE_URL}/settings?action=cancel" style="background: #EF4444; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block; margin: 5px;">
+                            Cancel Trial
+                        </a>
+                    </div>
+                    
+                    <p style="text-align: center;">
+                        <a href="{APP_BASE_URL}/request-extension" style="color: #6B7280;">Request Trial Extension</a>
+                    </p>
+                    
+                    <p style="color: #9CA3AF; font-size: 12px; margin-top: 30px; text-align: center;">
+                        No charges until you confirm. Cancel anytime.
+                    </p>
+                </body>
+            </html>
+            """
+            
+            try:
+                resend.emails.send({
+                    "from": "Tskflow <notifications@notifications.unbiassly.com>",
+                    "to": [user["email"]],
+                    "subject": f"Your Teams trial ends in {days_left} day{'s' if days_left > 1 else ''}",
+                    "html": email_content
+                })
+            except:
+                pass
+
+# Manual trigger for analytics (for testing)
+@api_router.post("/admin/send-analytics")
+async def trigger_analytics(background_tasks: BackgroundTasks):
+    background_tasks.add_task(send_daily_analytics)
+    return {"message": "Analytics email queued"}
+
 # Include router
 app.include_router(api_router)
 
