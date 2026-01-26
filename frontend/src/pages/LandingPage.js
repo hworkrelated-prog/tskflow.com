@@ -166,19 +166,18 @@ const LandingPage = () => {
                 </div>
 
                 {/* Main Content Area */}
-                <div className="bg-gradient-to-br from-slate-50 to-white min-h-[380px] relative overflow-hidden">
+                <div className="bg-gradient-to-br from-slate-50 to-white min-h-[400px] relative overflow-hidden">
                     
-                    {/* Step 0: Dashboard Overview */}
+                    {/* Step 0: Dashboard Overview with 3 Views */}
                     <motion.div 
                         className="absolute inset-0 p-5"
                         animate={{ opacity: step === 0 ? 1 : 0, x: step === 0 ? 0 : -20 }}
                         transition={{ duration: 0.4 }}
                         style={{ pointerEvents: step === 0 ? 'auto' : 'none' }}
                     >
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-3">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-800">Good morning! 👋</h3>
-                                <p className="text-sm text-slate-500">You have 3 tasks needing attention</p>
+                                <h3 className="text-lg font-bold text-slate-800">Your Tasks</h3>
                             </div>
                             <motion.button 
                                 className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg shadow-indigo-500/30"
@@ -188,34 +187,45 @@ const LandingPage = () => {
                                 <Plus className="w-4 h-4" /> New Task
                             </motion.button>
                         </div>
-                        
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            <div className="bg-white rounded-xl p-3 border shadow-sm">
-                                <div className="text-2xl font-bold text-amber-500">3</div>
-                                <div className="text-xs text-slate-500">Assigned to me</div>
+
+                        {/* Three View Tabs */}
+                        <div className="flex gap-2 mb-4">
+                            <div className="flex-1 bg-indigo-100 border-2 border-indigo-300 rounded-xl p-3 text-center cursor-pointer">
+                                <div className="text-xl font-bold text-indigo-600">3</div>
+                                <div className="text-xs font-medium text-indigo-700">Assigned</div>
+                                <div className="text-[10px] text-indigo-500">Tasks for you</div>
                             </div>
-                            <div className="bg-white rounded-xl p-3 border shadow-sm">
-                                <div className="text-2xl font-bold text-blue-500">5</div>
-                                <div className="text-xs text-slate-500">I assigned</div>
+                            <div className="flex-1 bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-slate-300">
+                                <div className="text-xl font-bold text-slate-600">2</div>
+                                <div className="text-xs font-medium text-slate-700">Self Assigned</div>
+                                <div className="text-[10px] text-slate-500">Your own tasks</div>
                             </div>
-                            <div className="bg-white rounded-xl p-3 border shadow-sm">
-                                <div className="text-2xl font-bold text-green-500">12</div>
-                                <div className="text-xs text-slate-500">Completed</div>
+                            <div className="flex-1 bg-white border border-slate-200 rounded-xl p-3 text-center cursor-pointer hover:border-slate-300">
+                                <div className="text-xl font-bold text-slate-600">5</div>
+                                <div className="text-xs font-medium text-slate-700">Delegated</div>
+                                <div className="text-[10px] text-slate-500">Assigned to others</div>
                             </div>
                         </div>
 
                         <div className="space-y-2">
                             {[
-                                { title: "Review pitch deck", from: "Sarah", priority: "High", time: "Due today" },
-                                { title: "Fix checkout bug", from: "Mike", priority: "Medium", time: "Due tomorrow" }
+                                { title: "Review pitch deck", from: "Sarah", priority: "High", time: "Due today", tag: "Assigned" },
+                                { title: "Prepare board presentation", from: "Mike", priority: "Medium", time: "Due tomorrow", tag: "Assigned" }
                             ].map((task, i) => (
-                                <div key={i} className="bg-white rounded-xl p-3 border shadow-sm flex items-center gap-3">
-                                    <div className={`w-2 h-2 rounded-full ${task.priority === 'High' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                <motion.div 
+                                    key={i} 
+                                    className="bg-white rounded-xl p-3 border shadow-sm flex items-center gap-3"
+                                    initial={{ y: 10, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: i * 0.1 }}
+                                >
+                                    <div className={`w-2 h-8 rounded-full ${task.priority === 'High' ? 'bg-red-500' : 'bg-amber-500'}`} />
                                     <div className="flex-1">
                                         <div className="font-medium text-sm text-slate-800">{task.title}</div>
                                         <div className="text-xs text-slate-500">From {task.from} • {task.time}</div>
                                     </div>
-                                </div>
+                                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{task.tag}</span>
+                                </motion.div>
                             ))}
                         </div>
                     </motion.div>
