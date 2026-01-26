@@ -1635,8 +1635,8 @@ class CheckoutRequest(BaseModel):
     origin_url: str
 
 SUBSCRIPTION_PACKAGES = {
-    "pro": {"price": 9.00, "name": "Pro Plan"},
-    "teams": {"price": 12.00, "name": "Teams Plan"}
+    "pro": {"price": 900, "name": "Pro Plan"},
+    "teams": {"price": 1200, "name": "Teams Plan"}
 }
 
 @api_router.post("/payments/create-checkout")
