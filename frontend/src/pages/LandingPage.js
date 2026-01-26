@@ -18,6 +18,7 @@ import {
     Sparkles,
     Target,
     TrendingUp,
+    Plus,
     Mail,
     Twitter,
     Linkedin,
