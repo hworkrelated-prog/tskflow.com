@@ -295,9 +295,15 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     await db.users.insert_one(user_doc)
     
     # Link any tasks that were assigned to this email before they registered
+    # Use case-insensitive matching for email placeholder
     placeholder_id = f"email_{user.email}"
+    placeholder_id_lower = f"email_{user.email.lower()}"
     await db.tasks.update_many(
-        {"assigned_to": placeholder_id},
+        {"$or": [
+            {"assigned_to": placeholder_id},
+            {"assigned_to": placeholder_id_lower},
+            {"assigned_to": {"$regex": f"^email_{user.email}$", "$options": "i"}}
+        ]},
         {"$set": {"assigned_to": user_id, "assigned_to_name": user.name}}
     )
     
