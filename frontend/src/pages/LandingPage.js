@@ -594,14 +594,16 @@ const LandingPage = () => {
                             Pricing
                         </Badge>
                         <h2 className="text-4xl md:text-5xl font-bold mb-4" style={{ fontFamily: 'Outfit' }}>
-                            Simple, transparent
+                            Fair pricing for
                             <br />
                             <span className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                                pricing
+                                real outcomes
                             </span>
                         </h2>
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                            Start free. Upgrade when you're ready. No hidden fees.
+                            We built Tskflow because team accountability shouldn't require enterprise software.
+                            <br />
+                            <span className="text-gray-500">Pay only for what you use. No surprises.</span>
                         </p>
                     </motion.div>
 
@@ -622,9 +624,18 @@ const LandingPage = () => {
                                         </Badge>
                                     </div>
                                 )}
+                                {plan.trial && (
+                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                                        <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full px-4 py-1 shadow-lg">
+                                            30-Day Free Trial
+                                        </Badge>
+                                    </div>
+                                )}
                                 <Card className={`h-full rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1 ${
                                     plan.popular 
                                         ? 'border-2 border-indigo-500 shadow-xl shadow-indigo-500/20' 
+                                        : plan.trial
+                                        ? 'border-2 border-green-500 shadow-xl shadow-green-500/20'
                                         : 'border shadow-lg hover:shadow-xl'
                                 }`}>
                                     <CardContent className="p-8">
@@ -642,8 +653,8 @@ const LandingPage = () => {
                                         <ul className="space-y-4 mb-8">
                                             {plan.features.map((feature, i) => (
                                                 <li key={i} className="flex items-center gap-3">
-                                                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                                                    <span className="text-gray-700">{feature}</span>
+                                                    <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${feature.includes('Coming Soon') ? 'text-gray-400' : 'text-green-500'}`} />
+                                                    <span className={feature.includes('Coming Soon') ? 'text-gray-500 italic' : 'text-gray-700'}>{feature}</span>
                                                 </li>
                                             ))}
                                         </ul>
@@ -653,9 +664,11 @@ const LandingPage = () => {
                                             className={`w-full rounded-full h-12 font-semibold ${
                                                 plan.popular 
                                                     ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/25' 
+                                                    : plan.trial
+                                                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg shadow-green-500/25 text-white'
                                                     : ''
                                             }`}
-                                            variant={plan.popular ? 'default' : 'outline'}
+                                            variant={plan.popular || plan.trial ? 'default' : 'outline'}
                                         >
                                             {plan.cta}
                                             <ChevronRight className="w-4 h-4 ml-2" />
@@ -665,6 +678,10 @@ const LandingPage = () => {
                             </motion.div>
                         ))}
                     </div>
+                    
+                    <p className="text-center text-gray-500 mt-8 text-sm">
+                        All plans include unlimited task creation. Only features that exist today are listed.
+                    </p>
                 </div>
             </section>
 
