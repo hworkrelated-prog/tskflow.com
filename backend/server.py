@@ -571,25 +571,9 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
             is_self_assigned = (assigned_to_id == current_user["id"])
         else:
             # Non-registered user - create placeholder
-            assigned_user = {"name": f"Invited: {assigned_to_email}", "email": assigned_to_email}
+            assigned_user = {"name": assigned_to_email.split('@')[0].title(), "email": assigned_to_email}
             assigned_to_id = f"email_{assigned_to_email}"
             is_self_assigned = False
-            
-            # Send invitation email
-            email_content = f"""
-            <html>
-                <body>
-                    <h2>You've been assigned a task on Tskflow!</h2>
-                    <p><strong>{current_user['name']}</strong> has assigned you a task:</p>
-                    <p><strong>Task:</strong> {task.title}</p>
-                    <p><strong>Priority:</strong> {task.priority}</p>
-                    <p><strong>Due:</strong> {task.due_date}</p>
-                    <p>Create your account to view details and respond:</p>
-                    <p><a href="{app_url}/invite?token={invite_token}">View Task</a></p>
-                </body>
-            </html>
-            """
-            background_tasks.add_task(send_email_notification, assigned_to_email, f"New Task from {current_user['name']}", email_content)
     else:
         assigned_user = await db.users.find_one({"id": task.assigned_to}, {"_id": 0})
         if not assigned_user:
