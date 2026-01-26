@@ -120,190 +120,391 @@ const LandingPage = () => {
         }
     ];
 
-    // Visual Demo Component
+    // Visual Demo Component - Realistic App Walkthrough
     const VisualDemo = () => {
         const [step, setStep] = useState(0);
+        const [isHovered, setIsHovered] = useState(false);
         
         useEffect(() => {
+            if (isHovered) return;
             const timer = setInterval(() => {
                 setStep((prev) => (prev + 1) % 5);
-            }, 4000);
+            }, 3500);
             return () => clearInterval(timer);
-        }, []);
+        }, [isHovered]);
 
-        const demoSteps = [
-            { title: "Create Task", visual: "task-create" },
-            { title: "Assign", visual: "task-assign" },
-            { title: "Track Progress", visual: "task-track" },
-            { title: "Complete", visual: "task-complete" },
-            { title: "Leaderboard", visual: "leaderboard" }
-        ];
+        const scenario = {
+            manager: { name: "You", avatar: "Y", role: "Founder" },
+            team: [
+                { name: "Sarah Chen", avatar: "SC", email: "sarah@startup.io", role: "Designer" },
+                { name: "Mike Ross", avatar: "MR", email: "mike@startup.io", role: "Developer" },
+                { name: "Alex Kim", avatar: "AK", email: "alex@startup.io", role: "Marketing" }
+            ],
+            task: "Design new landing page mockups"
+        };
 
         return (
-            <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="absolute top-4 left-4 flex gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
+            <div 
+                className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200/50"
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+            >
+                {/* App Header - Mimics real Tskflow */}
+                <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                            <Target className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="font-bold text-lg bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Tskflow</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-bold text-indigo-600">
+                            {scenario.manager.avatar}
+                        </div>
+                    </div>
                 </div>
-                
-                <div className="pt-12 pb-8 px-8">
-                    {/* Demo Screen */}
-                    <div className="bg-white rounded-xl p-6 min-h-[320px] relative overflow-hidden">
-                        {/* Step 0: Create Task */}
-                        <motion.div 
-                            className={`absolute inset-6 ${step === 0 ? 'opacity-100' : 'opacity-0'}`}
-                            animate={{ opacity: step === 0 ? 1 : 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
+
+                {/* Main Content Area */}
+                <div className="bg-gradient-to-br from-slate-50 to-white min-h-[380px] relative overflow-hidden">
+                    
+                    {/* Step 0: Dashboard Overview */}
+                    <motion.div 
+                        className="absolute inset-0 p-5"
+                        animate={{ opacity: step === 0 ? 1 : 0, x: step === 0 ? 0 : -20 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ pointerEvents: step === 0 ? 'auto' : 'none' }}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">Good morning! 👋</h3>
+                                <p className="text-sm text-slate-500">You have 3 tasks needing attention</p>
+                            </div>
+                            <motion.button 
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg shadow-indigo-500/30"
+                                animate={{ scale: [1, 1.05, 1] }}
+                                transition={{ repeat: Infinity, duration: 2 }}
+                            >
+                                <Plus className="w-4 h-4" /> New Task
+                            </motion.button>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            <div className="bg-white rounded-xl p-3 border shadow-sm">
+                                <div className="text-2xl font-bold text-amber-500">3</div>
+                                <div className="text-xs text-slate-500">Assigned to me</div>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 border shadow-sm">
+                                <div className="text-2xl font-bold text-blue-500">5</div>
+                                <div className="text-xs text-slate-500">I assigned</div>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 border shadow-sm">
+                                <div className="text-2xl font-bold text-green-500">12</div>
+                                <div className="text-xs text-slate-500">Completed</div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {[
+                                { title: "Review pitch deck", from: "Sarah", priority: "High", time: "Due today" },
+                                { title: "Fix checkout bug", from: "Mike", priority: "Medium", time: "Due tomorrow" }
+                            ].map((task, i) => (
+                                <div key={i} className="bg-white rounded-xl p-3 border shadow-sm flex items-center gap-3">
+                                    <div className={`w-2 h-2 rounded-full ${task.priority === 'High' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                    <div className="flex-1">
+                                        <div className="font-medium text-sm text-slate-800">{task.title}</div>
+                                        <div className="text-xs text-slate-500">From {task.from} • {task.time}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+
+                    {/* Step 1: Create New Task */}
+                    <motion.div 
+                        className="absolute inset-0 p-5"
+                        animate={{ opacity: step === 1 ? 1 : 0, x: step === 1 ? 0 : 20 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ pointerEvents: step === 1 ? 'auto' : 'none' }}
+                    >
+                        <div className="bg-white rounded-2xl border shadow-xl p-5 max-w-sm mx-auto">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center">
                                     <Zap className="w-5 h-5 text-indigo-600" />
                                 </div>
-                                <span className="font-semibold text-slate-800">New Task</span>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">New Task</h3>
+                                    <p className="text-xs text-slate-500">Assign work to your team</p>
+                                </div>
                             </div>
+                            
                             <div className="space-y-3">
-                                <div className="h-10 bg-slate-100 rounded-lg flex items-center px-3">
-                                    <span className="text-slate-600 text-sm">Review Q4 metrics report</span>
-                                    <motion.div 
-                                        className="w-0.5 h-5 bg-indigo-500 ml-1"
-                                        animate={{ opacity: [1, 0] }}
-                                        transition={{ repeat: Infinity, duration: 0.8 }}
-                                    />
+                                <div>
+                                    <label className="text-xs font-medium text-slate-500 mb-1 block">Task Title</label>
+                                    <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-200 flex items-center">
+                                        <motion.span 
+                                            className="text-slate-800 text-sm"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: "auto" }}
+                                        >
+                                            {scenario.task}
+                                        </motion.span>
+                                        <motion.div 
+                                            className="w-0.5 h-4 bg-indigo-500 ml-0.5"
+                                            animate={{ opacity: [1, 0] }}
+                                            transition={{ repeat: Infinity, duration: 0.6 }}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="h-20 bg-slate-50 rounded-lg p-3">
-                                    <span className="text-slate-400 text-sm">Description...</span>
-                                </div>
+                                
                                 <div className="flex gap-2">
-                                    <div className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">High</div>
-                                    <div className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-full text-xs">Due: Tomorrow</div>
+                                    <div className="flex-1">
+                                        <label className="text-xs font-medium text-slate-500 mb-1 block">Priority</label>
+                                        <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-sm font-medium text-center">
+                                            High
+                                        </div>
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="text-xs font-medium text-slate-500 mb-1 block">Due Date</label>
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 text-sm text-center">
+                                            Tomorrow
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </motion.div>
 
-                        {/* Step 1: Assign */}
-                        <motion.div 
-                            className={`absolute inset-6 ${step === 1 ? 'opacity-100' : 'opacity-0'}`}
-                            animate={{ opacity: step === 1 ? 1 : 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
+                                <motion.button 
+                                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2.5 rounded-xl font-medium text-sm shadow-lg"
+                                    animate={{ scale: [1, 1.02, 1] }}
+                                    transition={{ repeat: Infinity, duration: 1.5 }}
+                                >
+                                    Continue to Assign →
+                                </motion.button>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Step 2: Assign to Team Member */}
+                    <motion.div 
+                        className="absolute inset-0 p-5"
+                        animate={{ opacity: step === 2 ? 1 : 0, x: step === 2 ? 0 : 20 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ pointerEvents: step === 2 ? 'auto' : 'none' }}
+                    >
+                        <div className="bg-white rounded-2xl border shadow-xl p-5 max-w-sm mx-auto">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                                <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded-xl flex items-center justify-center">
                                     <Users className="w-5 h-5 text-purple-600" />
                                 </div>
-                                <span className="font-semibold text-slate-800">Assign To</span>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Assign To</h3>
+                                    <p className="text-xs text-slate-500">Choose a team member</p>
+                                </div>
                             </div>
+
+                            <div className="bg-slate-50 rounded-lg px-3 py-2 mb-3 text-sm text-slate-600 border">
+                                📋 {scenario.task}
+                            </div>
+                            
                             <div className="space-y-2">
-                                {['sarah@company.com', 'mike@company.com', 'alex@company.com'].map((email, i) => (
+                                {scenario.team.map((person, i) => (
                                     <motion.div 
-                                        key={email}
-                                        className={`p-3 rounded-lg flex items-center gap-3 ${i === 0 ? 'bg-indigo-50 border-2 border-indigo-200' : 'bg-slate-50'}`}
-                                        initial={{ x: -20, opacity: 0 }}
-                                        animate={{ x: 0, opacity: 1 }}
+                                        key={person.email}
+                                        className={`p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all ${
+                                            i === 0 
+                                                ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300 shadow-md' 
+                                                : 'bg-white border border-slate-200 hover:border-slate-300'
+                                        }`}
+                                        initial={{ y: 10, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
                                         transition={{ delay: i * 0.1 }}
                                     >
-                                        <div className={`w-8 h-8 rounded-full ${i === 0 ? 'bg-indigo-200' : 'bg-slate-200'} flex items-center justify-center text-xs font-medium`}>
-                                            {email[0].toUpperCase()}
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ${
+                                            i === 0 ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {person.avatar}
                                         </div>
-                                        <span className="text-sm text-slate-700">{email}</span>
-                                        {i === 0 && <CheckCircle2 className="w-4 h-4 text-indigo-600 ml-auto" />}
+                                        <div className="flex-1">
+                                            <div className="font-medium text-sm text-slate-800">{person.name}</div>
+                                            <div className="text-xs text-slate-500">{person.role}</div>
+                                        </div>
+                                        {i === 0 && (
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4 text-white" />
+                                            </motion.div>
+                                        )}
                                     </motion.div>
                                 ))}
                             </div>
-                        </motion.div>
 
-                        {/* Step 2: Track */}
-                        <motion.div 
-                            className={`absolute inset-6 ${step === 2 ? 'opacity-100' : 'opacity-0'}`}
-                            animate={{ opacity: step === 2 ? 1 : 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                                    <BarChart3 className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <span className="font-semibold text-slate-800">My Dashboard</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="bg-amber-50 rounded-lg p-3 text-center">
-                                    <div className="text-2xl font-bold text-amber-600">3</div>
-                                    <div className="text-xs text-amber-700">Pending</div>
-                                </div>
-                                <div className="bg-blue-50 rounded-lg p-3 text-center">
-                                    <div className="text-2xl font-bold text-blue-600">5</div>
-                                    <div className="text-xs text-blue-700">In Progress</div>
-                                </div>
-                                <div className="bg-green-50 rounded-lg p-3 text-center">
-                                    <div className="text-2xl font-bold text-green-600">12</div>
-                                    <div className="text-xs text-green-700">Completed</div>
-                                </div>
-                            </div>
-                        </motion.div>
+                            <motion.button 
+                                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2.5 rounded-xl font-medium text-sm shadow-lg mt-4"
+                                animate={{ scale: [1, 1.02, 1] }}
+                                transition={{ repeat: Infinity, duration: 1.5, delay: 0.5 }}
+                            >
+                                Assign to Sarah →
+                            </motion.button>
+                        </div>
+                    </motion.div>
 
-                        {/* Step 3: Complete */}
-                        <motion.div 
-                            className={`absolute inset-6 ${step === 3 ? 'opacity-100' : 'opacity-0'}`}
-                            animate={{ opacity: step === 3 ? 1 : 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    {/* Step 3: Email Notification & Task Completion */}
+                    <motion.div 
+                        className="absolute inset-0 p-5"
+                        animate={{ opacity: step === 3 ? 1 : 0, x: step === 3 ? 0 : 20 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ pointerEvents: step === 3 ? 'auto' : 'none' }}
+                    >
+                        <div className="flex gap-4 h-full">
+                            {/* Email Preview */}
+                            <motion.div 
+                                className="flex-1 bg-white rounded-2xl border shadow-xl p-4 relative overflow-hidden"
+                                initial={{ y: 20 }}
+                                animate={{ y: 0 }}
+                            >
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+                                <div className="flex items-center gap-2 mb-3 pt-1">
+                                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                                        <Target className="w-4 h-4 text-white" />
+                                    </div>
+                                    <div className="text-xs">
+                                        <div className="font-medium text-slate-800">New task from You</div>
+                                        <div className="text-slate-500">to sarah@startup.io</div>
+                                    </div>
                                 </div>
-                                <span className="font-semibold text-slate-800">Task Complete</span>
-                            </div>
-                            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                    <span className="font-medium text-green-800">Review Q4 metrics report</span>
+                                <div className="bg-slate-50 rounded-xl p-3 mb-3">
+                                    <div className="font-medium text-sm text-slate-800 mb-1">{scenario.task}</div>
+                                    <div className="flex gap-2">
+                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">High</span>
+                                        <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Due Tomorrow</span>
+                                    </div>
                                 </div>
-                                <div className="text-sm text-green-700 mb-3">Completed by Sarah • 2 hours ago</div>
-                                <div className="bg-white rounded-lg p-3">
-                                    <div className="text-xs text-slate-500 mb-1">Completion Note:</div>
-                                    <div className="text-sm text-slate-700">"Report attached. Key findings highlighted on page 3."</div>
-                                </div>
-                            </div>
-                        </motion.div>
+                                <motion.button 
+                                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-2 rounded-lg text-sm font-medium"
+                                    animate={{ scale: [1, 1.03, 1] }}
+                                    transition={{ repeat: Infinity, duration: 2 }}
+                                >
+                                    View Task in Tskflow →
+                                </motion.button>
+                            </motion.div>
 
-                        {/* Step 4: Leaderboard */}
-                        <motion.div 
-                            className={`absolute inset-6 ${step === 4 ? 'opacity-100' : 'opacity-0'}`}
-                            animate={{ opacity: step === 4 ? 1 : 0 }}
-                            transition={{ duration: 0.5 }}
-                        >
+                            {/* Completion */}
+                            <motion.div 
+                                className="flex-1 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-200 shadow-xl p-4"
+                                initial={{ y: 20, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                transition={{ delay: 0.3 }}
+                            >
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                        <CheckCircle2 className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div className="text-sm font-medium text-green-800">Task Completed!</div>
+                                </div>
+                                <div className="bg-white rounded-xl p-3 mb-2">
+                                    <div className="text-xs text-slate-500 mb-1">Sarah's note:</div>
+                                    <div className="text-sm text-slate-700">"Mockups ready! Uploaded 3 variants to Figma. Let me know your thoughts 🎨"</div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button className="flex-1 bg-green-500 text-white py-1.5 rounded-lg text-xs font-medium">
+                                        ✓ Accept
+                                    </button>
+                                    <button className="flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-xs font-medium">
+                                        Request Changes
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </motion.div>
+
+                    {/* Step 4: Team Performance Leaderboard */}
+                    <motion.div 
+                        className="absolute inset-0 p-5"
+                        animate={{ opacity: step === 4 ? 1 : 0, x: step === 4 ? 0 : 20 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ pointerEvents: step === 4 ? 'auto' : 'none' }}
+                    >
+                        <div className="bg-white rounded-2xl border shadow-xl p-5 max-w-md mx-auto">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
+                                <div className="w-10 h-10 bg-gradient-to-br from-yellow-100 to-orange-100 rounded-xl flex items-center justify-center">
                                     <TrendingUp className="w-5 h-5 text-yellow-600" />
                                 </div>
-                                <span className="font-semibold text-slate-800">Team Leaderboard</span>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Team Performance</h3>
+                                    <p className="text-xs text-slate-500">This week's top performers</p>
+                                </div>
                             </div>
+
                             <div className="space-y-2">
                                 {[
-                                    { name: 'Sarah', tasks: 24, time: '1.2d avg', rank: 1 },
-                                    { name: 'Mike', tasks: 18, time: '1.8d avg', rank: 2 },
-                                    { name: 'Alex', tasks: 15, time: '2.1d avg', rank: 3 }
-                                ].map((person) => (
-                                    <div key={person.name} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50">
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${person.rank === 1 ? 'bg-yellow-400 text-yellow-900' : 'bg-slate-200 text-slate-600'}`}>
+                                    { name: "Sarah Chen", tasks: 8, avgTime: "1.2 days", rank: 1, trend: "+15%" },
+                                    { name: "Mike Ross", tasks: 6, avgTime: "1.8 days", rank: 2, trend: "+8%" },
+                                    { name: "Alex Kim", tasks: 5, avgTime: "2.1 days", rank: 3, trend: "+3%" }
+                                ].map((person, i) => (
+                                    <motion.div 
+                                        key={person.name}
+                                        className={`p-3 rounded-xl flex items-center gap-3 ${
+                                            i === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200' : 'bg-slate-50'
+                                        }`}
+                                        initial={{ x: -20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        transition={{ delay: i * 0.15 }}
+                                    >
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                            i === 0 ? 'bg-yellow-400 text-yellow-900' : i === 1 ? 'bg-slate-300 text-slate-700' : 'bg-orange-200 text-orange-800'
+                                        }`}>
                                             {person.rank}
                                         </div>
                                         <div className="flex-1">
-                                            <div className="font-medium text-sm">{person.name}</div>
-                                            <div className="text-xs text-slate-500">{person.tasks} tasks • {person.time}</div>
+                                            <div className="font-medium text-sm text-slate-800">{person.name}</div>
+                                            <div className="text-xs text-slate-500">{person.tasks} tasks • {person.avgTime} avg</div>
                                         </div>
-                                    </div>
+                                        <div className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                            {person.trend}
+                                        </div>
+                                    </motion.div>
                                 ))}
                             </div>
-                        </motion.div>
+
+                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-500">Team completion rate</span>
+                                    <span className="font-bold text-green-600">94%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-2 mt-2">
+                                    <motion.div 
+                                        className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: "94%" }}
+                                        transition={{ duration: 1, delay: 0.5 }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+
+                {/* Bottom Progress Bar */}
+                <div className="bg-white border-t px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-600">
+                            {['Dashboard', 'Create Task', 'Assign', 'Complete & Review', 'Team Stats'][step]}
+                        </span>
+                        <span className="text-xs text-slate-400">{step + 1}/5</span>
                     </div>
-                    
-                    {/* Progress dots */}
-                    <div className="flex justify-center gap-2 mt-4">
-                        {demoSteps.map((_, i) => (
+                    <div className="flex gap-1.5">
+                        {[0, 1, 2, 3, 4].map((i) => (
                             <button
                                 key={i}
                                 onClick={() => setStep(i)}
-                                className={`w-2 h-2 rounded-full transition-all ${step === i ? 'bg-white w-6' : 'bg-slate-600'}`}
+                                className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    step === i 
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-500 flex-[2]' 
+                                        : step > i 
+                                        ? 'bg-indigo-200 flex-1'
+                                        : 'bg-slate-200 flex-1'
+                                }`}
                             />
                         ))}
                     </div>
