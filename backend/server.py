@@ -294,6 +294,13 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     
     await db.users.insert_one(user_doc)
     
+    # Link any tasks that were assigned to this email before they registered
+    placeholder_id = f"email_{user.email}"
+    await db.tasks.update_many(
+        {"assigned_to": placeholder_id},
+        {"$set": {"assigned_to": user_id, "assigned_to_name": user.name}}
+    )
+    
     # Always send verification email via Resend
     app_url = APP_BASE_URL
     email_content = f"""
