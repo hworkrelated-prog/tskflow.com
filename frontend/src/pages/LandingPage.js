@@ -429,67 +429,95 @@ const LandingPage = () => {
                         </div>
                     </motion.div>
 
-                    {/* Step 4: Team Performance Leaderboard */}
+                    {/* Step 4: Team Performance Leaderboard - ENHANCED */}
                     <motion.div 
-                        className="absolute inset-0 p-5"
+                        className="absolute inset-0 p-4"
                         animate={{ opacity: step === 4 ? 1 : 0, x: step === 4 ? 0 : 20 }}
                         transition={{ duration: 0.4 }}
                         style={{ pointerEvents: step === 4 ? 'auto' : 'none' }}
                     >
-                        <div className="bg-white rounded-2xl border shadow-xl p-5 max-w-md mx-auto">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 bg-gradient-to-br from-yellow-100 to-orange-100 rounded-xl flex items-center justify-center">
-                                    <TrendingUp className="w-5 h-5 text-yellow-600" />
+                        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 h-full text-white relative overflow-hidden">
+                            {/* Decorative elements */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl" />
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl" />
+                            
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
+                                        <TrendingUp className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-white">Team Leaderboard</h3>
+                                        <p className="text-xs text-slate-400">Who's shipping fastest?</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-slate-800">Team Performance</h3>
-                                    <p className="text-xs text-slate-500">This week's top performers</p>
+                                <div className="text-right">
+                                    <div className="text-2xl font-bold text-green-400">94%</div>
+                                    <div className="text-[10px] text-slate-400">completion rate</div>
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                {[
-                                    { name: "Sarah Chen", tasks: 8, avgTime: "1.2 days", rank: 1, trend: "+15%" },
-                                    { name: "Mike Ross", tasks: 6, avgTime: "1.8 days", rank: 2, trend: "+8%" },
-                                    { name: "Alex Kim", tasks: 5, avgTime: "2.1 days", rank: 3, trend: "+3%" }
-                                ].map((person, i) => (
+                            {/* Podium style for top 3 */}
+                            <div className="flex items-end justify-center gap-2 mb-4 h-28">
+                                {/* 2nd place */}
+                                <motion.div 
+                                    className="flex-1 bg-slate-700/50 rounded-t-xl p-2 text-center h-20"
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.2 }}
+                                >
+                                    <div className="w-8 h-8 bg-slate-400 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-bold text-slate-800">MR</div>
+                                    <div className="text-xs font-medium">Mike</div>
+                                    <div className="text-[10px] text-slate-400">6 tasks</div>
+                                    <div className="text-lg font-bold text-slate-300">2nd</div>
+                                </motion.div>
+                                
+                                {/* 1st place */}
+                                <motion.div 
+                                    className="flex-1 bg-gradient-to-t from-yellow-600/30 to-yellow-500/10 rounded-t-xl p-2 text-center h-28 border-t-2 border-yellow-400"
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.1 }}
+                                >
                                     <motion.div 
-                                        key={person.name}
-                                        className={`p-3 rounded-xl flex items-center gap-3 ${
-                                            i === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200' : 'bg-slate-50'
-                                        }`}
-                                        initial={{ x: -20, opacity: 0 }}
-                                        animate={{ x: 0, opacity: 1 }}
-                                        transition={{ delay: i * 0.15 }}
+                                        className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-bold text-white shadow-lg"
+                                        animate={{ scale: [1, 1.1, 1] }}
+                                        transition={{ repeat: Infinity, duration: 2 }}
                                     >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                            i === 0 ? 'bg-yellow-400 text-yellow-900' : i === 1 ? 'bg-slate-300 text-slate-700' : 'bg-orange-200 text-orange-800'
-                                        }`}>
-                                            {person.rank}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="font-medium text-sm text-slate-800">{person.name}</div>
-                                            <div className="text-xs text-slate-500">{person.tasks} tasks • {person.avgTime} avg</div>
-                                        </div>
-                                        <div className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                                            {person.trend}
-                                        </div>
+                                        SC
                                     </motion.div>
-                                ))}
+                                    <div className="text-sm font-bold">Sarah</div>
+                                    <div className="text-xs text-yellow-400">8 tasks • 1.2d avg</div>
+                                    <div className="text-xl font-bold text-yellow-400">🏆 1st</div>
+                                </motion.div>
+                                
+                                {/* 3rd place */}
+                                <motion.div 
+                                    className="flex-1 bg-slate-700/50 rounded-t-xl p-2 text-center h-16"
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    <div className="w-8 h-8 bg-orange-300 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-bold text-orange-800">AK</div>
+                                    <div className="text-xs font-medium">Alex</div>
+                                    <div className="text-[10px] text-slate-400">5 tasks</div>
+                                    <div className="text-lg font-bold text-orange-300">3rd</div>
+                                </motion.div>
                             </div>
 
-                            <div className="mt-4 pt-4 border-t border-slate-100">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Team completion rate</span>
-                                    <span className="font-bold text-green-600">94%</span>
+                            {/* Stats row */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="bg-slate-700/50 rounded-lg p-2 text-center">
+                                    <div className="text-lg font-bold text-white">19</div>
+                                    <div className="text-[10px] text-slate-400">Tasks Done</div>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 mt-2">
-                                    <motion.div 
-                                        className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full"
-                                        initial={{ width: 0 }}
-                                        animate={{ width: "94%" }}
-                                        transition={{ duration: 1, delay: 0.5 }}
-                                    />
+                                <div className="bg-slate-700/50 rounded-lg p-2 text-center">
+                                    <div className="text-lg font-bold text-green-400">1.7d</div>
+                                    <div className="text-[10px] text-slate-400">Avg Time</div>
+                                </div>
+                                <div className="bg-slate-700/50 rounded-lg p-2 text-center">
+                                    <div className="text-lg font-bold text-purple-400">+12%</div>
+                                    <div className="text-[10px] text-slate-400">vs Last Week</div>
                                 </div>
                             </div>
                         </div>
@@ -500,7 +528,7 @@ const LandingPage = () => {
                 <div className="bg-white border-t px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-600">
-                            {['Dashboard', 'Create Task', 'Assign', 'Complete & Review', 'Team Stats'][step]}
+                            {['Dashboard', 'Create Task', 'Assign', 'Complete & Review', 'Leaderboard'][step]}
                         </span>
                         <span className="text-xs text-slate-400">{step + 1}/5</span>
                     </div>
