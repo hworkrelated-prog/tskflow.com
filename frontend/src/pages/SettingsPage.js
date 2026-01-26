@@ -254,6 +254,38 @@ const SettingsPage = () => {
                                         </Badge>
                                     )}
                                 </div>
+                                {user?.subscription_tier === 'free' && (
+                                    <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Sparkles className="w-5 h-5 text-green-600" />
+                                            <span className="font-semibold text-green-800">Try Teams Free for 30 Days</span>
+                                        </div>
+                                        <p className="text-sm text-green-700 mb-3">
+                                            Get unlimited team members, performance leaderboards, and admin controls.
+                                        </p>
+                                        <Button
+                                            onClick={async () => {
+                                                try {
+                                                    await axios.post(`${API}/start-teams-trial`);
+                                                    toast.success('Teams trial started! Refresh to see changes.');
+                                                    refreshUser();
+                                                } catch (e) {
+                                                    toast.error(e.response?.data?.detail || 'Failed to start trial');
+                                                }
+                                            }}
+                                            className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
+                                        >
+                                            Start Free Trial
+                                        </Button>
+                                    </div>
+                                )}
+                                {user?.is_trial && user?.trial_ends && (
+                                    <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                                        <p className="text-sm text-amber-800">
+                                            <strong>Trial ends:</strong> {new Date(user.trial_ends).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                )}
                                 {user?.subscription_tier === 'teams' && (
                                     <Button
                                         onClick={() => navigate('/team')}
