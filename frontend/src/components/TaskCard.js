@@ -117,7 +117,15 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                         
                         <p className="text-sm text-muted-foreground line-clamp-2">{task.description}</p>
                         <div className="flex items-center justify-between text-sm">
-                            <span className={getPriorityClass(task.priority)}>{task.priority}</span>
+                            <div className="flex items-center gap-2">
+                                <span className={getPriorityClass(task.priority)}>{task.priority}</span>
+                                {task.calendar_event_id && (
+                                    <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                        <Calendar className="w-3 h-3" />
+                                        Scheduled
+                                    </span>
+                                )}
+                            </div>
                             <span className="text-muted-foreground flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 {format(new Date(task.due_date), 'MMM dd')}
