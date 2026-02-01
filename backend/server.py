@@ -2243,6 +2243,10 @@ async def get_org_structure(current_user: dict = Depends(get_current_user)):
 @api_router.post("/start-teams-trial")
 async def start_teams_trial(current_user: dict = Depends(get_current_user)):
     """Start a 30-day Teams trial for the user's domain"""
+    # Block personal email domains
+    if is_personal_email(current_user["email"]):
+        raise HTTPException(status_code=400, detail="Please use your company email to activate Teams trial. Personal email domains are not supported.")
+    
     if current_user["subscription_tier"] == "teams":
         raise HTTPException(status_code=400, detail="Already on Teams plan")
     
