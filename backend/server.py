@@ -436,8 +436,14 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user: UserLogin):
     db_user = await db.users.find_one({"email": user.email}, {"_id": 0})
-    if not db_user or not verify_password(user.password, db_user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user exists first
+    if not db_user:
+        raise HTTPException(status_code=401, detail="No account found with this email. Please sign up first.")
+    
+    # Then check password
+    if not verify_password(user.password, db_user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect password")
     
     if not db_user.get("email_verified", False):
         raise HTTPException(status_code=403, detail="Email not verified. Please verify your email first.")
