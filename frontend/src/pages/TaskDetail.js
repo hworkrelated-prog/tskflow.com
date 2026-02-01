@@ -72,8 +72,15 @@ const TaskDetail = () => {
     const handleAccept = async () => {
         setActionLoading(true);
         try {
-            await axios.put(`${API}/tasks/${taskId}/accept`);
-            toast.success('Task accepted!');
+            const response = await axios.put(`${API}/tasks/${taskId}/accept`);
+            if (response.data.calendar_scheduled) {
+                toast.success('Task accepted & scheduled on your calendar!', {
+                    description: '30-minute time block created',
+                    duration: 5000
+                });
+            } else {
+                toast.success('Task accepted!');
+            }
             fetchTask();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to accept task'));
