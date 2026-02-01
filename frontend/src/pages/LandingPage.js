@@ -39,6 +39,12 @@ const LandingPage = () => {
 
     const features = [
         {
+            icon: <Clock className="w-6 h-6" />,
+            title: "Auto Calendar Blocking",
+            description: "High-priority tasks automatically block time on Google Calendar when accepted. No more forgotten deadlines.",
+            highlight: true
+        },
+        {
             icon: <Zap className="w-6 h-6" />,
             title: "Lightning Fast",
             description: "Create and assign tasks in seconds. No complex setup, just pure productivity."
@@ -60,13 +66,8 @@ const LandingPage = () => {
         },
         {
             icon: <Shield className="w-6 h-6" />,
-            title: "Privacy First",
-            description: "See only what you need. Your team's private tasks stay private."
-        },
-        {
-            icon: <Clock className="w-6 h-6" />,
-            title: "Time Tracking",
-            description: "Monitor average completion times and identify bottlenecks."
+            title: "Company Email Only",
+            description: "Teams require company email. Serious B2B execution, not personal todo lists."
         }
     ];
 
