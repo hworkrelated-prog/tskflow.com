@@ -1663,6 +1663,10 @@ async def create_checkout(checkout_req: CheckoutRequest, http_request: HTTPReque
     if checkout_req.package not in SUBSCRIPTION_PACKAGES:
         raise HTTPException(status_code=400, detail="Invalid subscription package")
     
+    # Block personal emails for Teams package
+    if checkout_req.package == "teams" and is_personal_email(current_user["email"]):
+        raise HTTPException(status_code=400, detail="Please use your company email to purchase Teams. Personal email domains are not supported.")
+    
     package = SUBSCRIPTION_PACKAGES[checkout_req.package]
     
     # Initialize Stripe directly with live key
