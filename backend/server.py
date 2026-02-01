@@ -92,6 +92,7 @@ class UserResponse(BaseModel):
     email_verified: bool
     is_team_owner: Optional[bool] = False
     team_owner_email: Optional[str] = None
+    google_calendar_connected: Optional[bool] = False
 
 class TokenResponse(BaseModel):
     access_token: str
