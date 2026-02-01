@@ -2498,6 +2498,37 @@ async def trigger_analytics(background_tasks: BackgroundTasks):
     background_tasks.add_task(send_daily_analytics)
     return {"message": "Analytics email queued"}
 
+# Admin endpoint to view user stats
+@api_router.get("/admin/stats")
+async def get_admin_stats():
+    """Get user and subscription statistics"""
+    users = await db.users.find({}, {"_id": 0, "email": 1, "name": 1, "subscription_tier": 1, "created_at": 1, "is_trial": 1}).to_list(None)
+    tasks = await db.tasks.count_documents({})
+    
+    # Count by tier
+    tier_counts = {"free": 0, "pro": 0, "teams": 0}
+    personal_email_teams = []
+    
+    for u in users:
+        tier = u.get("subscription_tier", "free")
+        tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        
+        # Track teams users with personal emails
+        if tier == "teams" and is_personal_email(u.get("email", "")):
+            personal_email_teams.append({
+                "email": u.get("email"),
+                "name": u.get("name"),
+                "is_trial": u.get("is_trial", False)
+            })
+    
+    return {
+        "total_users": len(users),
+        "total_tasks": tasks,
+        "by_tier": tier_counts,
+        "personal_email_teams_users": personal_email_teams,
+        "users": [{"email": u.get("email"), "name": u.get("name"), "tier": u.get("subscription_tier", "free")} for u in users]
+    }
+
 # Include router
 app.include_router(api_router)
 
