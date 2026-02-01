@@ -284,6 +284,48 @@ const SettingsPage = () => {
                                         </p>
                                     </div>
                                 )}
+                                {/* Google Calendar Connection */}
+                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="font-semibold text-blue-900">Google Calendar</h4>
+                                            <p className="text-sm text-blue-700">Auto-block time for urgent tasks</p>
+                                        </div>
+                                        {user?.google_calendar_connected ? (
+                                            <Button
+                                                onClick={async () => {
+                                                    try {
+                                                        await axios.delete(`${API}/auth/google/disconnect`);
+                                                        toast.success('Calendar disconnected');
+                                                        refreshUser();
+                                                    } catch (e) {
+                                                        toast.error('Failed to disconnect');
+                                                    }
+                                                }}
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-full border-green-500 text-green-700"
+                                            >
+                                                <Check className="w-4 h-4 mr-1" /> Connected
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await axios.get(`${API}/auth/google/connect`);
+                                                        window.location.href = res.data.auth_url;
+                                                    } catch (e) {
+                                                        toast.error('Failed to connect');
+                                                    }
+                                                }}
+                                                size="sm"
+                                                className="rounded-full bg-blue-600 hover:bg-blue-700"
+                                            >
+                                                Connect Calendar
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
                                 {user?.subscription_tier === 'teams' && (
                                     <Button
                                         onClick={() => navigate('/team')}
