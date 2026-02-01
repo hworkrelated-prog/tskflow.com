@@ -719,9 +719,14 @@ const LandingPage = () => {
                                 viewport={{ once: true }}
                                 transition={{ duration: 0.5, delay: index * 0.1 }}
                             >
-                                <Card className="h-full border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white rounded-2xl overflow-hidden group">
+                                <Card className={`h-full border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 rounded-2xl overflow-hidden group ${feature.highlight ? 'bg-gradient-to-br from-indigo-50 to-purple-50 ring-2 ring-indigo-500' : 'bg-white'}`}>
                                     <CardContent className="p-8">
-                                        <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform duration-300">
+                                        {feature.highlight && (
+                                            <Badge className="mb-4 bg-indigo-600 text-white hover:bg-indigo-600 rounded-full text-xs">
+                                                🔥 KEY FEATURE
+                                            </Badge>
+                                        )}
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform duration-300 ${feature.highlight ? 'bg-gradient-to-br from-indigo-600 to-purple-600' : 'bg-gradient-to-br from-indigo-500 to-purple-500'}`}>
                                             {feature.icon}
                                         </div>
                                         <h3 className="text-xl font-bold mb-3" style={{ fontFamily: 'Outfit' }}>
