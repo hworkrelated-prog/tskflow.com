@@ -42,6 +42,18 @@ security = HTTPBearer()
 # PST Timezone
 PST = pytz.timezone('America/Los_Angeles')
 
+# Personal email domains that are blocked for Teams features
+BLOCKED_EMAIL_DOMAINS = {
+    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com',
+    'aol.com', 'icloud.com', 'me.com', 'mail.com', 'protonmail.com',
+    'zoho.com', 'yandex.com', 'gmx.com', 'inbox.com'
+}
+
+def is_personal_email(email: str) -> bool:
+    """Check if email is from a personal/blocked domain"""
+    domain = email.lower().split('@')[-1]
+    return domain in BLOCKED_EMAIL_DOMAINS
+
 # Create the main app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
