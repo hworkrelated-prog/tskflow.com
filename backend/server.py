@@ -2533,6 +2533,138 @@ async def get_admin_stats():
         "users": [{"email": u.get("email"), "name": u.get("name"), "tier": u.get("subscription_tier", "free")} for u in users]
     }
 
+# Google Calendar OAuth Configuration
+GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+
+def get_google_flow(redirect_uri: str):
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri]
+            }
+        },
+        scopes=GOOGLE_SCOPES,
+        redirect_uri=redirect_uri
+    )
+
+@api_router.get("/auth/google/connect")
+async def google_calendar_connect(http_request: HTTPRequest, current_user: dict = Depends(get_current_user)):
+    """Initiate Google Calendar OAuth flow"""
+    redirect_uri = f"{APP_BASE_URL}/api/auth/google/callback"
+    flow = get_google_flow(redirect_uri)
+    auth_url, state = flow.authorization_url(access_type='offline', prompt='consent')
+    
+    # Store state with user_id for callback
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"auth_url": auth_url}
+
+@api_router.get("/auth/google/callback")
+async def google_calendar_callback(code: str, state: str, http_request: HTTPRequest):
+    """Handle Google OAuth callback"""
+    # Verify state
+    state_doc = await db.oauth_states.find_one({"state": state})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    
+    user_id = state_doc["user_id"]
+    await db.oauth_states.delete_one({"state": state})
+    
+    try:
+        redirect_uri = f"{APP_BASE_URL}/api/auth/google/callback"
+        flow = get_google_flow(redirect_uri)
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        
+        # Store credentials
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "google_calendar_connected": True,
+                "google_credentials": {
+                    "token": credentials.token,
+                    "refresh_token": credentials.refresh_token,
+                    "token_uri": credentials.token_uri,
+                    "client_id": credentials.client_id,
+                    "client_secret": credentials.client_secret,
+                    "expiry": credentials.expiry.isoformat() if credentials.expiry else None
+                }
+            }}
+        )
+        
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?calendar=connected")
+    except Exception as e:
+        logging.error(f"Google OAuth error: {e}")
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=oauth_failed")
+
+@api_router.delete("/auth/google/disconnect")
+async def google_calendar_disconnect(current_user: dict = Depends(get_current_user)):
+    """Disconnect Google Calendar"""
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"google_calendar_connected": False}, "$unset": {"google_credentials": ""}}
+    )
+    return {"message": "Google Calendar disconnected"}
+
+async def create_calendar_event(user_id: str, task: dict):
+    """Create a Google Calendar event for a task"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user or not user.get("google_calendar_connected") or not user.get("google_credentials"):
+        return None
+    
+    try:
+        creds_data = user["google_credentials"]
+        credentials = Credentials(
+            token=creds_data["token"],
+            refresh_token=creds_data.get("refresh_token"),
+            token_uri=creds_data["token_uri"],
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"]
+        )
+        
+        service = build('calendar', 'v3', credentials=credentials)
+        
+        # Calculate event time (30 min before due date or now + 1 hour)
+        due_date = task.get("due_date")
+        if due_date:
+            if isinstance(due_date, str):
+                start_time = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+            else:
+                start_time = due_date
+        else:
+            start_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        
+        end_time = start_time + timedelta(minutes=30)
+        
+        event = {
+            'summary': f"🔴 {task['title']}" if task.get('priority') in ['high', 'urgent'] else task['title'],
+            'description': f"{task.get('description', '')}\n\n---\nView in Tskflow: {APP_BASE_URL}/tasks/{task['id']}",
+            'start': {'dateTime': start_time.isoformat(), 'timeZone': 'UTC'},
+            'end': {'dateTime': end_time.isoformat(), 'timeZone': 'UTC'},
+            'reminders': {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]}
+        }
+        
+        created_event = service.events().insert(calendarId='primary', body=event).execute()
+        
+        # Store event ID for updates/deletion
+        await db.tasks.update_one(
+            {"id": task["id"]},
+            {"$set": {"calendar_event_id": created_event['id']}}
+        )
+        
+        return created_event['id']
+    except Exception as e:
+        logging.error(f"Calendar event creation failed: {e}")
+        return None
+
 # Include router
 app.include_router(api_router)
 
