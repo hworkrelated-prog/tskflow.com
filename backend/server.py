@@ -476,7 +476,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         subscription_tier=current_user["subscription_tier"],
         email_verified=current_user["email_verified"],
         is_team_owner=current_user.get("is_team_owner", False),
-        team_owner_email=current_user.get("team_owner_email")
+        team_owner_email=current_user.get("team_owner_email"),
+        google_calendar_connected=current_user.get("google_calendar_connected", False)
     )
 
 class UpdateProfileRequest(BaseModel):
