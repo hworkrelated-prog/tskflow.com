@@ -1051,7 +1051,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
     )
 
 @api_router.put("/tasks/{task_id}/accept")
-async def accept_task(task_id: str, current_user: dict = Depends(get_current_user)):
+async def accept_task(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -1063,6 +1063,11 @@ async def accept_task(task_id: str, current_user: dict = Depends(get_current_use
         {"id": task_id},
         {"$set": {"status": "Accepted", "accepted_at": get_pst_now().isoformat()}}
     )
+    
+    # Create calendar event for high/urgent priority tasks
+    if task.get("priority") in ["high", "urgent"]:
+        task["id"] = task_id  # Ensure id is set
+        background_tasks.add_task(create_calendar_event, current_user["id"], task)
     
     return {"message": "Task accepted"}
 
