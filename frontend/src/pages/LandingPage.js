@@ -91,13 +91,13 @@ const LandingPage = () => {
             name: "Pro",
             price: "$9",
             period: "per month",
-            description: "For individuals who need accountability",
+            description: "For power users who need more",
             features: [
                 "Everything in Free",
+                "Google Calendar auto-blocking",
                 "File & image attachments",
                 "Advanced completion tracking",
-                "Priority support",
-                "Custom task categories"
+                "Priority support"
             ],
             cta: "Start Pro",
             popular: true
@@ -110,7 +110,7 @@ const LandingPage = () => {
             features: [
                 "Everything in Pro",
                 "30-day free trial",
-                "Unlimited team members",
+                "Company email required",
                 "Performance leaderboards",
                 "Org hierarchy & reporting",
                 "Domain-based workspace",
