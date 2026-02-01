@@ -153,6 +153,7 @@ class TaskResponse(BaseModel):
     created_by_email: Optional[str] = None
     previous_completion_note: Optional[str] = None
     previous_completion_images: Optional[List[str]] = None
+    calendar_event_id: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
