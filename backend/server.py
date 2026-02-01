@@ -463,7 +463,8 @@ async def login(user: UserLogin):
             name=db_user["name"],
             email=db_user["email"],
             subscription_tier=db_user["subscription_tier"],
-            email_verified=db_user["email_verified"]
+            email_verified=db_user["email_verified"],
+            google_calendar_connected=db_user.get("google_calendar_connected", False)
         )
     )
 
