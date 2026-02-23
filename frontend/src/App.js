@@ -219,6 +219,7 @@ function App() {
                     <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/payment-success" element={<PaymentSuccessPage />} />
                     <Route path="/invite" element={<InviteHandler />} />
+                    <Route path="/admin" element={<AdminPage />} />
                     <Route
                         path="/dashboard"
                         element={
