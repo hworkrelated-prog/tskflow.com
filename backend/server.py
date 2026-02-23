@@ -2547,6 +2547,143 @@ async def get_admin_stats():
         "users": [{"email": u.get("email"), "name": u.get("name"), "tier": u.get("subscription_tier", "free")} for u in users]
     }
 
+# Admin Access Grants Management
+class AdminLogin(BaseModel):
+    password: str
+
+class AccessGrant(BaseModel):
+    type: str  # "email" or "domain"
+    value: str  # email address or domain
+    plan: str  # "pro" or "teams"
+
+@api_router.post("/admin/login")
+async def admin_login(login: AdminLogin):
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if not admin_password or login.password != admin_password:
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+    
+    # Create admin token (24 hour expiry)
+    token = jwt.encode(
+        {"sub": "admin", "exp": datetime.now(timezone.utc) + timedelta(hours=24)},
+        SECRET_KEY, algorithm=ALGORITHM
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+async def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("sub") != "admin":
+            raise HTTPException(status_code=403, detail="Admin access required")
+        return True
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+@api_router.get("/admin/access-grants")
+async def get_access_grants(admin: bool = Depends(verify_admin)):
+    """Get all email and domain access grants"""
+    grants = await db.access_grants.find({}, {"_id": 0}).to_list(None)
+    return {"grants": grants}
+
+@api_router.post("/admin/access-grants")
+async def add_access_grant(grant: AccessGrant, admin: bool = Depends(verify_admin)):
+    """Add email or domain for free Pro/Teams access"""
+    if grant.type not in ["email", "domain"]:
+        raise HTTPException(status_code=400, detail="Type must be 'email' or 'domain'")
+    if grant.plan not in ["pro", "teams"]:
+        raise HTTPException(status_code=400, detail="Plan must be 'pro' or 'teams'")
+    
+    value = grant.value.lower().strip()
+    if grant.type == "domain" and not value.startswith("@"):
+        value = "@" + value
+    
+    # Check if already exists
+    existing = await db.access_grants.find_one({"type": grant.type, "value": value})
+    if existing:
+        raise HTTPException(status_code=400, detail="Grant already exists")
+    
+    # Add grant
+    await db.access_grants.insert_one({
+        "type": grant.type,
+        "value": value,
+        "plan": grant.plan,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Upgrade existing users
+    if grant.type == "email":
+        await db.users.update_one(
+            {"email": value},
+            {"$set": {"subscription_tier": grant.plan, "granted_access": True}}
+        )
+    else:  # domain
+        domain = value.replace("@", "")
+        await db.users.update_many(
+            {"company_domain": domain},
+            {"$set": {"subscription_tier": grant.plan, "granted_access": True}}
+        )
+    
+    return {"message": f"Access grant added for {value}"}
+
+@api_router.delete("/admin/access-grants")
+async def remove_access_grant(grant: AccessGrant, admin: bool = Depends(verify_admin)):
+    """Remove email or domain access grant and downgrade users"""
+    value = grant.value.lower().strip()
+    if grant.type == "domain" and not value.startswith("@"):
+        value = "@" + value
+    
+    # Find and remove grant
+    result = await db.access_grants.delete_one({"type": grant.type, "value": value})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Grant not found")
+    
+    # Find affected users and downgrade them
+    affected_users = []
+    if grant.type == "email":
+        user = await db.users.find_one({"email": value, "granted_access": True}, {"_id": 0, "email": 1, "name": 1})
+        if user:
+            affected_users.append(user)
+            await db.users.update_one(
+                {"email": value},
+                {"$set": {"subscription_tier": "free"}, "$unset": {"granted_access": ""}}
+            )
+    else:  # domain
+        domain = value.replace("@", "")
+        users = await db.users.find({"company_domain": domain, "granted_access": True}, {"_id": 0, "email": 1, "name": 1}).to_list(None)
+        affected_users = users
+        await db.users.update_many(
+            {"company_domain": domain, "granted_access": True},
+            {"$set": {"subscription_tier": "free"}, "$unset": {"granted_access": ""}}
+        )
+    
+    # Send notification emails
+    for user in affected_users:
+        try:
+            email_content = f"""
+            <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Access Update</h1>
+                </div>
+                <div style="padding: 30px;">
+                    <p>Hi {user.get('name', 'there')},</p>
+                    <p>Your complimentary access to Tskflow has ended. You've been moved to the Free plan.</p>
+                    <p>You can continue using Tskflow with unlimited tasks, or upgrade to Pro/Teams for additional features.</p>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{APP_BASE_URL}/settings" style="background: #6366F1; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Plans</a>
+                    </div>
+                </div>
+            </body></html>
+            """
+            resend.emails.send({
+                "from": "Tskflow <notifications@notifications.unbiassly.com>",
+                "to": [user["email"]],
+                "subject": "Your Tskflow Access Has Been Updated",
+                "html": email_content
+            })
+        except Exception as e:
+            logging.error(f"Failed to send access revoked email: {e}")
+    
+    return {"message": f"Access revoked for {value}", "affected_users": len(affected_users)}
+
 # Google Calendar OAuth Configuration
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar.events']
 
