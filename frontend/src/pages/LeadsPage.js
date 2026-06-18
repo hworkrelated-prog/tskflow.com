@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth, API } from '@/App';
+import { API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Search, Phone, Mail, Building2, Trash2, Pencil, Upload, Target, Linkedin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, Trash2, Pencil, Upload, Target, Linkedin, ChevronDown, ChevronUp, Lock, Sparkles, Loader2 } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -25,7 +25,6 @@ const STATUS_STYLES = {
 
 const EMPTY_LEAD = { name: '', title: '', company: '', email: '', phone: '', region: '', industry: '', persona: '', linkedin: '', status: 'To Call', notes: '' };
 
-// Minimal CSV parser supporting quoted fields
 const parseCSV = (text) => {
     const rows = [];
     let row = [], field = '', inQuotes = false;
@@ -47,14 +46,26 @@ const parseCSV = (text) => {
 };
 
 const LeadsPage = () => {
-    const { user } = useAuth();
     const navigate = useNavigate();
     const fileRef = useRef(null);
+
+    // Admin auth gate
+    const [authed, setAuthed] = useState(!!localStorage.getItem('admin_token'));
+    const [password, setPassword] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+
+    const cfg = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } });
+    const handleAuthError = (error) => {
+        if (error?.response?.status === 401) {
+            localStorage.removeItem('admin_token');
+            setAuthed(false);
+        }
+    };
 
     const [data, setData] = useState({ leads: [], counts: {}, total: 0, statuses: [] });
     const [loading, setLoading] = useState(true);
     const [icp, setIcp] = useState(null);
-    const [showIcp, setShowIcp] = useState(true);
+    const [showIcp, setShowIcp] = useState(false);
 
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -64,15 +75,38 @@ const LeadsPage = () => {
     const [leadForm, setLeadForm] = useState(EMPTY_LEAD);
     const [saving, setSaving] = useState(false);
 
+    // Apollo search
+    const [showApollo, setShowApollo] = useState(false);
+    const [apolloForm, setApolloForm] = useState({ titles: 'Operations Manager', locations: 'Toronto, Canada', employees: '' });
+    const [apolloResults, setApolloResults] = useState([]);
+    const [apolloLoading, setApolloLoading] = useState(false);
+    const [apolloNotice, setApolloNotice] = useState(null);
+    const [savingIdx, setSavingIdx] = useState(null);
+
+    const handleLogin = async () => {
+        if (!password.trim()) { toast.error('Enter the admin password'); return; }
+        setAuthLoading(true);
+        try {
+            const res = await axios.post(`${API}/admin/login`, { password });
+            localStorage.setItem('admin_token', res.data.access_token);
+            setAuthed(true);
+            setPassword('');
+        } catch (error) {
+            toast.error('Invalid admin password');
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
     const fetchLeads = async () => {
         try {
             const params = new URLSearchParams();
             if (search) params.append('q', search);
             if (statusFilter !== 'all') params.append('status', statusFilter);
-            const res = await axios.get(`${API}/leads?${params.toString()}`);
+            const res = await axios.get(`${API}/leads?${params.toString()}`, cfg());
             setData(res.data);
         } catch (error) {
-            toast.error('Failed to load leads');
+            handleAuthError(error);
         } finally {
             setLoading(false);
         }
@@ -80,16 +114,17 @@ const LeadsPage = () => {
 
     const fetchIcp = async () => {
         try {
-            const res = await axios.get(`${API}/leads/icp`);
+            const res = await axios.get(`${API}/leads/icp`, cfg());
             setIcp(res.data);
-        } catch (error) { /* ignore */ }
+        } catch (error) { handleAuthError(error); }
     };
 
-    useEffect(() => { fetchIcp(); }, []);
+    useEffect(() => { if (authed) fetchIcp(); }, [authed]);
     useEffect(() => {
+        if (!authed) return;
         const t = setTimeout(fetchLeads, 250);
         return () => clearTimeout(t);
-    }, [search, statusFilter]);
+    }, [search, statusFilter, authed]);
 
     const openCreate = () => { setEditingId(null); setLeadForm(EMPTY_LEAD); setShowLeadModal(true); };
     const openEdit = (lead) => { setEditingId(lead.id); setLeadForm({ ...EMPTY_LEAD, ...lead }); setShowLeadModal(true); };
@@ -99,15 +134,16 @@ const LeadsPage = () => {
         setSaving(true);
         try {
             if (editingId) {
-                await axios.put(`${API}/leads/${editingId}`, leadForm);
+                await axios.put(`${API}/leads/${editingId}`, leadForm, cfg());
                 toast.success('Lead updated');
             } else {
-                await axios.post(`${API}/leads`, leadForm);
+                await axios.post(`${API}/leads`, leadForm, cfg());
                 toast.success('Lead added');
             }
             setShowLeadModal(false);
             fetchLeads();
         } catch (error) {
+            handleAuthError(error);
             toast.error(getErrorMessage(error, 'Failed to save lead'));
         } finally {
             setSaving(false);
@@ -116,21 +152,17 @@ const LeadsPage = () => {
 
     const handleDelete = async (id) => {
         try {
-            await axios.delete(`${API}/leads/${id}`);
+            await axios.delete(`${API}/leads/${id}`, cfg());
             toast.success('Lead removed');
             fetchLeads();
-        } catch (error) {
-            toast.error('Failed to delete lead');
-        }
+        } catch (error) { handleAuthError(error); toast.error('Failed to delete lead'); }
     };
 
     const updateStatus = async (lead, status) => {
         try {
-            await axios.put(`${API}/leads/${lead.id}`, { status });
+            await axios.put(`${API}/leads/${lead.id}`, { status }, cfg());
             fetchLeads();
-        } catch (error) {
-            toast.error('Failed to update status');
-        }
+        } catch (error) { handleAuthError(error); toast.error('Failed to update status'); }
     };
 
     const handleImport = async (e) => {
@@ -143,28 +175,106 @@ const LeadsPage = () => {
             const header = rows[0].map(h => h.trim().toLowerCase());
             const idx = (name) => header.indexOf(name);
             const leads = rows.slice(1).map(r => ({
-                name: r[idx('name')] || '',
-                title: r[idx('title')] || '',
-                company: r[idx('company')] || '',
-                email: r[idx('email')] || '',
-                phone: r[idx('phone')] || '',
-                region: r[idx('region')] || '',
-                industry: r[idx('industry')] || '',
-                persona: r[idx('persona')] || '',
-                linkedin: r[idx('linkedin')] || '',
-                status: r[idx('status')] || 'To Call',
-                notes: r[idx('notes')] || ''
+                name: r[idx('name')] || '', title: r[idx('title')] || '', company: r[idx('company')] || '',
+                email: r[idx('email')] || '', phone: r[idx('phone')] || '', region: r[idx('region')] || '',
+                industry: r[idx('industry')] || '', persona: r[idx('persona')] || '', linkedin: r[idx('linkedin')] || '',
+                status: r[idx('status')] || 'To Call', notes: r[idx('notes')] || ''
             })).filter(l => l.name.trim());
             if (leads.length === 0) { toast.error('No valid rows found. Ensure a "name" column exists.'); return; }
-            const res = await axios.post(`${API}/leads/import`, { leads });
+            const res = await axios.post(`${API}/leads/import`, { leads }, cfg());
             toast.success(`Imported ${res.data.imported} lead(s)`);
             fetchLeads();
         } catch (error) {
+            handleAuthError(error);
             toast.error('Failed to import CSV');
         } finally {
             if (fileRef.current) fileRef.current.value = '';
         }
     };
+
+    const runApolloSearch = async () => {
+        setApolloLoading(true);
+        setApolloNotice(null);
+        setApolloResults([]);
+        try {
+            const body = {
+                person_titles: apolloForm.titles.split(',').map(s => s.trim()).filter(Boolean),
+                person_locations: apolloForm.locations.split(',').map(s => s.trim()).filter(Boolean),
+                organization_num_employees_ranges: apolloForm.employees.split(',').map(s => s.trim()).filter(Boolean),
+                per_page: 25,
+                page: 1
+            };
+            const res = await axios.post(`${API}/leads/apollo-search`, body, cfg());
+            setApolloResults(res.data.results || []);
+            if ((res.data.results || []).length === 0) setApolloNotice({ type: 'empty', msg: 'No matches found. Try broadening your titles or locations.' });
+        } catch (error) {
+            handleAuthError(error);
+            if (error?.response?.status === 402) {
+                setApolloNotice({ type: 'plan', msg: error.response.data.detail });
+            } else {
+                setApolloNotice({ type: 'error', msg: getErrorMessage(error, 'Apollo search failed') });
+            }
+        } finally {
+            setApolloLoading(false);
+        }
+    };
+
+    const saveApolloLead = async (person, index) => {
+        setSavingIdx(index);
+        try {
+            const body = {
+                apollo_person_id: person.apollo_person_id,
+                first_name: person.first_name,
+                last_name: person.last_name,
+                name: person.name,
+                title: person.title,
+                organization_name: person.company,
+                domain: person.domain,
+                linkedin_url: person.linkedin,
+                region: person.region,
+                industry: person.industry,
+                reveal: true
+            };
+            const res = await axios.post(`${API}/leads/apollo-save`, body, cfg());
+            toast.success(res.data.phone_pending ? `${person.name} saved — phone unlocking (arrives shortly)` : `${person.name} saved to your leads`);
+            fetchLeads();
+        } catch (error) {
+            handleAuthError(error);
+            toast.error(getErrorMessage(error, 'Failed to save lead'));
+        } finally {
+            setSavingIdx(null);
+        }
+    };
+
+    // ----- Admin login gate -----
+    if (!authed) {
+        return (
+            <div data-testid="leads-login" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6">
+                <Card className="w-full max-w-md rounded-2xl border-white/10 bg-white/95 backdrop-blur">
+                    <CardHeader className="text-center space-y-2">
+                        <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center">
+                            <Lock className="w-7 h-7 text-white" />
+                        </div>
+                        <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Prospecting Access</CardTitle>
+                        <CardDescription>Private sales tool — enter the admin password to continue.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="admin-pass">Admin Password</Label>
+                            <Input id="admin-pass" data-testid="leads-password-input" type="password" value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleLogin(); }}
+                                placeholder="Enter admin password" className="rounded-xl" />
+                        </div>
+                        <Button data-testid="leads-login-button" onClick={handleLogin} disabled={authLoading} className="w-full rounded-full">
+                            {authLoading ? 'Verifying...' : 'Unlock'}
+                        </Button>
+                        <button onClick={() => navigate('/')} className="w-full text-sm text-muted-foreground hover:text-foreground">Back to Tskflow</button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
 
     const statuses = data.statuses?.length ? data.statuses : ['To Call', 'Called', 'Interested', 'Won', 'Lost'];
 
@@ -172,30 +282,87 @@ const LeadsPage = () => {
         <div data-testid="leads-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
             <header className="sticky top-0 z-40 glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Button data-testid="leads-back-button" variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="rounded-full">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                        <div>
-                            <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                <Target className="w-6 h-6 text-indigo-600" /> Prospecting
-                            </h1>
-                            <p className="text-sm text-muted-foreground">Your live repository of people to sell Tskflow to</p>
-                        </div>
+                    <div>
+                        <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                            <Target className="w-6 h-6 text-indigo-600" /> Prospecting
+                        </h1>
+                        <p className="text-sm text-muted-foreground">Your private repository of people to sell Tskflow to</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} className="hidden" data-testid="csv-import-input" />
+                        <Button data-testid="apollo-toggle-button" variant={showApollo ? 'default' : 'outline'} onClick={() => setShowApollo(!showApollo)} className="rounded-full gap-2">
+                            <Sparkles className="w-4 h-4" /> Find Leads (Apollo)
+                        </Button>
                         <Button data-testid="import-csv-button" variant="outline" onClick={() => fileRef.current?.click()} className="rounded-full gap-2">
                             <Upload className="w-4 h-4" /> Import CSV
                         </Button>
                         <Button data-testid="add-lead-button" onClick={openCreate} className="rounded-full gap-2">
                             <Plus className="w-4 h-4" /> Add Lead
                         </Button>
+                        <Button variant="ghost" onClick={() => { localStorage.removeItem('admin_token'); setAuthed(false); }} className="rounded-full text-sm">Logout</Button>
                     </div>
                 </div>
             </header>
 
             <main className="container mx-auto px-6 py-8">
+                {/* Apollo search panel */}
+                <AnimatePresence>
+                    {showApollo && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-6">
+                            <Card className="rounded-2xl border-2 border-indigo-200">
+                                <CardHeader>
+                                    <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" /> Find real prospects via Apollo</CardTitle>
+                                    <CardDescription>Search Apollo&apos;s database, then save + unlock email &amp; phone for the ones you want to call.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="grid md:grid-cols-3 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label>Job titles (comma-separated)</Label>
+                                            <Input data-testid="apollo-titles" value={apolloForm.titles} onChange={(e) => setApolloForm({ ...apolloForm, titles: e.target.value })} placeholder="Operations Manager, Team Lead" className="rounded-xl" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label>Locations (comma-separated)</Label>
+                                            <Input data-testid="apollo-locations" value={apolloForm.locations} onChange={(e) => setApolloForm({ ...apolloForm, locations: e.target.value })} placeholder="Toronto, Canada, United States" className="rounded-xl" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label>Company size (e.g. 11,50)</Label>
+                                            <Input data-testid="apollo-employees" value={apolloForm.employees} onChange={(e) => setApolloForm({ ...apolloForm, employees: e.target.value })} placeholder="11,50" className="rounded-xl" />
+                                        </div>
+                                    </div>
+                                    <Button data-testid="apollo-search-button" onClick={runApolloSearch} disabled={apolloLoading} className="rounded-full gap-2">
+                                        {apolloLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Searching...</> : <><Search className="w-4 h-4" /> Search Apollo</>}
+                                    </Button>
+
+                                    {apolloNotice && (
+                                        <div data-testid="apollo-notice" className={`rounded-xl p-4 text-sm ${apolloNotice.type === 'plan' ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-slate-50 border text-slate-600'}`}>
+                                            {apolloNotice.type === 'plan' && <p className="font-semibold mb-1">Apollo API access required</p>}
+                                            {apolloNotice.msg}
+                                            {apolloNotice.type === 'plan' && <p className="mt-2">Tip: until then, use <strong>Import CSV</strong> with an Apollo/LinkedIn export, or add leads manually.</p>}
+                                        </div>
+                                    )}
+
+                                    {apolloResults.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm text-muted-foreground">{apolloResults.length} results — click &quot;Save &amp; unlock&quot; to add to your leads.</p>
+                                            {apolloResults.map((p, i) => (
+                                                <div key={p.apollo_person_id || i} data-testid={`apollo-result-${i}`} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-white">
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium truncate">{p.name} {p.title && <span className="text-muted-foreground font-normal">· {p.title}</span>}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{[p.company, p.region, p.industry].filter(Boolean).join(' · ')}</p>
+                                                    </div>
+                                                    <Button data-testid={`apollo-save-${i}`} size="sm" variant="outline" onClick={() => saveApolloLead(p, i)} disabled={savingIdx === i} className="rounded-full shrink-0">
+                                                        {savingIdx === i ? 'Saving...' : 'Save & unlock'}
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* ICP Guide */}
                 {icp && (
                     <Card className="mb-6 border-2 border-indigo-100 rounded-2xl overflow-hidden">
@@ -217,39 +384,26 @@ const LeadsPage = () => {
                                             <p className="text-sm font-semibold mb-2 text-indigo-700">Best-fit personas</p>
                                             <ul className="space-y-2">
                                                 {icp.personas.map((p) => (
-                                                    <li key={p.title} className="text-sm">
-                                                        <span className="font-medium">{p.title}</span>
-                                                        <span className="text-muted-foreground"> — {p.why}</span>
-                                                    </li>
+                                                    <li key={p.title} className="text-sm"><span className="font-medium">{p.title}</span><span className="text-muted-foreground"> — {p.why}</span></li>
                                                 ))}
                                             </ul>
                                         </div>
                                         <div className="space-y-4">
                                             <div>
                                                 <p className="text-sm font-semibold mb-2 text-indigo-700">Industries</p>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {icp.industries.map((i) => <Badge key={i} variant="outline" className="rounded-full font-normal">{i}</Badge>)}
-                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">{icp.industries.map((i) => <Badge key={i} variant="outline" className="rounded-full font-normal">{i}</Badge>)}</div>
                                             </div>
                                             <div>
                                                 <p className="text-sm font-semibold mb-2 text-indigo-700">Regions (US & Canada)</p>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {icp.regions.map((r) => <Badge key={r} variant="outline" className="rounded-full font-normal">{r}</Badge>)}
-                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">{icp.regions.map((r) => <Badge key={r} variant="outline" className="rounded-full font-normal">{r}</Badge>)}</div>
                                             </div>
                                             <div>
                                                 <p className="text-sm font-semibold mb-2 text-indigo-700">Search strings to copy</p>
-                                                <div className="space-y-1">
-                                                    {icp.search_queries.map((q) => (
-                                                        <code key={q} className="block text-xs bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700">{q}</code>
-                                                    ))}
-                                                </div>
+                                                <div className="space-y-1">{icp.search_queries.map((q) => <code key={q} className="block text-xs bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700">{q}</code>)}</div>
                                             </div>
                                             <div>
                                                 <p className="text-sm font-semibold mb-2 text-indigo-700">Where to find them</p>
-                                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-0.5">
-                                                    {icp.where_to_find.map((w) => <li key={w}>{w}</li>)}
-                                                </ul>
+                                                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-0.5">{icp.where_to_find.map((w) => <li key={w}>{w}</li>)}</ul>
                                             </div>
                                         </div>
                                     </CardContent>
@@ -287,7 +441,7 @@ const LeadsPage = () => {
                         <CardContent className="py-16 text-center">
                             <Target className="w-10 h-10 text-indigo-300 mx-auto mb-3" />
                             <p className="font-semibold mb-1">No leads yet</p>
-                            <p className="text-sm text-muted-foreground mb-4">Add your first prospect or import a CSV from LinkedIn / Apollo to start your repository.</p>
+                            <p className="text-sm text-muted-foreground mb-4">Use &quot;Find Leads (Apollo)&quot;, import a CSV, or add a prospect manually to start your repository.</p>
                             <div className="flex items-center justify-center gap-2">
                                 <Button onClick={openCreate} className="rounded-full gap-2"><Plus className="w-4 h-4" /> Add Lead</Button>
                                 <Button variant="outline" onClick={() => fileRef.current?.click()} className="rounded-full gap-2"><Upload className="w-4 h-4" /> Import CSV</Button>
@@ -307,7 +461,7 @@ const LeadsPage = () => {
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 flex-wrap text-sm text-muted-foreground">
                                                 {lead.company && <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{lead.company}</span>}
-                                                {lead.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{lead.phone}</span>}
+                                                {lead.phone ? <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-indigo-600 hover:underline"><Phone className="w-3.5 h-3.5" />{lead.phone}</a> : null}
                                                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{lead.email}</span>}
                                                 {lead.linkedin && <a href={lead.linkedin} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600 hover:underline"><Linkedin className="w-3.5 h-3.5" />Profile</a>}
                                             </div>
@@ -322,12 +476,8 @@ const LeadsPage = () => {
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
                                             <Select value={lead.status} onValueChange={(v) => updateStatus(lead, v)}>
-                                                <SelectTrigger data-testid={`lead-status-${lead.id}`} className={`rounded-full h-8 w-[130px] border ${STATUS_STYLES[lead.status] || ''}`}>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {statuses.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                                </SelectContent>
+                                                <SelectTrigger data-testid={`lead-status-${lead.id}`} className={`rounded-full h-8 w-[130px] border ${STATUS_STYLES[lead.status] || ''}`}><SelectValue /></SelectTrigger>
+                                                <SelectContent>{statuses.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                                             </Select>
                                             <Button data-testid={`edit-lead-${lead.id}`} variant="ghost" size="icon" onClick={() => openEdit(lead)} className="rounded-full"><Pencil className="w-4 h-4" /></Button>
                                             <Button data-testid={`delete-lead-${lead.id}`} variant="ghost" size="icon" onClick={() => handleDelete(lead.id)} className="rounded-full text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
@@ -349,67 +499,33 @@ const LeadsPage = () => {
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Name *</Label>
-                                <Input data-testid="lead-name-input" value={leadForm.name} onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })} placeholder="Jane Smith" className="rounded-xl" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label>Title</Label>
-                                <Input data-testid="lead-title-input" value={leadForm.title} onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })} placeholder="Operations Manager" className="rounded-xl" />
-                            </div>
+                            <div className="space-y-1.5"><Label>Name *</Label><Input data-testid="lead-name-input" value={leadForm.name} onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })} placeholder="Jane Smith" className="rounded-xl" /></div>
+                            <div className="space-y-1.5"><Label>Title</Label><Input data-testid="lead-title-input" value={leadForm.title} onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })} placeholder="Operations Manager" className="rounded-xl" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Company</Label>
-                                <Input data-testid="lead-company-input" value={leadForm.company} onChange={(e) => setLeadForm({ ...leadForm, company: e.target.value })} className="rounded-xl" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label>Phone</Label>
-                                <Input data-testid="lead-phone-input" value={leadForm.phone} onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })} placeholder="+1 ..." className="rounded-xl" />
-                            </div>
+                            <div className="space-y-1.5"><Label>Company</Label><Input data-testid="lead-company-input" value={leadForm.company} onChange={(e) => setLeadForm({ ...leadForm, company: e.target.value })} className="rounded-xl" /></div>
+                            <div className="space-y-1.5"><Label>Phone</Label><Input data-testid="lead-phone-input" value={leadForm.phone} onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })} placeholder="+1 ..." className="rounded-xl" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Email</Label>
-                                <Input data-testid="lead-email-input" value={leadForm.email} onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })} className="rounded-xl" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label>LinkedIn URL</Label>
-                                <Input data-testid="lead-linkedin-input" value={leadForm.linkedin} onChange={(e) => setLeadForm({ ...leadForm, linkedin: e.target.value })} className="rounded-xl" />
-                            </div>
+                            <div className="space-y-1.5"><Label>Email</Label><Input data-testid="lead-email-input" value={leadForm.email} onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })} className="rounded-xl" /></div>
+                            <div className="space-y-1.5"><Label>LinkedIn URL</Label><Input data-testid="lead-linkedin-input" value={leadForm.linkedin} onChange={(e) => setLeadForm({ ...leadForm, linkedin: e.target.value })} className="rounded-xl" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Region</Label>
-                                <Input data-testid="lead-region-input" value={leadForm.region} onChange={(e) => setLeadForm({ ...leadForm, region: e.target.value })} placeholder="Toronto, CA" className="rounded-xl" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label>Industry</Label>
-                                <Input data-testid="lead-industry-input" value={leadForm.industry} onChange={(e) => setLeadForm({ ...leadForm, industry: e.target.value })} placeholder="SaaS" className="rounded-xl" />
-                            </div>
+                            <div className="space-y-1.5"><Label>Region</Label><Input data-testid="lead-region-input" value={leadForm.region} onChange={(e) => setLeadForm({ ...leadForm, region: e.target.value })} placeholder="Toronto, CA" className="rounded-xl" /></div>
+                            <div className="space-y-1.5"><Label>Industry</Label><Input data-testid="lead-industry-input" value={leadForm.industry} onChange={(e) => setLeadForm({ ...leadForm, industry: e.target.value })} placeholder="SaaS" className="rounded-xl" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Persona</Label>
-                                <Input data-testid="lead-persona-input" value={leadForm.persona} onChange={(e) => setLeadForm({ ...leadForm, persona: e.target.value })} placeholder="Team Lead" className="rounded-xl" />
-                            </div>
+                            <div className="space-y-1.5"><Label>Persona</Label><Input data-testid="lead-persona-input" value={leadForm.persona} onChange={(e) => setLeadForm({ ...leadForm, persona: e.target.value })} placeholder="Team Lead" className="rounded-xl" /></div>
                             <div className="space-y-1.5">
                                 <Label>Status</Label>
                                 <Select value={leadForm.status} onValueChange={(v) => setLeadForm({ ...leadForm, status: v })}>
                                     <SelectTrigger data-testid="lead-status-select" className="rounded-xl"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {['To Call', 'Called', 'Interested', 'Won', 'Lost'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                    </SelectContent>
+                                    <SelectContent>{['To Call', 'Called', 'Interested', 'Won', 'Lost'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Notes</Label>
-                            <Textarea data-testid="lead-notes-input" value={leadForm.notes} onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })} rows={3} placeholder="Pitch angle, pain points, next step..." className="rounded-xl" />
-                        </div>
-                        <Button data-testid="save-lead-button" onClick={handleSave} disabled={saving} className="w-full rounded-full">
-                            {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Lead'}
-                        </Button>
+                        <div className="space-y-1.5"><Label>Notes</Label><Textarea data-testid="lead-notes-input" value={leadForm.notes} onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })} rows={3} placeholder="Pitch angle, pain points, next step..." className="rounded-xl" /></div>
+                        <Button data-testid="save-lead-button" onClick={handleSave} disabled={saving} className="w-full rounded-full">{saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Lead'}</Button>
                     </div>
                 </DialogContent>
             </Dialog>

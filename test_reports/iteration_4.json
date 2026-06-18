@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 4: validated admin-gated Leads/Prospecting + Apollo free-plan 402 behavior + groups + task regression. Updated /app/tests/test_groups_and_leads.py with new admin contract: leads endpoints now obtain a token via POST /api/admin/login {password} and use Bearer admin token; user/no-token requests must return 401/403. Pytest 26/26 passed. Frontend /leads admin gate fully validated end-to-end: password screen, login, add/edit/status-change/delete lead, Apollo search panel showing amber 'Apollo API access required' notice (apollo-notice). Confirmed Prospecting nav is removed from the TaskHub dashboard (no Prospecting text, no /leads link, no Target button) for the Pro user.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend Groups (9): list, free-user 403 create+list, dedupe, duplicate-name 400, empty-name 400, update+delete, teams create, delete non-existent 404",
+    "Backend Leads admin-gating (6): admin login OK, admin login wrong-password 401, GET /api/leads no-token 401/403, GET /api/leads with user token 401/403, POST /api/leads with user token 401/403, GET /api/leads/icp with user token 401/403",
+    "Backend Leads admin CRUD (7): ICP with admin 200, create+persist via GET, empty name 400, import skips empty + status fallback, update status valid + invalid 400, status counts all 5 buckets + ?status filter, delete then 404",
+    "Backend Apollo (3): apollo-search requires admin (user token 401/403), apollo-search no token 401/403, apollo-search with admin token returns HTTP 402 with 'upgrade/Apollo/plan' detail message (free plan)",
+    "Backend Regression: POST /api/tasks works for Pro user without note/category",
+    "Frontend /leads gate: leads-password-input + leads-login-button visible before login; entering admin password unlocks leads-page",
+    "Frontend /leads CRUD: add lead via dialog, search filter, change status to Won via lead-status-<id> select, edit via edit-lead-<id>, delete via delete-lead-<id> + native confirm — all work",
+    "Frontend Apollo: apollo-toggle-button opens panel, apollo-search-button triggers POST that returns 402, and apollo-notice (data-testid) shows with amber class and text 'Apollo API access required ... Upgrade to a paid Apollo plan (Basic or higher) at app.apollo.io to enable live prospect search'",
+    "Frontend Dashboard nav: Pro user dashboard /dashboard contains NO 'Prospecting'/'Target' text and NO link to /leads — confirmed removed from TaskHub.js"
+  ],
+  "test_report_links": [
+    "/app/tests/test_groups_and_leads.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "(Carry-over from iter3, still present in TaskHub.js around lines 576-577) Hydration warning: <Checkbox> nested inside <Button data-testid='select-tasks-button'> — '<button> cannot be a descendant of <button>'. Replace inner Checkbox with a non-button icon (e.g., CheckSquare/Check from lucide).",
+    "Optional: enforce a max items cap on POST /api/leads/import (e.g., 5000) to guard against unbounded payloads (admin-only now but still good hygiene)."
+  ],
+  "critical_code_review_comments": [
+    "Leads admin gating implemented consistently via Depends(verify_admin) on all /api/leads* + apollo-search + apollo-save (server.py lines 2991-3217). owner_id is hardcoded to ADMIN_LEADS_OWNER='admin' so per-user isolation is no longer relevant — single-tenant by design.",
+    "verify_admin returns 401 on JWT decode failure and 403 on non-admin sub. /api/leads with no Authorization header returns 403 (FastAPI HTTPBearer default) — that's fine and matches the tests' 401/403 tolerance.",
+    "apollo_search correctly maps Apollo's 403 'API_INACCESSIBLE' to HTTP 402 with a clear upgrade-Apollo-plan message; LeadsPage.js reads this and shows the amber apollo-notice. Good UX.",
+    "TaskHub.js is ~940 lines (over the 700-line guideline) — still recommended to split New Task and Manage Groups modals into separate components (carry-over).",
+    "Standalone /leads route is correctly a plain Route (not ProtectedRoute) in App.js line 224; the page does its own admin password gate via localStorage 'admin_token' + verify-admin-token call. Correct."
+  ],
+  "updated_files": [
+    "/app/tests/test_groups_and_leads.py"
+  ],
+  "success_rate": {
+    "backend": "100% (26/26 pytest tests passed)",
+    "frontend": "100% on /leads admin-gate + CRUD + Apollo notice + dashboard nav removal"
+  },
+  "test_credentials": "Admin password: 3369434114Ha. (via POST /api/admin/login). Normal users: prouser@acmecorp.com / owner@acmecorp.com / freeuser@example.org with Password123.",
+  "seed_data_creation": "All test data created with TEST_ prefix and cleaned up via DELETE in each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Pytest file at /app/tests/test_groups_and_leads.py. Run with: REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2) pytest tests/test_groups_and_leads.py -v. Apollo live search/enrichment cannot be exercised — the free Apollo plan returns 'API_INACCESSIBLE'; backend maps that to HTTP 402 with an upgrade message and the LeadsPage shows an amber apollo-notice. Do not expect live Apollo results. For UI tests on the standalone /leads page, the password gate (data-testid leads-password-input / leads-login-button) accepts the admin password and unlocks data-testid leads-page; native window.confirm is used on delete (use page.once('dialog', lambda d: d.accept())).",
+  "rca of the issue": "N/A — no bugs found; this iteration only validated a contract change (leads endpoints moved from per-user auth to admin-only auth) and the Apollo 402 behavior."
+}

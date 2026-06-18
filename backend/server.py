@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import asyncio
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from typing import List, Optional, Dict
@@ -2984,19 +2985,21 @@ class LeadUpdate(BaseModel):
 class LeadsImport(BaseModel):
     leads: List[LeadCreate]
 
+ADMIN_LEADS_OWNER = "admin"
+
 @api_router.get("/leads/icp")
-async def get_icp_guide(current_user: dict = Depends(get_current_user)):
+async def get_icp_guide(admin: bool = Depends(verify_admin)):
     return ICP_GUIDE
 
 @api_router.get("/leads")
 async def list_leads(
-    current_user: dict = Depends(get_current_user),
+    admin: bool = Depends(verify_admin),
     q: Optional[str] = None,
     status: Optional[str] = None,
     region: Optional[str] = None,
     persona: Optional[str] = None
 ):
-    query = {"owner_id": current_user["id"]}
+    query = {"owner_id": ADMIN_LEADS_OWNER}
     if status and status != "all":
         query["status"] = status
     if region and region != "all":
@@ -3009,10 +3012,9 @@ async def list_leads(
             {"name": regex}, {"company": regex}, {"title": regex},
             {"email": regex}, {"industry": regex}, {"notes": regex}
         ]
-    leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
-    # Status counts (unfiltered by status, but respect owner)
+    leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
     pipeline = [
-        {"$match": {"owner_id": current_user["id"]}},
+        {"$match": {"owner_id": ADMIN_LEADS_OWNER}},
         {"$group": {"_id": "$status", "count": {"$sum": 1}}}
     ]
     raw_counts = await db.leads.aggregate(pipeline).to_list(50)
@@ -3025,14 +3027,14 @@ async def list_leads(
     return {"leads": leads, "counts": counts, "total": total, "statuses": LEAD_STATUSES}
 
 @api_router.post("/leads")
-async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current_user)):
+async def create_lead(lead: LeadCreate, admin: bool = Depends(verify_admin)):
     if not (lead.name or "").strip():
         raise HTTPException(status_code=400, detail="Lead name is required")
     status = lead.status if lead.status in LEAD_STATUSES else "To Call"
     now = get_pst_now().isoformat()
     lead_doc = {
         "id": str(uuid.uuid4()),
-        "owner_id": current_user["id"],
+        "owner_id": ADMIN_LEADS_OWNER,
         "name": lead.name.strip(),
         "title": lead.title,
         "company": lead.company,
@@ -3052,7 +3054,7 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
     return lead_doc
 
 @api_router.post("/leads/import")
-async def import_leads(payload: LeadsImport, current_user: dict = Depends(get_current_user)):
+async def import_leads(payload: LeadsImport, admin: bool = Depends(verify_admin)):
     if len(payload.leads) > 5000:
         raise HTTPException(status_code=400, detail="Import is limited to 5000 leads at a time")
     now = get_pst_now().isoformat()
@@ -3063,7 +3065,7 @@ async def import_leads(payload: LeadsImport, current_user: dict = Depends(get_cu
         status = lead.status if lead.status in LEAD_STATUSES else "To Call"
         docs.append({
             "id": str(uuid.uuid4()),
-            "owner_id": current_user["id"],
+            "owner_id": ADMIN_LEADS_OWNER,
             "name": lead.name.strip(),
             "title": lead.title,
             "company": lead.company,
@@ -3083,8 +3085,8 @@ async def import_leads(payload: LeadsImport, current_user: dict = Depends(get_cu
     return {"imported": len(docs)}
 
 @api_router.put("/leads/{lead_id}")
-async def update_lead(lead_id: str, update: LeadUpdate, current_user: dict = Depends(get_current_user)):
-    lead = await db.leads.find_one({"id": lead_id, "owner_id": current_user["id"]}, {"_id": 0})
+async def update_lead(lead_id: str, update: LeadUpdate, admin: bool = Depends(verify_admin)):
+    lead = await db.leads.find_one({"id": lead_id, "owner_id": ADMIN_LEADS_OWNER}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     set_data = {k: v for k, v in update.model_dump().items() if v is not None}
@@ -3096,11 +3098,216 @@ async def update_lead(lead_id: str, update: LeadUpdate, current_user: dict = Dep
     return updated
 
 @api_router.delete("/leads/{lead_id}")
-async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.leads.delete_one({"id": lead_id, "owner_id": current_user["id"]})
+async def delete_lead(lead_id: str, admin: bool = Depends(verify_admin)):
+    result = await db.leads.delete_one({"id": lead_id, "owner_id": ADMIN_LEADS_OWNER})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"message": "Lead deleted"}
+
+
+# ==========================================================================
+# APOLLO.IO integration (admin-only) - search real prospects + unlock contact info
+# ==========================================================================
+
+APOLLO_BASE_URL = "https://api.apollo.io/api/v1"
+
+class ApolloSearchRequest(BaseModel):
+    person_titles: List[str] = []
+    person_locations: List[str] = []
+    organization_num_employees_ranges: List[str] = []
+    page: int = 1
+    per_page: int = 25
+
+class ApolloSaveRequest(BaseModel):
+    # Identifying fields from a search result used to enrich + save
+    apollo_person_id: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    name: Optional[str] = None
+    title: Optional[str] = None
+    organization_name: Optional[str] = None
+    domain: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    region: Optional[str] = None
+    industry: Optional[str] = None
+    reveal: bool = True  # unlock email + phone (consumes Apollo credits)
+
+def _apollo_headers():
+    api_key = os.getenv("APOLLO_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Apollo API key not configured")
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache",
+        "X-Api-Key": api_key,
+    }
+
+def _normalize_apollo_person(p: dict) -> dict:
+    org = p.get("organization") or {}
+    city = p.get("city")
+    state = p.get("state")
+    country = p.get("country")
+    region = ", ".join([x for x in [city, state, country] if x])
+    email = p.get("email")
+    if email and "email_not_unlocked" in email:
+        email = None  # masked
+    return {
+        "apollo_person_id": p.get("id"),
+        "first_name": p.get("first_name"),
+        "last_name": p.get("last_name"),
+        "name": p.get("name") or " ".join([x for x in [p.get("first_name"), p.get("last_name")] if x]),
+        "title": p.get("title"),
+        "company": org.get("name"),
+        "domain": org.get("primary_domain") or org.get("website_url"),
+        "industry": org.get("industry") or p.get("industry"),
+        "linkedin": p.get("linkedin_url"),
+        "region": region,
+        "email": email,
+        "phone": None,
+    }
+
+@api_router.post("/leads/apollo-search")
+async def apollo_search(req: ApolloSearchRequest, admin: bool = Depends(verify_admin)):
+    payload = {
+        "page": max(1, req.page),
+        "per_page": min(100, max(1, req.per_page)),
+    }
+    if req.person_titles:
+        payload["person_titles"] = req.person_titles
+    if req.person_locations:
+        payload["person_locations"] = req.person_locations
+    if req.organization_num_employees_ranges:
+        payload["organization_num_employees_ranges"] = req.organization_num_employees_ranges
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{APOLLO_BASE_URL}/mixed_people/api_search", headers=_apollo_headers(), json=payload)
+    except httpx.RequestError as e:
+        logging.error(f"Apollo search request error: {e}")
+        raise HTTPException(status_code=502, detail="Could not reach Apollo")
+
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Apollo rejected the API key")
+    if resp.status_code == 403:
+        # Free Apollo plans cannot use the search/enrichment API
+        try:
+            err = resp.json()
+        except Exception:
+            err = {}
+        if err.get("error_code") == "API_INACCESSIBLE":
+            raise HTTPException(status_code=402, detail="Your Apollo plan does not include API access. Upgrade to a paid Apollo plan (Basic or higher) at app.apollo.io to enable live prospect search.")
+        raise HTTPException(status_code=403, detail="Apollo access forbidden")
+    if resp.status_code >= 400:
+        logging.error(f"Apollo search failed {resp.status_code}: {resp.text[:300]}")
+        raise HTTPException(status_code=502, detail=f"Apollo search failed ({resp.status_code})")
+
+    data = resp.json()
+    people = data.get("people") or []
+    pagination = data.get("pagination") or {}
+    results = [_normalize_apollo_person(p) for p in people]
+    return {
+        "results": results,
+        "page": pagination.get("page", req.page),
+        "total_pages": pagination.get("total_pages"),
+        "total_entries": pagination.get("total_entries"),
+    }
+
+@api_router.post("/leads/apollo-save")
+async def apollo_save(req: ApolloSaveRequest, admin: bool = Depends(verify_admin)):
+    """Enrich a person via Apollo People Match (unlock email + phone) then save as a lead.
+    Phone reveal is asynchronous and is delivered to the webhook below."""
+    enriched = {}
+    if req.reveal:
+        params = {
+            "reveal_personal_emails": "true",
+            "reveal_phone_number": "true",
+        }
+        if req.apollo_person_id:
+            params["id"] = req.apollo_person_id
+        if req.first_name:
+            params["first_name"] = req.first_name
+        if req.last_name:
+            params["last_name"] = req.last_name
+        if req.organization_name:
+            params["organization_name"] = req.organization_name
+        if req.domain:
+            params["domain"] = req.domain
+        if req.linkedin_url:
+            params["linkedin_url"] = req.linkedin_url
+
+        webhook_token = os.getenv("APOLLO_WEBHOOK_TOKEN")
+        webhook_url = f"{APP_BASE_URL.replace('http://', 'https://')}/api/webhooks/apollo/phone?token={webhook_token}"
+        params["webhook_url"] = webhook_url
+
+        try:
+            async with httpx.AsyncClient(timeout=40.0) as client:
+                resp = await client.post(f"{APOLLO_BASE_URL}/people/match", headers=_apollo_headers(), params=params)
+            if resp.status_code < 400:
+                body = resp.json()
+                person = body.get("person") or body
+                if isinstance(person, dict):
+                    enriched = _normalize_apollo_person(person)
+            else:
+                logging.error(f"Apollo match failed {resp.status_code}: {resp.text[:300]}")
+        except httpx.RequestError as e:
+            logging.error(f"Apollo match request error: {e}")
+
+    now = get_pst_now().isoformat()
+    name = enriched.get("name") or req.name or " ".join([x for x in [req.first_name, req.last_name] if x]) or "Unknown"
+    lead_doc = {
+        "id": str(uuid.uuid4()),
+        "owner_id": ADMIN_LEADS_OWNER,
+        "apollo_person_id": req.apollo_person_id or enriched.get("apollo_person_id"),
+        "name": name.strip(),
+        "title": enriched.get("title") or req.title,
+        "company": enriched.get("company") or req.organization_name,
+        "email": enriched.get("email"),
+        "phone": enriched.get("phone"),  # may arrive later via webhook
+        "region": enriched.get("region") or req.region,
+        "industry": enriched.get("industry") or req.industry,
+        "persona": req.title,
+        "linkedin": enriched.get("linkedin") or req.linkedin_url,
+        "status": "To Call",
+        "notes": "Imported from Apollo",
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.leads.insert_one(lead_doc)
+    lead_doc.pop("_id", None)
+    return {"lead": lead_doc, "phone_pending": req.reveal and not lead_doc.get("phone")}
+
+@api_router.post("/webhooks/apollo/phone")
+async def apollo_phone_webhook(request: HTTPRequest, token: Optional[str] = None):
+    """Async phone-number delivery from Apollo. Matches lead by apollo_person_id."""
+    expected = os.getenv("APOLLO_WEBHOOK_TOKEN")
+    if expected and token != expected:
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"status": "ignored"}
+
+    # Apollo may send a person object or a list of phone numbers
+    person = payload.get("person") or payload
+    person_id = person.get("id") or payload.get("id") or payload.get("person_id")
+    phones = person.get("phone_numbers") or payload.get("phone_numbers") or []
+    primary = None
+    if isinstance(phones, list) and phones:
+        first = phones[0]
+        primary = first.get("sanitized_number") or first.get("raw_number") or first.get("number") if isinstance(first, dict) else first
+    if not primary:
+        primary = person.get("sanitized_phone") or payload.get("phone")
+
+    if person_id and primary:
+        await db.leads.update_one(
+            {"apollo_person_id": person_id, "owner_id": ADMIN_LEADS_OWNER},
+            {"$set": {"phone": primary, "updated_at": get_pst_now().isoformat()}}
+        )
+        return {"status": "ok"}
+    return {"status": "ignored"}
+
+
 
 
 

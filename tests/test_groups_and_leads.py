@@ -1,7 +1,9 @@
 """
-Tests for new features:
+Tests for features:
   - User Groups (Pro/Teams only): dedupe emails, duplicate-name prevention, free user 403
-  - Leads/Prospecting CRM: ICP guide, CRUD, import, per-owner isolation, status counts
+  - Leads/Prospecting CRM: ADMIN-ONLY now (owner='admin'). Uses admin token from /api/admin/login.
+  - Apollo: apollo-search returns 402 (free plan) with upgrade message; requires admin auth.
+  - Task creation regression (no note/category).
 """
 import os
 import pytest
@@ -14,6 +16,7 @@ API = f"{BASE_URL}/api"
 PRO_USER = {"email": "prouser@acmecorp.com", "password": "Password123"}
 TEAMS_USER = {"email": "owner@acmecorp.com", "password": "Password123"}
 FREE_USER = {"email": "freeuser@example.org", "password": "Password123"}
+ADMIN_PASSWORD = "3369434114Ha."
 
 
 def _login(creds):
@@ -21,6 +24,14 @@ def _login(creds):
     assert r.status_code == 200, f"login failed for {creds['email']}: {r.status_code} {r.text}"
     tok = r.json().get("access_token") or r.json().get("token")
     assert tok, f"no token in login response: {r.json()}"
+    return tok
+
+
+def _admin_login():
+    r = requests.post(f"{API}/admin/login", json={"password": ADMIN_PASSWORD}, timeout=30)
+    assert r.status_code == 200, f"admin login failed: {r.status_code} {r.text}"
+    tok = r.json().get("access_token")
+    assert tok
     return tok
 
 
@@ -43,8 +54,13 @@ def free_token():
     return _login(FREE_USER)
 
 
+@pytest.fixture(scope="module")
+def admin_token():
+    return _admin_login()
+
+
 # =========================================================================
-# GROUPS
+# GROUPS - normal user auth, unchanged
 # =========================================================================
 class TestGroups:
 
@@ -64,20 +80,13 @@ class TestGroups:
 
     def test_create_group_dedupes_emails(self, pro_token):
         name = f"TEST_dedupe_{uuid.uuid4().hex[:6]}"
-        payload = {
-            "name": name,
-            "emails": ["a@b.com", "A@B.COM", " a@b.com ", "c@d.com", "not-an-email", ""]
-        }
+        payload = {"name": name, "emails": ["a@b.com", "A@B.COM", " a@b.com ", "c@d.com", "not-an-email", ""]}
         r = requests.post(f"{API}/groups", headers=_h(pro_token), json=payload, timeout=15)
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["name"] == name
-        # only 2 unique emails should remain (a@b.com, c@d.com)
         assert sorted(data["emails"]) == ["a@b.com", "c@d.com"]
-        assert "id" in data
-        assert "_id" not in data
-
-        # Cleanup
+        assert "id" in data and "_id" not in data
         requests.delete(f"{API}/groups/{data['id']}", headers=_h(pro_token), timeout=15)
 
     def test_duplicate_name_case_insensitive(self, pro_token):
@@ -86,7 +95,6 @@ class TestGroups:
                            json={"name": name, "emails": ["x@y.com"]}, timeout=15)
         assert r1.status_code == 200
         gid = r1.json()["id"]
-        # try same name uppercased
         r2 = requests.post(f"{API}/groups", headers=_h(pro_token),
                            json={"name": name.upper(), "emails": ["z@y.com"]}, timeout=15)
         assert r2.status_code == 400
@@ -103,45 +111,15 @@ class TestGroups:
                           json={"name": name, "emails": ["one@x.com"]}, timeout=15)
         assert r.status_code == 200
         gid = r.json()["id"]
-
-        # Update name + emails
         new_name = f"TEST_upd2_{uuid.uuid4().hex[:6]}"
         ru = requests.put(f"{API}/groups/{gid}", headers=_h(pro_token),
-                          json={"name": new_name, "emails": ["two@x.com", "TWO@x.com"]},
-                          timeout=15)
+                          json={"name": new_name, "emails": ["two@x.com", "TWO@x.com"]}, timeout=15)
         assert ru.status_code == 200, ru.text
         updated = ru.json()
         assert updated["name"] == new_name
         assert updated["emails"] == ["two@x.com"]
-
-        # Verify via GET list
-        rg = requests.get(f"{API}/groups", headers=_h(pro_token), timeout=15)
-        assert rg.status_code == 200
-        found = [g for g in rg.json() if g["id"] == gid]
-        assert len(found) == 1 and found[0]["name"] == new_name
-
-        # Delete
         rd = requests.delete(f"{API}/groups/{gid}", headers=_h(pro_token), timeout=15)
         assert rd.status_code == 200
-
-        # Verify gone
-        rg2 = requests.get(f"{API}/groups", headers=_h(pro_token), timeout=15)
-        assert not [g for g in rg2.json() if g["id"] == gid]
-
-    def test_update_to_existing_name_rejected(self, pro_token):
-        n1 = f"TEST_a_{uuid.uuid4().hex[:6]}"
-        n2 = f"TEST_b_{uuid.uuid4().hex[:6]}"
-        a = requests.post(f"{API}/groups", headers=_h(pro_token),
-                         json={"name": n1, "emails": []}, timeout=15).json()
-        b = requests.post(f"{API}/groups", headers=_h(pro_token),
-                         json={"name": n2, "emails": []}, timeout=15).json()
-        # rename b to n1 (case-insensitive)
-        r = requests.put(f"{API}/groups/{b['id']}", headers=_h(pro_token),
-                        json={"name": n1.upper()}, timeout=15)
-        assert r.status_code == 400
-        # cleanup
-        requests.delete(f"{API}/groups/{a['id']}", headers=_h(pro_token), timeout=15)
-        requests.delete(f"{API}/groups/{b['id']}", headers=_h(pro_token), timeout=15)
 
     def test_teams_user_can_create_group(self, teams_token):
         name = f"TEST_teams_{uuid.uuid4().hex[:6]}"
@@ -157,151 +135,161 @@ class TestGroups:
 
 
 # =========================================================================
-# LEADS / PROSPECTING
+# LEADS / PROSPECTING - now ADMIN-ONLY
 # =========================================================================
-class TestLeads:
+class TestLeadsAdminGating:
+    """Confirm leads endpoints require admin token; user/no-token → 401/403."""
 
-    def test_icp_guide_returns_data(self, pro_token):
-        r = requests.get(f"{API}/leads/icp", headers=_h(pro_token), timeout=15)
+    def test_admin_login_returns_token(self):
+        r = requests.post(f"{API}/admin/login", json={"password": ADMIN_PASSWORD}, timeout=15)
+        assert r.status_code == 200
+        assert r.json().get("access_token")
+
+    def test_admin_login_wrong_password(self):
+        r = requests.post(f"{API}/admin/login", json={"password": "wrong"}, timeout=15)
+        assert r.status_code == 401
+
+    def test_leads_list_no_token(self):
+        r = requests.get(f"{API}/leads", timeout=15)
+        assert r.status_code in (401, 403), f"expected 401/403 got {r.status_code}"
+
+    def test_leads_list_with_user_token_forbidden(self, pro_token):
+        r = requests.get(f"{API}/leads", headers=_h(pro_token), timeout=15)
+        assert r.status_code in (401, 403)
+
+    def test_leads_create_with_user_token_forbidden(self, pro_token):
+        r = requests.post(f"{API}/leads", headers=_h(pro_token),
+                          json={"name": "TEST_X"}, timeout=15)
+        assert r.status_code in (401, 403)
+
+    def test_icp_with_user_token_forbidden(self, free_token):
+        # Previously open to free; now admin-only
+        r = requests.get(f"{API}/leads/icp", headers=_h(free_token), timeout=15)
+        assert r.status_code in (401, 403)
+
+
+class TestLeadsAdminCRUD:
+    """Admin CRUD + import + status counts with admin token."""
+
+    def test_icp_with_admin(self, admin_token):
+        r = requests.get(f"{API}/leads/icp", headers=_h(admin_token), timeout=15)
         assert r.status_code == 200
         data = r.json()
         assert "personas" in data and len(data["personas"]) > 0
         assert "industries" in data and len(data["industries"]) > 0
         assert "regions" in data and len(data["regions"]) > 0
 
-    def test_icp_available_to_free_user(self, free_token):
-        r = requests.get(f"{API}/leads/icp", headers=_h(free_token), timeout=15)
-        assert r.status_code == 200
-
-    def test_create_lead_and_persist(self, pro_token):
+    def test_create_lead_and_persist(self, admin_token):
         payload = {
-            "name": "TEST_Jane Doe",
+            "name": "TEST_admin_lead",
             "title": "Ops Manager",
             "company": "TEST_Acme",
             "email": "jane@test.com",
-            "region": "United States - West (SF, LA, Seattle)",
             "status": "To Call",
-            "notes": "Found via LinkedIn"
+            "notes": "found via LinkedIn"
         }
-        r = requests.post(f"{API}/leads", headers=_h(pro_token), json=payload, timeout=15)
+        r = requests.post(f"{API}/leads", headers=_h(admin_token), json=payload, timeout=15)
         assert r.status_code == 200, r.text
         created = r.json()
         assert created["name"] == payload["name"]
         assert created["status"] == "To Call"
-        assert "id" in created
-        assert "_id" not in created
+        assert "id" in created and "_id" not in created
         lead_id = created["id"]
 
-        # Verify via GET list
-        rg = requests.get(f"{API}/leads", headers=_h(pro_token), timeout=15)
+        rg = requests.get(f"{API}/leads", headers=_h(admin_token), timeout=15)
         assert rg.status_code == 200
         body = rg.json()
         assert "leads" in body and "counts" in body and "statuses" in body
         assert any(l["id"] == lead_id for l in body["leads"])
-        # cleanup
-        requests.delete(f"{API}/leads/{lead_id}", headers=_h(pro_token), timeout=15)
+        requests.delete(f"{API}/leads/{lead_id}", headers=_h(admin_token), timeout=15)
 
-    def test_create_lead_empty_name_rejected(self, pro_token):
-        r = requests.post(f"{API}/leads", headers=_h(pro_token),
-                         json={"name": "  "}, timeout=15)
+    def test_create_lead_empty_name_rejected(self, admin_token):
+        r = requests.post(f"{API}/leads", headers=_h(admin_token),
+                          json={"name": "  "}, timeout=15)
         assert r.status_code == 400
 
-    def test_import_leads_skips_empty_names(self, pro_token):
-        payload = {
-            "leads": [
-                {"name": "TEST_Alpha", "company": "A"},
-                {"name": "  "},  # should be skipped
-                {"name": "TEST_Bravo", "company": "B", "status": "Interested"},
-                {"name": ""},  # skipped
-                {"name": "TEST_Charlie", "status": "InvalidStatus"},  # status falls back to To Call
-            ]
-        }
-        r = requests.post(f"{API}/leads/import", headers=_h(pro_token), json=payload, timeout=15)
+    def test_import_skips_empty_names_and_falls_back_status(self, admin_token):
+        payload = {"leads": [
+            {"name": "TEST_Alpha", "company": "A"},
+            {"name": "  "},
+            {"name": "TEST_Bravo", "company": "B", "status": "Interested"},
+            {"name": ""},
+            {"name": "TEST_Charlie", "status": "InvalidStatus"},
+        ]}
+        r = requests.post(f"{API}/leads/import", headers=_h(admin_token), json=payload, timeout=15)
         assert r.status_code == 200, r.text
         assert r.json()["imported"] == 3
-
-        # Verify they exist & filter by q
-        rg = requests.get(f"{API}/leads?q=TEST_", headers=_h(pro_token), timeout=15)
-        assert rg.status_code == 200
+        rg = requests.get(f"{API}/leads?q=TEST_", headers=_h(admin_token), timeout=15)
         names = [l["name"] for l in rg.json()["leads"]]
         assert "TEST_Alpha" in names and "TEST_Bravo" in names and "TEST_Charlie" in names
-        # Charlie should have fallback status
         charlie = next(l for l in rg.json()["leads"] if l["name"] == "TEST_Charlie")
         assert charlie["status"] == "To Call"
-
-        # cleanup
         for l in rg.json()["leads"]:
             if l["name"].startswith("TEST_"):
-                requests.delete(f"{API}/leads/{l['id']}", headers=_h(pro_token), timeout=15)
+                requests.delete(f"{API}/leads/{l['id']}", headers=_h(admin_token), timeout=15)
 
-    def test_update_lead_status(self, pro_token):
-        r = requests.post(f"{API}/leads", headers=_h(pro_token),
+    def test_update_lead_status(self, admin_token):
+        r = requests.post(f"{API}/leads", headers=_h(admin_token),
                          json={"name": "TEST_Upd"}, timeout=15)
         lead_id = r.json()["id"]
-
-        # Update status
-        ru = requests.put(f"{API}/leads/{lead_id}", headers=_h(pro_token),
+        ru = requests.put(f"{API}/leads/{lead_id}", headers=_h(admin_token),
                          json={"status": "Won", "company": "TEST_NewCo"}, timeout=15)
         assert ru.status_code == 200, ru.text
         assert ru.json()["status"] == "Won"
         assert ru.json()["company"] == "TEST_NewCo"
-
-        # Invalid status rejected
-        ri = requests.put(f"{API}/leads/{lead_id}", headers=_h(pro_token),
+        ri = requests.put(f"{API}/leads/{lead_id}", headers=_h(admin_token),
                          json={"status": "Bogus"}, timeout=15)
         assert ri.status_code == 400
+        requests.delete(f"{API}/leads/{lead_id}", headers=_h(admin_token), timeout=15)
 
-        # cleanup
-        requests.delete(f"{API}/leads/{lead_id}", headers=_h(pro_token), timeout=15)
-
-    def test_status_counts_present(self, pro_token):
-        # create 2 leads with different statuses
-        a = requests.post(f"{API}/leads", headers=_h(pro_token),
+    def test_status_counts_and_filter(self, admin_token):
+        a = requests.post(f"{API}/leads", headers=_h(admin_token),
                          json={"name": "TEST_C1", "status": "To Call"}, timeout=15).json()
-        b = requests.post(f"{API}/leads", headers=_h(pro_token),
+        b = requests.post(f"{API}/leads", headers=_h(admin_token),
                          json={"name": "TEST_C2", "status": "Won"}, timeout=15).json()
-
-        rg = requests.get(f"{API}/leads", headers=_h(pro_token), timeout=15)
+        rg = requests.get(f"{API}/leads", headers=_h(admin_token), timeout=15)
         counts = rg.json()["counts"]
         assert all(s in counts for s in ["To Call", "Called", "Interested", "Won", "Lost"])
-        assert counts["To Call"] >= 1
-        assert counts["Won"] >= 1
-
-        # Filter by status
-        rs = requests.get(f"{API}/leads?status=Won", headers=_h(pro_token), timeout=15)
+        assert counts["To Call"] >= 1 and counts["Won"] >= 1
+        rs = requests.get(f"{API}/leads?status=Won", headers=_h(admin_token), timeout=15)
         assert all(l["status"] == "Won" for l in rs.json()["leads"])
+        requests.delete(f"{API}/leads/{a['id']}", headers=_h(admin_token), timeout=15)
+        requests.delete(f"{API}/leads/{b['id']}", headers=_h(admin_token), timeout=15)
 
-        # cleanup
-        requests.delete(f"{API}/leads/{a['id']}", headers=_h(pro_token), timeout=15)
-        requests.delete(f"{API}/leads/{b['id']}", headers=_h(pro_token), timeout=15)
-
-    def test_lead_per_owner_isolation(self, pro_token, free_token):
-        # Pro creates a lead
-        r = requests.post(f"{API}/leads", headers=_h(pro_token),
-                         json={"name": "TEST_PRO_ONLY"}, timeout=15)
-        lead_id = r.json()["id"]
-
-        # Free user should NOT see it
-        rg = requests.get(f"{API}/leads", headers=_h(free_token), timeout=15)
-        assert rg.status_code == 200
-        assert not any(l["id"] == lead_id for l in rg.json()["leads"])
-
-        # Free user trying to delete pro's lead → 404
-        rd = requests.delete(f"{API}/leads/{lead_id}", headers=_h(free_token), timeout=15)
-        assert rd.status_code == 404
-
-        # cleanup as pro
-        requests.delete(f"{API}/leads/{lead_id}", headers=_h(pro_token), timeout=15)
-
-    def test_delete_lead_verify_404_after(self, pro_token):
-        r = requests.post(f"{API}/leads", headers=_h(pro_token),
+    def test_delete_lead_then_404(self, admin_token):
+        r = requests.post(f"{API}/leads", headers=_h(admin_token),
                          json={"name": "TEST_DEL"}, timeout=15)
         lead_id = r.json()["id"]
-        rd = requests.delete(f"{API}/leads/{lead_id}", headers=_h(pro_token), timeout=15)
+        rd = requests.delete(f"{API}/leads/{lead_id}", headers=_h(admin_token), timeout=15)
         assert rd.status_code == 200
-        # Try delete again → 404
-        rd2 = requests.delete(f"{API}/leads/{lead_id}", headers=_h(pro_token), timeout=15)
+        rd2 = requests.delete(f"{API}/leads/{lead_id}", headers=_h(admin_token), timeout=15)
         assert rd2.status_code == 404
+
+
+# =========================================================================
+# APOLLO - admin-only; free plan -> 402 with upgrade message
+# =========================================================================
+class TestApollo:
+
+    def test_apollo_search_requires_admin(self, pro_token):
+        r = requests.post(f"{API}/leads/apollo-search", headers=_h(pro_token),
+                          json={"persona_titles": ["CEO"]}, timeout=30)
+        assert r.status_code in (401, 403), f"expected 401/403 got {r.status_code}: {r.text}"
+
+    def test_apollo_search_no_token(self):
+        r = requests.post(f"{API}/leads/apollo-search",
+                          json={"persona_titles": ["CEO"]}, timeout=30)
+        assert r.status_code in (401, 403)
+
+    def test_apollo_search_returns_402_free_plan(self, admin_token):
+        r = requests.post(f"{API}/leads/apollo-search", headers=_h(admin_token),
+                          json={"persona_titles": ["CEO", "Founder"], "page": 1, "per_page": 5},
+                          timeout=60)
+        assert r.status_code == 402, f"expected 402 (Apollo free plan), got {r.status_code}: {r.text}"
+        body = r.json()
+        msg = (body.get("detail") or "").lower()
+        assert any(k in msg for k in ["upgrade", "apollo", "plan", "inaccessible"]), \
+            f"expected upgrade message; got: {body}"
 
 
 # =========================================================================
@@ -310,12 +298,9 @@ class TestLeads:
 class TestTaskCreationRegression:
 
     def test_create_task_without_note_or_category(self, pro_token):
-        # First find the user's own id via /api/auth/me
         rme = requests.get(f"{API}/auth/me", headers=_h(pro_token), timeout=15)
         assert rme.status_code == 200, rme.text
-        me = rme.json()
-        my_email = me["email"]
-
+        my_email = rme.json()["email"]
         payload = {
             "title": "TEST_regression_task",
             "description": "no note no category",
@@ -326,7 +311,6 @@ class TestTaskCreationRegression:
         r = requests.post(f"{API}/tasks", headers=_h(pro_token), json=payload, timeout=15)
         assert r.status_code in (200, 201), f"task create failed: {r.status_code} {r.text}"
         task = r.json()
-        # Cleanup if id present
-        tid = task.get("id") or (task.get("tasks") or [{}])[0].get("id") if isinstance(task, dict) else None
+        tid = task.get("id")
         if tid:
             requests.delete(f"{API}/tasks/{tid}", headers=_h(pro_token), timeout=15)

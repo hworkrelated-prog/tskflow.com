@@ -59,11 +59,13 @@ Tskflow is a B2B task management platform focused on clear commitments, time rea
 - Duplicate group-name prevention (case-insensitive) + email de-duplication
 - Available only on Pro & Teams; managed from the New Task modal ("Manage groups")
 
-### Prospecting / Leads CRM ✨ NEW (Jun 2026)
-- `/leads` page: a live, searchable repository of sales prospects (all tiers)
+### Prospecting / Leads CRM ✨ NEW (Jun 2026) — PRIVATE ADMIN TOOL
+- `/leads` page: a private, admin-gated repository of sales prospects (NOT a per-user app feature)
+- Accessed via direct link + admin password (same `ADMIN_PASSWORD` as `/admin`); no in-app nav button
 - Curated Ideal Customer Profile guide (personas, industries, US/CA regions, search strings, where to find buyers)
 - Pipeline statuses (To Call → Called → Interested → Won/Lost) with counts
-- Full CRUD + CSV import (max 5000/import) + search & status filters; per-owner isolation
+- Full CRUD + CSV import (max 5000/import) + search & status filters
+- **Apollo.io integration**: "Find Leads (Apollo)" searches Apollo's People DB by title/location/company-size, and "Save & unlock" enriches a person (People Match: reveal email + phone via async webhook). Auth via `X-Api-Key`. NOTE: requires a PAID Apollo plan — the current key is on the free plan, so the API returns a clear "upgrade your plan" message; CSV/manual still work.
 
 ### Task Creation (updated Jun 2026)
 - Removed Notes & Category fields from the create-task modal

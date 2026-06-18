@@ -221,6 +221,7 @@ function App() {
                     <Route path="/payment-success" element={<PaymentSuccessPage />} />
                     <Route path="/invite" element={<InviteHandler />} />
                     <Route path="/admin" element={<AdminPage />} />
+                    <Route path="/leads" element={<LeadsPage />} />
                     <Route
                         path="/dashboard"
                         element={
@@ -258,14 +259,6 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <TeamManagementPage />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/leads"
-                        element={
-                            <ProtectedRoute>
-                                <LeadsPage />
                             </ProtectedRoute>
                         }
                     />
