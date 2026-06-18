@@ -15,11 +15,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, Image, Clock } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, Target } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
+import DateTimePicker from '@/components/DateTimePicker';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const TaskHub = () => {
@@ -33,16 +34,20 @@ const TaskHub = () => {
         title: '',
         description: '',
         due_date: '',
-        priority: 'Medium',
-        category: '',
-        note: ''
+        priority: 'Medium'
     });
-    const [noteImages, setNoteImages] = useState([]);
     const [selectedAssignees, setSelectedAssignees] = useState([]);
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
     const navigate = useNavigate();
+
+    // User groups (Pro & Teams)
+    const [groups, setGroups] = useState([]);
+    const [showGroupModal, setShowGroupModal] = useState(false);
+    const [groupForm, setGroupForm] = useState({ name: '', emails: [] });
+    const [groupEmailInput, setGroupEmailInput] = useState('');
+    const [groupSaving, setGroupSaving] = useState(false);
     
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
@@ -117,6 +122,7 @@ const TaskHub = () => {
         fetchDashboard();
         fetchUsers();
         fetchDeletedTasks();
+        fetchGroups();
     }, [viewMode, dateFilter, customDateRange]);
 
     // Auto-refresh polling with sound notification for new tasks
@@ -198,6 +204,91 @@ const TaskHub = () => {
         }
     };
 
+    const fetchGroups = async () => {
+        if (user?.subscription_tier === 'free') {
+            setGroups([]);
+            return;
+        }
+        try {
+            const response = await axios.get(`${API}/groups`);
+            setGroups(response.data);
+        } catch (error) {
+            // Silent: free users or no groups yet
+        }
+    };
+
+    const addGroupEmail = () => {
+        const email = groupEmailInput.trim().toLowerCase();
+        if (!email || !email.includes('@')) {
+            toast.error('Enter a valid email address');
+            return;
+        }
+        if (groupForm.emails.includes(email)) {
+            toast.error('Email already added to this group');
+            setGroupEmailInput('');
+            return;
+        }
+        setGroupForm({ ...groupForm, emails: [...groupForm.emails, email] });
+        setGroupEmailInput('');
+    };
+
+    const handleSaveGroup = async () => {
+        if (!groupForm.name.trim()) {
+            toast.error('Please give your group a name');
+            return;
+        }
+        if (groupForm.emails.length === 0) {
+            toast.error('Add at least one email to the group');
+            return;
+        }
+        setGroupSaving(true);
+        try {
+            await axios.post(`${API}/groups`, { name: groupForm.name.trim(), emails: groupForm.emails });
+            toast.success(`Group "${groupForm.name.trim()}" created`);
+            setGroupForm({ name: '', emails: [] });
+            setGroupEmailInput('');
+            fetchGroups();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to create group'));
+        } finally {
+            setGroupSaving(false);
+        }
+    };
+
+    const handleDeleteGroup = async (groupId) => {
+        try {
+            await axios.delete(`${API}/groups/${groupId}`);
+            toast.success('Group deleted');
+            fetchGroups();
+        } catch (error) {
+            toast.error('Failed to delete group');
+        }
+    };
+
+    const applyGroup = (group) => {
+        const newAssignees = [...selectedAssignees];
+        let added = 0;
+        group.emails.forEach((email) => {
+            const existingUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+            if (existingUser) {
+                const dup = newAssignees.some(a => a.type === 'user' && a.id === existingUser.id);
+                if (!dup) {
+                    newAssignees.push({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email });
+                    added++;
+                }
+            } else {
+                const dup = newAssignees.some(a => a.type === 'email' && a.email === email);
+                if (!dup) {
+                    newAssignees.push({ type: 'email', email });
+                    added++;
+                }
+            }
+        });
+        setSelectedAssignees(newAssignees);
+        setShowUserDropdown(false);
+        toast.success(`Added ${added} member(s) from "${group.name}"`);
+    };
+
     const fetchDeletedTasks = async () => {
         try {
             const response = await axios.get(`${API}/tasks/deleted`);
@@ -216,19 +307,6 @@ const TaskHub = () => {
         } catch (error) {
             toast.error('Failed to restore task');
         }
-    };
-
-    const handleImageUpload = (e) => {
-        const files = Array.from(e.target.files);
-        files.forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    setNoteImages(prev => [...prev, event.target.result]);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
     };
 
     const handleQuickComplete = async (taskId, completionNote, completionImages) => {
@@ -354,11 +432,7 @@ const TaskHub = () => {
                 return null;
             }).filter(Boolean);
 
-            const taskData = {
-                ...taskForm,
-                note: taskForm.note || null,
-                note_images: noteImages.length > 0 ? noteImages : null
-            };
+            const taskData = { ...taskForm };
 
             if (assigneeList.length === 1) {
                 await axios.post(`${API}/tasks`, {
@@ -379,11 +453,8 @@ const TaskHub = () => {
                 title: '',
                 description: '',
                 due_date: '',
-                priority: 'Medium',
-                category: '',
-                note: ''
+                priority: 'Medium'
             });
-            setNoteImages([]);
             setSelectedAssignees([]);
             fetchDashboard();
         } catch (error) {
@@ -398,14 +469,11 @@ const TaskHub = () => {
         if (!open) {
             setSelectedAssignees([]);
             setEmailInput('');
-            setNoteImages([]);
             setTaskForm({
                 title: '',
                 description: '',
                 due_date: '',
-                priority: 'Medium',
-                category: '',
-                note: ''
+                priority: 'Medium'
             });
         }
     };
@@ -471,6 +539,9 @@ const TaskHub = () => {
                                 <Users className="w-5 h-5" />
                             </Button>
                         )}
+                        <Button data-testid="prospecting-button" variant="outline" size="icon" onClick={() => navigate('/leads')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Prospecting (Sales leads)">
+                            <Target className="w-5 h-5" />
+                        </Button>
                         <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                             <BarChart3 className="w-5 h-5" />
                         </Button>
@@ -528,7 +599,14 @@ const TaskHub = () => {
                                                 <Textarea id="description" data-testid="task-description-input" value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Describe the task..." required rows={3} className="rounded-xl" />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="flex items-center gap-2"><Users className="w-4 h-4" />Assign To</Label>
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="flex items-center gap-2"><Users className="w-4 h-4" />Assign To</Label>
+                                                    {!isFreeUser && (
+                                                        <button type="button" data-testid="manage-groups-button" onClick={() => setShowGroupModal(true)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                                            <Users className="w-3.5 h-3.5" /> Manage groups
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {selectedAssignees.length > 0 && (
                                                     <div className="flex flex-wrap gap-2 mb-2">
                                                         <AnimatePresence>
@@ -550,6 +628,18 @@ const TaskHub = () => {
                                                                     <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-indigo-600" /></div>
                                                                     <div><p className="font-medium">Assign to Self</p><p className="text-xs text-muted-foreground">Auto-accept this task</p></div>
                                                                 </div>
+                                                            )}
+                                                            {!isFreeUser && groups.length > 0 && (
+                                                                <>
+                                                                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-gray-50">Your Groups</div>
+                                                                    {groups.map((group) => (
+                                                                        <div key={group.id} data-testid={`group-option-${group.id}`} onClick={() => applyGroup(group)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer border-b">
+                                                                            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center"><Users className="w-4 h-4 text-purple-600" /></div>
+                                                                            <div className="flex-1 min-w-0"><p className="font-medium truncate">{group.name}</p><p className="text-xs text-muted-foreground truncate">{group.emails.length} member(s)</p></div>
+                                                                            <Plus className="w-4 h-4 text-indigo-500" />
+                                                                        </div>
+                                                                    ))}
+                                                                </>
                                                             )}
                                                             {users.filter(u => u.id !== user?.id).length > 0 && (<div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-gray-50">Team Members</div>)}
                                                             {users.filter(u => u.id !== user?.id).filter(u => !emailInput || u.name.toLowerCase().includes(emailInput.toLowerCase()) || u.email.toLowerCase().includes(emailInput.toLowerCase())).map((u) => {
@@ -587,39 +677,13 @@ const TaskHub = () => {
                                                     </Select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="due_date">Due Date</Label>
-                                                    <Input id="due_date" data-testid="due-date-input" type="datetime-local" value={taskForm.due_date} onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })} required className="rounded-xl" />
+                                                    <Label htmlFor="due_date">Due Date & Time</Label>
+                                                    <DateTimePicker
+                                                        value={taskForm.due_date}
+                                                        onChange={(val) => setTaskForm({ ...taskForm, due_date: val })}
+                                                        testId="due-date"
+                                                    />
                                                 </div>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="category">Category (Optional)</Label>
-                                                <Input id="category" data-testid="category-input" value={taskForm.category} onChange={(e) => setTaskForm({ ...taskForm, category: e.target.value })} placeholder="e.g., Marketing, Development, Sales" className="rounded-xl" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="note">Note (Optional)</Label>
-                                                <Textarea id="note" value={taskForm.note} onChange={(e) => setTaskForm({ ...taskForm, note: e.target.value })} placeholder="Add any additional notes..." rows={2} className="rounded-xl" />
-                                                {!isFreeUser && (
-                                                    <>
-                                                        <div className="flex items-center gap-2">
-                                                            <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-                                                                <Image className="w-4 h-4" />
-                                                                <span>Attach Images</span>
-                                                                <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-                                                            </label>
-                                                            {noteImages.length > 0 && <span className="text-xs text-muted-foreground">{noteImages.length} image(s)</span>}
-                                                        </div>
-                                                        {noteImages.length > 0 && (
-                                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                                {noteImages.map((img, i) => (
-                                                                    <div key={i} className="relative">
-                                                                        <img src={img} alt="" className="w-16 h-16 object-cover rounded-lg" />
-                                                                        <button type="button" onClick={() => setNoteImages(noteImages.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="w-3 h-3" /></button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </>
-                                                )}
                                             </div>
                                             <Button data-testid="submit-task-button" type="submit" className="w-full rounded-full" disabled={createLoading || selectedAssignees.length === 0}>
                                                 {createLoading ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
@@ -627,6 +691,68 @@ const TaskHub = () => {
                                         </form>
                                     </DialogContent>
                                 </Dialog>
+                                {!isFreeUser && (
+                                    <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
+                                        <DialogContent className="rounded-2xl max-w-lg w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Your Groups</DialogTitle>
+                                                <DialogDescription>Save a group of emails once, then assign to everyone in one click.</DialogDescription>
+                                            </DialogHeader>
+
+                                            {groups.length > 0 && (
+                                                <div className="space-y-2 mb-4">
+                                                    {groups.map((group) => (
+                                                        <div key={group.id} data-testid={`group-row-${group.id}`} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-slate-50">
+                                                            <div className="min-w-0">
+                                                                <p className="font-semibold truncate">{group.name}</p>
+                                                                <p className="text-xs text-muted-foreground truncate">{group.emails.join(', ')}</p>
+                                                            </div>
+                                                            <button type="button" data-testid={`delete-group-${group.id}`} onClick={() => handleDeleteGroup(group.id)} className="text-red-500 hover:bg-red-50 rounded-full p-2 shrink-0">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="space-y-3 pt-2 border-t">
+                                                <p className="text-sm font-semibold">Create a new group</p>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="group-name">Group name</Label>
+                                                    <Input id="group-name" data-testid="group-name-input" value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} placeholder='e.g., "My Team", "Design Squad"' className="rounded-xl" />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="group-email">Add members by email</Label>
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            id="group-email"
+                                                            data-testid="group-email-input"
+                                                            value={groupEmailInput}
+                                                            onChange={(e) => setGroupEmailInput(e.target.value)}
+                                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGroupEmail(); } }}
+                                                            placeholder="name@company.com"
+                                                            className="rounded-xl"
+                                                        />
+                                                        <Button type="button" variant="outline" data-testid="add-group-email-button" onClick={addGroupEmail} className="rounded-xl shrink-0">Add</Button>
+                                                    </div>
+                                                    {groupForm.emails.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mt-2">
+                                                            {groupForm.emails.map((email) => (
+                                                                <div key={email} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-full text-sm">
+                                                                    <span>{email}</span>
+                                                                    <button type="button" onClick={() => setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== email) })} className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <Button type="button" data-testid="save-group-button" onClick={handleSaveGroup} disabled={groupSaving} className="w-full rounded-full">
+                                                    {groupSaving ? 'Saving...' : 'Create Group'}
+                                                </Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                )}
                             </>
                         )}
                     </div>

@@ -16,6 +16,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 import TeamManagementPage from '@/pages/TeamManagementPage';
 import AdminPage from '@/pages/AdminPage';
+import LeadsPage from '@/pages/LeadsPage';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -257,6 +258,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <TeamManagementPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/leads"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsPage />
                             </ProtectedRoute>
                         }
                     />

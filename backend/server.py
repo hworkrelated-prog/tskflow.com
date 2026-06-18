@@ -2816,6 +2816,292 @@ async def create_calendar_event(user_id: str, task: dict):
         logging.error(f"Calendar event creation failed: {e}")
         return None
 
+# ==========================================================================
+# USER GROUPS (Pro & Teams) - save a named group of emails for quick assign
+# ==========================================================================
+
+class GroupCreate(BaseModel):
+    name: str
+    emails: List[str] = []
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    emails: Optional[List[str]] = None
+
+def _clean_emails(emails: List[str]) -> List[str]:
+    seen = set()
+    cleaned = []
+    for e in emails or []:
+        e = (e or "").strip().lower()
+        if e and "@" in e and e not in seen:
+            seen.add(e)
+            cleaned.append(e)
+    return cleaned
+
+def _require_paid(current_user: dict):
+    if current_user.get("subscription_tier") not in ("pro", "teams"):
+        raise HTTPException(status_code=403, detail="Groups are available on Pro and Teams plans only")
+
+@api_router.get("/groups")
+async def list_groups(current_user: dict = Depends(get_current_user)):
+    _require_paid(current_user)
+    groups = await db.user_groups.find({"owner_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return groups
+
+@api_router.post("/groups")
+async def create_group(group: GroupCreate, current_user: dict = Depends(get_current_user)):
+    _require_paid(current_user)
+    name = (group.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+
+    # Prevent duplicate group names (case-insensitive) for this owner
+    existing = await db.user_groups.find_one({
+        "owner_id": current_user["id"],
+        "name": {"$regex": f"^{name}$", "$options": "i"}
+    }, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="A group with this name already exists")
+
+    group_doc = {
+        "id": str(uuid.uuid4()),
+        "owner_id": current_user["id"],
+        "name": name,
+        "emails": _clean_emails(group.emails),
+        "created_at": get_pst_now().isoformat()
+    }
+    await db.user_groups.insert_one(group_doc)
+    group_doc.pop("_id", None)
+    return group_doc
+
+@api_router.put("/groups/{group_id}")
+async def update_group(group_id: str, update: GroupUpdate, current_user: dict = Depends(get_current_user)):
+    _require_paid(current_user)
+    group = await db.user_groups.find_one({"id": group_id, "owner_id": current_user["id"]}, {"_id": 0})
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    set_data = {}
+    if update.name is not None:
+        new_name = update.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Group name cannot be empty")
+        dup = await db.user_groups.find_one({
+            "owner_id": current_user["id"],
+            "name": {"$regex": f"^{new_name}$", "$options": "i"},
+            "id": {"$ne": group_id}
+        }, {"_id": 0})
+        if dup:
+            raise HTTPException(status_code=400, detail="A group with this name already exists")
+        set_data["name"] = new_name
+    if update.emails is not None:
+        set_data["emails"] = _clean_emails(update.emails)
+
+    if set_data:
+        await db.user_groups.update_one({"id": group_id}, {"$set": set_data})
+
+    updated = await db.user_groups.find_one({"id": group_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/groups/{group_id}")
+async def delete_group(group_id: str, current_user: dict = Depends(get_current_user)):
+    _require_paid(current_user)
+    result = await db.user_groups.delete_one({"id": group_id, "owner_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return {"message": "Group deleted"}
+
+
+# ==========================================================================
+# PROSPECTING CRM (Leads) - a live, searchable repository of sales targets
+# ==========================================================================
+
+LEAD_STATUSES = ["To Call", "Called", "Interested", "Won", "Lost"]
+
+# Curated Ideal Customer Profile for Tskflow (B2B accountability tool)
+ICP_GUIDE = {
+    "personas": [
+        {"title": "Operations Manager / Director of Operations", "why": "Owns execution and accountability across teams."},
+        {"title": "Team Lead / People Manager", "why": "Delegates tasks daily and needs ownership + follow-through."},
+        {"title": "Project / Program Manager", "why": "Coordinates deliverables and deadlines across contributors."},
+        {"title": "Corporate Trainer / L&D Manager", "why": "Drives behavior change and accountability in teams."},
+        {"title": "Agency Owner / Founder (5-200 employees)", "why": "Needs visibility into who committed to what and when."},
+        {"title": "Customer Success / Support Lead", "why": "Manages task queues and SLAs with clear ownership."},
+    ],
+    "industries": [
+        "Marketing & Creative Agencies", "Software / SaaS", "Professional Services & Consulting",
+        "Construction & Field Services", "Healthcare Admin", "Real Estate Teams",
+        "Logistics & Operations", "Financial Services"
+    ],
+    "regions": [
+        "United States - Northeast (NYC, Boston)", "United States - West (SF, LA, Seattle)",
+        "United States - South (Austin, Atlanta, Miami)", "United States - Midwest (Chicago)",
+        "Canada - Toronto / Ontario", "Canada - Vancouver / BC", "Canada - Montreal / Quebec"
+    ],
+    "search_queries": [
+        '"Operations Manager" agency Toronto',
+        '"Director of Operations" SaaS United States',
+        '"Team Lead" OR "People Manager" marketing agency',
+        '"Corporate Trainer" OR "L&D Manager" professional services',
+        '"Project Manager" construction firm Canada',
+        'Founder agency 10-50 employees "accountability"',
+    ],
+    "where_to_find": [
+        "LinkedIn Sales Navigator (filter by title + region + company size)",
+        "LinkedIn search by job title and location",
+        "Apollo.io / Hunter.io exports (then import the CSV here)",
+        "Local chambers of commerce & industry association member lists",
+        "Conference / webinar attendee lists in your niche",
+    ]
+}
+
+class LeadCreate(BaseModel):
+    name: str
+    title: Optional[str] = None
+    company: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    region: Optional[str] = None
+    industry: Optional[str] = None
+    persona: Optional[str] = None
+    linkedin: Optional[str] = None
+    status: Optional[str] = "To Call"
+    notes: Optional[str] = None
+
+class LeadUpdate(BaseModel):
+    name: Optional[str] = None
+    title: Optional[str] = None
+    company: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    region: Optional[str] = None
+    industry: Optional[str] = None
+    persona: Optional[str] = None
+    linkedin: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+class LeadsImport(BaseModel):
+    leads: List[LeadCreate]
+
+@api_router.get("/leads/icp")
+async def get_icp_guide(current_user: dict = Depends(get_current_user)):
+    return ICP_GUIDE
+
+@api_router.get("/leads")
+async def list_leads(
+    current_user: dict = Depends(get_current_user),
+    q: Optional[str] = None,
+    status: Optional[str] = None,
+    region: Optional[str] = None,
+    persona: Optional[str] = None
+):
+    query = {"owner_id": current_user["id"]}
+    if status and status != "all":
+        query["status"] = status
+    if region and region != "all":
+        query["region"] = region
+    if persona and persona != "all":
+        query["persona"] = persona
+    if q:
+        regex = {"$regex": q, "$options": "i"}
+        query["$or"] = [
+            {"name": regex}, {"company": regex}, {"title": regex},
+            {"email": regex}, {"industry": regex}, {"notes": regex}
+        ]
+    leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Status counts (unfiltered by status, but respect owner)
+    pipeline = [
+        {"$match": {"owner_id": current_user["id"]}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]
+    raw_counts = await db.leads.aggregate(pipeline).to_list(50)
+    counts = {s: 0 for s in LEAD_STATUSES}
+    total = 0
+    for rc in raw_counts:
+        total += rc["count"]
+        if rc["_id"] in counts:
+            counts[rc["_id"]] = rc["count"]
+    return {"leads": leads, "counts": counts, "total": total, "statuses": LEAD_STATUSES}
+
+@api_router.post("/leads")
+async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current_user)):
+    if not (lead.name or "").strip():
+        raise HTTPException(status_code=400, detail="Lead name is required")
+    status = lead.status if lead.status in LEAD_STATUSES else "To Call"
+    now = get_pst_now().isoformat()
+    lead_doc = {
+        "id": str(uuid.uuid4()),
+        "owner_id": current_user["id"],
+        "name": lead.name.strip(),
+        "title": lead.title,
+        "company": lead.company,
+        "email": lead.email,
+        "phone": lead.phone,
+        "region": lead.region,
+        "industry": lead.industry,
+        "persona": lead.persona,
+        "linkedin": lead.linkedin,
+        "status": status,
+        "notes": lead.notes,
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.leads.insert_one(lead_doc)
+    lead_doc.pop("_id", None)
+    return lead_doc
+
+@api_router.post("/leads/import")
+async def import_leads(payload: LeadsImport, current_user: dict = Depends(get_current_user)):
+    now = get_pst_now().isoformat()
+    docs = []
+    for lead in payload.leads:
+        if not (lead.name or "").strip():
+            continue
+        status = lead.status if lead.status in LEAD_STATUSES else "To Call"
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "owner_id": current_user["id"],
+            "name": lead.name.strip(),
+            "title": lead.title,
+            "company": lead.company,
+            "email": lead.email,
+            "phone": lead.phone,
+            "region": lead.region,
+            "industry": lead.industry,
+            "persona": lead.persona,
+            "linkedin": lead.linkedin,
+            "status": status,
+            "notes": lead.notes,
+            "created_at": now,
+            "updated_at": now
+        })
+    if docs:
+        await db.leads.insert_many(docs)
+    return {"imported": len(docs)}
+
+@api_router.put("/leads/{lead_id}")
+async def update_lead(lead_id: str, update: LeadUpdate, current_user: dict = Depends(get_current_user)):
+    lead = await db.leads.find_one({"id": lead_id, "owner_id": current_user["id"]}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    set_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if "status" in set_data and set_data["status"] not in LEAD_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    set_data["updated_at"] = get_pst_now().isoformat()
+    await db.leads.update_one({"id": lead_id}, {"$set": set_data})
+    updated = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.leads.delete_one({"id": lead_id, "owner_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"message": "Lead deleted"}
+
+
+
 # Include router
 app.include_router(api_router)
 
