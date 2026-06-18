@@ -3053,6 +3053,8 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
 
 @api_router.post("/leads/import")
 async def import_leads(payload: LeadsImport, current_user: dict = Depends(get_current_user)):
+    if len(payload.leads) > 5000:
+        raise HTTPException(status_code=400, detail="Import is limited to 5000 leads at a time")
     now = get_pst_now().isoformat()
     docs = []
     for lead in payload.leads:

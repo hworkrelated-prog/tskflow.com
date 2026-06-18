@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, Target } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, Target, CheckSquare } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -574,7 +574,7 @@ const TaskHub = () => {
                         ) : (
                             <>
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
-                                    <Checkbox className="w-4 h-4" />
+                                    <CheckSquare className="w-4 h-4" />
                                     Select
                                 </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>

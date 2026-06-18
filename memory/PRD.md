@@ -52,6 +52,22 @@ Tskflow is a B2B task management platform focused on clear commitments, time rea
 
 ### Admin Features
 - `/api/admin/stats` - View all user metrics, subscription tiers, flagged accounts
+- `/admin` portal with manual Pro/Teams access grants (by email or domain)
+
+### User Groups (Pro & Teams) ✨ NEW (Jun 2026)
+- Create named email groups (e.g. "My Team", "Design Squad") for one-click multi-assign
+- Duplicate group-name prevention (case-insensitive) + email de-duplication
+- Available only on Pro & Teams; managed from the New Task modal ("Manage groups")
+
+### Prospecting / Leads CRM ✨ NEW (Jun 2026)
+- `/leads` page: a live, searchable repository of sales prospects (all tiers)
+- Curated Ideal Customer Profile guide (personas, industries, US/CA regions, search strings, where to find buyers)
+- Pipeline statuses (To Call → Called → Interested → Won/Lost) with counts
+- Full CRUD + CSV import (max 5000/import) + search & status filters; per-owner isolation
+
+### Task Creation (updated Jun 2026)
+- Removed Notes & Category fields from the create-task modal
+- New custom Due Date & Time picker (quick presets + calendar + hour/minute/AM-PM)
 
 ### Email System (via Resend)
 - Task assignment notifications
@@ -83,9 +99,12 @@ gmail.com, yahoo.com, outlook.com, hotmail.com, live.com, aol.com, icloud.com, m
 ## Backlog
 
 ### Code Quality
-- Refactor server.py (2600+ lines) into route modules
+- Refactor server.py (2900+ lines) into route modules
+- Split TaskHub.js (~940 lines) — extract New Task modal & Groups modal into components
 
 ### Future Features
+- Group editing UI (rename / edit members) — backend PUT /api/groups/{id} already exists
+- Leads: bulk actions, CSV export, optional paid B2B data API (Apollo/Hunter) auto-enrichment
 - Calendar event updates when tasks rescheduled
 - Calendar event deletion when tasks declined/deleted
 - Export reports
