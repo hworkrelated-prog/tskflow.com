@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '@/App';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Mic, MicOff, X, Loader2, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -120,8 +120,8 @@ export const VoiceCommandCenter = ({ onAction }) => {
             <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : closeAll())}>
                 <DialogContent className="rounded-3xl max-w-md text-center p-8" data-testid="voice-modal">
                     <button onClick={closeAll} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
-                    <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: 'Outfit' }}>Voice Assistant</h2>
-                    <p className="text-sm text-muted-foreground mb-6">{supported ? phaseText : 'Voice input is not supported in this browser. Try Chrome.'}</p>
+                    <DialogTitle className="text-2xl font-bold mb-1" style={{ fontFamily: 'Outfit' }}>Voice Assistant</DialogTitle>
+                    <DialogDescription className="text-sm text-muted-foreground mb-6">{supported ? phaseText : 'Voice input is not supported in this browser. Try Chrome.'}</DialogDescription>
 
                     <div className="flex items-center justify-center mb-6">
                         <motion.button

@@ -942,6 +942,8 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user))
         kids = [c for c in children if c.get("parent_id") == p["id"]]
         done = [c for c in kids if c["status"] == "Completed"]
         total = len(kids)
+        if total == 0:
+            continue  # skip empty groups (all children deleted)
         percent = round(len(done) / total * 100) if total else 0
         assignees = []
         for c in kids:
@@ -1460,7 +1462,22 @@ async def delete_task(task_id: str, current_user: dict = Depends(get_current_use
         {"id": task_id},
         {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
     )
-    
+
+    # If this is a parent group, delete its children too
+    if task.get("is_parent"):
+        await db.tasks.update_many(
+            {"parent_id": task_id},
+            {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
+        )
+    # If this was the last active child of a parent, remove the empty parent
+    elif task.get("parent_id"):
+        remaining = await db.tasks.count_documents({"parent_id": task["parent_id"], "deleted": {"$ne": True}})
+        if remaining == 0:
+            await db.tasks.update_one(
+                {"id": task["parent_id"]},
+                {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
+            )
+
     return {"message": "Task deleted"}
 
 @api_router.post("/tasks/bulk-delete")

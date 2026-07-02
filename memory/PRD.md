@@ -106,10 +106,13 @@ gmail.com, yahoo.com, outlook.com, hotmail.com, live.com, aol.com, icloud.com, m
 ### In progress — big feature request (Jul 2026), phased
 Phase 1 ✅ DONE: Manage Groups modal overflow fix; Team Management page resilient load (Promise.allSettled); Add Direct Report lists everyone in workspace (`/team/potential-reports` returns all domain members); placeholder-email→real-name resolution after signup (`resolve_assignee_name`).
 Phase 2 ✅ DONE: Fixed analytics duplicate-`$or` query bug (was ignoring user-involvement filter); track who completed each task (`completed_by`/`completed_by_name`, shown in TaskDetail); analytics team-onboarding empty state.
-Phase 3 ⏳ TODO: Multi-assignee → proper parent/subtask data model (collapsible parent, completion %, done vs outstanding, one-click reminder emails to outstanding).
-Phase 4 ⏳ TODO: Browser notifications — full background Web Push (VAPID + service worker); redesign long Assigned/Delegated/Self lists with fast, clean scrolling (virtualized).
-Phase 5 ⏳ TODO: Voice Command Center (Whisper STT + GPT + OpenAI TTS via Emergent key) — outstanding summary, create/assign/update tasks, navigate by voice.
-Phase 6 ⏳ TODO: Overall UX polish / reduce clicks.
+Phase 3 ✅ DONE: Multi-assignee parent/subtask model — `/tasks/bulk` builds a parent (is_parent) + children (parent_id); `/tasks/parents` returns groups w/ completion % + per-assignee status; collapsible ParentTaskGroup card in Delegated column; `/tasks/parents/{id}/remind` emails outstanding assignees; parent auto-cleanup on child delete.
+Phase 4 ✅ DONE: Background Web Push (VAPID + `public/sw.js` + `/push/*` endpoints + send_web_push on assignment); clean-scroll (max-height + styled scrollbars) on all 3 dashboard columns for long lists.
+Phase 5 ✅ DONE: Voice Command Center — floating mic → browser SpeechRecognition (STT) + SpeechSynthesis (TTS) + `/voice/command` (emergentintegrations GPT-4o, JSON action) for query_outstanding / create_task / assign_task / update_status / navigate. NOTE: OpenAI TTS not used (Emergent key doesn't cover TTS) — uses browser voice; upgrade needs a separate OpenAI/ElevenLabs key.
+Phase 6 ✅ (folded in): friction reduced via voice quick-actions, collapsible groups, cleaner scrolling, team onboarding empty-state, resilient loads.
+
+### Integrations / keys added
+- EMERGENT_LLM_KEY (voice reasoning + whisper capable), VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT (web push), APOLLO_API_KEY (leads). All in backend/.env.
 
 ### Code Quality
 - Refactor server.py (3300+ lines) into route modules
