@@ -155,6 +155,8 @@ class TaskResponse(BaseModel):
     previous_completion_note: Optional[str] = None
     previous_completion_images: Optional[List[str]] = None
     calendar_event_id: Optional[str] = None
+    completed_by: Optional[str] = None
+    completed_by_name: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -260,6 +262,19 @@ async def send_email_notification(to_email: str, subject: str, content: str):
         logging.info(f"Email sent to {to_email}, id: {email.get('id') if isinstance(email, dict) else email}")
     except Exception as e:
         logging.error(f"Failed to send email: {str(e)}")
+
+
+def resolve_assignee_name(task: dict, user_map: dict) -> str:
+    """Resolve an assignee's display name, gracefully handling not-yet-registered
+    (placeholder) email assignments so we never show a bare 'Unknown'."""
+    name = user_map.get(task.get("assigned_to"))
+    if name:
+        return name
+    at = task.get("assigned_to") or ""
+    if at.startswith("email_"):
+        return task.get("assigned_to_email") or at[6:]
+    return task.get("assigned_to_email") or "Unknown"
+
 
 # Auth Routes
 @api_router.post("/auth/register", response_model=dict)
@@ -944,7 +959,7 @@ async def get_dashboard(
             title=task["title"],
             description=task["description"],
             assigned_to=task["assigned_to"],
-            assigned_to_name=user_map.get(task["assigned_to"], "Unknown"),
+            assigned_to_name=resolve_assignee_name(task, user_map),
             created_by=task["created_by"],
             created_by_name=user_map.get(task["created_by"], "Unknown"),
             due_date=task["due_date"],
@@ -1040,7 +1055,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         title=task["title"],
         description=task["description"],
         assigned_to=task["assigned_to"],
-        assigned_to_name=assigned_user["name"] if assigned_user else "Unknown",
+        assigned_to_name=assigned_user["name"] if assigned_user else (task.get("assigned_to_email") or (task["assigned_to"][6:] if str(task["assigned_to"]).startswith("email_") else "Unknown")),
         created_by=task["created_by"],
         created_by_name=created_user["name"] if created_user else "Unknown",
         due_date=task["due_date"],
@@ -1062,7 +1077,10 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         assigned_to_email=assigned_user["email"] if assigned_user else task.get("assigned_to_email"),
         created_by_email=created_user["email"] if created_user else None,
         previous_completion_note=task.get("previous_completion_note"),
-        previous_completion_images=task.get("previous_completion_images")
+        previous_completion_images=task.get("previous_completion_images"),
+        calendar_event_id=task.get("calendar_event_id"),
+        completed_by=task.get("completed_by"),
+        completed_by_name=task.get("completed_by_name")
     )
 
 @api_router.put("/tasks/{task_id}/accept")
@@ -1163,6 +1181,8 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
     update_data = {
         "completion_note": completion.completion_note if completion else None,
         "completion_note_images": completion.completion_note_images if completion else None,
+        "completed_by": current_user["id"],
+        "completed_by_name": current_user["name"],
     }
     
     if is_self_assigned:
@@ -1439,18 +1459,20 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
     # Only fetch tasks where user is involved (created or assigned)
     # Exclude tasks deleted before completion (for analytics accuracy)
     tasks = await db.tasks.find({
-        "$or": [
-            {"assigned_to": current_user["id"]},
-            {"created_by": current_user["id"]}
+        "$and": [
+            {"$or": [
+                {"assigned_to": current_user["id"]},
+                {"created_by": current_user["id"]}
+            ]},
+            {"$or": [
+                {"deleted": {"$ne": True}},  # Not deleted
+                {"$and": [{"deleted": True}, {"completed_at": {"$ne": None}}]}  # Deleted but was completed first
+            ]}
         ],
         "created_at": {
             "$gte": start.isoformat(),
             "$lte": end.isoformat()
-        },
-        "$or": [
-            {"deleted": {"$ne": True}},  # Not deleted
-            {"$and": [{"deleted": True}, {"completed_at": {"$ne": None}}]}  # Deleted but was completed first
-        ]
+        }
     }, {"_id": 0}).to_list(1000)
     
     # Calculate metrics
@@ -2204,44 +2226,33 @@ async def get_direct_reports(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/team/potential-reports")
 async def get_potential_reports(current_user: dict = Depends(get_current_user)):
-    """Get team members who could be added as direct reports"""
+    """Get every team member in the workspace (except yourself) for selection.
+    Circular/self-reporting is prevented at the add-direct-report step."""
     if current_user["subscription_tier"] != "teams":
         raise HTTPException(status_code=403, detail="Teams subscription required")
-    
-    # Get all team members from same domain who don't already report to current user
-    # and are not the current user
+
+    # All team members from the same domain, except the current user
     potential = await db.users.find({
         "company_domain": current_user["company_domain"],
         "subscription_tier": "teams",
-        "id": {"$ne": current_user["id"]},
-        "$or": [
-            {"reports_to": {"$ne": current_user["id"]}},
-            {"reports_to": {"$exists": False}}
-        ]
+        "id": {"$ne": current_user["id"]}
     }, {"_id": 0, "id": 1, "name": 1, "email": 1, "reports_to": 1}).to_list(1000)
-    
-    # Get current user's manager to exclude (can't add your manager as direct report)
-    my_manager_id = current_user.get("reports_to")
-    
-    # Fetch manager names for context
+
+    # Resolve current manager names for context
     result = []
     for p in potential:
-        # Skip if this is your manager (circular prevention)
-        if my_manager_id and p["id"] == my_manager_id:
-            continue
-            
         current_manager = None
         if p.get("reports_to"):
             mgr = await db.users.find_one({"id": p["reports_to"]}, {"_id": 0, "name": 1})
             current_manager = mgr["name"] if mgr else None
-        
         result.append({
             "id": p["id"],
             "name": p["name"],
             "email": p["email"],
-            "current_manager": current_manager
+            "current_manager": current_manager,
+            "reports_to_you": p.get("reports_to") == current_user["id"]
         })
-    
+
     return result
 
 @api_router.get("/team/org-structure")

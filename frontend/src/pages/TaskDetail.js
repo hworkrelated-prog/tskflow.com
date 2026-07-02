@@ -493,6 +493,14 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
+                            {/* Who completed the task */}
+                            {task.status === 'Completed' && task.completed_by_name && (
+                                <div className="flex items-center gap-2 text-sm text-green-700" data-testid="completed-by">
+                                    <CheckCircle className="w-4 h-4" />
+                                    <span>Completed by <span className="font-semibold">{task.completed_by_name}</span></span>
+                                </div>
+                            )}
+
                             {/* Previous Completion Note (shown when sent back) */}
                             {(task.previous_completion_note || (task.previous_completion_images && task.previous_completion_images.length > 0)) && (
                                 <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">

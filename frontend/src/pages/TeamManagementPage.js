@@ -51,33 +51,29 @@ const TeamManagementPage = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const promises = [
+            const [reports, potential, manager, perf] = await Promise.allSettled([
                 axios.get(`${API}/team/direct-reports`),
                 axios.get(`${API}/team/potential-reports`),
                 axios.get(`${API}/team/my-manager`),
                 axios.get(`${API}/team/performance`)
-            ];
-            
-            // Only fetch billing if team owner
+            ]);
+
+            if (reports.status === 'fulfilled') setDirectReports(reports.value.data);
+            if (potential.status === 'fulfilled') setPotentialReports(potential.value.data);
+            if (manager.status === 'fulfilled') setMyManager(manager.value.data.manager);
+            if (perf.status === 'fulfilled') setPerformance(perf.value.data);
+
             if (user?.is_team_owner) {
-                promises.push(axios.get(`${API}/team/members`));
-                promises.push(axios.get(`${API}/team/billing`));
-            }
-            
-            const results = await Promise.all(promises);
-            
-            setDirectReports(results[0].data);
-            setPotentialReports(results[1].data);
-            setMyManager(results[2].data.manager);
-            setPerformance(results[3].data);
-            
-            if (user?.is_team_owner) {
-                setMembers(results[4].data);
-                setBilling(results[5].data);
+                const [mem, bill] = await Promise.allSettled([
+                    axios.get(`${API}/team/members`),
+                    axios.get(`${API}/team/billing`)
+                ]);
+                if (mem.status === 'fulfilled') setMembers(mem.value.data);
+                if (bill.status === 'fulfilled') setBilling(bill.value.data);
             }
         } catch (error) {
             console.error('Failed to load team data:', error);
-            toast.error('Failed to load team data');
+            toast.error('Failed to load some team data');
         } finally {
             setLoading(false);
         }

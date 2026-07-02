@@ -690,12 +690,13 @@ const TaskHub = () => {
                                 </Dialog>
                                 {!isFreeUser && (
                                     <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
-                                        <DialogContent className="rounded-2xl max-w-lg w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
-                                            <DialogHeader>
+                                        <DialogContent className="rounded-2xl max-w-lg w-[95vw] sm:w-full max-h-[85vh] p-0 gap-0 flex flex-col overflow-hidden">
+                                            <DialogHeader className="p-6 pb-3 shrink-0">
                                                 <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Your Groups</DialogTitle>
                                                 <DialogDescription>Save a group of emails once, then assign to everyone in one click.</DialogDescription>
                                             </DialogHeader>
 
+                                            <div className="px-6 pb-6 overflow-y-auto flex-1 min-h-0">
                                             {groups.length > 0 && (
                                                 <div className="space-y-2 mb-4">
                                                     {groups.map((group) => (
@@ -746,6 +747,7 @@ const TaskHub = () => {
                                                 <Button type="button" data-testid="save-group-button" onClick={handleSaveGroup} disabled={groupSaving} className="w-full rounded-full">
                                                     {groupSaving ? 'Saving...' : 'Create Group'}
                                                 </Button>
+                                            </div>
                                             </div>
                                         </DialogContent>
                                     </Dialog>

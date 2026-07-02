@@ -103,9 +103,17 @@ gmail.com, yahoo.com, outlook.com, hotmail.com, live.com, aol.com, icloud.com, m
 
 ## Backlog
 
+### In progress — big feature request (Jul 2026), phased
+Phase 1 ✅ DONE: Manage Groups modal overflow fix; Team Management page resilient load (Promise.allSettled); Add Direct Report lists everyone in workspace (`/team/potential-reports` returns all domain members); placeholder-email→real-name resolution after signup (`resolve_assignee_name`).
+Phase 2 ✅ DONE: Fixed analytics duplicate-`$or` query bug (was ignoring user-involvement filter); track who completed each task (`completed_by`/`completed_by_name`, shown in TaskDetail); analytics team-onboarding empty state.
+Phase 3 ⏳ TODO: Multi-assignee → proper parent/subtask data model (collapsible parent, completion %, done vs outstanding, one-click reminder emails to outstanding).
+Phase 4 ⏳ TODO: Browser notifications — full background Web Push (VAPID + service worker); redesign long Assigned/Delegated/Self lists with fast, clean scrolling (virtualized).
+Phase 5 ⏳ TODO: Voice Command Center (Whisper STT + GPT + OpenAI TTS via Emergent key) — outstanding summary, create/assign/update tasks, navigate by voice.
+Phase 6 ⏳ TODO: Overall UX polish / reduce clicks.
+
 ### Code Quality
-- Refactor server.py (2900+ lines) into route modules
-- Split TaskHub.js (~940 lines) — extract New Task modal & Groups modal into components
+- Refactor server.py (3300+ lines) into route modules
+- Split TaskHub.js (~940 lines) into components
 
 ### Future Features
 - Group editing UI (rename / edit members) — backend PUT /api/groups/{id} already exists

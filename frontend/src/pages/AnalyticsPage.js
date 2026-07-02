@@ -304,15 +304,32 @@ const AnalyticsPage = () => {
                                 </Card>
                             )}
 
-                            {/* Empty State */}
+                            {/* Empty State — team onboarding */}
                             {(!analytics.assignee_breakdown || analytics.assignee_breakdown.length === 0) && analytics.assigned_to_others_count === 0 && (
-                                <Card className="border-2 shadow-soft rounded-2xl">
+                                <Card className="border-2 shadow-soft rounded-2xl" data-testid="analytics-team-onboarding">
                                     <CardContent className="p-12 text-center">
-                                        <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                                        <h3 className="text-lg font-semibold mb-2">No Team Data Yet</h3>
-                                        <p className="text-muted-foreground">
-                                            Assign tasks to team members to see their performance metrics here.
-                                        </p>
+                                        <Users className="w-12 h-12 mx-auto text-indigo-400 mb-4" />
+                                        {user?.subscription_tier === 'teams' ? (
+                                            <>
+                                                <h3 className="text-lg font-semibold mb-2">Set up your team to unlock analytics</h3>
+                                                <p className="text-muted-foreground mb-5 max-w-md mx-auto">
+                                                    Add direct reports and assign them tasks — then you&apos;ll see completion rates, leaderboards, and hierarchy performance here.
+                                                </p>
+                                                <Button onClick={() => navigate('/team')} className="rounded-full" data-testid="analytics-setup-team-button">
+                                                    <Users className="w-4 h-4 mr-2" /> Set up your team
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <h3 className="text-lg font-semibold mb-2">Create a team to see performance analytics</h3>
+                                                <p className="text-muted-foreground mb-5 max-w-md mx-auto">
+                                                    Team analytics (completion rates, leaderboards, and reporting hierarchy) are part of the Teams plan. Create your team to get started.
+                                                </p>
+                                                <Button onClick={() => navigate('/settings')} className="rounded-full" data-testid="analytics-create-team-button">
+                                                    Create a team
+                                                </Button>
+                                            </>
+                                        )}
                                     </CardContent>
                                 </Card>
                             )}

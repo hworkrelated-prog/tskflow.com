@@ -8,6 +8,13 @@ All seeded via `/app/backend/seed_test_users.py` (email_verified=True). Password
 | Teams owner | owner@acmecorp.com | Password123 | teams |
 | Free user | freeuser@example.org | Password123 | free |
 
+## Team test accounts (acmecorp.com — Teams tier)
+| Role | Email | Password |
+|------|-------|----------|
+| Team owner | owner@acmecorp.com | Password123 |
+| Member (reports to owner) | alice@acmecorp.com | Password123 |
+| Member | bob@acmecorp.com | Password123 |
+
 ## Admin Portal & Prospecting (private)
 - Admin Portal route: `/admin`
 - Prospecting / Leads route: `/leads` (now ADMIN-GATED — not a per-user app feature)
