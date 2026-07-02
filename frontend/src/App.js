@@ -17,6 +17,8 @@ import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 import TeamManagementPage from '@/pages/TeamManagementPage';
 import AdminPage from '@/pages/AdminPage';
 import LeadsPage from '@/pages/LeadsPage';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
+import TermsOfService from '@/pages/TermsOfService';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -222,6 +224,8 @@ function App() {
                     <Route path="/invite" element={<InviteHandler />} />
                     <Route path="/admin" element={<AdminPage />} />
                     <Route path="/leads" element={<LeadsPage />} />
+                    <Route path="/privacy" element={<PrivacyPolicy />} />
+                    <Route path="/terms" element={<TermsOfService />} />
                     <Route
                         path="/dashboard"
                         element={
