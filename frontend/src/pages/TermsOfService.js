@@ -67,7 +67,7 @@ const TermsOfService = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">9. Contact Us</h2>
-                        <p>Questions about these Terms? Contact us at <a href="mailto:support@tskflow.com" className="text-indigo-600 underline">support@tskflow.com</a>.</p>
+                        <p>Questions about these Terms? Contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>
 

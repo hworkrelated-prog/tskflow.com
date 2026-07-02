@@ -75,7 +75,7 @@ const PrivacyPolicy = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">7. Contact Us</h2>
-                        <p>If you have any questions about this Privacy Policy, contact us at <a href="mailto:support@tskflow.com" className="text-indigo-600 underline">support@tskflow.com</a>.</p>
+                        <p>If you have any questions about this Privacy Policy, contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>
 
