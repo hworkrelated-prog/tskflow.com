@@ -336,7 +336,7 @@ const SettingsPage = () => {
                                         {user?.is_team_owner ? 'Manage Team' : 'My Team & Reports'}
                                     </Button>
                                 )}
-                                {(user?.subscription_tier === 'pro' || user?.subscription_tier === 'teams') && (
+                                {(user?.subscription_tier === 'pro' || (user?.subscription_tier === 'teams' && user?.is_team_owner)) && (
                                     <Button
                                         onClick={async () => {
                                             try {
@@ -489,6 +489,7 @@ const SettingsPage = () => {
                         </Button>
                     </div>
 
+                    {!(user?.subscription_tier === 'teams' && !user?.is_team_owner) && (
                     <div>
                         <h2 className="text-3xl font-bold mb-6 text-center text-foreground" style={{ fontFamily: 'Outfit' }}>Subscription Plans</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -618,6 +619,7 @@ const SettingsPage = () => {
                             </Card>
                         </div>
                     </div>
+                    )}
                 </motion.div>
             </main>
         </div>

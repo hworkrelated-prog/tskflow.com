@@ -278,18 +278,27 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         "subscription_tier": "teams",
         "is_team_owner": True
     }, {"_id": 0})
-    
+
+    # Check admin access grants (silent free Pro/Teams for specific emails or whole domains)
+    grant = await db.access_grants.find_one({"type": "email", "value": user.email.lower()}, {"_id": 0})
+    if not grant:
+        grant = await db.access_grants.find_one({"type": "domain", "value": "@" + company_domain}, {"_id": 0})
+
     # Determine subscription tier
+    is_team_owner = False
+    team_owner_email = None
+    granted_access = False
     if team_owner:
         # Auto-enroll in team if team owner exists
         subscription_tier = "teams"
-        is_team_owner = False
         team_owner_email = team_owner["email"]
+    elif grant:
+        # Silent free access granted by admin (by email or company domain)
+        subscription_tier = grant["plan"]
+        granted_access = True
     else:
         # New user, starts on free
         subscription_tier = "free"
-        is_team_owner = False
-        team_owner_email = None
     
     # Generate verification code
     verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
@@ -307,6 +316,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         "verification_code": verification_code,
         "is_team_owner": is_team_owner,
         "team_owner_email": team_owner_email,
+        "granted_access": granted_access,
         "last_active": get_pst_now().isoformat(),
         "created_at": get_pst_now().isoformat()
     }

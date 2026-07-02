@@ -53,6 +53,9 @@ Tskflow is a B2B task management platform focused on clear commitments, time rea
 ### Admin Features
 - `/api/admin/stats` - View all user metrics, subscription tiers, flagged accounts
 - `/admin` portal with manual Pro/Teams access grants (by email or domain)
+- **Signup honors access-grants (Jul 2026)**: new users whose email or company domain has an admin access-grant are SILENTLY placed on the granted tier (Pro/Teams) at registration — no notification, `granted_access=true`. Existing users are upgraded when the grant is added.
+- **Settings pricing hidden for domain-Teams members (Jul 2026)**: users on Teams via their domain (non-owner) no longer see the "Subscription Plans" pricing grid or "Manage Subscription" button; paying owners and Free/Pro users still do.
+- Example live grant: `@gomotive.com` → Teams (added in PREVIEW; must also be added in PRODUCTION admin panel).
 
 ### User Groups (Pro & Teams) ✨ NEW (Jun 2026)
 - Create named email groups (e.g. "My Team", "Design Squad") for one-click multi-assign
