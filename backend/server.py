@@ -747,6 +747,9 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         </html>
         """
         background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {task.title}", email_content)
+        # Background browser push (if the assignee is a registered user with a subscription)
+        if assigned_to_id and not str(assigned_to_id).startswith("email_"):
+            background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", task.title, f"/task/{task_id}")
     
     return TaskResponse(
         id=task_id,
@@ -773,6 +776,10 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
     # Free tier: no hard limit, only soft nudges handled in frontend
     
     created_tasks = []
+    # When assigning to 2+ people, group them under a collapsible parent task
+    is_multi = len([a for a in task.assigned_to]) > 1
+    parent_id = str(uuid.uuid4()) if is_multi else None
+    child_ids = []
     
     for assignee in task.assigned_to:
         task_id = str(uuid.uuid4())
@@ -819,10 +826,13 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "category": task.category,
             "created_at": get_pst_now().isoformat(),
             "accepted_at": accepted_at,
-            "invite_token": invite_token
+            "invite_token": invite_token,
+            "parent_id": parent_id,
+            "assigned_to_email": assigned_to_email
         }
         
         await db.tasks.insert_one(task_doc)
+        child_ids.append(task_id)
         
         # Send professional email notification if assigning to others
         app_url = APP_BASE_URL
@@ -864,6 +874,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                 </html>
                 """
                 background_tasks.add_task(send_email_notification, email_to_send, f"New Task: {task.title}", email_content)
+                if not str(assigned_to_id).startswith("email_"):
+                    background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", task.title, f"/task/{task_id}")
         
         created_tasks.append(TaskResponse(
             id=task_id,
@@ -881,7 +893,121 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             accepted_at=accepted_at
         ))
     
+    # Persist the parent container for multi-assignee tasks
+    if parent_id and child_ids:
+        await db.tasks.insert_one({
+            "id": parent_id,
+            "is_parent": True,
+            "title": task.title,
+            "description": task.description,
+            "created_by": current_user["id"],
+            "assigned_to": current_user["id"],
+            "due_date": task.due_date,
+            "status": "Parent",
+            "priority": task.priority,
+            "category": task.category,
+            "child_count": len(child_ids),
+            "created_at": get_pst_now().isoformat()
+        })
+    
     return created_tasks
+
+# ---- Multi-assignee parent task groups ----
+
+@api_router.get("/tasks/parents")
+async def get_parent_task_groups(current_user: dict = Depends(get_current_user)):
+    """Return multi-assignee task groups created by the current user, with
+    per-assignee status and overall completion percentage."""
+    parents = await db.tasks.find(
+        {"is_parent": True, "created_by": current_user["id"], "deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+
+    if not parents:
+        return []
+
+    parent_ids = [p["id"] for p in parents]
+    children = await db.tasks.find(
+        {"parent_id": {"$in": parent_ids}, "deleted": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(5000)
+
+    # Resolve assignee names
+    user_ids = list({c["assigned_to"] for c in children if not str(c["assigned_to"]).startswith("email_")})
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids)) if user_ids else []
+    user_map = {u["id"]: u["name"] for u in users}
+
+    result = []
+    for p in parents:
+        kids = [c for c in children if c.get("parent_id") == p["id"]]
+        done = [c for c in kids if c["status"] == "Completed"]
+        total = len(kids)
+        percent = round(len(done) / total * 100) if total else 0
+        assignees = []
+        for c in kids:
+            assignees.append({
+                "task_id": c["id"],
+                "name": resolve_assignee_name(c, user_map),
+                "email": c.get("assigned_to_email"),
+                "status": c["status"],
+                "completed": c["status"] == "Completed",
+                "completed_by_name": c.get("completed_by_name")
+            })
+        result.append({
+            "id": p["id"],
+            "title": p["title"],
+            "description": p["description"],
+            "priority": p.get("priority"),
+            "due_date": p["due_date"],
+            "created_at": p["created_at"],
+            "total": total,
+            "completed": len(done),
+            "outstanding": total - len(done),
+            "percent": percent,
+            "assignees": assignees
+        })
+    return result
+
+@api_router.post("/tasks/parents/{parent_id}/remind")
+async def remind_outstanding_assignees(parent_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Send a reminder email to everyone in the group who hasn't completed yet."""
+    parent = await db.tasks.find_one({"id": parent_id, "is_parent": True, "created_by": current_user["id"]}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Task group not found")
+
+    children = await db.tasks.find(
+        {"parent_id": parent_id, "deleted": {"$ne": True}, "status": {"$ne": "Completed"}},
+        {"_id": 0}
+    ).to_list(5000)
+
+    app_url = APP_BASE_URL
+    reminded = 0
+    for c in children:
+        assignee = await db.users.find_one({"id": c["assigned_to"]}, {"_id": 0}) if not str(c["assigned_to"]).startswith("email_") else None
+        email_to = (assignee or {}).get("email") or c.get("assigned_to_email")
+        name = (assignee or {}).get("name") or (email_to.split('@')[0] if email_to else "there")
+        if not email_to:
+            continue
+        content = f"""
+        <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">Reminder</h1>
+            </div>
+            <div style="padding: 30px;">
+                <p>Hi {name},</p>
+                <p><strong>{current_user['name']}</strong> is waiting on this task: <strong>{parent['title']}</strong>.</p>
+                <p>It's still outstanding — please take a look when you can.</p>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="{app_url}/task/{c['id']}" style="background: #4F46E5; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
+                </div>
+            </div>
+        </body></html>
+        """
+        background_tasks.add_task(send_email_notification, email_to, f"Reminder: {parent['title']}", content)
+        reminded += 1
+
+    return {"message": f"Reminder sent to {reminded} outstanding assignee(s)", "reminded": reminded}
+
 
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
 async def get_dashboard(
@@ -915,6 +1041,8 @@ async def get_dashboard(
     
     # Exclude deleted tasks from normal views
     query_filter["deleted"] = {"$ne": True}
+    # Exclude parent containers (multi-assignee groups are shown separately)
+    query_filter["is_parent"] = {"$ne": True}
     
     # Apply status filter
     if status_filter == "active":
@@ -980,7 +1108,10 @@ async def get_dashboard(
         elif task["assigned_to"] == current_user["id"]:
             assigned_to_me.append(task_resp)
         elif task["created_by"] == current_user["id"]:
-            assigned_by_me.append(task_resp)
+            # Children of a multi-assignee parent are shown grouped (via /tasks/parents),
+            # so keep them out of the flat "delegated" list to avoid duplicates
+            if not task.get("parent_id"):
+                assigned_by_me.append(task_resp)
     
     # Check task limit (always count active tasks regardless of filter)
     active_count_query = {
@@ -3329,6 +3460,208 @@ async def apollo_phone_webhook(request: HTTPRequest, token: Optional[str] = None
     return {"status": "ignored"}
 
 
+
+
+
+# ==========================================================================
+# WEB PUSH NOTIFICATIONS (background, VAPID) + VOICE COMMAND CENTER
+# ==========================================================================
+import json as _json
+
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:hashim@tskflow.com")
+
+class PushSubscription(BaseModel):
+    endpoint: str
+    keys: Dict[str, str]
+
+@api_router.get("/push/vapid-public-key")
+async def get_vapid_public_key():
+    return {"public_key": VAPID_PUBLIC_KEY}
+
+@api_router.post("/push/subscribe")
+async def push_subscribe(sub: PushSubscription, current_user: dict = Depends(get_current_user)):
+    await db.push_subscriptions.update_one(
+        {"endpoint": sub.endpoint},
+        {"$set": {
+            "user_id": current_user["id"],
+            "endpoint": sub.endpoint,
+            "keys": sub.keys,
+            "updated_at": get_pst_now().isoformat()
+        }},
+        upsert=True
+    )
+    return {"message": "Subscribed"}
+
+@api_router.post("/push/unsubscribe")
+async def push_unsubscribe(sub: PushSubscription, current_user: dict = Depends(get_current_user)):
+    await db.push_subscriptions.delete_one({"endpoint": sub.endpoint, "user_id": current_user["id"]})
+    return {"message": "Unsubscribed"}
+
+async def send_web_push(user_id: str, title: str, body: str, url: str = "/dashboard"):
+    """Send a background web-push notification to all of a user's subscriptions."""
+    if not (VAPID_PRIVATE_KEY and user_id):
+        return
+    subs = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(50)
+    if not subs:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception as e:
+        logging.error(f"pywebpush not available: {e}")
+        return
+    payload = _json.dumps({"title": title, "body": body, "url": url})
+    for s in subs:
+        try:
+            await asyncio.to_thread(
+                webpush,
+                subscription_info={"endpoint": s["endpoint"], "keys": s["keys"]},
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_SUBJECT}
+            )
+        except WebPushException as e:
+            # Clean up expired/invalid subscriptions
+            if getattr(e, "response", None) is not None and e.response.status_code in (404, 410):
+                await db.push_subscriptions.delete_one({"endpoint": s["endpoint"]})
+            else:
+                logging.error(f"Web push failed: {e}")
+        except Exception as e:
+            logging.error(f"Web push error: {e}")
+
+
+# ---- Voice Command Center (Whisper handled client-side; GPT reasoning here) ----
+
+class VoiceCommandRequest(BaseModel):
+    transcript: str
+
+VOICE_SYSTEM_PROMPT = """You are Tskflow's voice assistant. You help a user manage tasks by voice.
+You will receive the user's spoken transcript plus JSON context (their outstanding tasks and known contacts).
+Respond with a SINGLE JSON object ONLY (no markdown, no extra text) with this shape:
+{
+  "reply": "<short, conversational, human spoken reply (1-2 sentences)>",
+  "action": {
+    "type": "<one of: query_outstanding | create_task | assign_task | update_status | navigate | none>",
+    "params": { ... }
+  }
+}
+Rules:
+- query_outstanding: summarize what's outstanding in the reply; params {}.
+- create_task: params {"title": str, "assignee_email": str|null, "priority": "Low|Medium|High|Urgent"|null, "due_date": "YYYY-MM-DDTHH:MM"|null}. If assignee not given, assign to self (assignee_email null).
+- assign_task: same as create_task but always with assignee_email.
+- update_status: params {"task_title": str, "status": "Accepted|Completed"}.
+- navigate: params {"target": "dashboard|analytics|team|settings|leads"}.
+- none: when unclear; ask for clarification in reply.
+Keep replies warm, brief and natural, like a helpful teammate."""
+
+@api_router.post("/voice/command")
+async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    transcript = (req.transcript or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Empty transcript")
+
+    # Build lightweight context: user's active tasks + recent contacts
+    active = await db.tasks.find({
+        "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
+        "status": {"$nin": ["Completed", "Declined"]},
+        "deleted": {"$ne": True},
+        "is_parent": {"$ne": True}
+    }, {"_id": 0, "id": 1, "title": 1, "status": 1, "due_date": 1, "priority": 1, "assigned_to": 1}).to_list(100)
+    outstanding = [{"title": t["title"], "status": t["status"], "due_date": t.get("due_date"), "priority": t.get("priority")} for t in active]
+
+    contacts = await db.user_contacts.find({"user_id": current_user["id"]}, {"_id": 0, "contact_name": 1, "contact_email": 1}).to_list(50)
+    context = {
+        "my_name": current_user["name"],
+        "outstanding_count": len(outstanding),
+        "outstanding_tasks": outstanding[:25],
+        "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts]
+    }
+
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        raise HTTPException(status_code=500, detail="Voice assistant not configured")
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=emergent_key,
+            session_id=f"voice_{current_user['id']}",
+            system_message=VOICE_SYSTEM_PROMPT
+        ).with_model("openai", "gpt-4o")
+        user_msg = UserMessage(text=f"Transcript: {transcript}\n\nContext JSON: {_json.dumps(context)}")
+        raw = await chat.send_message(user_msg)
+    except Exception as e:
+        logging.error(f"Voice LLM error: {e}")
+        raise HTTPException(status_code=502, detail="Voice assistant is unavailable right now")
+
+    # Parse JSON out of the model response
+    text = raw if isinstance(raw, str) else str(raw)
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+    try:
+        start = text.index("{")
+        end = text.rindex("}") + 1
+        parsed = _json.loads(text[start:end])
+    except Exception:
+        parsed = {"reply": text[:300] or "Sorry, I didn't catch that.", "action": {"type": "none", "params": {}}}
+
+    reply = parsed.get("reply") or "Okay."
+    action = parsed.get("action") or {"type": "none", "params": {}}
+    atype = action.get("type", "none")
+    params = action.get("params") or {}
+
+    executed = {"type": atype}
+    # Execute server-side actions where safe
+    if atype in ("create_task", "assign_task"):
+        title = (params.get("title") or transcript)[:200]
+        assignee_email = params.get("assignee_email")
+        priority = params.get("priority") if params.get("priority") in ["Low", "Medium", "High", "Urgent"] else "Medium"
+        due = params.get("due_date") or (get_pst_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+        tid = str(uuid.uuid4())
+        if assignee_email and "@" in assignee_email:
+            existing = await db.users.find_one({"email": assignee_email}, {"_id": 0})
+            assigned_to = existing["id"] if existing else f"email_{assignee_email}"
+            status0 = "Pending"
+            accepted0 = None
+        else:
+            assigned_to = current_user["id"]
+            assignee_email = current_user["email"]
+            status0 = "Accepted"
+            accepted0 = get_pst_now().isoformat()
+        await db.tasks.insert_one({
+            "id": tid, "title": title, "description": f"Created by voice: {transcript}",
+            "assigned_to": assigned_to, "assigned_to_email": assignee_email,
+            "created_by": current_user["id"], "due_date": due, "status": status0,
+            "priority": priority, "created_at": get_pst_now().isoformat(),
+            "accepted_at": accepted0, "invite_token": str(uuid.uuid4())[:8]
+        })
+        if assigned_to != current_user["id"]:
+            background_tasks.add_task(send_web_push, assigned_to, f"New task from {current_user['name']}", title, f"/task/{tid}")
+        executed["task_id"] = tid
+    elif atype == "update_status":
+        tt = (params.get("task_title") or "").lower()
+        new_status = params.get("status")
+        if tt and new_status in ("Accepted", "Completed"):
+            match = await db.tasks.find_one({
+                "assigned_to": current_user["id"], "deleted": {"$ne": True},
+                "title": {"$regex": tt[:60], "$options": "i"}
+            }, {"_id": 0})
+            if match:
+                upd = {"status": new_status}
+                if new_status == "Completed":
+                    upd["completed_at"] = get_pst_now().isoformat()
+                    upd["completed_by"] = current_user["id"]
+                    upd["completed_by_name"] = current_user["name"]
+                elif new_status == "Accepted":
+                    upd["accepted_at"] = get_pst_now().isoformat()
+                await db.tasks.update_one({"id": match["id"]}, {"$set": upd})
+                executed["task_id"] = match["id"]
+
+    return {"reply": reply, "action": {"type": atype, "params": params}, "executed": executed}
 
 
 

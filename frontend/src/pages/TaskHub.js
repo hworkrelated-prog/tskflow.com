@@ -21,6 +21,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import DateTimePicker from '@/components/DateTimePicker';
+import ParentTaskGroup from '@/components/ParentTaskGroup';
+import VoiceCommandCenter from '@/components/VoiceCommandCenter';
+import { registerPush } from '@/lib/push';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const TaskHub = () => {
@@ -44,6 +47,7 @@ const TaskHub = () => {
 
     // User groups (Pro & Teams)
     const [groups, setGroups] = useState([]);
+    const [parentGroups, setParentGroups] = useState([]);
     const [showGroupModal, setShowGroupModal] = useState(false);
     const [groupForm, setGroupForm] = useState({ name: '', emails: [] });
     const [groupEmailInput, setGroupEmailInput] = useState('');
@@ -123,7 +127,13 @@ const TaskHub = () => {
         fetchUsers();
         fetchDeletedTasks();
         fetchGroups();
+        fetchParentGroups();
     }, [viewMode, dateFilter, customDateRange]);
+
+    // Register background push notifications once on mount
+    useEffect(() => {
+        registerPush();
+    }, []);
 
     // Auto-refresh polling with sound notification for new tasks
     const lastTaskCountRef = useRef(null);
@@ -214,6 +224,15 @@ const TaskHub = () => {
             setGroups(response.data);
         } catch (error) {
             // Silent: free users or no groups yet
+        }
+    };
+
+    const fetchParentGroups = async () => {
+        try {
+            const response = await axios.get(`${API}/tasks/parents`);
+            setParentGroups(response.data || []);
+        } catch (error) {
+            // Silent
         }
     };
 
@@ -457,6 +476,7 @@ const TaskHub = () => {
             });
             setSelectedAssignees([]);
             fetchDashboard();
+            fetchParentGroups();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to create task'));
         } finally {
@@ -850,7 +870,7 @@ const TaskHub = () => {
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
                                 <CardDescription>Tasks from others</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3">
+                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
                                 {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No tasks assigned to you'}</p>
                                 ) : (
@@ -868,7 +888,7 @@ const TaskHub = () => {
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-500"></div>Self-Assigned</CardTitle>
                                 <CardDescription>Your personal tasks</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3">
+                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
                                 {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No self-assigned tasks'}</p>
                                 ) : (
@@ -886,8 +906,11 @@ const TaskHub = () => {
                                 <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3">
-                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 ? (
+                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
+                                {parentGroups.map((group) => (
+                                    <ParentTaskGroup key={group.id} group={group} onChanged={fetchParentGroups} />
+                                ))}
+                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 && parentGroups.length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No delegated tasks'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
@@ -931,6 +954,8 @@ const TaskHub = () => {
                     </motion.div>
                 )}
             </main>
+
+            <VoiceCommandCenter onAction={() => { fetchDashboard(); fetchParentGroups(); }} />
         </div>
     );
 };
