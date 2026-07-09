@@ -113,6 +113,7 @@ class TaskCreate(BaseModel):
     category: Optional[str] = None
     note: Optional[str] = None
     note_images: Optional[List[str]] = None  # Base64 or URLs
+    attachments: Optional[List[dict]] = None  # [{id, path, filename, content_type, size, kind}]
 
 class BulkTaskCreate(BaseModel):
     title: str
@@ -123,6 +124,7 @@ class BulkTaskCreate(BaseModel):
     category: Optional[str] = None
     note: Optional[str] = None
     note_images: Optional[List[str]] = None
+    attachments: Optional[List[dict]] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -157,6 +159,7 @@ class TaskResponse(BaseModel):
     calendar_event_id: Optional[str] = None
     completed_by: Optional[str] = None
     completed_by_name: Optional[str] = None
+    attachments: Optional[List[dict]] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -696,7 +699,8 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "completion_note_images": None,
         "review_pending_at": None,
         "review_feedback": None,
-        "invite_token": invite_token
+        "invite_token": invite_token,
+        "attachments": task.attachments or None
     }
     
     await db.tasks.insert_one(task_doc)
@@ -828,7 +832,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "accepted_at": accepted_at,
             "invite_token": invite_token,
             "parent_id": parent_id,
-            "assigned_to_email": assigned_to_email
+            "assigned_to_email": assigned_to_email,
+            "attachments": task.attachments or None
         }
         
         await db.tasks.insert_one(task_doc)
@@ -1213,7 +1218,8 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         previous_completion_images=task.get("previous_completion_images"),
         calendar_event_id=task.get("calendar_event_id"),
         completed_by=task.get("completed_by"),
-        completed_by_name=task.get("completed_by_name")
+        completed_by_name=task.get("completed_by_name"),
+        attachments=task.get("attachments")
     )
 
 @api_router.put("/tasks/{task_id}/accept")
@@ -3683,6 +3689,184 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
 
 
 # Include router
+# ==========================================================================
+# CLOUD OBJECT STORAGE — task attachments & screen recordings
+# ==========================================================================
+from fastapi import Header, Query
+from fastapi.responses import Response
+
+OBJ_STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+APP_STORAGE_PREFIX = "tskflow"
+UPLOAD_TMP_DIR = "/tmp/tskflow_uploads"
+os.makedirs(UPLOAD_TMP_DIR, exist_ok=True)
+_storage_key = None
+_storage_lock = asyncio.Lock()
+
+async def _get_storage_key(force: bool = False):
+    global _storage_key
+    if _storage_key and not force:
+        return _storage_key
+    async with _storage_lock:
+        if _storage_key and not force:
+            return _storage_key
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post(f"{OBJ_STORAGE_URL}/init", json={"emergent_key": os.getenv("EMERGENT_LLM_KEY")})
+            r.raise_for_status()
+            _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+async def storage_put(path: str, data: bytes, content_type: str) -> dict:
+    key = await _get_storage_key()
+    async with httpx.AsyncClient(timeout=300) as c:
+        r = await c.put(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+        if r.status_code == 403:
+            key = await _get_storage_key(force=True)
+            r = await c.put(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+        r.raise_for_status()
+        return r.json()
+
+async def storage_get(path: str) -> tuple:
+    key = await _get_storage_key()
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.get(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+        if r.status_code == 403:
+            key = await _get_storage_key(force=True)
+            r = await c.get(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+        r.raise_for_status()
+        return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+def _kind_for(content_type: str) -> str:
+    ct = (content_type or "").lower()
+    if ct.startswith("video/"):
+        return "video"
+    if ct.startswith("image/"):
+        return "image"
+    if ct.startswith("audio/"):
+        return "audio"
+    return "file"
+
+class UploadFinish(BaseModel):
+    filename: str
+    content_type: Optional[str] = None
+
+@api_router.post("/uploads/start")
+async def upload_start(current_user: dict = Depends(get_current_user)):
+    upload_id = str(uuid.uuid4())
+    # Create empty temp file
+    open(os.path.join(UPLOAD_TMP_DIR, upload_id), "wb").close()
+    return {"upload_id": upload_id}
+
+@api_router.put("/uploads/{upload_id}/chunk")
+async def upload_chunk(upload_id: str, request: HTTPRequest, current_user: dict = Depends(get_current_user)):
+    # Basic guard against path traversal
+    if "/" in upload_id or ".." in upload_id:
+        raise HTTPException(status_code=400, detail="Invalid upload id")
+    tmp_path = os.path.join(UPLOAD_TMP_DIR, upload_id)
+    if not os.path.exists(tmp_path):
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    chunk = await request.body()
+    # Cap total size at 200MB
+    if os.path.getsize(tmp_path) + len(chunk) > 200 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 200MB)")
+    def _append():
+        with open(tmp_path, "ab") as f:
+            f.write(chunk)
+    await asyncio.to_thread(_append)
+    return {"received": len(chunk)}
+
+@api_router.post("/uploads/{upload_id}/finish")
+async def upload_finish(upload_id: str, meta: UploadFinish, current_user: dict = Depends(get_current_user)):
+    if "/" in upload_id or ".." in upload_id:
+        raise HTTPException(status_code=400, detail="Invalid upload id")
+    tmp_path = os.path.join(UPLOAD_TMP_DIR, upload_id)
+    if not os.path.exists(tmp_path):
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    data = await asyncio.to_thread(lambda: open(tmp_path, "rb").read())
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    ext = meta.filename.rsplit(".", 1)[-1].lower() if "." in meta.filename else "bin"
+    content_type = meta.content_type or "application/octet-stream"
+    path = f"{APP_STORAGE_PREFIX}/attachments/{current_user['id']}/{uuid.uuid4()}.{ext}"
+    try:
+        result = await storage_put(path, data, content_type)
+    except Exception as e:
+        logging.error(f"Storage upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Upload to storage failed")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    attachment = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result.get("path", path),
+        "original_filename": meta.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "kind": _kind_for(content_type),
+    }
+    await db.attachments.insert_one({
+        **attachment,
+        "owner_id": current_user["id"],
+        "is_deleted": False,
+        "created_at": get_pst_now().isoformat()
+    })
+    return attachment
+
+@api_router.get("/files/{path:path}")
+async def stream_file(path: str, request: HTTPRequest, authorization: Optional[str] = Header(None), auth: Optional[str] = Query(None)):
+    # Auth via header OR ?auth= (needed for <video>/<img> tags which can't set headers)
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif auth:
+        token = auth
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload.get("sub"):
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    record = await db.attachments.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        data, content_type = await storage_get(path)
+    except Exception as e:
+        logging.error(f"Storage fetch failed: {e}")
+        raise HTTPException(status_code=502, detail="Could not fetch file")
+
+    content_type = record.get("content_type") or content_type
+    total = len(data)
+    filename = record.get("original_filename", "file")
+
+    # Support HTTP Range for smooth inline video seeking/streaming
+    range_header = request.headers.get("range")
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Cache-Control": "private, max-age=3600",
+    }
+    if range_header and range_header.startswith("bytes="):
+        try:
+            rng = range_header.replace("bytes=", "").split("-")
+            start = int(rng[0]) if rng[0] else 0
+            end = int(rng[1]) if len(rng) > 1 and rng[1] else total - 1
+            end = min(end, total - 1)
+            start = max(0, min(start, end))
+            chunk = data[start:end + 1]
+            headers = {**common_headers, "Content-Range": f"bytes {start}-{end}/{total}", "Content-Length": str(len(chunk))}
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+        except Exception:
+            pass
+    return Response(content=data, media_type=content_type, headers={**common_headers, "Content-Length": str(total)})
+
+
+
 app.include_router(api_router)
 
 # Health check endpoint for Kubernetes

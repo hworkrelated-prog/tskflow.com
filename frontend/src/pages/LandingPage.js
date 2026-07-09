@@ -1002,7 +1002,7 @@ const LandingPage = () => {
                         </p>
                         <div className="flex items-center gap-2 text-gray-400 text-sm">
                             <Mail className="w-4 h-4" />
-                            <span>hello@Tskflow.io</span>
+                            <span>© 2025 Unbiassly, Inc. All rights reserved.</span>
                         </div>
                     </div>
                 </div>

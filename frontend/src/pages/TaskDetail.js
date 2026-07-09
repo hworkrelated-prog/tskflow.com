@@ -15,6 +15,7 @@ import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X,
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
+import AttachmentViewer from '@/components/AttachmentViewer';
 
 const TaskDetail = () => {
     const { taskId } = useParams();
@@ -445,6 +446,15 @@ const TaskDetail = () => {
                                 <Label className="text-muted-foreground">Description</Label>
                                 <p className="mt-2 text-base leading-relaxed">{task.description}</p>
                             </div>
+
+                            {task.attachments && task.attachments.length > 0 && (
+                                <div>
+                                    <Label className="text-muted-foreground">Attachments & Recordings</Label>
+                                    <div className="mt-2">
+                                        <AttachmentViewer attachments={task.attachments} />
+                                    </div>
+                                </div>
+                            )}
 
                             {task.reason_for_decline && (
                                 <div className="p-4 bg-red-50 border border-red-200 rounded-xl">

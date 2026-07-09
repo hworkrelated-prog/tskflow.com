@@ -112,7 +112,13 @@ Phase 5 ✅ DONE: Voice Command Center — floating mic → browser SpeechRecogn
 Phase 6 ✅ (folded in): friction reduced via voice quick-actions, collapsible groups, cleaner scrolling, team onboarding empty-state, resilient loads.
 
 ### Integrations / keys added
-- EMERGENT_LLM_KEY (voice reasoning + whisper capable), VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT (web push), APOLLO_API_KEY (leads). All in backend/.env.
+- EMERGENT_LLM_KEY (voice reasoning + whisper capable + object storage), VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT (web push), APOLLO_API_KEY (leads). All in backend/.env.
+
+### Task attachments & screen recording ✅ DONE (Jul 2026)
+- Create-task modal: "Attach files" + "Record screen" (getDisplayMedia + MediaRecorder → webm).
+- Chunked upload (2MB chunks) to Emergent cloud object storage via `/uploads/start|chunk|finish`; refs stored on the task doc (`attachments[]`) + `db.attachments` (soft-delete).
+- Receiver views recordings INLINE via `/api/files/{path}?auth=token` (Content-Disposition inline + HTTP Range/206 for seeking) — no download needed. `AttachmentViewer` renders video player / image / file link on Task Detail.
+- Files stream through the backend (no public storage URLs); auth via header or `?auth=` query (for &lt;video&gt;/&lt;img&gt; tags).
 
 ### Code Quality
 - Refactor server.py (3300+ lines) into route modules

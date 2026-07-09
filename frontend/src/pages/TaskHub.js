@@ -23,6 +23,7 @@ import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import DateTimePicker from '@/components/DateTimePicker';
 import ParentTaskGroup from '@/components/ParentTaskGroup';
 import VoiceCommandCenter from '@/components/VoiceCommandCenter';
+import AttachmentPicker from '@/components/AttachmentPicker';
 import { registerPush } from '@/lib/push';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
@@ -40,6 +41,7 @@ const TaskHub = () => {
         priority: 'Medium'
     });
     const [selectedAssignees, setSelectedAssignees] = useState([]);
+    const [attachments, setAttachments] = useState([]);
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -451,7 +453,7 @@ const TaskHub = () => {
                 return null;
             }).filter(Boolean);
 
-            const taskData = { ...taskForm };
+            const taskData = { ...taskForm, attachments };
 
             if (assigneeList.length === 1) {
                 await axios.post(`${API}/tasks`, {
@@ -475,6 +477,7 @@ const TaskHub = () => {
                 priority: 'Medium'
             });
             setSelectedAssignees([]);
+            setAttachments([]);
             fetchDashboard();
             fetchParentGroups();
         } catch (error) {
@@ -489,6 +492,7 @@ const TaskHub = () => {
         if (!open) {
             setSelectedAssignees([]);
             setEmailInput('');
+            setAttachments([]);
             setTaskForm({
                 title: '',
                 description: '',
@@ -701,6 +705,10 @@ const TaskHub = () => {
                                                         testId="due-date"
                                                     />
                                                 </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Attachments & Screen Recording</Label>
+                                                <AttachmentPicker attachments={attachments} setAttachments={setAttachments} />
                                             </div>
                                             <Button data-testid="submit-task-button" type="submit" className="w-full rounded-full" disabled={createLoading || selectedAssignees.length === 0}>
                                                 {createLoading ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
