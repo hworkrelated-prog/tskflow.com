@@ -19,6 +19,7 @@ import AdminPage from '@/pages/AdminPage';
 import LeadsPage from '@/pages/LeadsPage';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -208,6 +209,7 @@ const InviteHandler = () => {
 
 function App() {
     return (
+        <ErrorBoundary>
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
@@ -270,6 +272,7 @@ function App() {
             </BrowserRouter>
             <Toaster position="top-right" />
         </AuthProvider>
+        </ErrorBoundary>
     );
 }
 
