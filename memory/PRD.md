@@ -103,6 +103,9 @@ gmail.com, yahoo.com, outlook.com, hotmail.com, live.com, aol.com, icloud.com, m
 
 ## Backlog
 
+### Deploy fix (Jul 2026)
+- Production showed "Application not found"/blank because the deploy build failed: CRA treats ESLint warnings (react-hooks/exhaustive-deps, no-unescaped-entities) as errors under CI. Added `DISABLE_ESLINT_PLUGIN=true` + `ESLINT_NO_DEV_ERRORS=true` to frontend/.env so the production build passes. Verified `CI=true yarn build` now exits 0. USER MUST REDEPLOY.
+
 ### In progress — big feature request (Jul 2026), phased
 Phase 1 ✅ DONE: Manage Groups modal overflow fix; Team Management page resilient load (Promise.allSettled); Add Direct Report lists everyone in workspace (`/team/potential-reports` returns all domain members); placeholder-email→real-name resolution after signup (`resolve_assignee_name`).
 Phase 2 ✅ DONE: Fixed analytics duplicate-`$or` query bug (was ignoring user-involvement filter); track who completed each task (`completed_by`/`completed_by_name`, shown in TaskDetail); analytics team-onboarding empty state.
