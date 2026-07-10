@@ -10,6 +10,12 @@ import { Calendar, Image, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
+const safeDate = (value, fmt = 'MMM dd') => {
+    if (!value) return 'No date';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? 'No date' : format(d, fmt);
+};
+
 const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected = false, onSelect, selectionMode = false }) => {
     const navigate = useNavigate();
     const [showCompleteDialog, setShowCompleteDialog] = useState(false);
@@ -128,7 +134,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                             </div>
                             <span className="text-muted-foreground flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
-                                {format(new Date(task.due_date), 'MMM dd')}
+                                {safeDate(task.due_date)}
                             </span>
                         </div>
                         {showAssignee ? (

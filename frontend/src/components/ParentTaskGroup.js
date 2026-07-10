@@ -46,7 +46,7 @@ export const ParentTaskGroup = ({ group, onChanged }) => {
                             <span>{group.completed}/{group.total} done</span>
                             <span>·</span>
                             <Clock className="w-3 h-3" />
-                            {format(new Date(group.due_date), 'MMM dd')}
+                            {group.due_date && !isNaN(new Date(group.due_date).getTime()) ? format(new Date(group.due_date), 'MMM dd') : 'No date'}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
