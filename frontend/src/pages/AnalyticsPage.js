@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import { getErrorMessage } from '@/lib/utils';
@@ -40,6 +40,40 @@ const AnalyticsPage = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const downloadAnalyticsCSV = () => {
+        if (!analytics) return;
+        const rows = [
+            ['Name', 'Email', 'Tasks Assigned', 'Tasks Completed', 'Tasks Pending', 'Completion Rate (%)', 'Response Rate (%)', 'Avg Response (hours)', 'Avg Completion (days)']
+        ];
+        (analytics.assignee_breakdown || []).forEach((a) => {
+            rows.push([
+                a.name,
+                a.email,
+                a.tasks_assigned,
+                a.tasks_completed,
+                a.tasks_pending,
+                a.completion_rate,
+                a.response_rate ?? 0,
+                a.avg_response_hours ?? '',
+                a.avg_completion_days ?? ''
+            ]);
+        });
+        const csv = rows.map(r => r.map(cell => {
+            const s = String(cell ?? '');
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `tskflow-analytics-${startDate}-to-${endDate}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('Analytics CSV downloaded');
     };
 
     return (
@@ -196,21 +230,36 @@ const AnalyticsPage = () => {
                             {analytics.assignee_breakdown && analytics.assignee_breakdown.length > 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl">
                                     <CardHeader>
-                                        <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                            <TrendingUp className="w-6 h-6" />
-                                            Team Performance Breakdown
-                                        </CardTitle>
-                                        <CardDescription>Detailed metrics per assignee</CardDescription>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                                    <TrendingUp className="w-6 h-6" />
+                                                    Team Performance Breakdown
+                                                </CardTitle>
+                                                <CardDescription>Detailed metrics per assignee</CardDescription>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={downloadAnalyticsCSV}
+                                                className="rounded-full shrink-0"
+                                                data-testid="download-analytics-csv"
+                                            >
+                                                <Download className="w-4 h-4 mr-2" />
+                                                Download CSV
+                                            </Button>
+                                        </div>
                                     </CardHeader>
                                     <CardContent>
                                         {/* Table Header */}
-                                        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 rounded-xl mb-4 text-sm font-semibold text-muted-foreground">
-                                            <div className="col-span-3">Team Member</div>
-                                            <div className="col-span-2 text-center">Assigned</div>
-                                            <div className="col-span-2 text-center">Completed</div>
-                                            <div className="col-span-2 text-center">Pending</div>
-                                            <div className="col-span-2 text-center">Completion Rate</div>
-                                            <div className="col-span-1 text-center">Avg Days</div>
+                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-gray-50 rounded-xl mb-4 text-xs font-semibold text-muted-foreground" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
+                                            <div>Team Member</div>
+                                            <div className="text-center">Assigned</div>
+                                            <div className="text-center">Completed</div>
+                                            <div className="text-center">Pending</div>
+                                            <div className="text-center">Completion</div>
+                                            <div className="text-center">Response Rate</div>
+                                            <div className="text-center">Avg Response</div>
                                         </div>
 
                                         {/* Table Rows */}
@@ -224,10 +273,10 @@ const AnalyticsPage = () => {
                                                 >
                                                     <Card className="border rounded-xl hover:shadow-md transition-shadow">
                                                         <CardContent className="p-4">
-                                                            <div className="grid grid-cols-12 gap-4 items-center">
+                                                            <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
                                                                 {/* Name & Email */}
-                                                                <div className="col-span-3 flex items-center gap-3">
-                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center shrink-0">
                                                                         <span className="font-semibold text-indigo-700">
                                                                             {assignee.name.charAt(0).toUpperCase()}
                                                                         </span>
@@ -239,38 +288,38 @@ const AnalyticsPage = () => {
                                                                 </div>
 
                                                                 {/* Tasks Assigned */}
-                                                                <div className="col-span-2 text-center">
-                                                                    <Badge variant="secondary" className="text-lg px-3 py-1">
+                                                                <div className="text-center">
+                                                                    <Badge variant="secondary" className="px-2.5 py-1">
                                                                         {assignee.tasks_assigned}
                                                                     </Badge>
                                                                 </div>
 
                                                                 {/* Tasks Completed */}
-                                                                <div className="col-span-2 text-center">
-                                                                    <Badge className="bg-green-100 text-green-700 text-lg px-3 py-1">
-                                                                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                                                                <div className="text-center">
+                                                                    <Badge className="bg-green-100 text-green-700 px-2.5 py-1">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                                                                         {assignee.tasks_completed}
                                                                     </Badge>
                                                                 </div>
 
                                                                 {/* Tasks Pending */}
-                                                                <div className="col-span-2 text-center">
+                                                                <div className="text-center">
                                                                     {assignee.tasks_pending > 0 ? (
-                                                                        <Badge className="bg-amber-100 text-amber-700 text-lg px-3 py-1">
-                                                                            <Clock className="w-4 h-4 mr-1" />
+                                                                        <Badge className="bg-amber-100 text-amber-700 px-2.5 py-1">
+                                                                            <Clock className="w-3.5 h-3.5 mr-1" />
                                                                             {assignee.tasks_pending}
                                                                         </Badge>
                                                                     ) : (
-                                                                        <Badge className="bg-gray-100 text-gray-500 text-lg px-3 py-1">
+                                                                        <Badge className="bg-gray-100 text-gray-500 px-2.5 py-1">
                                                                             0
                                                                         </Badge>
                                                                     )}
                                                                 </div>
 
                                                                 {/* Completion Rate */}
-                                                                <div className="col-span-2">
+                                                                <div>
                                                                     <div className="flex flex-col items-center">
-                                                                        <span className={`text-lg font-bold ${
+                                                                        <span className={`text-base font-bold ${
                                                                             assignee.completion_rate >= 80 ? 'text-green-600' :
                                                                             assignee.completion_rate >= 50 ? 'text-amber-600' :
                                                                             'text-red-600'
@@ -284,11 +333,32 @@ const AnalyticsPage = () => {
                                                                     </div>
                                                                 </div>
 
-                                                                {/* Avg Completion Days */}
-                                                                <div className="col-span-1 text-center">
-                                                                    {assignee.avg_completion_days !== null ? (
+                                                                {/* Response Rate */}
+                                                                <div>
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className={`text-base font-bold ${
+                                                                            (assignee.response_rate || 0) >= 80 ? 'text-green-600' :
+                                                                            (assignee.response_rate || 0) >= 50 ? 'text-amber-600' :
+                                                                            'text-red-600'
+                                                                        }`}>
+                                                                            {assignee.response_rate || 0}%
+                                                                        </span>
+                                                                        <Progress 
+                                                                            value={assignee.response_rate || 0} 
+                                                                            className="h-2 w-full mt-1"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Avg Response Hours */}
+                                                                <div className="text-center">
+                                                                    {assignee.avg_response_hours !== null && assignee.avg_response_hours !== undefined ? (
                                                                         <span className="text-sm font-medium">
-                                                                            {assignee.avg_completion_days}d
+                                                                            {assignee.avg_response_hours < 1
+                                                                                ? `${Math.round(assignee.avg_response_hours * 60)}m`
+                                                                                : assignee.avg_response_hours < 24
+                                                                                    ? `${assignee.avg_response_hours}h`
+                                                                                    : `${(assignee.avg_response_hours / 24).toFixed(1)}d`}
                                                                         </span>
                                                                     ) : (
                                                                         <span className="text-sm text-muted-foreground">—</span>

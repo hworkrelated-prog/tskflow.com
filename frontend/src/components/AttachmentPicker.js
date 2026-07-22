@@ -76,13 +76,25 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
                 if (blob.size > 0) {
                     await doUpload(blob, `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`, 'video/webm');
+                } else {
+                    toast.error('Recording was empty — try again');
                 }
+            };
+            rec.onerror = (ev) => {
+                console.error('MediaRecorder error', ev);
+                toast.error('Recording error — please try again');
+                try { stream.getTracks().forEach((t) => t.stop()); } catch(_) {}
+                if (timerRef.current) clearInterval(timerRef.current);
+                setRecording(false);
+                setSeconds(0);
             };
             // If the user stops sharing via the browser UI, end the recording
             stream.getVideoTracks()[0].addEventListener('ended', () => {
                 if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
             });
-            rec.start();
+            // Collect chunks every 1s so the recording continues past the initial buffer
+            // (some browsers stop delivering data without a timeslice when the tab is inactive)
+            rec.start(1000);
             setRecording(true);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);

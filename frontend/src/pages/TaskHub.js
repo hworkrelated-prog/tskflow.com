@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Download } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -58,10 +58,11 @@ const TaskHub = () => {
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
     const [viewMode, setViewMode] = useState('active');
-    const [dateFilter, setDateFilter] = useState('all');
+    const [dateFilter, setDateFilter] = useState('today_overdue');
     const [customDateRange, setCustomDateRange] = useState({ from: null, to: null });
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showMoreFilters, setShowMoreFilters] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Multi-select delete state
     const [selectionMode, setSelectionMode] = useState(false);
@@ -503,6 +504,7 @@ const TaskHub = () => {
     };
 
     const primaryFilters = [
+        { value: 'today_overdue', label: 'Today + Overdue' },
         { value: 'overdue', label: 'Overdue', badge: true },
         { value: 'today', label: 'Today' },
         { value: 'this_week', label: 'This Week' }
@@ -515,9 +517,125 @@ const TaskHub = () => {
         { value: 'custom', label: 'Custom Range' }
     ];
 
+    const filterTodayAndOverdue = (tasks) => {
+        const now = new Date();
+        const endToday = endOfDay(now);
+        return tasks.filter(task => {
+            if (task.status === 'Completed') return false;
+            const dueDate = parseISO(task.due_date);
+            if (isNaN(dueDate.getTime())) return false;
+            // Any task due today (before end of today) or overdue in the past
+            return dueDate <= endToday;
+        });
+    };
+
+    const matchesSearch = (task) => {
+        const q = (searchQuery || '').trim().toLowerCase();
+        if (!q) return true;
+        const fields = [
+            task.title,
+            task.description,
+            task.priority,
+            task.status,
+            task.category,
+            task.assigned_to_name,
+            task.created_by_name,
+            task.assigned_to_email,
+            task.created_by_email
+        ];
+        return fields.some(v => v && String(v).toLowerCase().includes(q));
+    };
+
     const getFilteredTasks = (tasks) => {
-        if (dateFilter !== 'overdue') return tasks;
-        return filterOverdueTasks(tasks);
+        let filtered = tasks;
+        if (dateFilter === 'overdue') {
+            filtered = filterOverdueTasks(filtered);
+        } else if (dateFilter === 'today_overdue') {
+            filtered = filterTodayAndOverdue(filtered);
+        }
+        filtered = filtered.filter(matchesSearch);
+        return filtered;
+    };
+
+    const matchesGroupSearch = (group) => {
+        const q = (searchQuery || '').trim().toLowerCase();
+        if (!q) return true;
+        if (group.title && group.title.toLowerCase().includes(q)) return true;
+        if (group.description && group.description.toLowerCase().includes(q)) return true;
+        if (group.priority && group.priority.toLowerCase().includes(q)) return true;
+        return (group.assignees || []).some(a =>
+            (a.name && a.name.toLowerCase().includes(q)) ||
+            (a.email && a.email.toLowerCase().includes(q)) ||
+            (a.status && a.status.toLowerCase().includes(q))
+        );
+    };
+
+    const downloadAllTasksCSV = () => {
+        const buckets = [
+            { name: 'Assigned to Me', tasks: dashboard?.assigned_to_me || [] },
+            { name: 'Self-Assigned', tasks: dashboard?.self_assigned || [] },
+            { name: 'Delegated', tasks: dashboard?.assigned_by_me || [] }
+        ];
+        const rows = [[
+            'Bucket', 'Title', 'Description', 'Priority', 'Status', 'Due Date',
+            'Assigned To', 'Assigned To Email', 'Created By', 'Created By Email',
+            'Created At', 'Accepted At', 'Completed At', 'Category'
+        ]];
+        buckets.forEach(b => {
+            b.tasks.forEach(t => {
+                rows.push([
+                    b.name,
+                    t.title,
+                    t.description,
+                    t.priority,
+                    t.status,
+                    t.due_date,
+                    t.assigned_to_name,
+                    t.assigned_to_email || '',
+                    t.created_by_name,
+                    t.created_by_email || '',
+                    t.created_at,
+                    t.accepted_at || '',
+                    t.completed_at || '',
+                    t.category || ''
+                ]);
+            });
+        });
+        // Include grouped/parent tasks
+        (parentGroups || []).forEach(g => {
+            (g.assignees || []).forEach(a => {
+                rows.push([
+                    'Delegated (Group)',
+                    g.title,
+                    g.description,
+                    g.priority,
+                    a.status,
+                    g.due_date,
+                    a.name,
+                    a.email || '',
+                    user?.name || '',
+                    user?.email || '',
+                    g.created_at,
+                    '',
+                    a.completed ? 'yes' : '',
+                    ''
+                ]);
+            });
+        });
+        const csv = rows.map(r => r.map(cell => {
+            const s = String(cell ?? '');
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `tskflow-tasks-${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('Tasks exported to CSV');
     };
 
     if (loading) {
@@ -785,6 +903,39 @@ const TaskHub = () => {
                     </div>
                 </div>
 
+                {/* Search Bar + Actions */}
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <div className="relative flex-1 min-w-[240px]">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            data-testid="task-search-input"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search across all buckets — owner, title, description, priority, status..."
+                            className="pl-9 rounded-full h-10 bg-white border-gray-200"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                aria-label="Clear search"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    <Button
+                        variant="outline"
+                        onClick={downloadAllTasksCSV}
+                        className="rounded-full gap-2"
+                        data-testid="download-tasks-csv"
+                    >
+                        <Download className="w-4 h-4" />
+                        Download CSV
+                    </Button>
+                </div>
+
                 {/* Filter Bar */}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
                     <div className="flex items-center bg-gray-100 rounded-full p-1">
@@ -915,10 +1066,10 @@ const TaskHub = () => {
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
-                                {parentGroups.map((group) => (
+                                {parentGroups.filter(matchesGroupSearch).map((group) => (
                                     <ParentTaskGroup key={group.id} group={group} onChanged={fetchParentGroups} />
                                 ))}
-                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 && parentGroups.length === 0 ? (
+                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 && parentGroups.filter(matchesGroupSearch).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No delegated tasks'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (

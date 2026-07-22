@@ -141,10 +141,11 @@ const TeamManagementPage = () => {
         setSettingManager(true);
         
         try {
+            const managerId = (!selectedManager || selectedManager === '__none__') ? null : selectedManager;
             await axios.post(`${API}/team/set-manager`, { 
-                manager_id: selectedManager || null 
+                manager_id: managerId 
             });
-            toast.success(selectedManager ? 'Manager updated' : 'Manager removed');
+            toast.success(managerId ? 'Manager updated' : 'Manager removed');
             setShowSetManagerDialog(false);
             setSelectedManager('');
             fetchAllData();
@@ -546,7 +547,7 @@ const TeamManagementPage = () => {
                                                                 <SelectValue placeholder="Choose your manager" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                <SelectItem value="">
+                                                                <SelectItem value="__none__">
                                                                     <span className="text-muted-foreground">No manager (remove)</span>
                                                                 </SelectItem>
                                                                 {potentialReports.map((p) => (

@@ -175,6 +175,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ TESTED: POST /api/team/set-manager working correctly. Users can set their manager, circular reporting prevention works, validation for same domain enforced."
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: POST /api/team/set-manager working correctly. Verified alice can set manager to owner (returns 200 with message and manager details). Verified alice can remove manager by setting manager_id=null (returns 200 with 'Manager removed' message and manager=null)."
 
   - task: "Hierarchical Team Structure - Add Direct Report API"
     implemented: true
@@ -235,6 +238,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ TESTED: GET /api/team/potential-reports working correctly. Returns team members who can be added as direct reports."
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: GET /api/team/potential-reports now correctly includes pro-tier users from same domain. Verified that prouser@acmecorp.com (pro tier) is included along with alice and bob (teams tier). The subscription_tier filter has been successfully removed. Response includes all required fields: id, name, email, current_manager, reports_to_you."
 
 frontend:
   - task: "Email Input Bug Fix in Task Creation"
@@ -324,6 +330,9 @@ test_plan:
       - working: true
         agent: "testing"
         comment: "✅ TESTED: Analytics endpoint working correctly. POST /api/analytics returns assignee_breakdown array with all required fields: name, email, tasks_assigned, tasks_completed, tasks_pending, completion_rate, avg_completion_days. Sample data verified."
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: POST /api/analytics now includes NEW fields response_rate and avg_response_hours in assignee_breakdown. Verified with real data: response_rate=16.7% (1 out of 6 tasks got a response), avg_response_hours=0.0 (responded within seconds). Both fields are correctly typed (number 0-100 for response_rate, number or null for avg_response_hours). All existing fields still present and working."
 
   - task: "Bulk Task Creation Enhancement"
     implemented: true
@@ -344,3 +353,7 @@ agent_communication:
     message: "✅ BACKEND TESTING COMPLETE: All backend APIs tested and working correctly. Email notifications via Resend working (confirmed in logs). Task edit functionality working. Bulk task creation working. User registration & auth working. All hierarchical team structure APIs working. Rate limiting properly configured (2 req/sec). Ready for frontend testing if needed."
   - agent: "testing"
     message: "✅ RECENT CHANGES TESTING COMPLETE: All 4 key areas from review request tested successfully. 1) Email Verification Flow: verification_code properly hidden from API response (security enhancement). 2) Professional Email Notifications: Task creation and edit notifications working with tskbox branding. 3) Analytics: assignee_breakdown array working with all required fields. 4) Bulk Task Creation: Multiple assignees supported with separate tasks and email notifications. 10/11 tests passed (90.9% success rate). Only minor issue: resend verification fails when email already verified (expected behavior)."
+  - agent: "main"
+    message: "[Jul 2026] Implemented 9-fix continuation batch. Backend changes: (1) POST /analytics response now includes per-assignee response_rate (%) and avg_response_hours in assignee_breakdown; (2) GET /team/potential-reports no longer filters by subscription_tier so all domain users show up in Add Direct Report / Set Manager dropdowns. Frontend fixes done separately: Set Manager empty-value bug fixed, search bar + Today+Overdue default + CSV download on TaskHub, grouped-task delete/click-through/details, recording continues past 5s via timeslice, TaskDetail robust to invalid dates, AttachmentViewer robust to missing kind/storage_path. Please regression-test the two backend changes: (a) analytics response includes response_rate and avg_response_hours fields with sensible values; (b) /team/potential-reports returns non-teams-tier users from same domain."
+  - agent: "testing"
+    message: "✅ REGRESSION TESTING COMPLETE (3/3 tests passed): All backend endpoints affected by latest fixes are working correctly. (1) GET /api/team/potential-reports: Now correctly includes pro-tier users from same domain (prouser@acmecorp.com included along with teams-tier users). (2) POST /api/analytics: New fields response_rate and avg_response_hours present with sensible values (16.7% response rate, 0.0 hours avg response time in test). (3) POST /api/team/set-manager: Setting and removing manager both working correctly. All fixes verified and functioning as expected."

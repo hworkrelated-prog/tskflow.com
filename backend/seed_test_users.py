@@ -13,6 +13,8 @@ db = client[os.environ['DB_NAME']]
 USERS = [
     {"name": "Test Pro", "email": "prouser@acmecorp.com", "password": "Password123", "tier": "pro"},
     {"name": "Test Teams Owner", "email": "owner@acmecorp.com", "password": "Password123", "tier": "teams", "owner": True},
+    {"name": "Alice Team Member", "email": "alice@acmecorp.com", "password": "Password123", "tier": "teams"},
+    {"name": "Bob Team Member", "email": "bob@acmecorp.com", "password": "Password123", "tier": "teams"},
     {"name": "Test Free", "email": "freeuser@example.org", "password": "Password123", "tier": "free"},
 ]
 

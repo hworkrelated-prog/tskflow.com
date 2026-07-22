@@ -202,6 +202,8 @@ class AssigneeBreakdown(BaseModel):
     tasks_pending: int
     completion_rate: float
     avg_completion_days: Optional[float] = None
+    response_rate: float = 0.0
+    avg_response_hours: Optional[float] = None
 
 class AnalyticsResponse(BaseModel):
     assigned_to_others_count: int
@@ -1681,6 +1683,28 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
             
             completion_rate = round((len(completed_tasks) / len(assignee_tasks) * 100), 1) if assignee_tasks else 0
             
+            # Response rate: fraction of assigned tasks that got any response (Accepted/Declined/Counter-Proposed/Completed)
+            # rather than sitting Pending.
+            responded_tasks = [t for t in assignee_tasks if t["status"] in ["Accepted", "Declined", "Counter-Proposed", "Completed", "Review Pending"]]
+            response_rate = round((len(responded_tasks) / len(assignee_tasks) * 100), 1) if assignee_tasks else 0
+            
+            # Average hours to first response (created_at -> accepted_at or completed_at)
+            avg_response_hours = None
+            response_times = []
+            for t in assignee_tasks:
+                if t.get("created_at") and (t.get("accepted_at") or t.get("completed_at")):
+                    try:
+                        created = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                        responded_iso = t.get("accepted_at") or t.get("completed_at")
+                        responded_at = datetime.fromisoformat(responded_iso.replace('Z', '+00:00'))
+                        hours = (responded_at - created).total_seconds() / 3600
+                        if hours >= 0:
+                            response_times.append(hours)
+                    except Exception:
+                        pass
+            if response_times:
+                avg_response_hours = round(sum(response_times) / len(response_times), 1)
+            
             assignee_details.append(AssigneeBreakdown(
                 name=assignee_data["name"],
                 email=assignee_data["email"],
@@ -1688,7 +1712,9 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
                 tasks_completed=len(completed_tasks),
                 tasks_pending=len(pending_tasks),
                 completion_rate=completion_rate,
-                avg_completion_days=avg_days
+                avg_completion_days=avg_days,
+                response_rate=response_rate,
+                avg_response_hours=avg_response_hours
             ))
     
     # Sort by tasks assigned (descending)
@@ -2385,10 +2411,10 @@ async def get_potential_reports(current_user: dict = Depends(get_current_user)):
     if current_user["subscription_tier"] != "teams":
         raise HTTPException(status_code=403, detail="Teams subscription required")
 
-    # All team members from the same domain, except the current user
+    # All team members from the same domain, except the current user.
+    # Include users regardless of tier so Teams members on domain-Teams also appear.
     potential = await db.users.find({
         "company_domain": current_user["company_domain"],
-        "subscription_tier": "teams",
         "id": {"$ne": current_user["id"]}
     }, {"_id": 0, "id": 1, "name": 1, "email": 1, "reports_to": 1}).to_list(1000)
 

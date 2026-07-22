@@ -432,7 +432,7 @@ const TaskDetail = () => {
                                 </div>
                                 <div>
                                     <Label className="text-muted-foreground">Due Date</Label>
-                                    <p className="font-semibold text-lg">{format(new Date(task.due_date), 'MMM dd, yyyy h:mm a')}</p>
+                                    <p className="font-semibold text-lg">{task.due_date && !isNaN(new Date(task.due_date).getTime()) ? format(new Date(task.due_date), 'MMM dd, yyyy h:mm a') : 'No date'}</p>
                                 </div>
                                 {task.category && (
                                     <div>
@@ -468,7 +468,7 @@ const TaskDetail = () => {
                                     <Label className="text-blue-700">Counter Proposal</Label>
                                     <p className="mt-1 text-blue-900">{task.counter_proposal_message}</p>
                                     <p className="mt-2 text-sm text-blue-700">
-                                        Proposed Date: {format(new Date(task.proposed_due_date), 'MMM dd, yyyy h:mm a')}
+                                        Proposed Date: {task.proposed_due_date && !isNaN(new Date(task.proposed_due_date).getTime()) ? format(new Date(task.proposed_due_date), 'MMM dd, yyyy h:mm a') : '—'}
                                     </p>
                                 </div>
                             )}
