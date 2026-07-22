@@ -255,18 +255,32 @@ async def send_email_notification(to_email: str, subject: str, content: str):
         logging.warning("Resend API key not configured, skipping email")
         return
     
-    try:
-        params = {
-            "from": "Tskflow <notifications@notifications.unbiassly.com>",
-            "to": [to_email],
-            "subject": subject,
-            "html": content
-        }
-        # Run sync SDK in thread to keep FastAPI non-blocking
-        email = await asyncio.to_thread(resend.Emails.send, params)
-        logging.info(f"Email sent to {to_email}, id: {email.get('id') if isinstance(email, dict) else email}")
-    except Exception as e:
-        logging.error(f"Failed to send email: {str(e)}")
+    params = {
+        "from": "Tskflow <notifications@notifications.unbiassly.com>",
+        "to": [to_email],
+        "subject": subject,
+        "html": content
+    }
+    # Fast + resilient: 3 attempts with quick backoff (0.4s, 0.8s). Runs off the request
+    # thread via to_thread so FastAPI stays non-blocking. Total worst-case ~1.2s of retry.
+    last_err = None
+    for attempt in range(3):
+        try:
+            email = await asyncio.to_thread(resend.Emails.send, params)
+            logging.info(f"Email sent to {to_email}, id: {email.get('id') if isinstance(email, dict) else email}")
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (attempt + 1))
+    logging.error(f"Failed to send email to {to_email} after 3 attempts: {last_err}")
+
+
+async def send_emails_concurrent(messages: list):
+    """Fire multiple emails in parallel. messages = [(to, subject, html), ...]."""
+    if not messages:
+        return
+    await asyncio.gather(*[send_email_notification(m[0], m[1], m[2]) for m in messages], return_exceptions=True)
 
 
 def resolve_assignee_name(task: dict, user_map: dict) -> str:
@@ -990,7 +1004,7 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
     ).to_list(5000)
 
     app_url = APP_BASE_URL
-    reminded = 0
+    messages = []
     for c in children:
         assignee = await db.users.find_one({"id": c["assigned_to"]}, {"_id": 0}) if not str(c["assigned_to"]).startswith("email_") else None
         email_to = (assignee or {}).get("email") or c.get("assigned_to_email")
@@ -1012,8 +1026,11 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
             </div>
         </body></html>
         """
-        background_tasks.add_task(send_email_notification, email_to, f"Reminder: {parent['title']}", content)
-        reminded += 1
+        messages.append((email_to, f"Reminder: {parent['title']}", content))
+
+    # Dispatch all reminders concurrently in the background so the API returns immediately
+    background_tasks.add_task(send_emails_concurrent, messages)
+    reminded = len(messages)
 
     return {"message": f"Reminder sent to {reminded} outstanding assignee(s)", "reminded": reminded}
 
