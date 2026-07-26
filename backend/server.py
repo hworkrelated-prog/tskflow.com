@@ -3068,6 +3068,7 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
             return {"message": f"User {invite.email} added to team"}
     
     # Send invitation email
+    app_url = APP_BASE_URL
     email_content = f"""
     <html>
         <body>
