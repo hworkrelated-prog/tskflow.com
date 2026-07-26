@@ -24,6 +24,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import ParentTaskGroup from '@/components/ParentTaskGroup';
 import VoiceCommandCenter from '@/components/VoiceCommandCenter';
 import AttachmentPicker from '@/components/AttachmentPicker';
+import RichTextEditor from '@/components/RichTextEditor';
 import { registerPush } from '@/lib/push';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
@@ -746,7 +747,11 @@ const TaskHub = () => {
                                             </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor="description">Description</Label>
-                                                <Textarea id="description" data-testid="task-description-input" value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Describe the task..." required rows={3} className="rounded-xl" />
+                                                <RichTextEditor
+                                                    value={taskForm.description}
+                                                    onChange={(value) => setTaskForm({ ...taskForm, description: value })}
+                                                    placeholder="Describe the task with formatting..."
+                                                />
                                             </div>
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between">

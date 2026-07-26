@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import AttachmentViewer from '@/components/AttachmentViewer';
+import RichTextEditor from '@/components/RichTextEditor';
 
 const TaskDetail = () => {
     const { taskId, token } = useParams();
@@ -406,13 +407,10 @@ const TaskDetail = () => {
                                                         </div>
                                                         <div className="space-y-2">
                                                             <Label htmlFor="edit-description">Description</Label>
-                                                            <Textarea
-                                                                id="edit-description"
-                                                                data-testid="edit-description-input"
+                                                            <RichTextEditor
                                                                 value={editForm.description}
-                                                                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                                                                rows={4}
-                                                                className="rounded-xl"
+                                                                onChange={(value) => setEditForm({ ...editForm, description: value })}
+                                                                placeholder="Enter task description..."
                                                             />
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-4">
@@ -513,7 +511,10 @@ const TaskDetail = () => {
 
                             <div>
                                 <Label className="text-muted-foreground">Description</Label>
-                                <p className="mt-2 text-base leading-relaxed">{task.description}</p>
+                                <div 
+                                    className="mt-2 text-base leading-relaxed prose prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: task.description || '' }}
+                                />
                             </div>
 
                             {task.attachments && task.attachments.length > 0 && (

@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
+import RichTextEditor from '@/components/RichTextEditor';
 
 const CreateTask = () => {
     const { user } = useAuth();
@@ -188,14 +188,10 @@ const CreateTask = () => {
 
                             <div className="space-y-2">
                                 <Label htmlFor="description">Description (optional)</Label>
-                                <Textarea
-                                    id="description"
-                                    data-testid="task-description-input"
-                                    placeholder="Enter task description"
+                                <RichTextEditor
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    rows={5}
-                                    className="rounded-md"
+                                    onChange={(value) => setFormData({ ...formData, description: value })}
+                                    placeholder="Enter task description with formatting..."
                                 />
                             </div>
 

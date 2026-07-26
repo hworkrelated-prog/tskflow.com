@@ -121,7 +121,9 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                             {getStatusBadge(task.status)}
                         </div>
                         
-                        <p className="text-sm text-muted-foreground line-clamp-2">{task.description}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                            {task.description ? task.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''}
+                        </p>
                         <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2">
                                 <span className={getPriorityClass(task.priority)}>{task.priority}</span>
