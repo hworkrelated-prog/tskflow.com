@@ -31,6 +31,7 @@ const TaskHub = () => {
     const { user, logout } = useAuth();
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [drafts, setDrafts] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [users, setUsers] = useState([]);
@@ -131,6 +132,7 @@ const TaskHub = () => {
         fetchDeletedTasks();
         fetchGroups();
         fetchParentGroups();
+        fetchDrafts();
     }, [viewMode, dateFilter, customDateRange]);
 
     // Register background push notifications once on mount
@@ -205,6 +207,15 @@ const TaskHub = () => {
             toast.error('Failed to load dashboard');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchDrafts = async () => {
+        try {
+            const response = await axios.get(`${API}/tasks/drafts`);
+            setDrafts(response.data.drafts || []);
+        } catch (error) {
+            console.error('Failed to fetch drafts');
         }
     };
 
@@ -1021,6 +1032,52 @@ const TaskHub = () => {
                         </div>
                     </DialogContent>
                 </Dialog>
+
+                {/* Drafts Section */}
+                {drafts.length > 0 && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        transition={{ duration: 0.3 }}
+                        className="mb-6"
+                    >
+                        <Card className="border-2 shadow-soft rounded-2xl bg-amber-50">
+                            <CardHeader className="pb-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                                            Unfinished Drafts
+                                        </CardTitle>
+                                        <CardDescription>Resume your draft tasks</CardDescription>
+                                    </div>
+                                    <Badge variant="secondary">{drafts.length}</Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {drafts.map((draft) => (
+                                        <Card 
+                                            key={draft.id} 
+                                            className="p-4 cursor-pointer hover:shadow-md transition-shadow border border-amber-200"
+                                            onClick={() => navigate('/create-task', { state: { draftId: draft.id } })}
+                                        >
+                                            <h4 className="font-semibold text-sm truncate">
+                                                {draft.title || 'Untitled Draft'}
+                                            </h4>
+                                            <p className="text-xs text-gray-600 mt-1">
+                                                Started {draft.created_at && !isNaN(new Date(draft.created_at).getTime()) 
+                                                    ? format(new Date(draft.created_at), 'MMM dd, h:mm a')
+                                                    : ''}
+                                            </p>
+                                            <Badge variant="outline" className="mt-2 text-xs">Draft</Badge>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -9,26 +9,50 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const CreateTask = () => {
     const { user } = useAuth();
+    const location = useLocation();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [draftId, setDraftId] = useState(null);
+    const [autoSaveStatus, setAutoSaveStatus] = useState('');
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         assigned_to: '',
         due_date: '',
         priority: 'Medium',
-        category: ''
+        category: '',
+        auto_reminder: false
     });
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchUsers();
-    }, []);
+        
+        // Check if resuming a draft
+        if (location.state?.draftId) {
+            loadDraft(location.state.draftId);
+        }
+    }, [location.state]);
+
+    // Auto-save draft when user starts typing
+    useEffect(() => {
+        if (!draftId && formData.title) {
+            // Create initial draft when user starts typing
+            createDraft();
+        } else if (draftId) {
+            // Auto-save every 3 seconds after changes
+            const timer = setTimeout(() => {
+                saveDraft();
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [formData]);
 
     const fetchUsers = async () => {
         try {
@@ -39,12 +63,65 @@ const CreateTask = () => {
         }
     };
 
+    const loadDraft = async (id) => {
+        try {
+            const response = await axios.get(`${API}/tasks/${id}`);
+            const draft = response.data;
+            setDraftId(id);
+            setFormData({
+                title: draft.title || '',
+                description: draft.description || '',
+                assigned_to: draft.assigned_to || '',
+                due_date: draft.due_date || '',
+                priority: draft.priority || 'Medium',
+                category: draft.category || '',
+                auto_reminder: draft.auto_reminder || false
+            });
+            toast.success('Draft loaded');
+        } catch (error) {
+            toast.error('Failed to load draft');
+        }
+    };
+
+    const createDraft = async () => {
+        try {
+            setAutoSaveStatus('Saving draft...');
+            const response = await axios.post(`${API}/tasks/drafts`, formData);
+            setDraftId(response.data.id);
+            setAutoSaveStatus('Draft saved');
+            setTimeout(() => setAutoSaveStatus(''), 2000);
+        } catch (error) {
+            console.error('Failed to create draft', error);
+            setAutoSaveStatus('');
+        }
+    };
+
+    const saveDraft = async () => {
+        if (!draftId) return;
+        
+        try {
+            setAutoSaveStatus('Saving...');
+            await axios.put(`${API}/tasks/drafts/${draftId}`, formData);
+            setAutoSaveStatus('Saved');
+            setTimeout(() => setAutoSaveStatus(''), 2000);
+        } catch (error) {
+            console.error('Failed to save draft', error);
+            setAutoSaveStatus('');
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            await axios.post(`${API}/tasks`, formData);
+            if (draftId) {
+                // Complete the draft
+                await axios.post(`${API}/tasks/drafts/${draftId}/complete`);
+            } else {
+                // Create new task directly
+                await axios.post(`${API}/tasks`, formData);
+            }
             toast.success('Task created successfully');
             navigate('/dashboard');
         } catch (error) {
@@ -59,16 +136,28 @@ const CreateTask = () => {
             {/* Header */}
             <header className="border-b bg-white">
                 <div className="container mx-auto px-6 py-4">
-                    <Button
-                        data-testid="back-button"
-                        variant="ghost"
-                        onClick={() => navigate('/dashboard')}
-                        className="mb-2 rounded-md"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back
-                    </Button>
-                    <h1 className="text-2xl font-semibold" style={{ fontFamily: 'Outfit' }}>Create New Task</h1>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <Button
+                                data-testid="back-button"
+                                variant="ghost"
+                                onClick={() => navigate('/dashboard')}
+                                className="mb-2 rounded-md"
+                            >
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back
+                            </Button>
+                            <h1 className="text-2xl font-semibold" style={{ fontFamily: 'Outfit' }}>
+                                {draftId ? 'Resume Draft' : 'Create New Task'}
+                            </h1>
+                        </div>
+                        {autoSaveStatus && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Save className="w-4 h-4" />
+                                {autoSaveStatus}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -77,7 +166,9 @@ const CreateTask = () => {
                 <Card className="border-2 shadow-sm rounded-sm">
                     <CardHeader>
                         <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Task Details</CardTitle>
-                        <CardDescription>Fill in the information below to create a new task</CardDescription>
+                        <CardDescription>
+                            {draftId ? 'Continue editing your draft' : 'Fill in the information below. Your progress will be auto-saved.'}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-6">
@@ -96,14 +187,13 @@ const CreateTask = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="description">Description</Label>
+                                <Label htmlFor="description">Description (optional)</Label>
                                 <Textarea
                                     id="description"
                                     data-testid="task-description-input"
                                     placeholder="Enter task description"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    required
                                     rows={5}
                                     className="rounded-md"
                                 />
@@ -118,9 +208,10 @@ const CreateTask = () => {
                                         required
                                     >
                                         <SelectTrigger data-testid="assign-to-select" className="rounded-md">
-                                            <SelectValue placeholder="Select manager" />
+                                            <SelectValue placeholder="Select user" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="self">Myself</SelectItem>
                                             {users.map((u) => (
                                                 <SelectItem key={u.id} value={u.id}>
                                                     {u.name} ({u.email})
@@ -143,6 +234,7 @@ const CreateTask = () => {
                                             <SelectItem value="Low">Low</SelectItem>
                                             <SelectItem value="Medium">Medium</SelectItem>
                                             <SelectItem value="High">High</SelectItem>
+                                            <SelectItem value="Urgent">Urgent</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -175,6 +267,27 @@ const CreateTask = () => {
                                     />
                                 </div>
                             </div>
+
+                            {(formData.priority === 'High' || formData.priority === 'Urgent') && (
+                                <div className="flex items-center space-x-2 p-4 bg-amber-50 border border-amber-200 rounded-md">
+                                    <Checkbox
+                                        id="auto_reminder"
+                                        checked={formData.auto_reminder}
+                                        onCheckedChange={(checked) => setFormData({ ...formData, auto_reminder: checked })}
+                                    />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <label
+                                            htmlFor="auto_reminder"
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                        >
+                                            Enable auto-reminder
+                                        </label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Send automatic reminders for this high-priority task
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex gap-3 pt-4">
                                 <Button

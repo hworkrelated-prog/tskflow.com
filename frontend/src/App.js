@@ -245,6 +245,14 @@ function App() {
                         }
                     />
                     <Route
+                        path="/task-shared/:token"
+                        element={
+                            <ProtectedRoute>
+                                <TaskDetail />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
                         path="/analytics"
                         element={
                             <ProtectedRoute>

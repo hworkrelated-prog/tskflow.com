@@ -11,14 +11,14 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import AttachmentViewer from '@/components/AttachmentViewer';
 
 const TaskDetail = () => {
-    const { taskId } = useParams();
+    const { taskId, token } = useParams();
     const { user } = useAuth();
     const isFreeUser = user?.subscription_tier === 'free';
     const [task, setTask] = useState(null);
@@ -45,15 +45,27 @@ const TaskDetail = () => {
     });
     const [editLoading, setEditLoading] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [comments, setComments] = useState([]);
+    const [newComment, setNewComment] = useState('');
+    const [showComments, setShowComments] = useState(false);
+    const [commentLoading, setCommentLoading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchTask();
-    }, [taskId]);
+        if (taskId) fetchComments();
+    }, [taskId, token]);
 
     const fetchTask = async () => {
         try {
-            const response = await axios.get(`${API}/tasks/${taskId}`);
+            let response;
+            if (token) {
+                // Access via shareable link
+                response = await axios.get(`${API}/tasks/shared/${token}`);
+            } else {
+                // Access via task ID
+                response = await axios.get(`${API}/tasks/${taskId}`);
+            }
             setTask(response.data);
             setEditForm({
                 title: response.data.title,
@@ -67,6 +79,63 @@ const TaskDetail = () => {
             navigate('/dashboard');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchComments = async () => {
+        try {
+            const id = task?.id || taskId;
+            const response = await axios.get(`${API}/tasks/${id}/comments`);
+            setComments(response.data.comments || []);
+        } catch (error) {
+            console.error('Failed to fetch comments', error);
+        }
+    };
+
+    const handleAddComment = async () => {
+        if (!newComment.trim()) return;
+        
+        setCommentLoading(true);
+        try {
+            const id = task?.id || taskId;
+            // Extract @mentions from comment
+            const mentionRegex = /@(\w+)/g;
+            const mentions = [];
+            let match;
+            while ((match = mentionRegex.exec(newComment)) !== null) {
+                mentions.push(match[1]);
+            }
+            
+            await axios.post(`${API}/tasks/${id}/comments`, {
+                content: newComment,
+                mentions: mentions
+            });
+            
+            setNewComment('');
+            fetchComments();
+            toast.success('Comment added');
+        } catch (error) {
+            toast.error('Failed to add comment');
+        } finally {
+            setCommentLoading(false);
+        }
+    };
+
+    const handleCopyShareableLink = () => {
+        if (task?.shareable_token) {
+            const link = `${window.location.origin}/task-shared/${task.shareable_token}`;
+            navigator.clipboard.writeText(link);
+            toast.success('Shareable link copied to clipboard!');
+        }
+    };
+
+    const handleSendEmail = async () => {
+        try {
+            const id = task?.id || taskId;
+            await axios.post(`${API}/tasks/${id}/send-email`);
+            toast.success('Email sent to assignee');
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to send email'));
         }
     };
 
@@ -452,6 +521,88 @@ const TaskDetail = () => {
                                     <Label className="text-muted-foreground">Attachments & Recordings</Label>
                                     <div className="mt-2">
                                         <AttachmentViewer attachments={task.attachments} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Action Buttons: Share, Email, Comments */}
+                            <div className="flex gap-2 flex-wrap pt-4 border-t">
+                                {task.shareable_token && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleCopyShareableLink}
+                                        className="rounded-full"
+                                    >
+                                        <Share2 className="w-4 h-4 mr-2" />
+                                        Copy Shareable Link
+                                    </Button>
+                                )}
+                                
+                                {user?.id === task.created_by && task.assigned_to !== user?.id && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleSendEmail}
+                                        className="rounded-full"
+                                    >
+                                        <Mail className="w-4 h-4 mr-2" />
+                                        Email Assignee
+                                    </Button>
+                                )}
+                                
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowComments(!showComments)}
+                                    className="rounded-full"
+                                >
+                                    <MessageSquare className="w-4 h-4 mr-2" />
+                                    Comments ({comments.length})
+                                </Button>
+                            </div>
+
+                            {/* Comments Section */}
+                            {showComments && (
+                                <div className="space-y-4 p-4 bg-gray-50 rounded-xl border">
+                                    <div className="space-y-3">
+                                        {comments.length === 0 ? (
+                                            <p className="text-center text-gray-500 text-sm">No comments yet. Be the first to comment!</p>
+                                        ) : (
+                                            comments.map((comment) => (
+                                                <div key={comment.id} className="bg-white p-3 rounded-lg shadow-sm">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="font-semibold text-sm">{comment.user_name}</span>
+                                                        <span className="text-xs text-gray-500">
+                                                            {comment.created_at && !isNaN(new Date(comment.created_at).getTime()) 
+                                                                ? format(new Date(comment.created_at), 'MMM dd, h:mm a')
+                                                                : ''}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700">{comment.content}</p>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    
+                                    <div className="space-y-2 pt-3 border-t">
+                                        <Textarea
+                                            placeholder="Add a comment... (use @ to mention users)"
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            rows={3}
+                                            className="rounded-lg"
+                                        />
+                                        <div className="flex justify-end">
+                                            <Button
+                                                onClick={handleAddComment}
+                                                disabled={commentLoading || !newComment.trim()}
+                                                size="sm"
+                                                className="rounded-full"
+                                            >
+                                                {commentLoading ? 'Posting...' : 'Post Comment'}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
