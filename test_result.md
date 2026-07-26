@@ -305,6 +305,18 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Completed parent groups filtering working correctly. GET /api/tasks/parents?status_filter parameter works as expected. Created multi-assignee task (2 children) via POST /api/tasks/bulk. Parent initially appears in ?status_filter=active list. Both children completed and approved (complete → review → approve flow). Parent then appears in ?status_filter=completed list with 100% completion. Parent correctly removed from active list. Filtering logic working perfectly."
 
+  - task: "Standalone Recording Feature"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Standalone recording feature working correctly. All 7 test cases passed. (1) Login as owner@acmecorp.com successful. (2) POST /api/recordings/standalone creates recording with recording_url query parameter. (3) Response includes recording_id, shareable_link, and shareable_token. (4) Shareable link format is valid (https://tskflow.com/recording/{token}). (5) GET /api/recordings/{token} retrieves recording successfully. (6) Retrieved data matches created data (recording_id, recording_url, shareable_token). (7) Recording is not expired for new recordings. (8) Creating recording with null URL works. (9) Invalid tokens correctly return 404. No network errors or unexpected 404s. Feature is production-ready."
+
 frontend:
   - task: "Email Input Bug Fix in Task Creation"
     implemented: true
@@ -443,3 +455,5 @@ agent_communication:
     message: "⚠️ LOGIN FUNCTIONALITY TEST - INFRASTRUCTURE ISSUE: Attempted to test login with owner@acmecorp.com / Password123. Backend API is working correctly (verified via curl to localhost:8001/api/auth/login - returns 200 with valid JWT token and user data). Frontend loads correctly on localhost:3000. However, frontend cannot reach backend due to DNS resolution failure: the external URL (https://tskflow-e5iuxa.us-west-2.aws.emergentmethods.ai) configured in REACT_APP_BACKEND_URL is not resolvable from the testing container (ERR_NAME_NOT_RESOLVED). This is an infrastructure/network configuration issue, not a code issue. The login functionality itself is working correctly at the backend level. Frontend UI test shows: homepage loads ✓, login page loads ✓, credentials can be filled ✓, but login fails silently because API call cannot reach backend. Console logs confirm: 'REQUEST FAILED: https://tskflow-e5iuxa.us-west-2.aws.emergentmethods.ai/api/auth/login - net::ERR_NAME_NOT_RESOLVED'. Both frontend (port 3000) and backend (port 8001) services are running correctly per supervisorctl."
   - agent: "testing"
     message: "✅ LOGIN FUNCTIONALITY TEST COMPLETE - WORKING: Tested login with owner@acmecorp.com / Password123 after backend URL was fixed to http://localhost:8001. Full test results: (1) Homepage loaded successfully ✓. (2) Login page loaded successfully ✓. (3) Credentials filled correctly ✓. (4) Login button clicked ✓. (5) Successfully navigated to /dashboard ✓. (6) Dashboard (TaskHub) loaded successfully ✓. (7) No console errors found ✓. Minor network errors detected are only related to Microsoft Clarity analytics (i.clarity.ms, c.bing.com) - these are third-party tracking services and do NOT affect core functionality. Backend URL configuration (http://localhost:8001) is correct and authentication flow is fully functional. Login test PASSED."
+  - agent: "testing"
+    message: "✅ STANDALONE RECORDING FEATURE TEST COMPLETE (All tests passed): Tested standalone recording feature as requested. (1) Login as owner@acmecorp.com / Password123 successful. (2) POST /api/recordings/standalone creates recording with recording_url as query parameter (not JSON body). (3) Response includes all required fields: recording_id, shareable_link (format: https://tskflow.com/recording/{token}), shareable_token. (4) GET /api/recordings/{token} retrieves recording successfully with all data intact. (5) No network errors or unexpected 404s. (6) Additional tests: Creating recording with null URL works, invalid tokens correctly return 404. Feature is fully functional and production-ready."

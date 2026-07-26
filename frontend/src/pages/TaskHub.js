@@ -25,6 +25,7 @@ import ParentTaskGroup from '@/components/ParentTaskGroup';
 import VoiceCommandCenter from '@/components/VoiceCommandCenter';
 import AttachmentPicker from '@/components/AttachmentPicker';
 import RichTextEditor from '@/components/RichTextEditor';
+import StandaloneRecorder from '@/components/StandaloneRecorder';
 import { registerPush } from '@/lib/push';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
@@ -840,6 +841,7 @@ const TaskHub = () => {
                             </>
                         ) : (
                             <>
+                                <StandaloneRecorder />
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
                                     <CheckSquare className="w-4 h-4" />
                                     Select
