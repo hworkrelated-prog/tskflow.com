@@ -47,17 +47,22 @@ export const StandaloneRecorder = () => {
 
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
                 if (blob.size > 0) {
-                    // Upload and create shareable link
-                    const filename = `recording-${Date.now()}.webm`;
-                    const ref = await uploadBlob(blob, filename, 'video/webm');
-                    
-                    const response = await axios.post(`${API}/recordings/standalone`, {
-                        recording_url: ref.path
-                    });
-                    
-                    setShareableLink(response.data.shareable_link);
-                    setShowResult(true);
-                    toast.success('Recording saved!');
+                    try {
+                        // Upload and create shareable link
+                        const filename = `recording-${Date.now()}.webm`;
+                        const ref = await uploadBlob(blob, filename, 'video/webm');
+                        
+                        const response = await axios.post(`${API}/recordings/standalone`, {
+                            recording_url: ref.path
+                        });
+                        
+                        setShareableLink(response.data.shareable_link);
+                        setShowResult(true);
+                        toast.success('Recording saved!');
+                    } catch (err) {
+                        console.error('Upload error:', err);
+                        toast.error('Failed to save recording');
+                    }
                 } else {
                     toast.error('Recording empty');
                 }
