@@ -1015,9 +1015,11 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
 # ---- Multi-assignee parent task groups ----
 
 @api_router.get("/tasks/parents")
-async def get_parent_task_groups(current_user: dict = Depends(get_current_user)):
+async def get_parent_task_groups(current_user: dict = Depends(get_current_user), status_filter: str = "active"):
     """Return multi-assignee task groups created by the current user, with
-    per-assignee status and overall completion percentage."""
+    per-assignee status and overall completion percentage.
+    status_filter: 'active' or 'completed'
+    """
     parents = await db.tasks.find(
         {"is_parent": True, "created_by": current_user["id"], "deleted": {"$ne": True}},
         {"_id": 0}
@@ -1045,6 +1047,14 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user))
         if total == 0:
             continue  # skip empty groups (all children deleted)
         percent = round(len(done) / total * 100) if total else 0
+        
+        # Filter based on completion status
+        is_completed = percent == 100
+        if status_filter == "completed" and not is_completed:
+            continue
+        if status_filter == "active" and is_completed:
+            continue
+        
         assignees = []
         for c in kids:
             assignees.append({
@@ -1780,6 +1790,75 @@ async def counter_propose(task_id: str, action: TaskAction, background_tasks: Ba
         background_tasks.add_task(send_email_notification, creator["email"], "Task Counter-Proposal", email_content)
     
     return {"message": "Counter-proposal submitted"}
+
+@api_router.put("/tasks/{task_id}/accept-counter-proposal")
+async def accept_counter_proposal(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Accept a counter-proposal and update the task with the new due date"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only task creator can accept counter-proposals
+    if task["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the task creator can accept counter-proposals")
+    
+    if task["status"] != "Counter-Proposed":
+        raise HTTPException(status_code=400, detail="Task has no pending counter-proposal")
+    
+    if not task.get("proposed_due_date"):
+        raise HTTPException(status_code=400, detail="No proposed due date found")
+    
+    # Accept the counter-proposal: update due date and set status to Accepted
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {
+            "status": "Accepted",
+            "due_date": task["proposed_due_date"],
+            "accepted_at": get_pst_now().isoformat(),
+            "counter_proposal_accepted": True
+        }}
+    )
+    
+    # If this is a parent task (group task), update all children
+    if task.get("is_parent"):
+        await db.tasks.update_many(
+            {"parent_id": task_id},
+            {"$set": {
+                "due_date": task["proposed_due_date"]
+            }}
+        )
+    
+    # Notify assignee
+    assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+    if assignee:
+        app_url = APP_BASE_URL
+        email_content = f"""
+        <html>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Counter-Proposal Accepted!</h1>
+                </div>
+                <div style="padding: 40px 30px; background: white;">
+                    <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
+                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                        Great news! <strong>{current_user['name']}</strong> has accepted your counter-proposal for the task: <strong>{task['title']}</strong>
+                    </p>
+                    <div style="background: #F0FDF4; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #10B981;">
+                        <p style="color: #065F46; margin: 0 0 10px 0;">New Due Date: <strong>{task['proposed_due_date'].replace('T', ' at ').split('.')[0]}</strong></p>
+                        <p style="color: #065F46; margin: 0;">Status: <strong>Accepted</strong></p>
+                    </div>
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            View Task
+                        </a>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        background_tasks.add_task(send_email_notification, assignee["email"], "Counter-Proposal Accepted!", email_content)
+    
+    return {"message": "Counter-proposal accepted", "new_due_date": task["proposed_due_date"]}
 
 @api_router.put("/tasks/{task_id}/complete")
 async def complete_task(task_id: str, completion: Optional[TaskComplete] = None, current_user: dict = Depends(get_current_user)):
@@ -3528,7 +3607,15 @@ def _require_paid(current_user: dict):
 @api_router.get("/groups")
 async def list_groups(current_user: dict = Depends(get_current_user)):
     _require_paid(current_user)
-    groups = await db.user_groups.find({"owner_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Get organization-wide groups based on company domain
+    company_domain = current_user.get("company_domain")
+    if not company_domain:
+        return []
+    
+    groups = await db.user_groups.find(
+        {"company_domain": company_domain},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
     return groups
 
 @api_router.post("/groups")
@@ -3538,20 +3625,26 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
     if not name:
         raise HTTPException(status_code=400, detail="Group name is required")
 
-    # Prevent duplicate group names (case-insensitive) for this owner
+    company_domain = current_user.get("company_domain")
+    if not company_domain:
+        raise HTTPException(status_code=400, detail="Company domain not found")
+
+    # Prevent duplicate group names (case-insensitive) org-wide
     existing = await db.user_groups.find_one({
-        "owner_id": current_user["id"],
+        "company_domain": company_domain,
         "name": {"$regex": f"^{name}$", "$options": "i"}
     }, {"_id": 0})
     if existing:
-        raise HTTPException(status_code=400, detail="A group with this name already exists")
+        raise HTTPException(status_code=400, detail="A group with this name already exists in your organization")
 
     group_doc = {
         "id": str(uuid.uuid4()),
         "owner_id": current_user["id"],
+        "company_domain": company_domain,
         "name": name,
         "emails": _clean_emails(group.emails),
-        "created_at": get_pst_now().isoformat()
+        "created_at": get_pst_now().isoformat(),
+        "created_by_name": current_user["name"]
     }
     await db.user_groups.insert_one(group_doc)
     group_doc.pop("_id", None)
@@ -3560,7 +3653,13 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
 @api_router.put("/groups/{group_id}")
 async def update_group(group_id: str, update: GroupUpdate, current_user: dict = Depends(get_current_user)):
     _require_paid(current_user)
-    group = await db.user_groups.find_one({"id": group_id, "owner_id": current_user["id"]}, {"_id": 0})
+    company_domain = current_user.get("company_domain")
+    
+    # Anyone in the org can edit org-wide groups
+    group = await db.user_groups.find_one({
+        "id": group_id,
+        "company_domain": company_domain
+    }, {"_id": 0})
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -3570,7 +3669,7 @@ async def update_group(group_id: str, update: GroupUpdate, current_user: dict = 
         if not new_name:
             raise HTTPException(status_code=400, detail="Group name cannot be empty")
         dup = await db.user_groups.find_one({
-            "owner_id": current_user["id"],
+            "company_domain": company_domain,
             "name": {"$regex": f"^{new_name}$", "$options": "i"},
             "id": {"$ne": group_id}
         }, {"_id": 0})
@@ -3581,6 +3680,8 @@ async def update_group(group_id: str, update: GroupUpdate, current_user: dict = 
         set_data["emails"] = _clean_emails(update.emails)
 
     if set_data:
+        set_data["updated_at"] = get_pst_now().isoformat()
+        set_data["updated_by"] = current_user["id"]
         await db.user_groups.update_one({"id": group_id}, {"$set": set_data})
 
     updated = await db.user_groups.find_one({"id": group_id}, {"_id": 0})
@@ -3589,7 +3690,13 @@ async def update_group(group_id: str, update: GroupUpdate, current_user: dict = 
 @api_router.delete("/groups/{group_id}")
 async def delete_group(group_id: str, current_user: dict = Depends(get_current_user)):
     _require_paid(current_user)
-    result = await db.user_groups.delete_one({"id": group_id, "owner_id": current_user["id"]})
+    company_domain = current_user.get("company_domain")
+    
+    # Anyone in the org can delete org-wide groups
+    result = await db.user_groups.delete_one({
+        "id": group_id,
+        "company_domain": company_domain
+    })
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"message": "Group deleted"}

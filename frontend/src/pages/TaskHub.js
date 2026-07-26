@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Download } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Download, Pencil } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -53,9 +53,11 @@ const TaskHub = () => {
     const [groups, setGroups] = useState([]);
     const [parentGroups, setParentGroups] = useState([]);
     const [showGroupModal, setShowGroupModal] = useState(false);
-    const [groupForm, setGroupForm] = useState({ name: '', emails: [] });
+    const [groupForm, setGroupForm] = useState({ id: null, name: '', emails: [] });
     const [groupEmailInput, setGroupEmailInput] = useState('');
     const [groupSaving, setGroupSaving] = useState(false);
+    const [editingGroupId, setEditingGroupId] = useState(null);
+    const [expandedGroup, setExpandedGroup] = useState(null);
     
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
@@ -244,7 +246,9 @@ const TaskHub = () => {
 
     const fetchParentGroups = async () => {
         try {
-            const response = await axios.get(`${API}/tasks/parents`);
+            const params = new URLSearchParams();
+            params.append('status_filter', viewMode);
+            const response = await axios.get(`${API}/tasks/parents?${params.toString()}`);
             setParentGroups(response.data || []);
         } catch (error) {
             // Silent
@@ -252,18 +256,43 @@ const TaskHub = () => {
     };
 
     const addGroupEmail = () => {
-        const email = groupEmailInput.trim().toLowerCase();
-        if (!email || !email.includes('@')) {
-            toast.error('Enter a valid email address');
+        const input = groupEmailInput.trim();
+        if (!input) {
+            toast.error('Enter an email address');
             return;
         }
-        if (groupForm.emails.includes(email)) {
-            toast.error('Email already added to this group');
+        
+        // Check if input contains multiple emails (bulk paste detection)
+        const lines = input.split(/[\n,;]+/).map(line => line.trim().toLowerCase()).filter(line => line);
+        
+        if (lines.length > 1) {
+            // Bulk import
+            const validEmails = lines.filter(email => email.includes('@'));
+            const newEmails = validEmails.filter(email => !groupForm.emails.includes(email));
+            
+            if (newEmails.length === 0) {
+                toast.error('All emails are already added');
+                return;
+            }
+            
+            setGroupForm({ ...groupForm, emails: [...groupForm.emails, ...newEmails] });
             setGroupEmailInput('');
-            return;
+            toast.success(`Added ${newEmails.length} email(s)`);
+        } else {
+            // Single email
+            const email = input.toLowerCase();
+            if (!email.includes('@')) {
+                toast.error('Enter a valid email address');
+                return;
+            }
+            if (groupForm.emails.includes(email)) {
+                toast.error('Email already added to this group');
+                setGroupEmailInput('');
+                return;
+            }
+            setGroupForm({ ...groupForm, emails: [...groupForm.emails, email] });
+            setGroupEmailInput('');
         }
-        setGroupForm({ ...groupForm, emails: [...groupForm.emails, email] });
-        setGroupEmailInput('');
     };
 
     const handleSaveGroup = async () => {
@@ -277,16 +306,46 @@ const TaskHub = () => {
         }
         setGroupSaving(true);
         try {
-            await axios.post(`${API}/groups`, { name: groupForm.name.trim(), emails: groupForm.emails });
-            toast.success(`Group "${groupForm.name.trim()}" created`);
-            setGroupForm({ name: '', emails: [] });
+            if (editingGroupId) {
+                // Update existing group
+                await axios.put(`${API}/groups/${editingGroupId}`, {
+                    name: groupForm.name.trim(),
+                    emails: groupForm.emails
+                });
+                toast.success(`Group "${groupForm.name.trim()}" updated`);
+                setEditingGroupId(null);
+            } else {
+                // Create new group
+                await axios.post(`${API}/groups`, {
+                    name: groupForm.name.trim(),
+                    emails: groupForm.emails
+                });
+                toast.success(`Group "${groupForm.name.trim()}" created`);
+            }
+            setGroupForm({ id: null, name: '', emails: [] });
             setGroupEmailInput('');
             fetchGroups();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to create group'));
+            toast.error(getErrorMessage(error, editingGroupId ? 'Failed to update group' : 'Failed to create group'));
         } finally {
             setGroupSaving(false);
         }
+    };
+
+    const handleEditGroup = (group) => {
+        setEditingGroupId(group.id);
+        setGroupForm({
+            id: group.id,
+            name: group.name,
+            emails: [...group.emails]
+        });
+        setExpandedGroup(null);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingGroupId(null);
+        setGroupForm({ id: null, name: '', emails: [] });
+        setGroupEmailInput('');
     };
 
     const handleDeleteGroup = async (groupId) => {
@@ -861,54 +920,133 @@ const TaskHub = () => {
                                             <div className="px-6 pb-6 overflow-y-auto flex-1 min-h-0">
                                             {groups.length > 0 && (
                                                 <div className="space-y-2 mb-4">
-                                                    {groups.map((group) => (
-                                                        <div key={group.id} data-testid={`group-row-${group.id}`} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-slate-50">
-                                                            <div className="min-w-0">
-                                                                <p className="font-semibold truncate">{group.name}</p>
-                                                                <p className="text-xs text-muted-foreground truncate">{group.emails.join(', ')}</p>
+                                                    {groups.map((group) => {
+                                                        const isExpanded = expandedGroup === group.id;
+                                                        const showAllEmails = isExpanded || group.emails.length <= 3;
+                                                        const displayEmails = showAllEmails ? group.emails : group.emails.slice(0, 3);
+                                                        
+                                                        return (
+                                                            <div key={group.id} data-testid={`group-row-${group.id}`} className="rounded-xl border bg-slate-50 overflow-hidden">
+                                                                <div className="flex items-start justify-between gap-3 p-3">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
+                                                                        className="min-w-0 flex-1 text-left"
+                                                                    >
+                                                                        <p className="font-semibold">{group.name}</p>
+                                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                                            {displayEmails.join(', ')}
+                                                                            {!showAllEmails && <span className="text-indigo-600 ml-1">+{group.emails.length - 3} more</span>}
+                                                                        </p>
+                                                                        {group.emails.length > 3 && (
+                                                                            <p className="text-xs text-indigo-600 mt-1">
+                                                                                {isExpanded ? 'Click to collapse' : 'Click to see all'}
+                                                                            </p>
+                                                                        )}
+                                                                    </button>
+                                                                    <div className="flex items-center gap-1 shrink-0">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleEditGroup(group)}
+                                                                            className="text-indigo-600 hover:bg-indigo-50 rounded-full p-2"
+                                                                            title="Edit group"
+                                                                        >
+                                                                            <Pencil className="w-4 h-4" />
+                                                                        </button>
+                                                                        {isExpanded && (
+                                                                            <button
+                                                                                type="button"
+                                                                                data-testid={`delete-group-${group.id}`}
+                                                                                onClick={() => handleDeleteGroup(group.id)}
+                                                                                className="text-red-500 hover:bg-red-50 rounded-full p-2"
+                                                                                title="Delete group"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <button type="button" data-testid={`delete-group-${group.id}`} onClick={() => handleDeleteGroup(group.id)} className="text-red-500 hover:bg-red-50 rounded-full p-2 shrink-0">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
 
                                             <div className="space-y-3 pt-2 border-t">
-                                                <p className="text-sm font-semibold">Create a new group</p>
+                                                <p className="text-sm font-semibold">{editingGroupId ? 'Edit group' : 'Create a new group'}</p>
                                                 <div className="space-y-2">
                                                     <Label htmlFor="group-name">Group name</Label>
-                                                    <Input id="group-name" data-testid="group-name-input" value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} placeholder='e.g., "My Team", "Design Squad"' className="rounded-xl" />
+                                                    <Input
+                                                        id="group-name"
+                                                        data-testid="group-name-input"
+                                                        value={groupForm.name}
+                                                        onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                                                        placeholder='e.g., "My Team", "Design Squad"'
+                                                        className="rounded-xl"
+                                                    />
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label htmlFor="group-email">Add members by email</Label>
                                                     <div className="flex gap-2">
-                                                        <Input
+                                                        <Textarea
                                                             id="group-email"
                                                             data-testid="group-email-input"
                                                             value={groupEmailInput}
                                                             onChange={(e) => setGroupEmailInput(e.target.value)}
-                                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGroupEmail(); } }}
-                                                            placeholder="name@company.com"
-                                                            className="rounded-xl"
+                                                            placeholder="name@company.com (or paste multiple emails from a spreadsheet)"
+                                                            className="rounded-xl min-h-[80px]"
                                                         />
-                                                        <Button type="button" variant="outline" data-testid="add-group-email-button" onClick={addGroupEmail} className="rounded-xl shrink-0">Add</Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            data-testid="add-group-email-button"
+                                                            onClick={addGroupEmail}
+                                                            className="rounded-xl shrink-0 self-start"
+                                                        >
+                                                            Add
+                                                        </Button>
                                                     </div>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Tip: Paste a column of emails from Excel/Sheets to bulk import
+                                                    </p>
                                                     {groupForm.emails.length > 0 && (
                                                         <div className="flex flex-wrap gap-2 mt-2">
                                                             {groupForm.emails.map((email) => (
                                                                 <div key={email} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-full text-sm">
                                                                     <span>{email}</span>
-                                                                    <button type="button" onClick={() => setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== email) })} className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== email) })}
+                                                                        className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
-                                                <Button type="button" data-testid="save-group-button" onClick={handleSaveGroup} disabled={groupSaving} className="w-full rounded-full">
-                                                    {groupSaving ? 'Saving...' : 'Create Group'}
-                                                </Button>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        data-testid="save-group-button"
+                                                        onClick={handleSaveGroup}
+                                                        disabled={groupSaving}
+                                                        className="flex-1 rounded-full"
+                                                    >
+                                                        {groupSaving ? 'Saving...' : (editingGroupId ? 'Update Group' : 'Create Group')}
+                                                    </Button>
+                                                    {editingGroupId && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            onClick={handleCancelEdit}
+                                                            className="rounded-full"
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
                                             </div>
                                         </DialogContent>

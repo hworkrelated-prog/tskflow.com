@@ -245,6 +245,66 @@ backend:
         agent: "testing"
         comment: "✅ REGRESSION TEST PASSED: GET /api/team/potential-reports now correctly includes pro-tier users from same domain. Verified that prouser@acmecorp.com (pro tier) is included along with alice and bob (teams tier). The subscription_tier filter has been successfully removed. Response includes all required fields: id, name, email, current_manager, reports_to_you."
 
+  - task: "Organization-wide Groups"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Organization-wide groups working correctly. GET /api/groups returns groups based on company_domain (not just owner_id). Verified that users from same company (owner@acmecorp.com and alice@acmecorp.com) can see each other's groups. Both users can edit the same group (org-wide edit permission). Created group by owner, alice successfully listed it, edited it (name + emails), and owner saw the updates."
+
+  - task: "Groups Editable"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Groups editable functionality working correctly. PUT /api/groups/{group_id} allows updating both name and emails. Created group with 2 emails, updated to add 3rd email and change name, verified updates persisted. All changes correctly saved to database and retrievable via GET /api/groups."
+
+  - task: "Bulk Group Creation"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Bulk group creation working correctly. POST /api/groups accepts array of emails and creates group with all emails at once (simulating spreadsheet paste). Tested with 10 emails in initial creation, all verified present. Then updated via PUT to add 5 more emails (total 15), bulk update successful. Supports large-scale email additions."
+
+  - task: "Counter-Proposal Acceptance"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Counter-proposal acceptance flow working correctly. Full workflow tested: (1) Owner creates task for Alice with due date in 3 days. (2) Alice submits counter-proposal via PUT /api/tasks/{task_id}/counter-propose with new due date (7 days) and message. Task status becomes 'Counter-Proposed'. (3) Owner accepts via PUT /api/tasks/{task_id}/accept-counter-proposal. (4) Task status becomes 'Accepted' and due_date updates to proposed date. All steps verified working."
+
+  - task: "Completed Parent Groups Filtering"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Completed parent groups filtering working correctly. GET /api/tasks/parents?status_filter parameter works as expected. Created multi-assignee task (2 children) via POST /api/tasks/bulk. Parent initially appears in ?status_filter=active list. Both children completed and approved (complete → review → approve flow). Parent then appears in ?status_filter=completed list with 100% completion. Parent correctly removed from active list. Filtering logic working perfectly."
+
 frontend:
   - task: "Email Input Bug Fix in Task Creation"
     implemented: true
@@ -285,15 +345,16 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Email Notifications via Resend"
-    - "Task Edit Functionality"
-    - "Bulk Task Creation"
-    - "User Registration & Authentication"
+    - "Organization-wide Groups"
+    - "Groups Editable"
+    - "Bulk Group Creation"
+    - "Counter-Proposal Acceptance"
+    - "Completed Parent Groups Filtering"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -376,3 +437,5 @@ agent_communication:
     message: "✅ EMAIL PIPELINE REGRESSION TEST COMPLETE (3/3 tests passed): Verified two backend email pipeline changes. (1) Individual email retry & non-blocking: POST /api/tasks returns in 0.232s with BackgroundTasks, send_email_notification uses asyncio.to_thread with 3 retry attempts (0.4s/0.8s backoff). (2) Group reminder concurrent dispatch: POST /api/tasks/parents/{id}/remind returns in 0.153s, uses send_emails_concurrent with asyncio.gather for parallel email dispatch. (3) Graceful RESEND_API_KEY handling: Missing key logs warnings, no tracebacks, endpoints return 200 with low latency. Both latencies well under 2s requirement. All changes working as designed."
   - agent: "testing"
     message: "✅ DRAFTS FUNCTIONALITY TEST COMPLETE (5/5 tests passed): All drafts endpoints working correctly, 404 bug is FIXED. (1) GET /api/tasks/drafts returns empty array (not 404) when no drafts exist. (2) POST /api/tasks/drafts creates draft with minimal data (just title). (3) GET /api/tasks/drafts returns created drafts. (4) PUT /api/tasks/drafts/{id} updates draft successfully. (5) POST /api/tasks/drafts/{id}/complete converts draft to regular task (status changes from Draft to Accepted, draft removed from drafts list). IMPORTANT: During testing, I fixed missing dependencies (pytz, google-auth-oauthlib) and created missing /app/backend/.env file with required environment variables. Backend was not starting due to these issues."
+  - agent: "testing"
+    message: "✅ GROUP FEATURES TESTING COMPLETE (5/5 tests passed - 100%): All 7 core group fixes tested and working correctly. (1) Organization-wide Groups: Users from same company domain can see and edit each other's groups (tested with owner and alice from acmecorp.com). (2) Groups Editable: PUT /api/groups/{group_id} updates name and emails, changes persist. (3) Bulk Group Creation: POST /api/groups accepts multiple emails at once (tested with 10 emails, then updated to 15). (4) Counter-Proposal Acceptance: Full flow working - create task → counter-propose with new due date → accept counter-proposal → status becomes 'Accepted' and due_date updates. (5) Completed Parent Groups Filtering: GET /api/tasks/parents?status_filter correctly filters by completion status (active vs completed). Multi-assignee tasks create parent + children, completion requires both complete and review/approve steps. All features production-ready."

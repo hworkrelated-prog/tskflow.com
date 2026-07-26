@@ -199,6 +199,20 @@ const TaskDetail = () => {
         }
     };
 
+    const handleAcceptCounterProposal = async () => {
+        setActionLoading(true);
+        try {
+            const id = task?.id || taskId;
+            await axios.put(`${API}/tasks/${id}/accept-counter-proposal`);
+            toast.success('Counter-proposal accepted!');
+            fetchTask();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to accept counter-proposal'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleComplete = async () => {
         setActionLoading(true);
         try {
@@ -622,6 +636,25 @@ const TaskDetail = () => {
                                     <p className="mt-2 text-sm text-blue-700">
                                         Proposed Date: {task.proposed_due_date && !isNaN(new Date(task.proposed_due_date).getTime()) ? format(new Date(task.proposed_due_date), 'MMM dd, yyyy h:mm a') : '—'}
                                     </p>
+                                    {user?.id === task.created_by && task.status === 'Counter-Proposed' && (
+                                        <div className="flex gap-2 mt-3">
+                                            <Button
+                                                onClick={handleAcceptCounterProposal}
+                                                size="sm"
+                                                className="rounded-full bg-green-600 hover:bg-green-700"
+                                            >
+                                                Accept Proposal
+                                            </Button>
+                                            <Button
+                                                onClick={handleDecline}
+                                                size="sm"
+                                                variant="outline"
+                                                className="rounded-full"
+                                            >
+                                                Reject
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
