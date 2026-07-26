@@ -317,6 +317,30 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Standalone recording feature working correctly. All 7 test cases passed. (1) Login as owner@acmecorp.com successful. (2) POST /api/recordings/standalone creates recording with recording_url query parameter. (3) Response includes recording_id, shareable_link, and shareable_token. (4) Shareable link format is valid (https://tskflow.com/recording/{token}). (5) GET /api/recordings/{token} retrieves recording successfully. (6) Retrieved data matches created data (recording_id, recording_url, shareable_token). (7) Recording is not expired for new recordings. (8) Creating recording with null URL works. (9) Invalid tokens correctly return 404. No network errors or unexpected 404s. Feature is production-ready."
 
+  - task: "Group Task Leaderboard"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Group task leaderboard endpoint working correctly. GET /api/tasks/{task_id}/leaderboard returns leaderboard data for parent tasks. All required fields present: rank, assignee_id, name, status, engagement_score, task_id, completion_hours. Leaderboard correctly ranks assignees by engagement score (lower is better: 1=completed, 2=review pending, 3=accepted, 4=other, 5=pending) and completion time. Visibility message included: '⚡ Your speed and engagement are visible to everyone on this task'. Tested with 2-assignee group task. Feature is production-ready."
+
+  - task: "Task Comments with Mentions"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Task comments with mentions working correctly. POST /api/tasks/{task_id}/comments creates comments with mentions array (user IDs). All required fields present in response: id, user_id, user_name, content, mentions, created_at. GET /api/tasks/{task_id}/comments retrieves comments successfully. Mentions are properly stored and retrieved. Email notifications sent to mentioned users (verified in backend logs). Tested with mention of alice@acmecorp.com. Feature is production-ready."
+
 frontend:
   - task: "Email Input Bug Fix in Task Creation"
     implemented: true
@@ -479,3 +503,6 @@ agent_communication:
     message: "✅ REACT-QUILL-NEW MIGRATION VALIDATION COMPLETE: Task creation modal is now fully functional with React 19. Tested all requirements from review request: (1) Login with owner@acmecorp.com / Password123 ✓. (2) Clicked 'New Task' button ✓. (3) Modal opened without crash ✓. (4) Rich text editor loaded successfully with full toolbar (Bold, Italic, Underline, Lists, Link) ✓. (5) Task title and description fields working correctly ✓. (6) NO errors - zero findDOMNode errors, zero React 19 compatibility errors, zero React error boundary triggers ✓. Console shows only minor non-blocking warnings (Microsoft Clarity external service, emergent-main.js React warnings, Quill 'bullet' format config). The react-quill-new@3.8.3 package is working perfectly. Migration from react-quill to react-quill-new is SUCCESSFUL and PRODUCTION-READY. The stuck task 'Email Input Bug Fix in Task Creation' is now RESOLVED."
 
     message: "❌ CRITICAL PRODUCTION BLOCKER - FINAL VALIDATION FAILED: Task creation modal crashes immediately when opened. Error: 'TypeError: react_dom_1.default.findDOMNode is not a function' at ReactQuill.getEditingArea. Verified react-quill@2.0.0-beta.4 is installed but STILL incompatible with React 19. Root cause: react-quill package (including all 2.x beta versions) is UNMAINTAINED and does NOT support React 19. SOLUTION REQUIRED: Must migrate to 'react-quill-new' package (maintained fork specifically for React 19). Migration steps: (1) yarn remove react-quill && yarn add react-quill-new, (2) Update /app/frontend/src/components/RichTextEditor.js: change import from 'react-quill' to 'react-quill-new', (3) Update CSS import from 'react-quill/dist/quill.snow.css' to 'react-quill-new/dist/quill.snow.css'. This is a BLOCKING issue - app shows 'Something went wrong' error page when trying to create tasks. Cannot proceed with production deployment until fixed. Other features tested: ✓ Login working, ✓ Record Screen button visible, ✓ Dashboard loads correctly."
+
+  - agent: "testing"
+    message: "✅ GROUP TASK FEATURES TESTING COMPLETE (12/12 tests passed - 100%): Quick backend validation of new group task features completed successfully. (1) Login as owner@acmecorp.com / Password123 ✓. (2) Created parent task (group task) with 2 assignees (Alice and Bob) ✓. (3) GET /api/tasks/{task_id}/leaderboard returns leaderboard data with all required fields: rank, assignee_id, name, status, engagement_score, task_id, completion_hours ✓. Leaderboard correctly ranks by engagement score (1=completed, 2=review pending, 3=accepted, 4=other, 5=pending) and completion time ✓. Visibility message present: '⚡ Your speed and engagement are visible to everyone on this task' ✓. (4) POST /api/tasks/{task_id}/comments with mentions creates comment successfully ✓. All required fields present: id, user_id, user_name, content, mentions, created_at ✓. Mentions array correctly stores user IDs ✓. (5) GET /api/tasks/{task_id}/comments retrieves comments successfully ✓. Comment persistence verified ✓. All endpoints return data without errors. Features are production-ready."

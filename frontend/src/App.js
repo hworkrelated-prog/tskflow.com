@@ -66,6 +66,11 @@ const AuthProvider = ({ children }) => {
         setToken(token);
         setUser(userData);
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => {});
+        }
     };
 
     const logout = () => {
@@ -241,6 +246,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <TaskDetail />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/group-task/:groupId"
+                        element={
+                            <ProtectedRoute>
+                                <GroupTaskDetail />
                             </ProtectedRoute>
                         }
                     />

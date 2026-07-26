@@ -93,7 +93,10 @@ export const ParentTaskGroup = ({ group, onChanged }) => {
     const complete = group.percent === 100;
 
     return (
-        <Card className="border-2 rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
+        <Card 
+            className="border-2 rounded-2xl overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => navigate(`/group-task/${group.id}`)}
+        >
             <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50">
                 <div className="flex items-start justify-between gap-3">
                     <button
