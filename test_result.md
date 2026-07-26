@@ -285,7 +285,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -349,6 +349,18 @@ test_plan:
         agent: "testing"
         comment: "✅ TESTED: Bulk task creation working perfectly. POST /api/tasks/bulk creates separate tasks for each assignee (registered users, unregistered emails, self-assignment). Email notifications sent to all assignees. Confirmed 3 tasks created for 3 different assignees with unique IDs."
 
+  - task: "Drafts Functionality - 404 Bug Fix"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: All drafts endpoints working correctly. 5/5 tests passed. (1) GET /api/tasks/drafts returns empty array (not 404) when no drafts exist. (2) POST /api/tasks/drafts creates draft with minimal data (just title). (3) GET /api/tasks/drafts returns created drafts. (4) PUT /api/tasks/drafts/{id} updates draft fields (title, description, priority verified). (5) POST /api/tasks/drafts/{id}/complete converts draft to regular task (status changes from Draft to Accepted, draft removed from drafts list). 404 bug is completely fixed. Note: Fixed missing dependencies (pytz, google-auth-oauthlib) and created missing /app/backend/.env file during testing."
+
 agent_communication:
   - agent: "main"
     message: "Implemented hierarchical team structure with direct reports. Need to test the backend APIs first, then verify frontend functionality."
@@ -362,3 +374,5 @@ agent_communication:
     message: "✅ REGRESSION TESTING COMPLETE (3/3 tests passed): All backend endpoints affected by latest fixes are working correctly. (1) GET /api/team/potential-reports: Now correctly includes pro-tier users from same domain (prouser@acmecorp.com included along with teams-tier users). (2) POST /api/analytics: New fields response_rate and avg_response_hours present with sensible values (16.7% response rate, 0.0 hours avg response time in test). (3) POST /api/team/set-manager: Setting and removing manager both working correctly. All fixes verified and functioning as expected."
   - agent: "testing"
     message: "✅ EMAIL PIPELINE REGRESSION TEST COMPLETE (3/3 tests passed): Verified two backend email pipeline changes. (1) Individual email retry & non-blocking: POST /api/tasks returns in 0.232s with BackgroundTasks, send_email_notification uses asyncio.to_thread with 3 retry attempts (0.4s/0.8s backoff). (2) Group reminder concurrent dispatch: POST /api/tasks/parents/{id}/remind returns in 0.153s, uses send_emails_concurrent with asyncio.gather for parallel email dispatch. (3) Graceful RESEND_API_KEY handling: Missing key logs warnings, no tracebacks, endpoints return 200 with low latency. Both latencies well under 2s requirement. All changes working as designed."
+  - agent: "testing"
+    message: "✅ DRAFTS FUNCTIONALITY TEST COMPLETE (5/5 tests passed): All drafts endpoints working correctly, 404 bug is FIXED. (1) GET /api/tasks/drafts returns empty array (not 404) when no drafts exist. (2) POST /api/tasks/drafts creates draft with minimal data (just title). (3) GET /api/tasks/drafts returns created drafts. (4) PUT /api/tasks/drafts/{id} updates draft successfully. (5) POST /api/tasks/drafts/{id}/complete converts draft to regular task (status changes from Draft to Accepted, draft removed from drafts list). IMPORTANT: During testing, I fixed missing dependencies (pytz, google-auth-oauthlib) and created missing /app/backend/.env file with required environment variables. Backend was not starting due to these issues."

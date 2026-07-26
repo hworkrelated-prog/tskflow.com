@@ -1277,6 +1277,384 @@ async def get_deleted_tasks(current_user: dict = Depends(get_current_user)):
         "created_by_name": user_map.get(task["created_by"], "Unknown")
     } for task in deleted_tasks]
 
+# ===== DRAFT TASK ENDPOINTS =====
+@api_router.post("/tasks/drafts", response_model=TaskResponse)
+async def create_draft_task(task: DraftTaskCreate, current_user: dict = Depends(get_current_user)):
+    """Auto-save a task draft"""
+    task_id = str(uuid.uuid4())
+    
+    task_doc = {
+        "id": task_id,
+        "title": task.title or "",
+        "description": task.description or "",
+        "assigned_to": task.assigned_to or "",
+        "assigned_to_email": None,
+        "created_by": current_user["id"],
+        "due_date": task.due_date or "",
+        "status": "Draft",
+        "priority": task.priority or "Medium",
+        "category": task.category,
+        "note": task.note,
+        "note_images": task.note_images,
+        "created_at": get_pst_now().isoformat(),
+        "accepted_at": None,
+        "completed_at": None,
+        "invite_token": str(uuid.uuid4())[:8],
+        "attachments": task.attachments or None,
+        "auto_reminder": task.auto_reminder or False,
+        "shareable_token": str(uuid.uuid4())[:12],
+        "comments": []
+    }
+    
+    await db.tasks.insert_one(task_doc)
+    
+    return TaskResponse(
+        id=task_id,
+        title=task_doc["title"],
+        description=task_doc["description"],
+        assigned_to=task_doc["assigned_to"],
+        assigned_to_name="",
+        created_by=current_user["id"],
+        created_by_name=current_user["name"],
+        due_date=task_doc["due_date"],
+        status="Draft",
+        priority=task_doc["priority"],
+        category=task_doc["category"],
+        created_at=task_doc["created_at"],
+        shareable_token=task_doc["shareable_token"]
+    )
+
+@api_router.get("/tasks/drafts")
+async def get_draft_tasks(current_user: dict = Depends(get_current_user)):
+    """Get all draft tasks for current user"""
+    drafts = await db.tasks.find({
+        "created_by": current_user["id"],
+        "status": "Draft",
+        "deleted": {"$ne": True}
+    }, {"_id": 0}).to_list(100)
+    
+    return {"drafts": drafts}
+
+@api_router.put("/tasks/drafts/{task_id}")
+async def update_draft_task(task_id: str, task: DraftTaskCreate, current_user: dict = Depends(get_current_user)):
+    """Update a draft task"""
+    draft = await db.tasks.find_one({"id": task_id, "status": "Draft"}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    if draft["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    update_data = {}
+    if task.title is not None:
+        update_data["title"] = task.title
+    if task.description is not None:
+        update_data["description"] = task.description
+    if task.assigned_to is not None:
+        update_data["assigned_to"] = task.assigned_to
+    if task.due_date is not None:
+        update_data["due_date"] = task.due_date
+    if task.priority is not None:
+        update_data["priority"] = task.priority
+    if task.category is not None:
+        update_data["category"] = task.category
+    if task.note is not None:
+        update_data["note"] = task.note
+    if task.note_images is not None:
+        update_data["note_images"] = task.note_images
+    if task.attachments is not None:
+        update_data["attachments"] = task.attachments
+    if task.auto_reminder is not None:
+        update_data["auto_reminder"] = task.auto_reminder
+    
+    update_data["updated_at"] = get_pst_now().isoformat()
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+    
+    return {"message": "Draft updated"}
+
+@api_router.post("/tasks/drafts/{task_id}/complete", response_model=TaskResponse)
+async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Complete a draft task and convert it to a regular task"""
+    draft = await db.tasks.find_one({"id": task_id, "status": "Draft"}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    
+    if draft["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate required fields
+    if not draft.get("title"):
+        raise HTTPException(status_code=400, detail="Title is required")
+    if not draft.get("assigned_to"):
+        raise HTTPException(status_code=400, detail="Assignee is required")
+    if not draft.get("due_date"):
+        raise HTTPException(status_code=400, detail="Due date is required")
+    
+    # Handle assignee resolution
+    assigned_to = draft["assigned_to"]
+    app_url = APP_BASE_URL
+    
+    if assigned_to == "self":
+        assigned_user = current_user
+        assigned_to_id = current_user["id"]
+        assigned_to_email = current_user["email"]
+        is_self_assigned = True
+    elif "@" in assigned_to:
+        assigned_to_email = assigned_to
+        existing_user = await db.users.find_one({"email": assigned_to_email}, {"_id": 0})
+        
+        if existing_user:
+            assigned_user = existing_user
+            assigned_to_id = existing_user["id"]
+            is_self_assigned = (assigned_to_id == current_user["id"])
+        else:
+            assigned_user = {"name": assigned_to_email.split('@')[0].title(), "email": assigned_to_email}
+            assigned_to_id = f"email_{assigned_to_email}"
+            is_self_assigned = False
+    else:
+        assigned_user = await db.users.find_one({"id": assigned_to}, {"_id": 0})
+        if not assigned_user:
+            raise HTTPException(status_code=404, detail="Assigned user not found")
+        
+        assigned_to_id = assigned_to
+        assigned_to_email = assigned_user["email"]
+        is_self_assigned = (assigned_to_id == current_user["id"])
+    
+    # Update draft to regular task
+    initial_status = "Accepted" if is_self_assigned else "Pending"
+    accepted_at = get_pst_now().isoformat() if is_self_assigned else None
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {
+            "status": initial_status,
+            "accepted_at": accepted_at,
+            "assigned_to": assigned_to_id,
+            "assigned_to_email": assigned_to_email,
+            "completed_draft_at": get_pst_now().isoformat()
+        }}
+    )
+    
+    # Send email if not self-assigned
+    if not is_self_assigned:
+        recipient_email = assigned_user.get("email") or assigned_to_email
+        recipient_name = assigned_user.get("name", "there")
+        
+        email_content = f"""
+        <html>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
+                </div>
+                <div style="padding: 40px 30px; background: white;">
+                    <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                        You have been assigned a new task by <strong>{current_user['name']}</strong>.
+                    </p>
+                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{draft['title']}</h2>
+                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{draft.get('description', '')[:300]}</p>
+                        <div style="color: #6B7280; font-size: 14px;">
+                            Due: {draft['due_date'].replace('T', ' at ').split('.')[0]}
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{app_url}/invite?token={draft['invite_token']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            View Task in Tskflow
+                        </a>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {draft['title']}", email_content)
+    
+    # Return updated task
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return TaskResponse(
+        id=updated_task["id"],
+        title=updated_task["title"],
+        description=updated_task["description"],
+        assigned_to=updated_task["assigned_to"],
+        assigned_to_name=assigned_user.get("name", ""),
+        created_by=current_user["id"],
+        created_by_name=current_user["name"],
+        due_date=updated_task["due_date"],
+        status=updated_task["status"],
+        priority=updated_task["priority"],
+        category=updated_task.get("category"),
+        created_at=updated_task["created_at"],
+        accepted_at=updated_task.get("accepted_at")
+    )
+
+# ===== TASK COMMENTS ENDPOINTS =====
+@api_router.post("/tasks/{task_id}/comments")
+async def add_task_comment(task_id: str, comment: TaskComment, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Add a comment to a task"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator and assignee can comment
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    comment_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "user_name": current_user["name"],
+        "content": comment.content,
+        "mentions": comment.mentions or [],
+        "created_at": get_pst_now().isoformat()
+    }
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$push": {"comments": comment_doc}}
+    )
+    
+    # Send email notifications to mentioned users
+    if comment.mentions:
+        app_url = APP_BASE_URL
+        for user_id in comment.mentions:
+            mentioned_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+            if mentioned_user and mentioned_user["id"] != current_user["id"]:
+                email_content = f"""
+                <html>
+                    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                        <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">You were mentioned</h1>
+                        </div>
+                        <div style="padding: 40px 30px; background: white;">
+                            <p style="font-size: 16px; color: #374151;">Hi {mentioned_user['name']},</p>
+                            <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                                <strong>{current_user['name']}</strong> mentioned you in a comment on task: <strong>{task['title']}</strong>
+                            </p>
+                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0;">
+                                <p style="color: #374151; margin: 0;">{comment.content}</p>
+                            </div>
+                            <div style="text-align: center; margin-top: 30px;">
+                                <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                    View Task
+                                </a>
+                            </div>
+                        </div>
+                    </body>
+                </html>
+                """
+                background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_content)
+    
+    return {"message": "Comment added", "comment": comment_doc}
+
+@api_router.get("/tasks/{task_id}/comments")
+async def get_task_comments(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all comments for a task"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator and assignee can view comments
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return {"comments": task.get("comments", [])}
+
+# ===== SHAREABLE TASK LINK ENDPOINT =====
+@api_router.get("/tasks/shared/{token}")
+async def get_task_by_shareable_link(token: str, current_user: dict = Depends(get_current_user)):
+    """Access a task via its shareable link"""
+    task = await db.tasks.find_one({"shareable_token": token}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator and assignee can access via shareable link
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied - you are not assigned to this task")
+    
+    # Get user details
+    assigned_user = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+    created_user = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+    
+    return TaskResponse(
+        id=task["id"],
+        title=task["title"],
+        description=task.get("description", ""),
+        assigned_to=task["assigned_to"],
+        assigned_to_name=assigned_user["name"] if assigned_user else "Unknown",
+        created_by=task["created_by"],
+        created_by_name=created_user["name"] if created_user else "Unknown",
+        due_date=task["due_date"],
+        status=task["status"],
+        priority=task["priority"],
+        category=task.get("category"),
+        created_at=task["created_at"],
+        accepted_at=task.get("accepted_at"),
+        shareable_token=task.get("shareable_token"),
+        comments=task.get("comments", [])
+    )
+
+# ===== SEND EMAIL TO ASSIGNEE ENDPOINT =====
+@api_router.post("/tasks/{task_id}/send-email")
+async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Send an email update to the task assignee"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator can send email
+    if task["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the task creator can send emails")
+    
+    # Don't send to self
+    if task["assigned_to"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot send email to yourself")
+    
+    assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+    if not assignee:
+        raise HTTPException(status_code=404, detail="Assignee not found")
+    
+    app_url = APP_BASE_URL
+    email_content = f"""
+    <html>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Task Update</h1>
+            </div>
+            <div style="padding: 40px 30px; background: white;">
+                <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
+                <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                    <strong>{current_user['name']}</strong> sent you an update about the following task:
+                </p>
+                <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                    <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task['title']}</h2>
+                    <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.get('description', '')[:300]}</p>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px;">
+                        <div style="background: {'#FEF3C7' if task['priority'] in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task['priority'] in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+                            {task['priority']} Priority
+                        </div>
+                        <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
+                            Status: {task['status']}
+                        </div>
+                        <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
+                            Due: {task['due_date'].replace('T', ' at ').split('.')[0]}
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        View Task
+                    </a>
+                </div>
+            </div>
+        </body>
+    </html>
+    """
+    
+    background_tasks.add_task(send_email_notification, assignee["email"], f"Task Update: {task['title']}", email_content)
+    
+    return {"message": "Email sent successfully"}
+
 @api_router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
@@ -1709,384 +2087,6 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
         counter_proposal_message=updated_task.get("counter_proposal_message"),
         proposed_due_date=updated_task.get("proposed_due_date")
     )
-
-# ===== DRAFT TASK ENDPOINTS =====
-@api_router.post("/tasks/drafts", response_model=TaskResponse)
-async def create_draft_task(task: DraftTaskCreate, current_user: dict = Depends(get_current_user)):
-    """Auto-save a task draft"""
-    task_id = str(uuid.uuid4())
-    
-    task_doc = {
-        "id": task_id,
-        "title": task.title or "",
-        "description": task.description or "",
-        "assigned_to": task.assigned_to or "",
-        "assigned_to_email": None,
-        "created_by": current_user["id"],
-        "due_date": task.due_date or "",
-        "status": "Draft",
-        "priority": task.priority or "Medium",
-        "category": task.category,
-        "note": task.note,
-        "note_images": task.note_images,
-        "created_at": get_pst_now().isoformat(),
-        "accepted_at": None,
-        "completed_at": None,
-        "invite_token": str(uuid.uuid4())[:8],
-        "attachments": task.attachments or None,
-        "auto_reminder": task.auto_reminder or False,
-        "shareable_token": str(uuid.uuid4())[:12],
-        "comments": []
-    }
-    
-    await db.tasks.insert_one(task_doc)
-    
-    return TaskResponse(
-        id=task_id,
-        title=task_doc["title"],
-        description=task_doc["description"],
-        assigned_to=task_doc["assigned_to"],
-        assigned_to_name="",
-        created_by=current_user["id"],
-        created_by_name=current_user["name"],
-        due_date=task_doc["due_date"],
-        status="Draft",
-        priority=task_doc["priority"],
-        category=task_doc["category"],
-        created_at=task_doc["created_at"],
-        shareable_token=task_doc["shareable_token"]
-    )
-
-@api_router.get("/tasks/drafts")
-async def get_draft_tasks(current_user: dict = Depends(get_current_user)):
-    """Get all draft tasks for current user"""
-    drafts = await db.tasks.find({
-        "created_by": current_user["id"],
-        "status": "Draft",
-        "deleted": {"$ne": True}
-    }, {"_id": 0}).to_list(100)
-    
-    return {"drafts": drafts}
-
-@api_router.put("/tasks/drafts/{task_id}")
-async def update_draft_task(task_id: str, task: DraftTaskCreate, current_user: dict = Depends(get_current_user)):
-    """Update a draft task"""
-    draft = await db.tasks.find_one({"id": task_id, "status": "Draft"}, {"_id": 0})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
-    
-    if draft["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    update_data = {}
-    if task.title is not None:
-        update_data["title"] = task.title
-    if task.description is not None:
-        update_data["description"] = task.description
-    if task.assigned_to is not None:
-        update_data["assigned_to"] = task.assigned_to
-    if task.due_date is not None:
-        update_data["due_date"] = task.due_date
-    if task.priority is not None:
-        update_data["priority"] = task.priority
-    if task.category is not None:
-        update_data["category"] = task.category
-    if task.note is not None:
-        update_data["note"] = task.note
-    if task.note_images is not None:
-        update_data["note_images"] = task.note_images
-    if task.attachments is not None:
-        update_data["attachments"] = task.attachments
-    if task.auto_reminder is not None:
-        update_data["auto_reminder"] = task.auto_reminder
-    
-    update_data["updated_at"] = get_pst_now().isoformat()
-    
-    await db.tasks.update_one({"id": task_id}, {"$set": update_data})
-    
-    return {"message": "Draft updated"}
-
-@api_router.post("/tasks/drafts/{task_id}/complete", response_model=TaskResponse)
-async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    """Complete a draft task and convert it to a regular task"""
-    draft = await db.tasks.find_one({"id": task_id, "status": "Draft"}, {"_id": 0})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Draft not found")
-    
-    if draft["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    # Validate required fields
-    if not draft.get("title"):
-        raise HTTPException(status_code=400, detail="Title is required")
-    if not draft.get("assigned_to"):
-        raise HTTPException(status_code=400, detail="Assignee is required")
-    if not draft.get("due_date"):
-        raise HTTPException(status_code=400, detail="Due date is required")
-    
-    # Handle assignee resolution
-    assigned_to = draft["assigned_to"]
-    app_url = APP_BASE_URL
-    
-    if assigned_to == "self":
-        assigned_user = current_user
-        assigned_to_id = current_user["id"]
-        assigned_to_email = current_user["email"]
-        is_self_assigned = True
-    elif "@" in assigned_to:
-        assigned_to_email = assigned_to
-        existing_user = await db.users.find_one({"email": assigned_to_email}, {"_id": 0})
-        
-        if existing_user:
-            assigned_user = existing_user
-            assigned_to_id = existing_user["id"]
-            is_self_assigned = (assigned_to_id == current_user["id"])
-        else:
-            assigned_user = {"name": assigned_to_email.split('@')[0].title(), "email": assigned_to_email}
-            assigned_to_id = f"email_{assigned_to_email}"
-            is_self_assigned = False
-    else:
-        assigned_user = await db.users.find_one({"id": assigned_to}, {"_id": 0})
-        if not assigned_user:
-            raise HTTPException(status_code=404, detail="Assigned user not found")
-        
-        assigned_to_id = assigned_to
-        assigned_to_email = assigned_user["email"]
-        is_self_assigned = (assigned_to_id == current_user["id"])
-    
-    # Update draft to regular task
-    initial_status = "Accepted" if is_self_assigned else "Pending"
-    accepted_at = get_pst_now().isoformat() if is_self_assigned else None
-    
-    await db.tasks.update_one(
-        {"id": task_id},
-        {"$set": {
-            "status": initial_status,
-            "accepted_at": accepted_at,
-            "assigned_to": assigned_to_id,
-            "assigned_to_email": assigned_to_email,
-            "completed_draft_at": get_pst_now().isoformat()
-        }}
-    )
-    
-    # Send email if not self-assigned
-    if not is_self_assigned:
-        recipient_email = assigned_user.get("email") or assigned_to_email
-        recipient_name = assigned_user.get("name", "there")
-        
-        email_content = f"""
-        <html>
-            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
-                </div>
-                <div style="padding: 40px 30px; background: white;">
-                    <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
-                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                        You have been assigned a new task by <strong>{current_user['name']}</strong>.
-                    </p>
-                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
-                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{draft['title']}</h2>
-                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{draft.get('description', '')[:300]}</p>
-                        <div style="color: #6B7280; font-size: 14px;">
-                            Due: {draft['due_date'].replace('T', ' at ').split('.')[0]}
-                        </div>
-                    </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/invite?token={draft['invite_token']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                            View Task in Tskflow
-                        </a>
-                    </div>
-                </div>
-            </body>
-        </html>
-        """
-        background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {draft['title']}", email_content)
-    
-    # Return updated task
-    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    return TaskResponse(
-        id=updated_task["id"],
-        title=updated_task["title"],
-        description=updated_task["description"],
-        assigned_to=updated_task["assigned_to"],
-        assigned_to_name=assigned_user.get("name", ""),
-        created_by=current_user["id"],
-        created_by_name=current_user["name"],
-        due_date=updated_task["due_date"],
-        status=updated_task["status"],
-        priority=updated_task["priority"],
-        category=updated_task.get("category"),
-        created_at=updated_task["created_at"],
-        accepted_at=updated_task.get("accepted_at")
-    )
-
-# ===== TASK COMMENTS ENDPOINTS =====
-@api_router.post("/tasks/{task_id}/comments")
-async def add_task_comment(task_id: str, comment: TaskComment, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    """Add a comment to a task"""
-    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Only creator and assignee can comment
-    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    comment_doc = {
-        "id": str(uuid.uuid4()),
-        "user_id": current_user["id"],
-        "user_name": current_user["name"],
-        "content": comment.content,
-        "mentions": comment.mentions or [],
-        "created_at": get_pst_now().isoformat()
-    }
-    
-    await db.tasks.update_one(
-        {"id": task_id},
-        {"$push": {"comments": comment_doc}}
-    )
-    
-    # Send email notifications to mentioned users
-    if comment.mentions:
-        app_url = APP_BASE_URL
-        for user_id in comment.mentions:
-            mentioned_user = await db.users.find_one({"id": user_id}, {"_id": 0})
-            if mentioned_user and mentioned_user["id"] != current_user["id"]:
-                email_content = f"""
-                <html>
-                    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                        <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">You were mentioned</h1>
-                        </div>
-                        <div style="padding: 40px 30px; background: white;">
-                            <p style="font-size: 16px; color: #374151;">Hi {mentioned_user['name']},</p>
-                            <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                                <strong>{current_user['name']}</strong> mentioned you in a comment on task: <strong>{task['title']}</strong>
-                            </p>
-                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0;">
-                                <p style="color: #374151; margin: 0;">{comment.content}</p>
-                            </div>
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                                    View Task
-                                </a>
-                            </div>
-                        </div>
-                    </body>
-                </html>
-                """
-                background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_content)
-    
-    return {"message": "Comment added", "comment": comment_doc}
-
-@api_router.get("/tasks/{task_id}/comments")
-async def get_task_comments(task_id: str, current_user: dict = Depends(get_current_user)):
-    """Get all comments for a task"""
-    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Only creator and assignee can view comments
-    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    return {"comments": task.get("comments", [])}
-
-# ===== SHAREABLE TASK LINK ENDPOINT =====
-@api_router.get("/tasks/shared/{token}")
-async def get_task_by_shareable_link(token: str, current_user: dict = Depends(get_current_user)):
-    """Access a task via its shareable link"""
-    task = await db.tasks.find_one({"shareable_token": token}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Only creator and assignee can access via shareable link
-    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied - you are not assigned to this task")
-    
-    # Get user details
-    assigned_user = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
-    created_user = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
-    
-    return TaskResponse(
-        id=task["id"],
-        title=task["title"],
-        description=task.get("description", ""),
-        assigned_to=task["assigned_to"],
-        assigned_to_name=assigned_user["name"] if assigned_user else "Unknown",
-        created_by=task["created_by"],
-        created_by_name=created_user["name"] if created_user else "Unknown",
-        due_date=task["due_date"],
-        status=task["status"],
-        priority=task["priority"],
-        category=task.get("category"),
-        created_at=task["created_at"],
-        accepted_at=task.get("accepted_at"),
-        shareable_token=task.get("shareable_token"),
-        comments=task.get("comments", [])
-    )
-
-# ===== SEND EMAIL TO ASSIGNEE ENDPOINT =====
-@api_router.post("/tasks/{task_id}/send-email")
-async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    """Send an email update to the task assignee"""
-    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Only creator can send email
-    if task["created_by"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Only the task creator can send emails")
-    
-    # Don't send to self
-    if task["assigned_to"] == current_user["id"]:
-        raise HTTPException(status_code=400, detail="Cannot send email to yourself")
-    
-    assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
-    if not assignee:
-        raise HTTPException(status_code=404, detail="Assignee not found")
-    
-    app_url = APP_BASE_URL
-    email_content = f"""
-    <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Task Update</h1>
-            </div>
-            <div style="padding: 40px 30px; background: white;">
-                <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
-                <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                    <strong>{current_user['name']}</strong> sent you an update about the following task:
-                </p>
-                <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
-                    <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task['title']}</h2>
-                    <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.get('description', '')[:300]}</p>
-                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px;">
-                        <div style="background: {'#FEF3C7' if task['priority'] in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task['priority'] in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-                            {task['priority']} Priority
-                        </div>
-                        <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
-                            Status: {task['status']}
-                        </div>
-                        <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
-                            Due: {task['due_date'].replace('T', ' at ').split('.')[0]}
-                        </div>
-                    </div>
-                </div>
-                <div style="text-align: center; margin-top: 30px;">
-                    <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                        View Task
-                    </a>
-                </div>
-            </div>
-        </body>
-    </html>
-    """
-    
-    background_tasks.add_task(send_email_notification, assignee["email"], f"Task Update: {task['title']}", email_content)
-    
-    return {"message": "Email sent successfully"}
 
 @api_router.post("/analytics", response_model=AnalyticsResponse)
 async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_current_user)):
