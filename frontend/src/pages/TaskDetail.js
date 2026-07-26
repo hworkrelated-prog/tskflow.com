@@ -50,6 +50,8 @@ const TaskDetail = () => {
     const [newComment, setNewComment] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
+    const [aiSummary, setAiSummary] = useState(null);
+    const [loadingAiSummary, setLoadingAiSummary] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -137,6 +139,19 @@ const TaskDetail = () => {
             toast.success('Email sent to assignee');
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to send email'));
+        }
+    };
+
+    const fetchAiSummary = async () => {
+        setLoadingAiSummary(true);
+        try {
+            const id = task?.id || taskId;
+            const response = await axios.post(`${API}/tasks/${id}/ai-summary`);
+            setAiSummary(response.data.summary);
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to generate AI summary'));
+        } finally {
+            setLoadingAiSummary(false);
         }
     };
 
@@ -542,6 +557,16 @@ const TaskDetail = () => {
 
                             {/* Action Buttons: Share, Email, Comments */}
                             <div className="flex gap-2 flex-wrap pt-4 border-t">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={fetchAiSummary}
+                                    disabled={loadingAiSummary}
+                                    className="rounded-full"
+                                >
+                                    ✨ {loadingAiSummary ? 'Generating...' : 'AI Summary'}
+                                </Button>
+                                
                                 {task.shareable_token && (
                                     <Button
                                         variant="outline"
@@ -576,6 +601,17 @@ const TaskDetail = () => {
                                     Comments ({comments.length})
                                 </Button>
                             </div>
+
+                            {/* AI Summary */}
+                            {aiSummary && (
+                                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-lg">🤖</span>
+                                        <Label className="text-purple-700 font-semibold">AI Summary</Label>
+                                    </div>
+                                    <p className="text-sm text-purple-900">{aiSummary}</p>
+                                </div>
+                            )}
 
                             {/* Comments Section */}
                             {showComments && (

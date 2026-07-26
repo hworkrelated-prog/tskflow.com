@@ -1057,14 +1057,49 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user),
         
         assignees = []
         for c in kids:
+            # Calculate if this assignee is consistently on-time
+            # Check their completion history across all tasks
+            assignee_id = c["assigned_to"]
+            is_consistent_performer = False
+            
+            if c["status"] == "Completed":
+                # Check if completed on time
+                try:
+                    due = datetime.fromisoformat(c["due_date"].replace('Z', '+00:00'))
+                    completed = datetime.fromisoformat(c.get("completed_at", c["due_date"]).replace('Z', '+00:00'))
+                    is_consistent_performer = completed <= due
+                except:
+                    pass
+            
             assignees.append({
                 "task_id": c["id"],
                 "name": resolve_assignee_name(c, user_map),
                 "email": c.get("assigned_to_email"),
                 "status": c["status"],
                 "completed": c["status"] == "Completed",
-                "completed_by_name": c.get("completed_by_name")
+                "completed_by_name": c.get("completed_by_name"),
+                "is_consistent": is_consistent_performer
             })
+        
+        # Sort assignees: consistent performers at bottom, those needing attention at top
+        # Priority: Not started > Late > In progress > Completed on time
+        def sort_key(a):
+            if a["status"] == "Pending":
+                return 0  # Highest priority - not started
+            elif a["status"] in ["Counter-Proposed", "Declined"]:
+                return 1  # Needs attention
+            elif a["status"] == "Accepted":
+                return 2  # Working on it
+            elif a["status"] == "Review Pending":
+                return 3  # Waiting for review
+            elif a["completed"] and not a["is_consistent"]:
+                return 4  # Completed but late
+            elif a["completed"] and a["is_consistent"]:
+                return 5  # Completed on time - deprioritize
+            return 2
+        
+        assignees.sort(key=sort_key)
+        
         result.append({
             "id": p["id"],
             "title": p["title"],
@@ -1664,6 +1699,270 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
     background_tasks.add_task(send_email_notification, assignee["email"], f"Task Update: {task['title']}", email_content)
     
     return {"message": "Email sent successfully"}
+
+# ===== GROUP TASK ANALYTICS & LEADERBOARD =====
+@api_router.get("/tasks/{task_id}/analytics")
+async def get_task_analytics(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get analytics for a group task (parent task)"""
+    parent = await db.tasks.find_one({"id": task_id, "is_parent": True}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Group task not found")
+    
+    # Only creator and assignees can view analytics
+    children = await db.tasks.find({"parent_id": task_id}, {"_id": 0}).to_list(500)
+    assignee_ids = [c["assigned_to"] for c in children]
+    
+    if parent["created_by"] != current_user["id"] and current_user["id"] not in assignee_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    total = len(children)
+    completed = len([c for c in children if c["status"] == "Completed"])
+    pending = len([c for c in children if c["status"] == "Pending"])
+    accepted = len([c for c in children if c["status"] == "Accepted"])
+    review_pending = len([c for c in children if c["status"] == "Review Pending"])
+    declined = len([c for c in children if c["status"] == "Declined"])
+    
+    # Calculate average completion time
+    completed_tasks = [c for c in children if c["status"] == "Completed" and c.get("completed_at")]
+    avg_completion_hours = 0
+    if completed_tasks:
+        total_hours = 0
+        for task in completed_tasks:
+            try:
+                created = datetime.fromisoformat(task["created_at"].replace('Z', '+00:00'))
+                completed = datetime.fromisoformat(task["completed_at"].replace('Z', '+00:00'))
+                hours = (completed - created).total_seconds() / 3600
+                total_hours += hours
+            except:
+                pass
+        avg_completion_hours = round(total_hours / len(completed_tasks), 1) if completed_tasks else 0
+    
+    return {
+        "total_assignees": total,
+        "completed": completed,
+        "pending": pending,
+        "accepted": accepted,
+        "review_pending": review_pending,
+        "declined": declined,
+        "completion_rate": round(completed / total * 100) if total else 0,
+        "avg_completion_hours": avg_completion_hours
+    }
+
+@api_router.get("/tasks/{task_id}/leaderboard")
+async def get_task_leaderboard(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get leaderboard for a group task showing assignees ranked by speed and engagement"""
+    parent = await db.tasks.find_one({"id": task_id, "is_parent": True}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Group task not found")
+    
+    children = await db.tasks.find({"parent_id": task_id}, {"_id": 0}).to_list(500)
+    assignee_ids = [c["assigned_to"] for c in children]
+    
+    if parent["created_by"] != current_user["id"] and current_user["id"] not in assignee_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get user details
+    user_ids = list(set([c["assigned_to"] for c in children if not str(c["assigned_to"]).startswith("email_")]))
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids)) if user_ids else []
+    user_map = {u["id"]: u["name"] for u in users}
+    
+    # Calculate leaderboard metrics
+    leaderboard = []
+    for child in children:
+        assignee_id = child["assigned_to"]
+        name = resolve_assignee_name(child, user_map)
+        
+        # Calculate completion time in hours
+        completion_hours = None
+        if child["status"] == "Completed" and child.get("completed_at"):
+            try:
+                created = datetime.fromisoformat(child["created_at"].replace('Z', '+00:00'))
+                completed = datetime.fromisoformat(child["completed_at"].replace('Z', '+00:00'))
+                completion_hours = round((completed - created).total_seconds() / 3600, 1)
+            except:
+                pass
+        
+        # Engagement score (lower is better: 1=completed fast, 5=not started)
+        if child["status"] == "Completed":
+            engagement_score = 1
+        elif child["status"] == "Review Pending":
+            engagement_score = 2
+        elif child["status"] == "Accepted":
+            engagement_score = 3
+        elif child["status"] == "Pending":
+            engagement_score = 5
+        else:
+            engagement_score = 4
+        
+        leaderboard.append({
+            "assignee_id": assignee_id,
+            "name": name,
+            "status": child["status"],
+            "completion_hours": completion_hours,
+            "engagement_score": engagement_score,
+            "task_id": child["id"]
+        })
+    
+    # Sort by engagement (lower=better), then by completion time (faster=better)
+    leaderboard.sort(key=lambda x: (x["engagement_score"], x["completion_hours"] if x["completion_hours"] else 9999))
+    
+    # Add rank
+    for i, entry in enumerate(leaderboard):
+        entry["rank"] = i + 1
+    
+    return {
+        "leaderboard": leaderboard,
+        "visibility_message": "⚡ Your speed and engagement are visible to everyone on this task"
+    }
+
+# ===== AI SUMMARIES =====
+@api_router.post("/tasks/{task_id}/ai-summary")
+async def get_task_ai_summary(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Generate AI summary for a specific task"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Only creator and assignee can view summary
+    if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        prompt = f"""Summarize this task in 2-3 concise sentences focusing on what needs to be done and any key details:
+
+Title: {task['title']}
+Description: {task.get('description', 'No description')}
+Priority: {task.get('priority', 'Medium')}
+Due: {task['due_date']}
+Status: {task['status']}
+
+Provide a brief, actionable summary."""
+
+        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
+        response = await chat.aask([UserMessage(content=prompt)])
+        
+        return {"summary": response.content.strip()}
+    except Exception as e:
+        logging.error(f"AI summary error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate AI summary")
+
+@api_router.post("/dashboard/ai-summary")
+async def get_dashboard_ai_summary(
+    view_mode: str,
+    date_filter: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate AI summary for the current dashboard view/filter"""
+    # Fetch tasks based on filters (simplified version)
+    query = {
+        "$or": [
+            {"assigned_to": current_user["id"]},
+            {"created_by": current_user["id"]}
+        ],
+        "deleted": {"$ne": True}
+    }
+    
+    if view_mode == "completed":
+        query["status"] = "Completed"
+    else:
+        query["status"] = {"$ne": "Completed"}
+    
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    if not tasks:
+        return {"summary": "No tasks found for the selected filter."}
+    
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        # Build task list summary
+        task_list = []
+        for t in tasks[:20]:  # Limit to 20 for token efficiency
+            task_list.append(f"- {t['title']} (Priority: {t.get('priority', 'Medium')}, Status: {t['status']})")
+        
+        prompt = f"""Summarize what the user should expect for their {view_mode} tasks ({date_filter}). Focus on priorities, upcoming deadlines, and key actions needed.
+
+Tasks:
+{chr(10).join(task_list)}
+
+Provide a brief overview in 3-4 sentences highlighting what needs attention."""
+
+        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
+        response = await chat.aask([UserMessage(content=prompt)])
+        
+        return {"summary": response.content.strip()}
+    except Exception as e:
+        logging.error(f"Dashboard AI summary error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate AI summary")
+
+# ===== BULK APPROVE =====
+@api_router.post("/tasks/bulk-approve")
+async def bulk_approve_tasks(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Approve all tasks pending the current user's approval"""
+    # Find all tasks in "Review Pending" status created by current user
+    tasks = await db.tasks.find({
+        "created_by": current_user["id"],
+        "status": "Review Pending",
+        "deleted": {"$ne": True}
+    }, {"_id": 0}).to_list(500)
+    
+    if not tasks:
+        return {"message": "No tasks pending approval", "approved_count": 0}
+    
+    approved_ids = []
+    app_url = APP_BASE_URL
+    
+    for task in tasks:
+        # Approve the task
+        await db.tasks.update_one(
+            {"id": task["id"]},
+            {"$set": {
+                "status": "Completed",
+                "completed_at": get_pst_now().isoformat()
+            }}
+        )
+        approved_ids.append(task["id"])
+        
+        # Send email notification to assignee
+        assignee = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
+        if assignee:
+            email_content = f"""
+            <html>
+                <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                    <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Task Approved!</h1>
+                    </div>
+                    <div style="padding: 40px 30px; background: white;">
+                        <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
+                        <p style="font-size: 16px; color: #374151; line-height: 1.6;">
+                            <strong>{current_user['name']}</strong> has approved your completion of: <strong>{task['title']}</strong>
+                        </p>
+                        <div style="text-align: center; margin-top: 30px;">
+                            <a href="{app_url}/task/{task['id']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                View Task
+                            </a>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+            background_tasks.add_task(send_email_notification, assignee["email"], f"Task Approved: {task['title']}", email_content)
+    
+    return {
+        "message": f"Approved {len(approved_ids)} task(s)",
+        "approved_count": len(approved_ids),
+        "approved_ids": approved_ids
+    }
 
 @api_router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):

@@ -58,6 +58,9 @@ const TaskHub = () => {
     const [groupSaving, setGroupSaving] = useState(false);
     const [editingGroupId, setEditingGroupId] = useState(null);
     const [expandedGroup, setExpandedGroup] = useState(null);
+    const [aiSummary, setAiSummary] = useState(null);
+    const [loadingAiSummary, setLoadingAiSummary] = useState(false);
+    const [bulkApproving, setBulkApproving] = useState(false);
     
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
 
@@ -355,6 +358,36 @@ const TaskHub = () => {
             fetchGroups();
         } catch (error) {
             toast.error('Failed to delete group');
+        }
+    };
+
+    const fetchDashboardAiSummary = async () => {
+        setLoadingAiSummary(true);
+        try {
+            const response = await axios.post(`${API}/dashboard/ai-summary`, {
+                view_mode: viewMode,
+                date_filter: dateFilter
+            });
+            setAiSummary(response.data.summary);
+        } catch (error) {
+            toast.error('Failed to generate AI summary');
+        } finally {
+            setLoadingAiSummary(false);
+        }
+    };
+
+    const handleBulkApprove = async () => {
+        if (!window.confirm('Approve all tasks pending your review?')) return;
+        
+        setBulkApproving(true);
+        try {
+            const response = await axios.post(`${API}/tasks/bulk-approve`);
+            toast.success(response.data.message);
+            fetchDashboard();
+        } catch (error) {
+            toast.error('Failed to bulk approve tasks');
+        } finally {
+            setBulkApproving(false);
         }
     };
 
@@ -772,6 +805,30 @@ const TaskHub = () => {
                         <p className="text-muted-foreground">Manage your tasks and stay productive</p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {/* AI Summary and Bulk Approve */}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchDashboardAiSummary}
+                            disabled={loadingAiSummary}
+                            className="rounded-full"
+                        >
+                            ✨ {loadingAiSummary ? 'Loading...' : 'AI Summary'}
+                        </Button>
+                        
+                        {dashboard?.assigned_by_me?.some(t => t.status === 'Review Pending') && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleBulkApprove}
+                                disabled={bulkApproving}
+                                className="rounded-full bg-green-50 text-green-700 border-green-300"
+                            >
+                                <CheckSquare className="w-4 h-4 mr-2" />
+                                {bulkApproving ? 'Approving...' : 'Bulk Approve'}
+                            </Button>
+                        )}
+                        
                         {selectionMode ? (
                             <>
                                 <span className="text-sm text-muted-foreground mr-2">{selectedTasks.size} selected</span>
@@ -1089,6 +1146,31 @@ const TaskHub = () => {
                         Download CSV
                     </Button>
                 </div>
+
+                {/* AI Summary Display */}
+                {aiSummary && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: -10 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-2xl"
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xl">🤖</span>
+                                    <h3 className="font-semibold text-purple-900">AI Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
+                                </div>
+                                <p className="text-sm text-purple-800">{aiSummary}</p>
+                            </div>
+                            <button
+                                onClick={() => setAiSummary(null)}
+                                className="text-purple-400 hover:text-purple-600 p-1"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
 
                 {/* Filter Bar */}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
