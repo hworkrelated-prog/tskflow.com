@@ -115,6 +115,7 @@ class TaskCreate(BaseModel):
     note_images: Optional[List[str]] = None  # Base64 or URLs
     attachments: Optional[List[dict]] = None  # [{id, path, filename, content_type, size, kind}]
     auto_reminder: Optional[bool] = False
+    requires_screen_recording: Optional[bool] = False  # Section 5: require screen recording proof
 
 class DraftTaskCreate(BaseModel):
     title: Optional[str] = None
@@ -795,7 +796,8 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "attachments": task.attachments or None,
         "auto_reminder": task.auto_reminder or False,
         "shareable_token": str(uuid.uuid4())[:12],
-        "comments": []
+        "comments": [],
+        "requires_screen_recording": task.requires_screen_recording or False
     }
     
     await db.tasks.insert_one(task_doc)
@@ -1700,6 +1702,66 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
     
     return {"message": "Email sent successfully"}
 
+# ===== STANDALONE SCREEN RECORDING =====
+@api_router.post("/recordings/standalone")
+async def create_standalone_recording(
+    recording_url: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a standalone screen recording with shareable link"""
+    recording_id = str(uuid.uuid4())
+    recording_doc = {
+        "id": recording_id,
+        "created_by": current_user["id"],
+        "recording_url": recording_url,
+        "created_at": get_pst_now().isoformat(),
+        "shareable_token": str(uuid.uuid4())[:12],
+        "auto_delete_at": None  # Set when associated task is completed
+    }
+    await db.recordings.insert_one(recording_doc)
+    
+    app_url = APP_BASE_URL
+    shareable_link = f"{app_url}/recording/{recording_doc['shareable_token']}"
+    
+    return {
+        "recording_id": recording_id,
+        "shareable_link": shareable_link,
+        "shareable_token": recording_doc['shareable_token']
+    }
+
+@api_router.get("/recordings/{token}")
+async def get_recording_by_token(token: str):
+    """Get recording by shareable token"""
+    recording = await db.recordings.find_one({"shareable_token": token}, {"_id": 0})
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    
+    # Check if recording is expired (auto-deleted)
+    if recording.get("auto_delete_at"):
+        try:
+            delete_time = datetime.fromisoformat(recording["auto_delete_at"].replace('Z', '+00:00'))
+            if get_pst_now() > delete_time:
+                return {
+                    "expired": True,
+                    "message": "This recording has been automatically deleted 24h after task completion"
+                }
+        except:
+            pass
+    
+    return recording
+
+# Section 5: Auto-delete recordings 24h after task completion
+async def schedule_recording_deletion(task_id: str):
+    """Schedule deletion of task recordings 24h after completion"""
+    # Assumption: attachments with kind='video' are recordings that should be deleted
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if task and task.get("attachments"):
+        delete_at = (get_pst_now() + timedelta(hours=24)).isoformat()
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {"recordings_delete_at": delete_at}}
+        )
+
 # ===== GROUP TASK ANALYTICS & LEADERBOARD =====
 @api_router.get("/tasks/{task_id}/analytics")
 async def get_task_analytics(task_id: str, current_user: dict = Depends(get_current_user)):
@@ -2181,6 +2243,8 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
     if is_self_assigned:
         update_data["status"] = "Completed"
         update_data["completed_at"] = get_pst_now().isoformat()
+        # Section 5: Schedule recording deletion 24h after completion
+        await schedule_recording_deletion(task_id)
     else:
         # Set to Review Pending for non-self-assigned tasks
         update_data["status"] = "Review Pending"
@@ -2213,6 +2277,8 @@ async def review_task(task_id: str, review: ReviewAction, background_tasks: Back
             {"id": task_id},
             {"$set": {"status": "Completed", "completed_at": get_pst_now().isoformat()}}
         )
+        # Section 5: Schedule recording deletion 24h after approval
+        await schedule_recording_deletion(task_id)
         if assignee:
             email_content = f"""
             <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

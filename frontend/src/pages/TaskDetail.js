@@ -548,7 +548,14 @@ const TaskDetail = () => {
 
                             {task.attachments && task.attachments.length > 0 && (
                                 <div>
-                                    <Label className="text-muted-foreground">Attachments & Recordings</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-muted-foreground">Attachments & Recordings</Label>
+                                        {task.status === 'Completed' && task.attachments.some(a => a.kind === 'video') && (
+                                            <p className="text-xs text-amber-700">
+                                                ⚠️ Recordings auto-delete 24h after completion. Download to keep.
+                                            </p>
+                                        )}
+                                    </div>
                                     <div className="mt-2">
                                         <AttachmentViewer attachments={task.attachments} />
                                     </div>

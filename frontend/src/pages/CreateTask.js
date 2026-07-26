@@ -27,7 +27,8 @@ const CreateTask = () => {
         due_date: '',
         priority: 'Medium',
         category: '',
-        auto_reminder: false
+        auto_reminder: false,
+        requires_screen_recording: false
     });
     const navigate = useNavigate();
 
@@ -284,6 +285,25 @@ const CreateTask = () => {
                                     </div>
                                 </div>
                             )}
+
+                            <div className="flex items-center space-x-2 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                                <Checkbox
+                                    id="requires_screen_recording"
+                                    checked={formData.requires_screen_recording}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, requires_screen_recording: checked })}
+                                />
+                                <div className="grid gap-1.5 leading-none">
+                                    <label
+                                        htmlFor="requires_screen_recording"
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                    >
+                                        Require screen recording proof
+                                    </label>
+                                    <p className="text-sm text-muted-foreground">
+                                        Assignee must submit a screen recording when completing this task
+                                    </p>
+                                </div>
+                            </div>
 
                             <div className="flex gap-3 pt-4">
                                 <Button

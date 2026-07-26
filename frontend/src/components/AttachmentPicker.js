@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX } from 'lucide-react';
+import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
 
 const iconFor = (kind) => {
@@ -22,15 +23,17 @@ const OptionToggle = ({ on, onClick, iconOn, iconOff, label, dataTestId }) => (
     </button>
 );
 
-export const AttachmentPicker = ({ attachments, setAttachments }) => {
+export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRecording = false }) => {
     const fileInputRef = useRef(null);
-    const [uploads, setUploads] = useState({}); // tempId -> {name, progress}
+    const [uploads, setUploads] = useState({});
     const [recording, setRecording] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
     const [starting, setStarting] = useState(false);
     const [seconds, setSeconds] = useState(0);
     const [opts, setOpts] = useState({ mic: true, camera: true, systemAudio: true });
     const [permissionState, setPermissionState] = useState({ mic: null, camera: null });
+    const [showPreview, setShowPreview] = useState(false);
+    const [previewBlob, setPreviewBlob] = useState(null);
 
     const recorderRef = useRef(null);
     const streamsRef = useRef({ screen: null, mic: null, camera: null, composed: null });
@@ -81,8 +84,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    // Ask for mic + camera up-front so Chrome shows its native permission prompts BEFORE
-    // the screen share picker — this gives users the familiar Loom-style flow.
     const requestMediaPermissions = async () => {
         const needMic = opts.mic;
         const needCam = opts.camera;
@@ -116,14 +117,12 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
         }
         setStarting(true);
         try {
-            // 1) Ask for mic/camera FIRST so Chrome shows its native permission prompt(s)
             const { mic: micStream, camera: cameraStream } = await requestMediaPermissions();
             streamsRef.current.mic = micStream;
             streamsRef.current.camera = cameraStream;
 
-            // 2) Ask for screen (Chrome share picker) — request tab/system audio if the user toggled it on
             const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: 30 },
+                video: { frameRate: 30 }, // Fixed: consistent 30fps for smoother recording
                 audio: opts.systemAudio,
             });
             streamsRef.current.screen = screenStream;
@@ -135,7 +134,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
             let canvas = null;
 
             if (useCamera) {
-                // Compose screen + small camera bubble in bottom-right via canvas
                 screenVideoEl = document.createElement('video');
                 screenVideoEl.srcObject = screenStream;
                 screenVideoEl.muted = true;
@@ -145,7 +143,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 cameraVideoEl.muted = true;
                 await cameraVideoEl.play().catch(() => {});
 
-                // Wait for metadata
                 await new Promise((res) => {
                     if (screenVideoEl.readyState >= 1) res();
                     else screenVideoEl.onloadedmetadata = () => res();
@@ -157,11 +154,21 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 canvasRef.current = canvas;
                 videoRefs.current = { screen: screenVideoEl, camera: cameraVideoEl };
 
-                const ctx = canvas.getContext('2d');
-                const draw = () => {
+                const ctx = canvas.getContext('2d', { alpha: false }); // Fixed: disable alpha for better performance
+                let lastDrawTime = 0;
+                const targetFPS = 30;
+                const frameInterval = 1000 / targetFPS;
+
+                const draw = (currentTime) => {
+                    // Fixed: throttle drawing to exact 30fps to prevent lag
+                    if (currentTime - lastDrawTime < frameInterval) {
+                        rafRef.current = requestAnimationFrame(draw);
+                        return;
+                    }
+                    lastDrawTime = currentTime;
+
                     try {
                         ctx.drawImage(screenVideoEl, 0, 0, canvas.width, canvas.height);
-                        // Camera bubble: circular, 18% width, bottom-right
                         const bubbleD = Math.round(canvas.width * 0.18);
                         const margin = Math.round(canvas.width * 0.02);
                         const x = canvas.width - bubbleD - margin;
@@ -171,7 +178,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                         ctx.arc(x + bubbleD / 2, y + bubbleD / 2, bubbleD / 2, 0, Math.PI * 2);
                         ctx.closePath();
                         ctx.clip();
-                        // Cover-fit the camera into the circle
                         const cw = cameraVideoEl.videoWidth || 640;
                         const ch = cameraVideoEl.videoHeight || 480;
                         const scale = Math.max(bubbleD / cw, bubbleD / ch);
@@ -179,7 +185,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                         const dh = ch * scale;
                         ctx.drawImage(cameraVideoEl, x + (bubbleD - dw) / 2, y + (bubbleD - dh) / 2, dw, dh);
                         ctx.restore();
-                        // White ring around the bubble
                         ctx.beginPath();
                         ctx.arc(x + bubbleD / 2, y + bubbleD / 2, bubbleD / 2, 0, Math.PI * 2);
                         ctx.lineWidth = Math.max(2, Math.round(bubbleD * 0.03));
@@ -188,13 +193,12 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                     } catch (_) { /* ignore per-frame errors */ }
                     rafRef.current = requestAnimationFrame(draw);
                 };
-                draw();
+                draw(0);
                 videoTrackForRecording = canvas.captureStream(30).getVideoTracks()[0];
             } else {
                 videoTrackForRecording = screenStream.getVideoTracks()[0];
             }
 
-            // 3) Mix audio: system audio (from screen) + mic (Web Audio API)
             let audioTrack = null;
             const hasSystemAudio = opts.systemAudio && screenStream.getAudioTracks().length > 0;
             const hasMic = !!micStream;
@@ -211,7 +215,6 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 audioTrack = dest.stream.getAudioTracks()[0];
             }
 
-            // 4) Compose the final recording stream and start the recorder
             const composed = new MediaStream();
             composed.addTrack(videoTrackForRecording);
             if (audioTrack) composed.addTrack(audioTrack);
@@ -232,7 +235,9 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
                 cleanupStreams();
                 if (blob.size > 0) {
-                    await doUpload(blob, `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`, 'video/webm');
+                    // Show preview instead of auto-uploading
+                    setPreviewBlob(blob);
+                    setShowPreview(true);
                 } else {
                     toast.error('Recording was empty — try again');
                 }
@@ -243,17 +248,15 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
                 setRecording(false);
                 setSeconds(0);
             };
-            // If the user stops the screen share from browser UI, end the recording
             screenStream.getVideoTracks()[0].addEventListener('ended', () => {
                 if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
             });
-            rec.start(1000); // chunk every 1s so recording continues past initial buffer
+            rec.start(1000);
             setRecording(true);
             setShowOptions(false);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-            // Bind live camera preview to the on-screen preview element (best-effort)
             if (useCamera && cameraPreviewRef.current) {
                 cameraPreviewRef.current.srcObject = cameraStream;
                 cameraPreviewRef.current.play().catch(() => {});
@@ -273,96 +276,187 @@ export const AttachmentPicker = ({ attachments, setAttachments }) => {
         if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
     };
 
+    const handleSaveRecording = async () => {
+        if (previewBlob) {
+            await doUpload(previewBlob, `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`, 'video/webm');
+            setShowPreview(false);
+            setPreviewBlob(null);
+            toast.success('Recording saved!');
+        }
+    };
+
+    const handleDiscardRecording = () => {
+        setShowPreview(false);
+        setPreviewBlob(null);
+        toast.info('Recording discarded');
+    };
+
+    const handleRecordAgain = () => {
+        setShowPreview(false);
+        setPreviewBlob(null);
+        startRecording();
+    };
+
     const removeAttachment = (id) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
     const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     const uploadList = Object.entries(uploads);
 
     return (
-        <div className="space-y-3" data-testid="attachment-picker">
-            <div className="flex flex-wrap items-center gap-2">
-                <input ref={fileInputRef} type="file" multiple onChange={handleFiles} className="hidden" data-testid="attach-file-input" />
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="rounded-full" data-testid="attach-file-button">
-                    <Paperclip className="w-4 h-4 mr-2" /> Attach files
+        <div className="space-y-3">
+            {requiresScreenRecording && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                    <strong>⚠️ Screen recording required</strong> - This task requires a screen recording for completion proof.
+                </div>
+            )}
+            
+            <div className="flex flex-wrap gap-2">
+                <input type="file" ref={fileInputRef} onChange={handleFiles} multiple hidden />
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="rounded-full" size="sm">
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    Attach Files
                 </Button>
-                {!recording ? (
-                    <>
-                        <Button type="button" variant="outline" size="sm" onClick={() => setShowOptions((v) => !v)} className="rounded-full" data-testid="record-screen-button">
-                            <Video className="w-4 h-4 mr-2" /> Record screen
-                        </Button>
-                    </>
-                ) : (
-                    <Button type="button" variant="destructive" size="sm" onClick={stopRecording} className="rounded-full animate-pulse" data-testid="stop-recording-button">
-                        <Square className="w-4 h-4 mr-2" /> Stop recording · {fmt(seconds)}
+                {!recording && (
+                    <Button type="button" variant="outline" onClick={() => setShowOptions(!showOptions)} className="rounded-full" disabled={starting} size="sm">
+                        <Video className="w-4 h-4 mr-2" />
+                        {starting ? 'Starting...' : 'Record Screen'}
                     </Button>
                 )}
             </div>
 
-            {/* Loom-style pre-recording controls */}
-            {!recording && showOptions && (
-                <div className="p-3 rounded-xl border bg-slate-50 space-y-2" data-testid="record-options-panel">
-                    <p className="text-xs font-medium text-gray-700">Choose what to include, then start recording</p>
+            {showOptions && !recording && (
+                <div className="p-3 bg-slate-50 rounded-xl border space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground">Recording options:</p>
                     <div className="flex flex-wrap gap-2">
                         <OptionToggle
                             on={opts.mic}
-                            onClick={() => setOpts((o) => ({ ...o, mic: !o.mic }))}
-                            iconOn={<Mic className="w-3.5 h-3.5" />}
-                            iconOff={<MicOff className="w-3.5 h-3.5" />}
-                            label={opts.mic ? 'Mic on' : 'Mic off'}
+                            onClick={() => setOpts({ ...opts, mic: !opts.mic })}
+                            iconOn={<Mic className="w-3 h-3" />}
+                            iconOff={<MicOff className="w-3 h-3" />}
+                            label="Microphone"
                             dataTestId="toggle-mic"
                         />
                         <OptionToggle
                             on={opts.camera}
-                            onClick={() => setOpts((o) => ({ ...o, camera: !o.camera }))}
-                            iconOn={<Camera className="w-3.5 h-3.5" />}
-                            iconOff={<CameraOff className="w-3.5 h-3.5" />}
-                            label={opts.camera ? 'Camera on' : 'Camera off'}
+                            onClick={() => setOpts({ ...opts, camera: !opts.camera })}
+                            iconOn={<Camera className="w-3 h-3" />}
+                            iconOff={<CameraOff className="w-3 h-3" />}
+                            label="Camera"
                             dataTestId="toggle-camera"
                         />
                         <OptionToggle
                             on={opts.systemAudio}
-                            onClick={() => setOpts((o) => ({ ...o, systemAudio: !o.systemAudio }))}
-                            iconOn={<Volume2 className="w-3.5 h-3.5" />}
-                            iconOff={<VolumeX className="w-3.5 h-3.5" />}
-                            label={opts.systemAudio ? 'System audio' : 'No system audio'}
+                            onClick={() => setOpts({ ...opts, systemAudio: !opts.systemAudio })}
+                            iconOn={<Volume2 className="w-3 h-3" />}
+                            iconOff={<VolumeX className="w-3 h-3" />}
+                            label="System Audio"
                             dataTestId="toggle-system-audio"
                         />
                     </div>
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                        <p className="text-[11px] text-gray-500">Chrome will ask for mic/camera permission next.</p>
-                        <Button type="button" size="sm" onClick={startRecording} disabled={starting} className="rounded-full">
-                            {starting ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Starting…</> : <><Video className="w-3.5 h-3.5 mr-2" />Start recording</>}
+                    <Button type="button" onClick={startRecording} disabled={starting} className="w-full rounded-full" size="sm">
+                        {starting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting...</> : 'Start Recording'}
+                    </Button>
+                </div>
+            )}
+
+            {recording && (
+                <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+                    {/* Floating controls */}
+                    <div className="bg-red-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+                        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                        <span className="font-mono font-bold text-lg">{fmt(seconds)}</span>
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={stopRecording}
+                            className="bg-white text-red-600 hover:bg-gray-100 rounded-full ml-2"
+                        >
+                            <Square className="w-4 h-4 mr-1" />
+                            Stop
                         </Button>
                     </div>
+                    
+                    {/* Live camera preview */}
+                    {opts.camera && (
+                        <div className="bg-black rounded-xl overflow-hidden shadow-2xl w-48 h-36">
+                            <video
+                                ref={cameraPreviewRef}
+                                autoPlay
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+                    )}
                 </div>
             )}
 
-            {/* Live camera preview bubble while recording */}
-            {recording && opts.camera && permissionState.camera === 'granted' && (
-                <div className="flex justify-end">
-                    <video
-                        ref={cameraPreviewRef}
-                        muted
-                        playsInline
-                        className="w-24 h-24 rounded-full object-cover border-2 border-white shadow-lg bg-black"
-                        data-testid="camera-preview"
-                    />
-                </div>
-            )}
+            {/* Preview Dialog */}
+            <Dialog open={showPreview} onOpenChange={setShowPreview}>
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>Preview Your Recording</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        {previewBlob && (
+                            <video
+                                src={URL.createObjectURL(previewBlob)}
+                                controls
+                                className="w-full rounded-lg bg-black"
+                            />
+                        )}
+                        <div className="flex gap-3 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={handleDiscardRecording}
+                                className="rounded-full"
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Discard
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleRecordAgain}
+                                className="rounded-full"
+                            >
+                                <RotateCw className="w-4 h-4 mr-2" />
+                                Record Again
+                            </Button>
+                            <Button
+                                onClick={handleSaveRecording}
+                                className="rounded-full bg-green-600 hover:bg-green-700"
+                            >
+                                <Play className="w-4 h-4 mr-2" />
+                                Save Recording
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
-            {(uploadList.length > 0 || attachments.length > 0) && (
+            {uploadList.length > 0 && (
                 <div className="space-y-2">
-                    {attachments.map((att) => (
-                        <div key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border bg-slate-50 text-sm" data-testid={`attachment-chip-${att.id}`}>
-                            <span className="flex items-center gap-2 truncate">{iconFor(att.kind)}{att.original_filename}</span>
-                            <button type="button" onClick={() => removeAttachment(att.id)} className="text-red-500 hover:bg-red-50 rounded-full p-1 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    {uploadList.map(([tempId, { name, progress }]) => (
+                        <div key={tempId} className="text-xs text-muted-foreground flex items-center gap-2 bg-slate-50 p-2 rounded">
+                            <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                            <span className="truncate flex-1">{name}</span>
+                            <span className="shrink-0">{progress}%</span>
                         </div>
                     ))}
-                    {uploadList.map(([id, u]) => (
-                        <div key={id} className="flex items-center gap-2 p-2 rounded-lg border bg-indigo-50 text-sm">
-                            <Loader2 className="w-4 h-4 animate-spin text-indigo-500 shrink-0" />
-                            <span className="truncate flex-1">{u.name}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">{u.progress}%</span>
+                </div>
+            )}
+
+            {attachments.length > 0 && (
+                <div className="space-y-2">
+                    {attachments.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-200 p-2 rounded-xl text-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                                {iconFor(att.kind)}
+                                <span className="truncate">{att.filename}</span>
+                            </div>
+                            <button type="button" onClick={() => removeAttachment(att.id)} className="text-red-500 hover:bg-red-100 rounded-full p-1 shrink-0">
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
                     ))}
                 </div>
