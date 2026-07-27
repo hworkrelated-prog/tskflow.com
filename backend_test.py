@@ -1,331 +1,668 @@
 #!/usr/bin/env python3
 """
-Backend API Testing Script for Group Task Features
-Tests:
-1. Login as owner@acmecorp.com
-2. GET /api/tasks/{task_id}/leaderboard endpoint
-3. POST /api/tasks/{task_id}/comments with mentions
+Backend Regression Test Suite for Tskflow July 2025 Continuation Batch
+Tests AI Summary endpoints, Standalone Recording, Mentions Notifications, and Regression Sanity
 """
 
 import requests
 import json
+import time
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://auth-status-1.preview.emergentagent.com/api"
-TEST_EMAIL = "owner@acmecorp.com"
-TEST_PASSWORD = "Password123"
+BASE_URL = "http://localhost:8001/api"
+OWNER_EMAIL = "owner@acmecorp.com"
+OWNER_PASSWORD = "Password123"
+ALICE_EMAIL = "alice@acmecorp.com"
+ALICE_PASSWORD = "Password123"
 
 # Test results tracking
 test_results = []
 
-def log_test(test_name, passed, details=""):
+def log_test(test_name, passed, message="", latency=None):
     """Log test result"""
     status = "✅ PASS" if passed else "❌ FAIL"
-    test_results.append({
+    result = {
         "test": test_name,
         "passed": passed,
-        "details": details
-    })
-    print(f"{status}: {test_name}")
-    if details:
-        print(f"  Details: {details}")
+        "message": message,
+        "latency": latency
+    }
+    test_results.append(result)
+    latency_str = f" ({latency:.3f}s)" if latency else ""
+    print(f"{status}: {test_name}{latency_str}")
+    if message:
+        print(f"  → {message}")
+
+def login(email, password):
+    """Login and return auth token"""
+    try:
+        response = requests.post(
+            f"{BASE_URL}/auth/login",
+            json={"email": email, "password": password},
+            timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("access_token"), data.get("user", {})
+        else:
+            print(f"Login failed: {response.status_code} - {response.text}")
+            return None, None
+    except Exception as e:
+        print(f"Login error: {e}")
+        return None, None
+
+def test_ai_summary_endpoints(token, owner_user):
+    """Test AI Summary endpoints - must accept JSON body and return within 15s"""
+    print("\n=== Testing AI Summary Endpoints ===")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Test 1: POST /api/dashboard/ai-summary with JSON body
+    test_name = "POST /api/dashboard/ai-summary (JSON body)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/dashboard/ai-summary",
+            json={"view_mode": "active", "date_filter": "all"},
+            headers=headers,
+            timeout=20
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "summary" in data:
+                if latency < 15:
+                    log_test(test_name, True, f"Summary: {data['summary'][:100]}...", latency)
+                else:
+                    log_test(test_name, False, f"Latency too high: {latency:.2f}s (>15s)", latency)
+            else:
+                log_test(test_name, False, f"Missing 'summary' field in response", latency)
+        elif response.status_code == 422:
+            log_test(test_name, False, f"422 Unprocessable Entity - JSON body not accepted", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except requests.exceptions.Timeout:
+        log_test(test_name, False, "Request timed out (>20s)")
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 2: Create a task first for task-specific AI summary
+    print("\n  Creating test task for AI summary...")
+    task_id = None
+    try:
+        task_response = requests.post(
+            f"{BASE_URL}/tasks",
+            json={
+                "title": "Test Task for AI Summary",
+                "description": "This is a test task to verify AI summary functionality",
+                "assigned_to": owner_user["id"],
+                "due_date": (datetime.now() + timedelta(days=7)).isoformat(),
+                "priority": "High"
+            },
+            headers=headers,
+            timeout=5
+        )
+        if task_response.status_code == 200:
+            task_data = task_response.json()
+            task_id = task_data.get("id")
+            print(f"  ✓ Task created: {task_id}")
+        else:
+            print(f"  ✗ Task creation failed: {task_response.status_code}")
+    except Exception as e:
+        print(f"  ✗ Task creation error: {e}")
+    
+    # Test 3: POST /api/tasks/{task_id}/ai-summary
+    if task_id:
+        test_name = "POST /api/tasks/{task_id}/ai-summary"
+        try:
+            start = time.time()
+            response = requests.post(
+                f"{BASE_URL}/tasks/{task_id}/ai-summary",
+                headers=headers,
+                timeout=20
+            )
+            latency = time.time() - start
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "summary" in data:
+                    if latency < 15:
+                        log_test(test_name, True, f"Summary: {data['summary'][:100]}...", latency)
+                    else:
+                        log_test(test_name, False, f"Latency too high: {latency:.2f}s (>15s)", latency)
+                else:
+                    log_test(test_name, False, f"Missing 'summary' field in response", latency)
+            elif response.status_code == 422:
+                log_test(test_name, False, f"422 Unprocessable Entity", latency)
+            else:
+                log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+        except requests.exceptions.Timeout:
+            log_test(test_name, False, "Request timed out (>20s)")
+        except Exception as e:
+            log_test(test_name, False, f"Exception: {str(e)}")
+    else:
+        log_test("POST /api/tasks/{task_id}/ai-summary", False, "Skipped - no task created")
+    
+    return task_id
+
+def test_standalone_recording(token):
+    """Test Standalone Recording - must accept JSON body"""
+    print("\n=== Testing Standalone Recording ===")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Test 1: POST with JSON body {"recording_url": "test/path/recording.webm"}
+    test_name = "POST /api/recordings/standalone (JSON body with URL)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/recordings/standalone",
+            json={"recording_url": "test/path/recording.webm"},
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            required_fields = ["recording_id", "shareable_link", "shareable_token"]
+            missing = [f for f in required_fields if f not in data]
+            if not missing:
+                log_test(test_name, True, f"Recording created: {data['recording_id']}", latency)
+                # Store for later retrieval test
+                test_standalone_recording.token = data["shareable_token"]
+            else:
+                log_test(test_name, False, f"Missing fields: {missing}", latency)
+        elif response.status_code == 422:
+            log_test(test_name, False, f"422 Unprocessable Entity - JSON body not accepted", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 2: POST with JSON body {"recording_url": null}
+    test_name = "POST /api/recordings/standalone (JSON body with null)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/recordings/standalone",
+            json={"recording_url": None},
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "recording_id" in data:
+                log_test(test_name, True, f"Recording created with null URL", latency)
+            else:
+                log_test(test_name, False, f"Missing recording_id", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 3: Backwards compat - POST with query param
+    test_name = "POST /api/recordings/standalone (query param - backwards compat)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/recordings/standalone?recording_url=test/path",
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            log_test(test_name, True, "Backwards compatibility maintained", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 4: GET /api/recordings/{shareable_token}
+    if hasattr(test_standalone_recording, 'token'):
+        test_name = "GET /api/recordings/{shareable_token}"
+        try:
+            start = time.time()
+            response = requests.get(
+                f"{BASE_URL}/recordings/{test_standalone_recording.token}",
+                timeout=5
+            )
+            latency = time.time() - start
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "recording_url" in data:
+                    log_test(test_name, True, "Recording retrieved successfully", latency)
+                else:
+                    log_test(test_name, False, "Missing recording_url in response", latency)
+            else:
+                log_test(test_name, False, f"Status {response.status_code}", latency)
+        except Exception as e:
+            log_test(test_name, False, f"Exception: {str(e)}")
+
+def test_mentions_notifications(owner_token, owner_user, alice_token, alice_user, task_id):
+    """Test Mentions Notifications Flow"""
+    print("\n=== Testing Mentions Notifications Flow ===")
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    alice_headers = {"Authorization": f"Bearer {alice_token}"}
+    
+    # If no task_id from AI summary test, create a new one
+    if not task_id:
+        print("  Creating task for mentions test...")
+        try:
+            response = requests.post(
+                f"{BASE_URL}/tasks",
+                json={
+                    "title": "Test Task for Mentions",
+                    "description": "Testing mentions functionality",
+                    "assigned_to": alice_user["id"],
+                    "due_date": (datetime.now() + timedelta(days=3)).isoformat(),
+                    "priority": "Medium"
+                },
+                headers=owner_headers,
+                timeout=5
+            )
+            if response.status_code == 200:
+                task_data = response.json()
+                task_id = task_data.get("id")
+                print(f"  ✓ Task created: {task_id}")
+            else:
+                print(f"  ✗ Task creation failed: {response.status_code}")
+                log_test("Mentions Notifications Flow", False, "Could not create task")
+                return
+        except Exception as e:
+            print(f"  ✗ Task creation error: {e}")
+            log_test("Mentions Notifications Flow", False, f"Task creation error: {e}")
+            return
+    
+    # Test 1: POST comment with mention
+    test_name = "POST /api/tasks/{task_id}/comments (with mention)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/tasks/{task_id}/comments",
+            json={
+                "content": f"Hey @alice check this out!",
+                "mentions": [alice_user["id"]]
+            },
+            headers=owner_headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "comment" in data:
+                comment = data["comment"]
+                required_fields = ["id", "user_id", "user_name", "content", "mentions", "created_at"]
+                missing = [f for f in required_fields if f not in comment]
+                if not missing:
+                    log_test(test_name, True, f"Comment created with mention", latency)
+                else:
+                    log_test(test_name, False, f"Missing fields: {missing}", latency)
+            else:
+                log_test(test_name, False, "Missing 'comment' in response", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Wait a moment for notification to be created
+    time.sleep(0.5)
+    
+    # Test 2: GET /api/notifications/pending as alice (first call)
+    test_name = "GET /api/notifications/pending (first call - should have notification)"
+    try:
+        start = time.time()
+        response = requests.get(
+            f"{BASE_URL}/notifications/pending",
+            headers=alice_headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "notifications" in data:
+                notifications = data["notifications"]
+                if len(notifications) > 0:
+                    notif = notifications[0]
+                    required_fields = ["type", "title", "body", "task_id"]
+                    missing = [f for f in required_fields if f not in notif]
+                    if not missing:
+                        if notif["type"] == "mention" and "owner" in notif["title"].lower():
+                            log_test(test_name, True, f"Notification found: {notif['title']}", latency)
+                        else:
+                            log_test(test_name, False, f"Notification type/title incorrect: {notif}", latency)
+                    else:
+                        log_test(test_name, False, f"Missing fields: {missing}", latency)
+                else:
+                    log_test(test_name, False, "No notifications returned (expected at least one)", latency)
+            else:
+                log_test(test_name, False, "Missing 'notifications' field", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 3: GET /api/notifications/pending as alice (second call - should be empty)
+    test_name = "GET /api/notifications/pending (second call - should be empty)"
+    try:
+        start = time.time()
+        response = requests.get(
+            f"{BASE_URL}/notifications/pending",
+            headers=alice_headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "notifications" in data:
+                notifications = data["notifications"]
+                if len(notifications) == 0:
+                    log_test(test_name, True, "No notifications (already delivered)", latency)
+                else:
+                    log_test(test_name, False, f"Still has {len(notifications)} notifications (should be 0)", latency)
+            else:
+                log_test(test_name, False, "Missing 'notifications' field", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+
+def test_mentionable_users(token):
+    """Test Mentionable Users Endpoint"""
+    print("\n=== Testing Mentionable Users Endpoint ===")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    test_name = "GET /api/users/mentionable"
+    try:
+        start = time.time()
+        response = requests.get(
+            f"{BASE_URL}/users/mentionable",
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            users = response.json()
+            if isinstance(users, list) and len(users) > 0:
+                # Check if alice and owner are in the list
+                emails = [u.get("email") for u in users]
+                required_fields = ["id", "name", "email"]
+                missing = [f for f in required_fields if f not in users[0]]
+                
+                if not missing:
+                    if ALICE_EMAIL in emails and OWNER_EMAIL in emails:
+                        log_test(test_name, True, f"Found {len(users)} mentionable users (includes alice and owner)", latency)
+                    else:
+                        log_test(test_name, False, f"Missing expected users. Found: {emails}", latency)
+                else:
+                    log_test(test_name, False, f"Missing fields in user objects: {missing}", latency)
+            else:
+                log_test(test_name, False, "Empty user list or not a list", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+
+def test_regression_sanity(token, owner_user, alice_user):
+    """Test Regression Sanity for Existing Endpoints"""
+    print("\n=== Testing Regression Sanity ===")
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # Test 1: POST /api/tasks (single task)
+    test_name = "POST /api/tasks (single task)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/tasks",
+            json={
+                "title": "Regression Test Single Task",
+                "description": "Testing single task creation",
+                "assigned_to": alice_user["id"],
+                "due_date": (datetime.now() + timedelta(days=5)).isoformat(),
+                "priority": "Low"
+            },
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "id" in data:
+                log_test(test_name, True, f"Task created: {data['id']}", latency)
+                test_regression_sanity.single_task_id = data["id"]
+            else:
+                log_test(test_name, False, "Missing id", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 2: POST /api/tasks/bulk (group of 2)
+    test_name = "POST /api/tasks/bulk (group of 2)"
+    try:
+        start = time.time()
+        response = requests.post(
+            f"{BASE_URL}/tasks/bulk",
+            json={
+                "title": "Regression Test Bulk Task",
+                "description": "Testing bulk task creation",
+                "assigned_to": [alice_user["id"], owner_user["id"]],
+                "due_date": (datetime.now() + timedelta(days=5)).isoformat(),
+                "priority": "Medium"
+            },
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            # Response is a list of TaskResponse objects
+            if isinstance(data, list) and len(data) > 0:
+                # Find parent task by querying the database or checking if any task has is_parent
+                # For now, we'll just check if tasks were created
+                log_test(test_name, True, f"Bulk task created with {len(data)} child tasks", latency)
+                # Get parent_id by querying the parent endpoint
+                test_regression_sanity.bulk_created = True
+            else:
+                log_test(test_name, False, "Empty response or not a list", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 3: GET /api/tasks/parents?status_filter=active
+    test_name = "GET /api/tasks/parents?status_filter=active"
+    try:
+        start = time.time()
+        response = requests.get(
+            f"{BASE_URL}/tasks/parents?status_filter=active",
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list):
+                log_test(test_name, True, f"Retrieved {len(data)} active parent tasks", latency)
+            else:
+                log_test(test_name, False, "Response is not a list", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
+    
+    # Test 4: GET /api/tasks/{parent_id}/leaderboard
+    # First, get a parent task from the parents list
+    test_name = "GET /api/tasks/{parent_id}/leaderboard"
+    if hasattr(test_regression_sanity, 'bulk_created') and test_regression_sanity.bulk_created:
+        try:
+            # Get parent tasks first
+            parents_response = requests.get(
+                f"{BASE_URL}/tasks/parents?status_filter=active",
+                headers=headers,
+                timeout=5
+            )
+            if parents_response.status_code == 200:
+                parents = parents_response.json()
+                if len(parents) > 0:
+                    parent_id = parents[0]["id"]
+                    start = time.time()
+                    response = requests.get(
+                        f"{BASE_URL}/tasks/{parent_id}/leaderboard",
+                        headers=headers,
+                        timeout=5
+                    )
+                    latency = time.time() - start
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if "leaderboard" in data:
+                            log_test(test_name, True, f"Leaderboard retrieved", latency)
+                        else:
+                            log_test(test_name, False, "Missing 'leaderboard' field", latency)
+                    else:
+                        log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+                else:
+                    log_test(test_name, False, "No parent tasks found")
+            else:
+                log_test(test_name, False, "Could not fetch parent tasks")
+        except Exception as e:
+            log_test(test_name, False, f"Exception: {str(e)}")
+    else:
+        log_test(test_name, False, "Skipped - no bulk task created")
+    
+    # Test 5: POST /api/analytics
+    test_name = "POST /api/analytics"
+    try:
+        start = time.time()
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        response = requests.post(
+            f"{BASE_URL}/analytics",
+            json={
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat()
+            },
+            headers=headers,
+            timeout=5
+        )
+        latency = time.time() - start
+        
+        if response.status_code == 200:
+            data = response.json()
+            if "assignee_breakdown" in data:
+                breakdown = data["assignee_breakdown"]
+                if isinstance(breakdown, list) and len(breakdown) > 0:
+                    # Check for new fields: response_rate and avg_response_hours
+                    first_assignee = breakdown[0]
+                    if "response_rate" in first_assignee and "avg_response_hours" in first_assignee:
+                        log_test(test_name, True, f"Analytics with response_rate and avg_response_hours", latency)
+                    else:
+                        log_test(test_name, False, "Missing response_rate or avg_response_hours fields", latency)
+                else:
+                    log_test(test_name, True, "Analytics returned (empty breakdown)", latency)
+            else:
+                log_test(test_name, False, "Missing 'assignee_breakdown' field", latency)
+        else:
+            log_test(test_name, False, f"Status {response.status_code}: {response.text[:200]}", latency)
+    except Exception as e:
+        log_test(test_name, False, f"Exception: {str(e)}")
 
 def print_summary():
     """Print test summary"""
     print("\n" + "="*80)
     print("TEST SUMMARY")
     print("="*80)
+    
     passed = sum(1 for r in test_results if r["passed"])
+    failed = sum(1 for r in test_results if not r["passed"])
     total = len(test_results)
-    print(f"Total: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
-    print("\nFailed tests:")
+    
+    print(f"\nTotal Tests: {total}")
+    print(f"Passed: {passed} ({passed/total*100:.1f}%)")
+    print(f"Failed: {failed} ({failed/total*100:.1f}%)")
+    
+    if failed > 0:
+        print("\n❌ FAILED TESTS:")
+        for r in test_results:
+            if not r["passed"]:
+                print(f"  • {r['test']}")
+                if r["message"]:
+                    print(f"    → {r['message']}")
+    
+    print("\n✅ PASSED TESTS:")
     for r in test_results:
-        if not r["passed"]:
-            print(f"  ❌ {r['test']}: {r['details']}")
+        if r["passed"]:
+            latency_str = f" ({r['latency']:.3f}s)" if r["latency"] else ""
+            print(f"  • {r['test']}{latency_str}")
+    
+    # Check latency requirements
+    print("\n⏱️  LATENCY ANALYSIS:")
+    ai_tests = [r for r in test_results if "ai-summary" in r["test"].lower() and r["latency"]]
+    other_tests = [r for r in test_results if "ai-summary" not in r["test"].lower() and r["latency"]]
+    
+    if ai_tests:
+        avg_ai = sum(r["latency"] for r in ai_tests) / len(ai_tests)
+        max_ai = max(r["latency"] for r in ai_tests)
+        print(f"  AI Summary endpoints: avg={avg_ai:.2f}s, max={max_ai:.2f}s (requirement: <15s)")
+    
+    if other_tests:
+        avg_other = sum(r["latency"] for r in other_tests) / len(other_tests)
+        max_other = max(r["latency"] for r in other_tests)
+        print(f"  Other endpoints: avg={avg_other:.2f}s, max={max_other:.2f}s (requirement: <2s)")
+    
+    print("\n" + "="*80)
+
+def main():
+    """Main test execution"""
     print("="*80)
-
-# Test 1: Login
-print("\n" + "="*80)
-print("TEST 1: Login as owner@acmecorp.com")
-print("="*80)
-
-try:
-    response = requests.post(
-        f"{BASE_URL}/auth/login",
-        json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
-        timeout=10
-    )
+    print("TSKFLOW BACKEND REGRESSION TEST SUITE")
+    print("July 2025 Continuation Batch")
+    print("="*80)
     
-    if response.status_code == 200:
-        data = response.json()
-        token = data.get("access_token")
-        user_id = data.get("user", {}).get("id")
-        user_name = data.get("user", {}).get("name")
-        
-        if token and user_id:
-            log_test("Login successful", True, f"User: {user_name} (ID: {user_id})")
-            headers = {"Authorization": f"Bearer {token}"}
-        else:
-            log_test("Login successful", False, "Missing token or user_id in response")
-            exit(1)
-    else:
-        log_test("Login successful", False, f"Status {response.status_code}: {response.text}")
-        exit(1)
-except Exception as e:
-    log_test("Login successful", False, f"Exception: {str(e)}")
-    exit(1)
-
-# Test 2: Create a parent task for testing leaderboard
-print("\n" + "="*80)
-print("TEST 2: Create a parent task (group task) for leaderboard testing")
-print("="*80)
-
-try:
-    # First, get alice's user ID for bulk task creation
-    response = requests.get(
-        f"{BASE_URL}/team/potential-reports",
-        headers=headers,
-        timeout=10
-    )
+    # Login as owner
+    print("\n🔐 Logging in as owner@acmecorp.com...")
+    owner_token, owner_user = login(OWNER_EMAIL, OWNER_PASSWORD)
+    if not owner_token:
+        print("❌ CRITICAL: Owner login failed. Cannot proceed with tests.")
+        return
+    print(f"✓ Owner logged in: {owner_user.get('name')} ({owner_user.get('email')})")
     
-    if response.status_code == 200:
-        potential_reports = response.json()
-        alice = next((u for u in potential_reports if u["email"] == "alice@acmecorp.com"), None)
-        bob = next((u for u in potential_reports if u["email"] == "bob@acmecorp.com"), None)
-        
-        if alice and bob:
-            alice_id = alice["id"]
-            bob_id = bob["id"]
-            log_test("Get team members for bulk task", True, f"Alice ID: {alice_id}, Bob ID: {bob_id}")
-        else:
-            log_test("Get team members for bulk task", False, "Alice or Bob not found in potential reports")
-            alice_id = None
-            bob_id = None
+    # Login as alice
+    print("\n🔐 Logging in as alice@acmecorp.com...")
+    alice_token, alice_user = login(ALICE_EMAIL, ALICE_PASSWORD)
+    if not alice_token:
+        print("❌ CRITICAL: Alice login failed. Cannot proceed with mentions tests.")
+        alice_token = None
+        alice_user = None
     else:
-        log_test("Get team members for bulk task", False, f"Status {response.status_code}")
-        alice_id = None
-        bob_id = None
+        print(f"✓ Alice logged in: {alice_user.get('name')} ({alice_user.get('email')})")
     
-    # Create bulk task (creates parent + children)
-    if alice_id and bob_id:
-        bulk_task_data = {
-            "title": f"Test Group Task for Leaderboard - {datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "description": "Testing leaderboard endpoint with group task",
-            "assigned_to": [alice_id, bob_id],
-            "due_date": (datetime.now() + timedelta(days=7)).isoformat(),
-            "priority": "medium"
-        }
-        
-        response = requests.post(
-            f"{BASE_URL}/tasks/bulk",
-            headers=headers,
-            json=bulk_task_data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Response is a list of TaskResponse objects (children)
-            if isinstance(data, list) and len(data) > 0:
-                log_test("Bulk task creation successful", True, f"Created {len(data)} child tasks")
-                
-                # Get parent tasks to find the one we just created
-                parents_response = requests.get(
-                    f"{BASE_URL}/tasks/parents",
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if parents_response.status_code == 200:
-                    parents = parents_response.json()
-                    # Find the most recent parent task (should be the one we just created)
-                    if isinstance(parents, list) and len(parents) > 0:
-                        parent_task_id = parents[0].get("id")
-                        log_test("Create parent task", True, f"Parent ID: {parent_task_id}, Children: {len(data)}")
-                    else:
-                        log_test("Create parent task", False, "No parent tasks found")
-                        parent_task_id = None
-                else:
-                    log_test("Create parent task", False, f"Failed to fetch parent tasks: {parents_response.status_code}")
-                    parent_task_id = None
-            else:
-                log_test("Create parent task", False, "Invalid response format or empty task list")
-                parent_task_id = None
-        else:
-            log_test("Create parent task", False, f"Status {response.status_code}: {response.text}")
-            parent_task_id = None
+    # Run tests
+    task_id = test_ai_summary_endpoints(owner_token, owner_user)
+    test_standalone_recording(owner_token)
+    test_mentionable_users(owner_token)
+    
+    if alice_token and alice_user:
+        test_mentions_notifications(owner_token, owner_user, alice_token, alice_user, task_id)
     else:
-        log_test("Create parent task", False, "Skipped due to missing team member IDs")
-        parent_task_id = None
+        print("\n⚠️  Skipping mentions notifications tests (alice login failed)")
+    
+    test_regression_sanity(owner_token, owner_user, alice_user if alice_user else owner_user)
+    
+    # Print summary
+    print_summary()
 
-except Exception as e:
-    log_test("Create parent task", False, f"Exception: {str(e)}")
-    parent_task_id = None
-
-# Test 3: GET /api/tasks/{task_id}/leaderboard
-print("\n" + "="*80)
-print("TEST 3: GET /api/tasks/{task_id}/leaderboard")
-print("="*80)
-
-if parent_task_id:
-    try:
-        response = requests.get(
-            f"{BASE_URL}/tasks/{parent_task_id}/leaderboard",
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            leaderboard = data.get("leaderboard", [])
-            visibility_message = data.get("visibility_message", "")
-            
-            if isinstance(leaderboard, list):
-                log_test("Leaderboard endpoint returns data", True, 
-                        f"Found {len(leaderboard)} entries")
-                
-                # Verify leaderboard structure
-                if len(leaderboard) > 0:
-                    first_entry = leaderboard[0]
-                    required_fields = ["rank", "assignee_id", "name", "status", "engagement_score", "task_id"]
-                    missing_fields = [f for f in required_fields if f not in first_entry]
-                    
-                    if not missing_fields:
-                        log_test("Leaderboard structure valid", True, 
-                                f"All required fields present: {', '.join(required_fields)}")
-                        print(f"\n  Sample entry:")
-                        print(f"    Rank: {first_entry.get('rank')}")
-                        print(f"    Name: {first_entry.get('name')}")
-                        print(f"    Status: {first_entry.get('status')}")
-                        print(f"    Engagement Score: {first_entry.get('engagement_score')}")
-                        print(f"    Completion Hours: {first_entry.get('completion_hours')}")
-                    else:
-                        log_test("Leaderboard structure valid", False, 
-                                f"Missing fields: {', '.join(missing_fields)}")
-                else:
-                    log_test("Leaderboard structure valid", False, "Leaderboard is empty")
-                
-                # Verify visibility message
-                if visibility_message:
-                    log_test("Visibility message present", True, f"Message: {visibility_message}")
-                else:
-                    log_test("Visibility message present", False, "No visibility message")
-            else:
-                log_test("Leaderboard endpoint returns data", False, "Leaderboard is not a list")
-        else:
-            log_test("Leaderboard endpoint returns data", False, 
-                    f"Status {response.status_code}: {response.text}")
-    except Exception as e:
-        log_test("Leaderboard endpoint returns data", False, f"Exception: {str(e)}")
-else:
-    log_test("Leaderboard endpoint returns data", False, "Skipped - no parent task available")
-
-# Test 4: POST /api/tasks/{task_id}/comments with mentions
-print("\n" + "="*80)
-print("TEST 4: POST /api/tasks/{task_id}/comments with mentions")
-print("="*80)
-
-if parent_task_id and alice_id:
-    try:
-        # Add comment with mention
-        comment_data = {
-            "content": f"Great work team! @alice let's discuss this further.",
-            "mentions": [alice_id]
-        }
-        
-        response = requests.post(
-            f"{BASE_URL}/tasks/{parent_task_id}/comments",
-            headers=headers,
-            json=comment_data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            comment = data.get("comment", {})
-            message = data.get("message", "")
-            
-            if comment:
-                log_test("Comment creation successful", True, 
-                        f"Comment ID: {comment.get('id')}")
-                
-                # Verify comment structure
-                required_fields = ["id", "user_id", "user_name", "content", "mentions", "created_at"]
-                missing_fields = [f for f in required_fields if f not in comment]
-                
-                if not missing_fields:
-                    log_test("Comment structure valid", True, 
-                            f"All required fields present")
-                    print(f"\n  Comment details:")
-                    print(f"    User: {comment.get('user_name')}")
-                    print(f"    Content: {comment.get('content')}")
-                    print(f"    Mentions: {comment.get('mentions')}")
-                    print(f"    Created: {comment.get('created_at')}")
-                else:
-                    log_test("Comment structure valid", False, 
-                            f"Missing fields: {', '.join(missing_fields)}")
-                
-                # Verify mentions
-                if alice_id in comment.get("mentions", []):
-                    log_test("Mentions working correctly", True, 
-                            f"Alice ({alice_id}) mentioned successfully")
-                else:
-                    log_test("Mentions working correctly", False, 
-                            f"Alice not found in mentions: {comment.get('mentions')}")
-            else:
-                log_test("Comment creation successful", False, "No comment in response")
-        else:
-            log_test("Comment creation successful", False, 
-                    f"Status {response.status_code}: {response.text}")
-    except Exception as e:
-        log_test("Comment creation successful", False, f"Exception: {str(e)}")
-else:
-    log_test("Comment creation successful", False, 
-            "Skipped - no parent task or alice_id available")
-
-# Test 5: GET /api/tasks/{task_id}/comments to verify comment was saved
-print("\n" + "="*80)
-print("TEST 5: GET /api/tasks/{task_id}/comments to verify comment persistence")
-print("="*80)
-
-if parent_task_id:
-    try:
-        response = requests.get(
-            f"{BASE_URL}/tasks/{parent_task_id}/comments",
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            comments = data.get("comments", [])
-            
-            if isinstance(comments, list) and len(comments) > 0:
-                log_test("Comments retrieval successful", True, 
-                        f"Found {len(comments)} comment(s)")
-                
-                # Verify the comment we just added is present
-                latest_comment = comments[-1]
-                if "Great work team!" in latest_comment.get("content", ""):
-                    log_test("Comment persistence verified", True, 
-                            "Latest comment matches what we added")
-                else:
-                    log_test("Comment persistence verified", False, 
-                            "Latest comment doesn't match")
-            else:
-                log_test("Comments retrieval successful", False, 
-                        "No comments found or invalid format")
-        else:
-            log_test("Comments retrieval successful", False, 
-                    f"Status {response.status_code}: {response.text}")
-    except Exception as e:
-        log_test("Comments retrieval successful", False, f"Exception: {str(e)}")
-else:
-    log_test("Comments retrieval successful", False, "Skipped - no parent task available")
-
-# Print summary
-print_summary()
-
-# Exit with appropriate code
-exit(0 if all(r["passed"] for r in test_results) else 1)
+if __name__ == "__main__":
+    main()

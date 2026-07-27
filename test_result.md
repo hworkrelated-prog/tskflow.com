@@ -395,8 +395,8 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 5
+  version: "1.1"
+  test_sequence: 6
   run_ui: false
 
 test_plan:
@@ -404,7 +404,7 @@ test_plan:
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
-  notes: "✅ React-quill-new migration complete. Task creation modal working correctly with React 19."
+  notes: "July 2025 continuation batch regression testing complete. All 15 backend tests passed (100%). AI Summary endpoints accept JSON body with graceful fallback, Standalone recording accepts JSON body, Mentionable users endpoint working, Pending notifications endpoint working. All regression sanity checks passed. Ready for main agent to summarize and finish."
 
   - task: "Email Verification Flow - Security Enhancement"
     implemented: true
@@ -469,6 +469,54 @@ test_plan:
         agent: "testing"
         comment: "✅ TESTED: All drafts endpoints working correctly. 5/5 tests passed. (1) GET /api/tasks/drafts returns empty array (not 404) when no drafts exist. (2) POST /api/tasks/drafts creates draft with minimal data (just title). (3) GET /api/tasks/drafts returns created drafts. (4) PUT /api/tasks/drafts/{id} updates draft fields (title, description, priority verified). (5) POST /api/tasks/drafts/{id}/complete converts draft to regular task (status changes from Draft to Accepted, draft removed from drafts list). 404 bug is completely fixed. Note: Fixed missing dependencies (pytz, google-auth-oauthlib) and created missing /app/backend/.env file during testing."
 
+  - task: "AI Summary Endpoints - JSON Body Support"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED (2/2 tests): AI Summary endpoints now accept JSON body and provide graceful fallback when EMERGENT_LLM_KEY is not configured. (1) POST /api/dashboard/ai-summary with JSON body {view_mode: 'active', date_filter: 'all'} returns 200 with heuristic summary in 0.004s (no LLM key configured, fallback working correctly). (2) POST /api/tasks/{task_id}/ai-summary returns 200 with heuristic summary in 0.003s (fallback working correctly). FIXED BUG: Task-specific AI summary endpoint was returning 500 when EMERGENT_LLM_KEY missing - now returns graceful fallback summary instead. Both endpoints respond well under 15s requirement. No 422 or 500 errors. JSON body parsing working correctly."
+
+  - task: "Standalone Recording - JSON Body Support"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED (4/4 tests): Standalone recording endpoint now accepts JSON body. (1) POST /api/recordings/standalone with JSON body {recording_url: 'test/path/recording.webm'} returns 200 with recording_id, shareable_link, shareable_token in 0.003s. (2) POST with JSON body {recording_url: null} returns 200 in 0.002s. (3) Backwards compatibility maintained: POST with query param ?recording_url=test/path returns 200 in 0.002s. (4) GET /api/recordings/{shareable_token} retrieves recording successfully in 0.001s. All required fields present. No 422 errors. JSON body parsing working correctly."
+
+  - task: "Mentionable Users Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: GET /api/users/mentionable returns same-domain users correctly. Tested with owner@acmecorp.com - returns 4 mentionable users including alice@acmecorp.com and owner@acmecorp.com (same domain). Response includes all required fields: id, name, email. Latency: 0.002s. Feature working as expected for @mentions functionality."
+
+  - task: "Pending Notifications Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED (3/3 tests): Mentions notifications flow working end-to-end. (1) POST /api/tasks/{task_id}/comments with mentions array creates comment and notification in 0.028s. All required fields present: id, user_id, user_name, content, mentions, created_at. (2) GET /api/notifications/pending (first call) returns notification with type='mention', title includes 'Test Teams Owner mentioned you', body includes task title, task_id set, delivered=false in DB but marked delivered=true after fetch. Latency: 0.004s. (3) GET /api/notifications/pending (second call) returns empty array (notifications already delivered). Latency: 0.002s. Notification delivery and marking logic working correctly."
+
 agent_communication:
   - agent: "main"
     message: "Implemented hierarchical team structure with direct reports. Need to test the backend APIs first, then verify frontend functionality."
@@ -506,3 +554,9 @@ agent_communication:
 
   - agent: "testing"
     message: "✅ GROUP TASK FEATURES TESTING COMPLETE (12/12 tests passed - 100%): Quick backend validation of new group task features completed successfully. (1) Login as owner@acmecorp.com / Password123 ✓. (2) Created parent task (group task) with 2 assignees (Alice and Bob) ✓. (3) GET /api/tasks/{task_id}/leaderboard returns leaderboard data with all required fields: rank, assignee_id, name, status, engagement_score, task_id, completion_hours ✓. Leaderboard correctly ranks by engagement score (1=completed, 2=review pending, 3=accepted, 4=other, 5=pending) and completion time ✓. Visibility message present: '⚡ Your speed and engagement are visible to everyone on this task' ✓. (4) POST /api/tasks/{task_id}/comments with mentions creates comment successfully ✓. All required fields present: id, user_id, user_name, content, mentions, created_at ✓. Mentions array correctly stores user IDs ✓. (5) GET /api/tasks/{task_id}/comments retrieves comments successfully ✓. Comment persistence verified ✓. All endpoints return data without errors. Features are production-ready."
+
+  - agent: "main"
+    message: "[Jul 2025 continuation batch] Applied 9 fixes: (1) ParentTaskGroup now goes straight to /group-task/{id} (no inline expansion). (2) Chatter @mentions across TaskDetail + GroupTaskDetail: fuzzy narrowing dropdown, arrow-key nav, IDs mapped via markers. (3) Backend: new POST /api/tasks/{id}/comments now writes to db.notifications collection for browser push polling. (4) New GET /api/notifications/pending endpoint returns + marks delivered. (5) New GET /api/users/mentionable returns same-domain users. (6) POST /api/dashboard/ai-summary and POST /api/tasks/{id}/ai-summary now accept JSON body OR query params, with asyncio.wait_for timeout (10-12s) + graceful heuristic fallback. (7) POST /api/recordings/standalone now accepts JSON body {recording_url} (frontend was already sending JSON). (8) StandaloneRecorder uses preferCurrentTab + surfaceSwitching + fallback mimeType, better error surfacing. (9) Frontend: Analytics defaults to Current Month + preset shortcuts (Current, Last Month, Last Week, Last Two Weeks, Custom). (10) TaskHub search bar is now icon-only until clicked (removed CSV button — CSV lives in Analytics). (11) App.js prompts for notification permission for existing sessions + polls /notifications/pending every 30s to fire native Chrome notifications. (12) App.css adds comprehensive dark and minimal theme rules to eliminate white-on-white and colored-text-on-light issues. Please regression-test: (a) POST /api/dashboard/ai-summary with JSON body {view_mode: 'active', date_filter: 'all'} → returns summary within ~15s or a graceful fallback (never 500). (b) POST /api/tasks/{id}/ai-summary → similar behavior. (c) POST /api/recordings/standalone with JSON body {recording_url: 'test/path'} → returns recording_id/shareable_link/shareable_token. (d) GET /api/notifications/pending → returns [] for new user; after a mention comment is added, mentioned user sees the notification once, then no longer. (e) GET /api/users/mentionable → returns same-domain users, non-empty for owner@acmecorp.com. (f) Ensure existing endpoints (comments POST/GET, tasks POST, analytics POST, leaderboard GET) still work.
+
+  - agent: "testing"
+    message: "✅ JULY 2025 CONTINUATION BATCH REGRESSION TEST COMPLETE (15/15 tests passed - 100%): Comprehensive backend testing completed successfully. All endpoints from the continuation batch are working correctly. RESULTS: (1) AI Summary Endpoints: Both POST /api/dashboard/ai-summary and POST /api/tasks/{task_id}/ai-summary accept JSON body, return 200 with graceful fallback when EMERGENT_LLM_KEY not configured. Latencies: 0.004s and 0.003s (well under 15s requirement). FIXED BUG: Task-specific AI summary was returning 500 when LLM key missing - now returns heuristic fallback. (2) Standalone Recording: POST /api/recordings/standalone accepts JSON body {recording_url}, backwards compatible with query params. All 4 tests passed. Latencies: 0.001-0.003s. (3) Mentionable Users: GET /api/users/mentionable returns 4 same-domain users (includes alice and owner). Latency: 0.002s. (4) Mentions Notifications: Full flow working - comment with mention creates notification, GET /api/notifications/pending returns notification on first call, empty on second call (delivered flag working). Latencies: 0.002-0.028s. (5) Regression Sanity: POST /api/tasks (single), POST /api/tasks/bulk (group of 2), GET /api/tasks/parents, GET /api/tasks/{parent_id}/leaderboard, POST /api/analytics all working. Analytics includes response_rate and avg_response_hours fields. All latencies under 2s requirement. NO 422 or 500 errors detected. All features production-ready.""

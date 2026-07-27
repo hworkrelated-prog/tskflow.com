@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
@@ -14,10 +14,38 @@ import { motion, AnimatePresence } from 'framer-motion';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import { getErrorMessage } from '@/lib/utils';
 
+// Return YYYY-MM-DD in local time (no TZ drift from toISOString)
+const toDateStr = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+};
+
+const rangePresets = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    const oneWeekAgo = new Date(today);
+    oneWeekAgo.setDate(today.getDate() - 7);
+    const twoWeeksAgo = new Date(today);
+    twoWeeksAgo.setDate(today.getDate() - 14);
+    return {
+        current: { label: 'Current Month', start: toDateStr(startOfMonth), end: toDateStr(endOfMonth) },
+        lastMonth: { label: 'Last Month', start: toDateStr(startOfLastMonth), end: toDateStr(endOfLastMonth) },
+        lastWeek: { label: 'Last Week', start: toDateStr(oneWeekAgo), end: toDateStr(today) },
+        lastTwoWeeks: { label: 'Last Two Weeks', start: toDateStr(twoWeeksAgo), end: toDateStr(today) },
+    };
+};
+
 const AnalyticsPage = () => {
     const { user } = useAuth();
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const presets = rangePresets();
+    const [startDate, setStartDate] = useState(presets.current.start);
+    const [endDate, setEndDate] = useState(presets.current.end);
+    const [activePreset, setActivePreset] = useState('current');
     const [analytics, setAnalytics] = useState(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -25,14 +53,13 @@ const AnalyticsPage = () => {
     // Onboarding
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('analytics');
 
-    const handleFetchAnalytics = async (e) => {
-        e.preventDefault();
+    const fetchAnalytics = useCallback(async (s, e) => {
+        if (!s || !e) return;
         setLoading(true);
-
         try {
             const response = await axios.post(`${API}/analytics`, {
-                start_date: startDate,
-                end_date: endDate
+                start_date: s,
+                end_date: e,
             });
             setAnalytics(response.data);
         } catch (error) {
@@ -40,6 +67,27 @@ const AnalyticsPage = () => {
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    // Auto-fetch on load with Current Month default
+    useEffect(() => {
+        fetchAnalytics(presets.current.start, presets.current.end);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const applyPreset = (key) => {
+        const p = presets[key];
+        if (!p) return;
+        setStartDate(p.start);
+        setEndDate(p.end);
+        setActivePreset(key);
+        fetchAnalytics(p.start, p.end);
+    };
+
+    const handleFetchAnalytics = (e) => {
+        e.preventDefault();
+        setActivePreset('custom');
+        fetchAnalytics(startDate, endDate);
     };
 
     const downloadAnalyticsCSV = () => {
@@ -123,9 +171,37 @@ const AnalyticsPage = () => {
                     <Card className="border-2 shadow-soft rounded-2xl">
                         <CardHeader>
                             <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Select Time Period</CardTitle>
-                            <CardDescription>Choose a date range to analyze</CardDescription>
+                            <CardDescription>Choose a shortcut or a custom date range</CardDescription>
                         </CardHeader>
                         <CardContent>
+                            {/* Shortcut buttons */}
+                            <div className="flex flex-wrap items-center gap-2 mb-5">
+                                {[
+                                    { key: 'current', label: 'Current Month' },
+                                    { key: 'lastMonth', label: 'Last Month' },
+                                    { key: 'lastWeek', label: 'Last Week' },
+                                    { key: 'lastTwoWeeks', label: 'Last Two Weeks' },
+                                ].map((p) => (
+                                    <button
+                                        key={p.key}
+                                        type="button"
+                                        onClick={() => applyPreset(p.key)}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                                            activePreset === p.key
+                                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                                : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'
+                                        }`}
+                                        data-testid={`analytics-preset-${p.key}`}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                                <span className={`px-3 py-1.5 rounded-full text-sm font-medium border ${
+                                    activePreset === 'custom' ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500'
+                                }`}>
+                                    Custom range ↓
+                                </span>
+                            </div>
                             <form onSubmit={handleFetchAnalytics} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
@@ -135,7 +211,7 @@ const AnalyticsPage = () => {
                                             data-testid="start-date-input"
                                             type="date"
                                             value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
+                                            onChange={(e) => { setStartDate(e.target.value); setActivePreset('custom'); }}
                                             required
                                             className="rounded-xl h-12"
                                         />
@@ -147,7 +223,7 @@ const AnalyticsPage = () => {
                                             data-testid="end-date-input"
                                             type="date"
                                             value={endDate}
-                                            onChange={(e) => setEndDate(e.target.value)}
+                                            onChange={(e) => { setEndDate(e.target.value); setActivePreset('custom'); }}
                                             required
                                             className="rounded-xl h-12"
                                         />

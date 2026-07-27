@@ -263,6 +263,122 @@
 [data-theme="dark"] [class*="SelectItem"]:hover {
     background: #252525 !important;
 }
+
+/* Dark mode: ensure text on colored/light backgrounds stays readable */
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-gray-50,
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .bg-zinc-50,
+[data-theme="dark"] .bg-neutral-50 {
+    background: #1e1e1e !important;
+    color: #e6e6e6 !important;
+}
+
+[data-theme="dark"] .text-white {
+    /* leave true white text alone — it's usually on a bold color */
+    color: #ffffff !important;
+}
+
+/* Force dark text on light utility bg helpers to render readable */
+[data-theme="dark"] .text-gray-900,
+[data-theme="dark"] .text-gray-800,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-black {
+    color: #f0f0f0 !important;
+}
+
+[data-theme="dark"] .text-gray-700,
+[data-theme="dark"] .text-slate-700 {
+    color: #d0d0d0 !important;
+}
+
+[data-theme="dark"] .text-gray-500,
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-gray-400,
+[data-theme="dark"] .text-slate-400 {
+    color: #a0a0a0 !important;
+}
+
+/* Toned bg pastels in dark mode become subtle dark tints (readable) */
+[data-theme="dark"] .bg-indigo-50,
+[data-theme="dark"] .bg-purple-50,
+[data-theme="dark"] .bg-pink-50,
+[data-theme="dark"] .bg-blue-50,
+[data-theme="dark"] .bg-emerald-50,
+[data-theme="dark"] .bg-green-50,
+[data-theme="dark"] .bg-amber-50,
+[data-theme="dark"] .bg-yellow-50,
+[data-theme="dark"] .bg-red-50 {
+    background: #232323 !important;
+}
+[data-theme="dark"] .bg-indigo-100 { background: #1f1b3a !important; color: #c7d2fe !important; }
+[data-theme="dark"] .bg-purple-100 { background: #2a1e3a !important; color: #d8b4fe !important; }
+[data-theme="dark"] .bg-blue-100 { background: #16273f !important; color: #bfdbfe !important; }
+[data-theme="dark"] .bg-green-100 { background: #16301f !important; color: #86efac !important; }
+[data-theme="dark"] .bg-amber-100 { background: #33260c !important; color: #fcd34d !important; }
+[data-theme="dark"] .bg-red-100 { background: #331616 !important; color: #fecaca !important; }
+[data-theme="dark"] .bg-gray-100 { background: #1a1a1a !important; color: #d0d0d0 !important; }
+[data-theme="dark"] .bg-gray-200 { background: #262626 !important; color: #e0e0e0 !important; }
+
+/* Gradients — flatten to a single dark tone so text stays readable */
+[data-theme="dark"] .bg-gradient-to-r,
+[data-theme="dark"] .bg-gradient-to-l,
+[data-theme="dark"] .bg-gradient-to-tr,
+[data-theme="dark"] .bg-gradient-to-tl,
+[data-theme="dark"] .bg-gradient-to-b {
+    background: #1e1e1e !important;
+}
+
+/* Deep colored text on dark mode gets a lighter variant */
+[data-theme="dark"] .text-indigo-700, [data-theme="dark"] .text-indigo-800, [data-theme="dark"] .text-indigo-900 { color: #a5b4fc !important; }
+[data-theme="dark"] .text-purple-700, [data-theme="dark"] .text-purple-800, [data-theme="dark"] .text-purple-900 { color: #d8b4fe !important; }
+[data-theme="dark"] .text-blue-700, [data-theme="dark"] .text-blue-800, [data-theme="dark"] .text-blue-900 { color: #93c5fd !important; }
+[data-theme="dark"] .text-green-700, [data-theme="dark"] .text-green-800, [data-theme="dark"] .text-green-900 { color: #86efac !important; }
+[data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900 { color: #fcd34d !important; }
+[data-theme="dark"] .text-red-700, [data-theme="dark"] .text-red-800, [data-theme="dark"] .text-red-900 { color: #fca5a5 !important; }
+
+/* Borders — subtle */
+[data-theme="dark"] .border-gray-100,
+[data-theme="dark"] .border-gray-200,
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-100 {
+    border-color: #2f2f2f !important;
+}
+
+/* --- MINIMAL THEME polish: keep text dark, cards white, subtle borders --- */
+[data-theme="minimal"] {
+    background: #ffffff;
+    color: #0a0a0a;
+}
+[data-theme="minimal"] body,
+[data-theme="minimal"] .min-h-screen {
+    background: #ffffff !important;
+    color: #0a0a0a !important;
+}
+[data-theme="minimal"] .bg-gradient-to-br,
+[data-theme="minimal"] .bg-gradient-to-r,
+[data-theme="minimal"] .bg-gradient-to-l,
+[data-theme="minimal"] .bg-gradient-to-tr {
+    background: #ffffff !important;
+}
+[data-theme="minimal"] [class*="Card"],
+[data-theme="minimal"] .rounded-2xl.border-2 {
+    background: #ffffff !important;
+    border-color: #e5e5e5 !important;
+}
+[data-theme="minimal"] .glass-header {
+    background: #ffffff !important;
+    border-color: #e5e5e5 !important;
+}
+[data-theme="minimal"] .text-muted-foreground,
+[data-theme="minimal"] .text-gray-500,
+[data-theme="minimal"] .text-slate-500 {
+    color: #6b7280 !important;
+}
+/* Ensure primary buttons stay visible (dark button on white) */
+[data-theme="minimal"] .bg-indigo-600 { background: #0a0a0a !important; color: #ffffff !important; }
+[data-theme="minimal"] .bg-indigo-600:hover { background: #1a1a1a !important; }
 /* Clean, subtle scrollbars for long task columns */
 .clean-scroll {
     scrollbar-width: thin;

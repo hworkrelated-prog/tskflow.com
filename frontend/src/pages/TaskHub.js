@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Download, Pencil } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil } from 'lucide-react';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -71,6 +71,8 @@ const TaskHub = () => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showMoreFilters, setShowMoreFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
+    const searchInputRef = React.useRef(null);
 
     // Multi-select delete state
     const [selectionMode, setSelectionMode] = useState(false);
@@ -1116,37 +1118,44 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {/* Search Bar + Actions */}
+                {/* Search Bar (condensed) — magnifying glass icon that expands into a search input */}
                 <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className="relative flex-1 min-w-[240px]">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            data-testid="task-search-input"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search across all buckets — owner, title, description, priority, status..."
-                            className="pl-9 rounded-full h-10 bg-white border-gray-200"
-                        />
-                        {searchQuery && (
+                    <div className={`relative transition-all duration-200 ${searchOpen || searchQuery ? 'flex-1 min-w-[240px]' : 'w-10'}`}>
+                        {searchOpen || searchQuery ? (
+                            <>
+                                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    ref={searchInputRef}
+                                    data-testid="task-search-input"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
+                                    placeholder="Search across all buckets — owner, title, description, priority, status..."
+                                    className="pl-9 rounded-full h-10 bg-white border-gray-200"
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => { setSearchQuery(''); setSearchOpen(false); }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Close search"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </>
+                        ) : (
                             <button
                                 type="button"
-                                onClick={() => setSearchQuery('')}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                aria-label="Clear search"
+                                onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 0); }}
+                                className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-gray-200 text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+                                aria-label="Open search"
+                                data-testid="task-search-icon"
+                                title="Search tasks"
                             >
-                                <X className="w-4 h-4" />
+                                <Search className="w-4 h-4" />
                             </button>
                         )}
                     </div>
-                    <Button
-                        variant="outline"
-                        onClick={downloadAllTasksCSV}
-                        className="rounded-full gap-2"
-                        data-testid="download-tasks-csv"
-                    >
-                        <Download className="w-4 h-4" />
-                        Download CSV
-                    </Button>
                 </div>
 
                 {/* AI Summary Display */}

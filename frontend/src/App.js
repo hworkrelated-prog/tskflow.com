@@ -11,6 +11,7 @@ import LoginPage from '@/pages/LoginPage';
 import ForgotPassword from '@/pages/ForgotPassword';
 import TaskHub from '@/pages/TaskHub';
 import TaskDetail from '@/pages/TaskDetail';
+import GroupTaskDetail from '@/pages/GroupTaskDetail';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
@@ -48,6 +49,55 @@ const AuthProvider = ({ children }) => {
             setLoading(false);
         }
     }, [token]);
+
+    // Prompt for browser notification permission whenever we have a live session
+    // (covers both fresh sign-in AND page reloads for existing sessions).
+    useEffect(() => {
+        if (!user) return;
+        if (!('Notification' in window)) return;
+        if (Notification.permission === 'default') {
+            // Slight delay so it doesn't block initial paint / feels less abrupt
+            const t = setTimeout(() => {
+                Notification.requestPermission().catch(() => {});
+            }, 800);
+            return () => clearTimeout(t);
+        }
+    }, [user]);
+
+    // Poll for pending mentions / notifications and fire native Chrome notifications
+    useEffect(() => {
+        if (!user) return;
+        let cancelled = false;
+        const pollOnce = async () => {
+            if (cancelled) return;
+            try {
+                const res = await axios.get(`${API}/notifications/pending`);
+                const items = (res.data && res.data.notifications) || [];
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    items.forEach((n) => {
+                        try {
+                            const notif = new Notification(n.title || 'Tskflow', {
+                                body: n.body || '',
+                                icon: '/favicon.ico',
+                                tag: n.id,
+                            });
+                            notif.onclick = () => {
+                                window.focus();
+                                if (n.task_id) {
+                                    window.location.href = `/task/${n.task_id}`;
+                                }
+                                notif.close();
+                            };
+                        } catch (_) { /* silent */ }
+                    });
+                }
+            } catch (_) { /* silent — server may be down momentarily */ }
+        };
+        // Fire once immediately, then every 30s
+        pollOnce();
+        const interval = setInterval(pollOnce, 30000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [user]);
 
     const fetchCurrentUser = async () => {
         try {

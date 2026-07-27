@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import asyncio
+import re
 import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
@@ -144,6 +145,13 @@ class BulkTaskCreate(BaseModel):
 class TaskComment(BaseModel):
     content: str
     mentions: Optional[List[str]] = []  # List of user IDs mentioned with @
+
+class AISummaryRequest(BaseModel):
+    view_mode: Optional[str] = "active"
+    date_filter: Optional[str] = "all"
+
+class RecordingCreateRequest(BaseModel):
+    recording_url: Optional[str] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1561,12 +1569,24 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
         {"$push": {"comments": comment_doc}}
     )
     
-    # Send email notifications to mentioned users
+    # Send email notifications to mentioned users and store push-notification records
     if comment.mentions:
         app_url = APP_BASE_URL
         for user_id in comment.mentions:
             mentioned_user = await db.users.find_one({"id": user_id}, {"_id": 0})
             if mentioned_user and mentioned_user["id"] != current_user["id"]:
+                # Store a pending browser notification for polling
+                await db.notifications.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": mentioned_user["id"],
+                    "type": "mention",
+                    "title": f"{current_user['name']} mentioned you",
+                    "body": f"In: {task['title']} — {comment.content[:120]}",
+                    "task_id": task_id,
+                    "created_at": get_pst_now().isoformat(),
+                    "delivered": False,
+                    "read": False,
+                })
                 email_content = f"""
                 <html>
                     <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -1606,6 +1626,40 @@ async def get_task_comments(task_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=403, detail="Access denied")
     
     return {"comments": task.get("comments", [])}
+
+# ===== BROWSER NOTIFICATIONS (poll-based) =====
+@api_router.get("/notifications/pending")
+async def get_pending_notifications(current_user: dict = Depends(get_current_user)):
+    """Return undelivered browser notifications for the current user and mark as delivered.
+
+    Used by the frontend to trigger native `Notification` popups (Chrome/Edge/etc).
+    """
+    docs = await db.notifications.find(
+        {"user_id": current_user["id"], "delivered": {"$ne": True}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    if docs:
+        ids = [d["id"] for d in docs]
+        await db.notifications.update_many(
+            {"id": {"$in": ids}},
+            {"$set": {"delivered": True, "delivered_at": get_pst_now().isoformat()}}
+        )
+    return {"notifications": docs}
+
+@api_router.get("/users/mentionable")
+async def get_mentionable_users(current_user: dict = Depends(get_current_user)):
+    """Return users the current user can mention (same domain if teams, else all known users).
+
+    Lightweight - returns id, name, email, avatar-friendly initials only.
+    """
+    email = current_user.get("email", "")
+    domain = email.split("@")[-1] if "@" in email else ""
+    query = {}
+    if domain:
+        # Same-domain users first (typical team-context)
+        query = {"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}}
+    users = await db.users.find(query, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
+    return users
 
 # ===== SHAREABLE TASK LINK ENDPOINT =====
 @api_router.get("/tasks/shared/{token}")
@@ -1705,15 +1759,25 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
 # ===== STANDALONE SCREEN RECORDING =====
 @api_router.post("/recordings/standalone")
 async def create_standalone_recording(
+    body: RecordingCreateRequest = None,
     recording_url: str = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a standalone screen recording with shareable link"""
+    """Create a standalone screen recording with shareable link.
+
+    Accepts either JSON body {recording_url} or ?recording_url query param.
+    """
+    rec_url = None
+    if body is not None:
+        rec_url = body.recording_url
+    if not rec_url and recording_url:
+        rec_url = recording_url
+
     recording_id = str(uuid.uuid4())
     recording_doc = {
         "id": recording_id,
         "created_by": current_user["id"],
-        "recording_url": recording_url,
+        "recording_url": rec_url,
         "created_at": get_pst_now().isoformat(),
         "shareable_token": str(uuid.uuid4())[:12],
         "auto_delete_at": None  # Set when associated task is completed
@@ -1891,36 +1955,49 @@ async def get_task_ai_summary(task_id: str, current_user: dict = Depends(get_cur
     
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
-        raise HTTPException(status_code=500, detail="AI service not configured")
+        # Provide a quick heuristic summary if AI is unavailable
+        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority, due {task['due_date']}. Status: {task['status']}."}
     
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         
-        prompt = f"""Summarize this task in 2-3 concise sentences focusing on what needs to be done and any key details:
-
+        prompt = f"""Summarize this task in 1-2 concise sentences:
 Title: {task['title']}
-Description: {task.get('description', 'No description')}
+Description: {(task.get('description') or 'No description')[:400]}
 Priority: {task.get('priority', 'Medium')}
 Due: {task['due_date']}
-Status: {task['status']}
-
-Provide a brief, actionable summary."""
+Status: {task['status']}"""
 
         chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        response = await chat.aask([UserMessage(content=prompt)])
+        response = await asyncio.wait_for(
+            chat.aask([UserMessage(content=prompt)]),
+            timeout=10.0
+        )
         
         return {"summary": response.content.strip()}
+    except asyncio.TimeoutError:
+        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority, due {task['due_date']}. (Summary timed out.)"}
     except Exception as e:
         logging.error(f"AI summary error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate AI summary")
+        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority. Status: {task['status']}."}
 
 @api_router.post("/dashboard/ai-summary")
 async def get_dashboard_ai_summary(
-    view_mode: str,
-    date_filter: str,
+    body: AISummaryRequest = None,
+    view_mode: str = None,
+    date_filter: str = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Generate AI summary for the current dashboard view/filter"""
+    """Generate AI summary for the current dashboard view/filter.
+
+    Accepts either JSON body {view_mode, date_filter} or query params.
+    """
+    if body is not None:
+        view_mode = view_mode or body.view_mode
+        date_filter = date_filter or body.date_filter
+    view_mode = view_mode or "active"
+    date_filter = date_filter or "all"
+
     # Fetch tasks based on filters (simplified version)
     query = {
         "$or": [
@@ -1935,37 +2012,57 @@ async def get_dashboard_ai_summary(
     else:
         query["status"] = {"$ne": "Completed"}
     
-    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(50)
     
     if not tasks:
         return {"summary": "No tasks found for the selected filter."}
     
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
-        raise HTTPException(status_code=500, detail="AI service not configured")
+        # Provide a quick heuristic summary if AI is unavailable
+        total = len(tasks)
+        overdue = 0
+        now = get_pst_now()
+        priorities = {"High": 0, "Medium": 0, "Low": 0}
+        for t in tasks:
+            priorities[t.get("priority", "Medium")] = priorities.get(t.get("priority", "Medium"), 0) + 1
+            try:
+                due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+                if due < now and t.get("status") != "Completed":
+                    overdue += 1
+            except Exception:
+                pass
+        return {"summary": f"You have {total} {view_mode} tasks. {overdue} are overdue. Priorities — High: {priorities.get('High',0)}, Medium: {priorities.get('Medium',0)}, Low: {priorities.get('Low',0)}."}
     
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         
-        # Build task list summary
+        # Build compact task list summary (fewer tasks, shorter fields for speed)
         task_list = []
-        for t in tasks[:20]:  # Limit to 20 for token efficiency
-            task_list.append(f"- {t['title']} (Priority: {t.get('priority', 'Medium')}, Status: {t['status']})")
+        for t in tasks[:12]:  # Limit to 12 for speed
+            title = (t.get('title') or '')[:60]
+            task_list.append(f"- {title} [{t.get('priority', 'M')}/{t.get('status', '')}]")
         
-        prompt = f"""Summarize what the user should expect for their {view_mode} tasks ({date_filter}). Focus on priorities, upcoming deadlines, and key actions needed.
-
-Tasks:
-{chr(10).join(task_list)}
-
-Provide a brief overview in 3-4 sentences highlighting what needs attention."""
+        prompt = (
+            f"Summarize {view_mode} tasks in 2 short sentences. "
+            f"Highlight top priorities and urgent items.\n\n"
+            + "\n".join(task_list)
+        )
 
         chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        response = await chat.aask([UserMessage(content=prompt)])
+        # Add a timeout so slow LLM does not block the UI
+        response = await asyncio.wait_for(
+            chat.aask([UserMessage(content=prompt)]),
+            timeout=12.0
+        )
         
         return {"summary": response.content.strip()}
+    except asyncio.TimeoutError:
+        return {"summary": f"You have {len(tasks)} {view_mode} tasks. (AI summary timed out — showing quick stats.)"}
     except Exception as e:
         logging.error(f"Dashboard AI summary error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate AI summary")
+        # Fall back to heuristic instead of failing
+        return {"summary": f"You have {len(tasks)} {view_mode} tasks. Focus on High priority items first."}
 
 # ===== BULK APPROVE =====
 @api_router.post("/tasks/bulk-approve")

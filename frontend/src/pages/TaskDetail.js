@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
@@ -52,12 +52,102 @@ const TaskDetail = () => {
     const [commentLoading, setCommentLoading] = useState(false);
     const [aiSummary, setAiSummary] = useState(null);
     const [loadingAiSummary, setLoadingAiSummary] = useState(false);
+    // Chatter mention state
+    const [mentionUsers, setMentionUsers] = useState([]);
+    const [showMentionSuggest, setShowMentionSuggest] = useState(false);
+    const [mentionSearch, setMentionSearch] = useState('');
+    const [mentionHighlight, setMentionHighlight] = useState(0);
+    const [pendingMentions, setPendingMentions] = useState([]); // [{userId, marker}]
+    const commentTextareaRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchTask();
         if (taskId) fetchComments();
     }, [taskId, token]);
+
+    // Fetch mentionable users once
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await axios.get(`${API}/users/mentionable`);
+                setMentionUsers(res.data || []);
+            } catch (_) {
+                try {
+                    const legacy = await axios.get(`${API}/users`);
+                    setMentionUsers(legacy.data || []);
+                } catch (__) { /* silent */ }
+            }
+        })();
+    }, []);
+
+    // Fuzzy filter for mention drop-down
+    const fuzzyScore = (haystack, needle) => {
+        const h = (haystack || '').toLowerCase();
+        const n = (needle || '').toLowerCase().trim();
+        if (!n) return 0;
+        if (h.startsWith(n)) return 0;
+        const idx = h.indexOf(n);
+        if (idx !== -1) return 1 + idx;
+        let hi = 0; let miss = 0;
+        for (const ch of n) {
+            const next = h.indexOf(ch, hi);
+            if (next === -1) return 999;
+            miss += next - hi;
+            hi = next + 1;
+        }
+        return 10 + miss;
+    };
+
+    const filteredMentionUsers = mentionUsers
+        .map((u) => ({ u, score: Math.min(fuzzyScore(u.name, mentionSearch), fuzzyScore((u.email || '').split('@')[0], mentionSearch)) }))
+        .filter((x) => x.score < 999)
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 6)
+        .map((x) => x.u);
+
+    const onCommentChange = (e) => {
+        const value = e.target.value;
+        setNewComment(value);
+        const caret = e.target.selectionStart ?? value.length;
+        const before = value.slice(0, caret);
+        const atIdx = before.lastIndexOf('@');
+        if (atIdx === -1) { setShowMentionSuggest(false); return; }
+        const between = before.slice(atIdx + 1);
+        if (/\s/.test(between)) { setShowMentionSuggest(false); return; }
+        setMentionSearch(between.toLowerCase());
+        setShowMentionSuggest(true);
+        setMentionHighlight(0);
+    };
+
+    const insertMention = (u) => {
+        const el = commentTextareaRef.current;
+        const caret = el?.selectionStart ?? newComment.length;
+        const before = newComment.slice(0, caret);
+        const after = newComment.slice(caret);
+        const atIdx = before.lastIndexOf('@');
+        if (atIdx === -1) return;
+        const handle = u.name.replace(/\s+/g, '');
+        const marker = `@${handle}`;
+        const newVal = `${newComment.slice(0, atIdx)}${marker} ${after}`;
+        setNewComment(newVal);
+        setPendingMentions((prev) => (prev.find((p) => p.userId === u.id) ? prev : [...prev, { userId: u.id, marker }]));
+        setShowMentionSuggest(false);
+        requestAnimationFrame(() => {
+            if (!el) return;
+            const pos = atIdx + marker.length + 1;
+            el.focus();
+            try { el.setSelectionRange(pos, pos); } catch (_) { /* noop */ }
+        });
+    };
+
+    const onCommentKeyDown = (e) => {
+        if (!showMentionSuggest || filteredMentionUsers.length === 0) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); setMentionHighlight((i) => Math.min(i + 1, filteredMentionUsers.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setMentionHighlight((i) => Math.max(i - 1, 0)); }
+        else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertMention(filteredMentionUsers[mentionHighlight]); }
+        else if (e.key === 'Escape') { setShowMentionSuggest(false); }
+    };
 
     const fetchTask = async () => {
         try {
@@ -101,20 +191,18 @@ const TaskDetail = () => {
         setCommentLoading(true);
         try {
             const id = task?.id || taskId;
-            // Extract @mentions from comment
-            const mentionRegex = /@(\w+)/g;
-            const mentions = [];
-            let match;
-            while ((match = mentionRegex.exec(newComment)) !== null) {
-                mentions.push(match[1]);
-            }
+            // Map still-present markers back to user IDs
+            const mentions = pendingMentions
+                .filter((m) => newComment.includes(m.marker))
+                .map((m) => m.userId);
             
             await axios.post(`${API}/tasks/${id}/comments`, {
                 content: newComment,
-                mentions: mentions
+                mentions,
             });
             
             setNewComment('');
+            setPendingMentions([]);
             fetchComments();
             toast.success('Comment added');
         } catch (error) {
@@ -644,13 +732,35 @@ const TaskDetail = () => {
                                     </div>
                                     
                                     <div className="space-y-2 pt-3 border-t">
-                                        <Textarea
-                                            placeholder="Add a comment... (use @ to mention users)"
-                                            value={newComment}
-                                            onChange={(e) => setNewComment(e.target.value)}
-                                            rows={3}
-                                            className="rounded-lg"
-                                        />
+                                        <div className="relative">
+                                            <Textarea
+                                                ref={commentTextareaRef}
+                                                placeholder="Add a comment... (type @ to mention users)"
+                                                value={newComment}
+                                                onChange={onCommentChange}
+                                                onKeyDown={onCommentKeyDown}
+                                                rows={3}
+                                                className="rounded-lg"
+                                            />
+                                            {showMentionSuggest && filteredMentionUsers.length > 0 && (
+                                                <div className="absolute bottom-full mb-2 w-full max-w-md bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
+                                                    {filteredMentionUsers.map((u, idx) => (
+                                                        <button
+                                                            key={u.id}
+                                                            type="button"
+                                                            onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
+                                                            onMouseEnter={() => setMentionHighlight(idx)}
+                                                            className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between ${
+                                                                idx === mentionHighlight ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <span className="font-medium">{u.name}</span>
+                                                            <span className="text-xs text-gray-500">{u.email}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                         <div className="flex justify-end">
                                             <Button
                                                 onClick={handleAddComment}
