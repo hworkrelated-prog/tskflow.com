@@ -204,6 +204,7 @@ class TaskResponse(BaseModel):
     shareable_token: Optional[str] = None
     comments: Optional[List[dict]] = []
     is_sales_task: Optional[bool] = False
+    requires_screen_recording: Optional[bool] = False
     viewed_at: Optional[str] = None
     parent_id: Optional[str] = None
 
@@ -896,6 +897,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         note_images=task.note_images,
         invite_token=invite_token,
         is_sales_task=task.is_sales_task or False,
+        requires_screen_recording=task.requires_screen_recording or False,
     )
 
 @api_router.post("/tasks/bulk", response_model=List[TaskResponse])
@@ -1023,6 +1025,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             created_at=task_doc["created_at"],
             accepted_at=accepted_at,
             is_sales_task=task.is_sales_task or False,
+            requires_screen_recording=task.requires_screen_recording or False,
         ))
     
     # Persist the parent container for multi-assignee tasks
@@ -2377,7 +2380,11 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         calendar_event_id=task.get("calendar_event_id"),
         completed_by=task.get("completed_by"),
         completed_by_name=task.get("completed_by_name"),
-        attachments=task.get("attachments")
+        attachments=task.get("attachments"),
+        is_sales_task=task.get("is_sales_task", False),
+        requires_screen_recording=task.get("requires_screen_recording", False),
+        parent_id=task.get("parent_id"),
+        viewed_at=task.get("viewed_at"),
     )
 
 @api_router.put("/tasks/{task_id}/accept")

@@ -972,7 +972,7 @@ agent_communication:
 
   - task: "Bulk Task with requires_screen_recording Field"
     implemented: true
-    working: false
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
@@ -981,6 +981,9 @@ agent_communication:
       - working: false
         agent: "testing"
         comment: "❌ CRITICAL BUG (Batch #9 - 2/4 tests passed): requires_screen_recording field is saved to database but NOT returned in API responses. (1) POST /api/tasks/bulk with requires_screen_recording=true creates tasks successfully. (2) GET /api/tasks/{alice_sub_id} returns requires_screen_recording=None (expected True). (3) GET /api/tasks/{bob_sub_id} returns requires_screen_recording=None (expected True). (4) Default behavior works: POST /api/tasks/bulk without field defaults to false. ROOT CAUSE: TaskResponse model (line 169-208) is missing requires_screen_recording field. GET /api/tasks/{id} endpoint (line 2349-2381) doesn't include requires_screen_recording in response construction. Bulk task creation TaskResponse (line 1011-1026) also missing the field. FIX NEEDED: Add requires_screen_recording to TaskResponse model and all endpoint response constructions."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (Focused Retest - 4/4 tests passed - 100%): requires_screen_recording field is now working correctly in all task responses. (1) POST /api/tasks/bulk with requires_screen_recording=true → 200, all 2 subtasks have requires_screen_recording=true in response. (2) GET /api/tasks/{child_id} for one subtask → 200 with requires_screen_recording=true in body. (3) POST /api/tasks (single) with requires_screen_recording=true → 200 with requires_screen_recording=true in response. (4) POST /api/tasks/bulk WITHOUT the field → 200, all subtasks default to requires_screen_recording=false. All tests passed. Bug is FIXED and verified working."
 
   - task: "UserPreferences Merge with EOD Fields"
     implemented: true
@@ -1020,4 +1023,6 @@ agent_communication:
 
   - agent: "testing"
     message: "✅ JULY 2025 BATCH #9 COMPREHENSIVE TESTING COMPLETE (25/30 tests passed - 83.3%): Tested all new assignee management, requires_screen_recording, EOD features, and regression. BATCH #9 NEW FEATURES (19/21 tests passed - 90.5%): (1) POST /api/tasks/parents/{parent_id}/assignees: 5/5 tests passed - add assignees by email/ID, idempotent, 403/404 for non-creators. (2) DELETE /api/tasks/parents/{parent_id}/assignees/{subtask_id}: 4/4 tests passed - remove subtask, 403/404 for non-creators. (3) requires_screen_recording field: 2/4 tests passed - CRITICAL BUG: field saved to DB but NOT returned in API responses (missing from TaskResponse model and GET endpoint). (4) UserPreferences merge: 4/4 tests passed - eod_enabled, eod_hour, eod_channel all working. (5) POST /api/eod/preview: 1/1 test passed - returns correct shape with sent/delivered_to/counts. (6) POST /api/cron/eod-report: 1/1 test passed - no 401 when CRON_SECRET unset. REGRESSION (Batch #6-8) (6/9 tests passed - 66.7%): (a) POST /api/recordings/standalone: PASSED. (b) GET /api/recordings/mine: PASSED (returns {recordings:[], count:N} - correct API design). (c) DELETE /api/recordings/{id}: PASSED. (d) PUT /api/tasks/{subtask_id}/review: NOT TESTED (test setup issue - task needs to be in 'Review Pending' status first, this is expected behavior). (e) POST /api/tasks/parents/{parent_id}/remind: PASSED. (f) Groups CRUD: PASSED (all 4 operations). (g) GET /api/users: PASSED. CRITICAL BUG FOUND: requires_screen_recording field missing from TaskResponse model (line 169-208) and GET /api/tasks/{id} endpoint (line 2349-2381). Field is saved to database correctly but not returned in API responses. FIX NEEDED: Add requires_screen_recording to TaskResponse model and all endpoint response constructions (GET /api/tasks/{id}, POST /api/tasks, POST /api/tasks/bulk). LATENCY ANALYSIS: All endpoints avg=0.003s, max=0.010s (<2s requirement ✅). All batch #9 features working except requires_screen_recording response bug."
+  - agent: "testing"
+    message: "✅ FOCUSED RETEST COMPLETE (4/4 tests passed - 100%): requires_screen_recording field bug is FIXED. All test scenarios from review request passed: (1) POST /api/tasks/bulk with requires_screen_recording=true → all subtasks return requires_screen_recording=true. (2) GET /api/tasks/{child_id} → returns requires_screen_recording=true. (3) POST /api/tasks (single) with requires_screen_recording=true → returns requires_screen_recording=true. (4) POST /api/tasks/bulk WITHOUT field → defaults to false in all responses. The main agent's fix successfully added requires_screen_recording to TaskResponse model and all endpoint response constructions. Feature is production-ready."
 
