@@ -888,7 +888,8 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         accepted_at=accepted_at,
         note=task.note,
         note_images=task.note_images,
-        invite_token=invite_token
+        invite_token=invite_token,
+        is_sales_task=task.is_sales_task or False,
     )
 
 @api_router.post("/tasks/bulk", response_model=List[TaskResponse])
@@ -950,7 +951,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "invite_token": invite_token,
             "parent_id": parent_id,
             "assigned_to_email": assigned_to_email,
-            "attachments": task.attachments or None
+            "attachments": task.attachments or None,
+            "is_sales_task": task.is_sales_task or False,
         }
         
         await db.tasks.insert_one(task_doc)
@@ -1012,7 +1014,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             priority=task.priority,
             category=task.category,
             created_at=task_doc["created_at"],
-            accepted_at=accepted_at
+            accepted_at=accepted_at,
+            is_sales_task=task.is_sales_task or False,
         ))
     
     # Persist the parent container for multi-assignee tasks
