@@ -12,6 +12,10 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import TaskHub from '@/pages/TaskHub';
 import TaskDetail from '@/pages/TaskDetail';
 import GroupTaskDetail from '@/pages/GroupTaskDetail';
+import UpdatesPage from '@/pages/UpdatesPage';
+import LeaderboardPage from '@/pages/LeaderboardPage';
+import TranscriptImportPage from '@/pages/TranscriptImportPage';
+import RecordingEditorPage from '@/pages/RecordingEditorPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
@@ -98,6 +102,45 @@ const AuthProvider = ({ children }) => {
         const interval = setInterval(pollOnce, 30000);
         return () => { cancelled = true; clearInterval(interval); };
     }, [user]);
+
+    // WebSocket connection for real-time notifications + chatter
+    useEffect(() => {
+        if (!user || !token) return;
+        let ws;
+        let reconnectTimer;
+        const connect = () => {
+            try {
+                const wsProto = (BACKEND_URL || window.location.origin).replace(/^http/, 'ws');
+                ws = new WebSocket(`${wsProto}/api/ws?token=${encodeURIComponent(token)}`);
+                ws.onmessage = (ev) => {
+                    try {
+                        const data = JSON.parse(ev.data);
+                        if (data.event === 'notification') {
+                            window.dispatchEvent(new CustomEvent('tskflow:notification', { detail: data.notification }));
+                            // Also trigger a native notification if allowed
+                            if ('Notification' in window && Notification.permission === 'granted' && data.notification) {
+                                try {
+                                    const n = new Notification(data.notification.title, { body: data.notification.body, tag: data.notification.id });
+                                    n.onclick = () => { window.focus(); if (data.notification.task_id) window.location.href = `/task/${data.notification.task_id}`; };
+                                } catch (_) { /* noop */ }
+                            }
+                        } else if (data.event === 'new_comment') {
+                            window.dispatchEvent(new CustomEvent('tskflow:new_comment', { detail: data }));
+                        }
+                    } catch (_) { /* silent */ }
+                };
+                ws.onclose = () => {
+                    reconnectTimer = setTimeout(connect, 3000);
+                };
+                ws.onerror = () => { try { ws.close(); } catch (_) { /* noop */ } };
+            } catch (_) { /* silent */ }
+        };
+        connect();
+        return () => {
+            try { ws && ws.close(); } catch (_) { /* noop */ }
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+        };
+    }, [user, token]);
 
     const fetchCurrentUser = async () => {
         try {
@@ -339,6 +382,10 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+                    <Route path="/updates" element={<ProtectedRoute><UpdatesPage /></ProtectedRoute>} />
+                    <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
+                    <Route path="/transcript" element={<ProtectedRoute><TranscriptImportPage /></ProtectedRoute>} />
+                    <Route path="/recording/edit" element={<ProtectedRoute><RecordingEditorPage /></ProtectedRoute>} />
                 </Routes>
             </BrowserRouter>
             <Toaster position="top-right" />

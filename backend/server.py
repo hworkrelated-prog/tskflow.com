@@ -30,6 +30,11 @@ load_dotenv(ROOT_DIR / '.env')
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
 
+# Email sender persona ("Jarvis" per product spec)
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Jarvis")
+EMAIL_FROM_ADDR = os.getenv("EMAIL_FROM_ADDR", "notifications@notifications.unbiassly.com")
+EMAIL_FROM = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDR}>"
+
 # Configure Resend
 resend.api_key = os.getenv("RESEND_API_KEY")
 
@@ -117,6 +122,7 @@ class TaskCreate(BaseModel):
     attachments: Optional[List[dict]] = None  # [{id, path, filename, content_type, size, kind}]
     auto_reminder: Optional[bool] = False
     requires_screen_recording: Optional[bool] = False  # Section 5: require screen recording proof
+    is_sales_task: Optional[bool] = False  # Section 11: prospect/customer-related
 
 class DraftTaskCreate(BaseModel):
     title: Optional[str] = None
@@ -141,6 +147,7 @@ class BulkTaskCreate(BaseModel):
     note_images: Optional[List[str]] = None
     attachments: Optional[List[dict]] = None
     auto_reminder: Optional[bool] = False
+    is_sales_task: Optional[bool] = False
 
 class TaskComment(BaseModel):
     content: str
@@ -190,6 +197,9 @@ class TaskResponse(BaseModel):
     auto_reminder: Optional[bool] = False
     shareable_token: Optional[str] = None
     comments: Optional[List[dict]] = []
+    is_sales_task: Optional[bool] = False
+    viewed_at: Optional[str] = None
+    parent_id: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -286,7 +296,7 @@ async def send_email_notification(to_email: str, subject: str, content: str):
         return
     
     params = {
-        "from": "Tskflow <notifications@notifications.unbiassly.com>",
+        "from": EMAIL_FROM,
         "to": [to_email],
         "subject": subject,
         "html": content
@@ -805,7 +815,9 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "auto_reminder": task.auto_reminder or False,
         "shareable_token": str(uuid.uuid4())[:12],
         "comments": [],
-        "requires_screen_recording": task.requires_screen_recording or False
+        "requires_screen_recording": task.requires_screen_recording or False,
+        "is_sales_task": task.is_sales_task or False,
+        "viewed_at": None
     }
     
     await db.tasks.insert_one(task_doc)
@@ -1124,6 +1136,28 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user),
             "assignees": assignees
         })
     return result
+
+@api_router.get("/tasks/parents/{parent_id}/subtasks")
+async def get_parent_subtasks(parent_id: str, current_user: dict = Depends(get_current_user)):
+    """Return the list of sub-tasks (assignees) for a group task, with names."""
+    parent = await db.tasks.find_one({"id": parent_id, "is_parent": True, "deleted": {"$ne": True}}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Group task not found")
+    if parent.get("created_by") != current_user["id"] and current_user["id"] not in (parent.get("assigned_to_list") or []):
+        # Allow access if the current user has a subtask in this group
+        has_sub = await db.tasks.find_one({"parent_id": parent_id, "assigned_to": current_user["id"], "deleted": {"$ne": True}})
+        if not has_sub:
+            raise HTTPException(status_code=403, detail="Access denied")
+    subs = await db.tasks.find({"parent_id": parent_id, "deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
+    # Enrich with assignee names
+    user_ids = list({s.get("assigned_to") for s in subs if s.get("assigned_to")})
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(len(user_ids) or 1)
+    umap = {u["id"]: u for u in users}
+    for s in subs:
+        u = umap.get(s.get("assigned_to"), {})
+        s["assigned_to_name"] = u.get("name", s.get("assigned_to_email") or "Unknown")
+    return subs
+
 
 @api_router.post("/tasks/parents/{parent_id}/remind")
 async def remind_outstanding_assignees(parent_id: str, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
@@ -1569,48 +1603,36 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
         {"$push": {"comments": comment_doc}}
     )
     
-    # Send email notifications to mentioned users and store push-notification records
+    # WebSocket: broadcast new comment to task creator + assignee (real-time chatter)
+    try:
+        recipients = {task.get("created_by"), task.get("assigned_to")} - {current_user["id"]}
+        for uid in filter(None, recipients):
+            await ws_manager.send(uid, {"event": "new_comment", "task_id": task_id, "comment": {k: v for k, v in comment_doc.items() if k != "_id"}})
+    except Exception:
+        pass
+
+    # Send email + in-app notifications to mentioned users
     if comment.mentions:
         app_url = APP_BASE_URL
         for user_id in comment.mentions:
             mentioned_user = await db.users.find_one({"id": user_id}, {"_id": 0})
             if mentioned_user and mentioned_user["id"] != current_user["id"]:
-                # Store a pending browser notification for polling
-                await db.notifications.insert_one({
-                    "id": str(uuid.uuid4()),
-                    "user_id": mentioned_user["id"],
-                    "type": "mention",
-                    "title": f"{current_user['name']} mentioned you",
-                    "body": f"In: {task['title']} — {comment.content[:120]}",
-                    "task_id": task_id,
-                    "created_at": get_pst_now().isoformat(),
-                    "delivered": False,
-                    "read": False,
-                })
-                email_content = f"""
-                <html>
-                    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                        <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">You were mentioned</h1>
-                        </div>
-                        <div style="padding: 40px 30px; background: white;">
-                            <p style="font-size: 16px; color: #374151;">Hi {mentioned_user['name']},</p>
-                            <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                                <strong>{current_user['name']}</strong> mentioned you in a comment on task: <strong>{task['title']}</strong>
-                            </p>
-                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0;">
-                                <p style="color: #374151; margin: 0;">{comment.content}</p>
-                            </div>
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                                    View Task
-                                </a>
-                            </div>
-                        </div>
-                    </body>
-                </html>
+                # In-app notification (bell) + browser push polling + WS live
+                await create_notification(
+                    user_id=mentioned_user["id"],
+                    n_type="mention",
+                    title=f"{current_user['name']} mentioned you",
+                    body=f"In: {task['title']} — {comment.content[:120]}",
+                    task_id=task_id,
+                    actor_name=current_user["name"],
+                )
+                inner_html = f"""
+                <h2 style="margin:0 0 8px;font-size:20px;">You were mentioned</h2>
+                <p><strong>{current_user['name']}</strong> mentioned you in <strong>{task['title']}</strong>:</p>
+                <blockquote style="border-left:4px solid #4F46E5;padding:12px 16px;background:#f5f6fb;border-radius:8px;color:#374151;margin:14px 0;">{comment.content}</blockquote>
                 """
-                background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_content)
+                email_html = _jarvis_email_shell(inner_html, cta_url=f"{app_url}/task/{task_id}", cta_label="View task")
+                background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_html)
     
     return {"message": "Comment added", "comment": comment_doc}
 
@@ -3545,7 +3567,7 @@ async def request_trial_extension(current_user: dict = Depends(get_current_user)
     
     try:
         resend.emails.send({
-            "from": "Tskflow <notifications@notifications.unbiassly.com>",
+            "from": EMAIL_FROM,
             "to": [admin_email],
             "subject": f"Trial Extension Request - {current_user['email']}",
             "html": email_content
@@ -3662,7 +3684,7 @@ async def send_daily_analytics():
     
     try:
         resend.emails.send({
-            "from": "Tskflow Analytics <notifications@notifications.unbiassly.com>",
+            "from": f"Jarvis Analytics <{EMAIL_FROM_ADDR}>",
             "to": [admin_email],
             "subject": f"Tskflow Daily Analytics - {today.strftime('%b %d')}",
             "html": email_content
@@ -3727,7 +3749,7 @@ async def send_trial_reminders():
             
             try:
                 resend.emails.send({
-                    "from": "Tskflow <notifications@notifications.unbiassly.com>",
+                    "from": EMAIL_FROM,
                     "to": [user["email"]],
                     "subject": f"Your Teams trial ends in {days_left} day{'s' if days_left > 1 else ''}",
                     "html": email_content
@@ -3899,7 +3921,7 @@ async def remove_access_grant(grant: AccessGrant, admin: bool = Depends(verify_a
             </body></html>
             """
             resend.emails.send({
-                "from": "Tskflow <notifications@notifications.unbiassly.com>",
+                "from": EMAIL_FROM,
                 "to": [user["email"]],
                 "subject": "Your Tskflow Access Has Been Updated",
                 "html": email_content
@@ -4942,6 +4964,767 @@ async def stream_file(path: str, request: HTTPRequest, authorization: Optional[s
             pass
     return Response(content=data, media_type=content_type, headers={**common_headers, "Content-Length": str(total)})
 
+
+
+# ==============================================================================
+# JULY 2025 CONTINUATION BATCH — 13 FEATURE ROLLUP
+# ==============================================================================
+
+# --- WebSocket manager for real-time chatter/notifications ---
+from fastapi import WebSocket, WebSocketDisconnect
+
+class WSConnectionManager:
+    def __init__(self):
+        # user_id -> set of active WebSocket connections
+        self.active: Dict[str, set] = {}
+
+    async def connect(self, user_id: str, ws: WebSocket):
+        await ws.accept()
+        self.active.setdefault(user_id, set()).add(ws)
+
+    def disconnect(self, user_id: str, ws: WebSocket):
+        if user_id in self.active:
+            self.active[user_id].discard(ws)
+            if not self.active[user_id]:
+                self.active.pop(user_id, None)
+
+    async def send(self, user_id: str, payload: dict):
+        dead = []
+        for ws in self.active.get(user_id, set()):
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(user_id, ws)
+
+    async def broadcast_task(self, task_id: str, payload: dict, user_ids: List[str]):
+        for uid in set(user_ids):
+            await self.send(uid, payload)
+
+ws_manager = WSConnectionManager()
+
+def _decode_user_from_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
+
+@app.websocket("/api/ws")
+async def websocket_endpoint(ws: WebSocket, token: str = None):
+    """Auth via ?token=<JWT>. Client should reconnect with token when it expires."""
+    user_id = _decode_user_from_token(token or "")
+    if not user_id:
+        await ws.close(code=1008)
+        return
+    await ws_manager.connect(user_id, ws)
+    try:
+        while True:
+            # Keep-alive; we accept pings/nothing.
+            msg = await ws.receive_text()
+            if msg == "ping":
+                await ws.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(user_id, ws)
+    except Exception:
+        ws_manager.disconnect(user_id, ws)
+
+
+# --- Notification helper (in-app center + optional email) ---
+IMPORTANT_EMAIL_EVENTS = {"task_assigned", "status_change", "task_completed", "important_response"}
+
+async def create_notification(
+    user_id: str,
+    n_type: str,
+    title: str,
+    body: str,
+    task_id: Optional[str] = None,
+    actor_name: Optional[str] = None,
+    send_email: bool = False,
+    email_to: Optional[str] = None,
+    email_subject: Optional[str] = None,
+    email_html: Optional[str] = None,
+):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": n_type,
+        "title": title,
+        "body": body,
+        "task_id": task_id,
+        "actor_name": actor_name,
+        "created_at": get_pst_now().isoformat(),
+        "delivered": False,   # for legacy browser-notification poll
+        "read": False,        # for in-app bell
+    }
+    await db.notifications.insert_one(doc)
+    # Push over WebSocket if user is online
+    try:
+        await ws_manager.send(user_id, {"event": "notification", "notification": {k: v for k, v in doc.items() if k != "_id"}})
+    except Exception:
+        pass
+    # Send email only on IMPORTANT events, and only if user has an email
+    if send_email and n_type in IMPORTANT_EMAIL_EVENTS and email_to and email_subject and email_html:
+        try:
+            await send_email_notification(email_to, email_subject, email_html)
+        except Exception:
+            pass
+    return doc
+
+
+def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_label: Optional[str] = None) -> str:
+    """Wrap content in the Jarvis branded HTML shell."""
+    cta = ""
+    if cta_url and cta_label:
+        cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#4F46E5;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
+    return f"""
+<html>
+<body style="margin:0;padding:0;background:#f5f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f6fb;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(24,24,50,0.06);">
+        <tr><td style="background:linear-gradient(135deg,#4F46E5,#7C3AED);padding:28px 32px;color:#fff;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;background:#ffffff33;border-radius:10px;display:inline-block;text-align:center;line-height:36px;font-weight:700;">J</div>
+            <div style="display:inline-block;vertical-align:middle;margin-left:10px;">
+              <div style="font-weight:700;font-size:16px;">Jarvis</div>
+              <div style="opacity:0.85;font-size:12px;">Your Tskflow assistant</div>
+            </div>
+          </div>
+        </td></tr>
+        <tr><td style="padding:32px;color:#1f2937;font-size:15px;line-height:1.6;">
+          {inner_html}
+          {cta}
+        </td></tr>
+        <tr><td style="background:#f9fafb;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #eef0f3;">
+          <div>— <strong>Jarvis</strong>, Tskflow assistant</div>
+          <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#4F46E5;text-decoration:none;">Manage notifications</a></div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>
+"""
+
+# --- Notification endpoints (in-app center) ---
+@api_router.get("/notifications")
+async def get_notifications(current_user: dict = Depends(get_current_user), limit: int = 50):
+    docs = await db.notifications.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    unread = await db.notifications.count_documents({"user_id": current_user["id"], "read": {"$ne": True}})
+    return {"notifications": docs, "unread": unread}
+
+@api_router.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, current_user: dict = Depends(get_current_user)):
+    await db.notifications.update_one(
+        {"id": notif_id, "user_id": current_user["id"]},
+        {"$set": {"read": True, "read_at": get_pst_now().isoformat()}}
+    )
+    return {"ok": True}
+
+@api_router.post("/notifications/mark-all-read")
+async def mark_all_notifications_read(current_user: dict = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": current_user["id"], "read": {"$ne": True}},
+        {"$set": {"read": True, "read_at": get_pst_now().isoformat()}}
+    )
+    return {"ok": True}
+
+
+# --- Mark task as viewed (for the "Viewed" column in Group Task Detail modal) ---
+@api_router.post("/tasks/{task_id}/mark-viewed")
+async def mark_task_viewed(task_id: str, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("assigned_to") != current_user["id"]:
+        return {"ok": True}
+    if not task.get("viewed_at"):
+        await db.tasks.update_one({"id": task_id}, {"$set": {"viewed_at": get_pst_now().isoformat()}})
+    return {"ok": True}
+
+
+# --- Personal Leaderboard: rank users on speed for tasks I've assigned out ---
+def _compute_completion_hours(task: dict) -> Optional[float]:
+    """Sum elapsed time across all revision rounds. If we don't have history,
+    fall back to (completed_at - accepted_at) or (completed_at - created_at)."""
+    try:
+        history = task.get("status_history") or []
+        # Ideally history records each round with started_at/completed_at.
+        # For MVP, fall back to simple diff:
+        completed_at = task.get("completed_at")
+        if not completed_at:
+            return None
+        started_at = task.get("accepted_at") or task.get("created_at")
+        if not started_at:
+            return None
+        end = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+        start = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+        # Sum all "In Progress" segments if history is present
+        if history:
+            total = timedelta(0)
+            open_seg = None
+            for h in history:
+                if h.get("status") in ("Accepted", "In Progress"):
+                    open_seg = datetime.fromisoformat(h["at"].replace('Z', '+00:00'))
+                elif h.get("status") in ("Completed", "Review Pending") and open_seg:
+                    total += datetime.fromisoformat(h["at"].replace('Z', '+00:00')) - open_seg
+                    open_seg = None
+            if total.total_seconds() > 0:
+                return round(total.total_seconds() / 3600, 2)
+        return round((end - start).total_seconds() / 3600, 2)
+    except Exception:
+        return None
+
+
+@api_router.get("/leaderboard/personal")
+async def personal_leaderboard(
+    current_user: dict = Depends(get_current_user),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """Rank users on tasks I've assigned out (completion + response speed)."""
+    query: dict = {"created_by": current_user["id"], "status": "Completed", "deleted": {"$ne": True}}
+    if start_date:
+        query["created_at"] = query.get("created_at", {})
+        query["created_at"]["$gte"] = start_date
+    if end_date:
+        query["created_at"] = query.get("created_at", {})
+        query["created_at"]["$lte"] = end_date + "T23:59:59"
+
+    tasks = await db.tasks.find(query, {"_id": 0}).to_list(2000)
+    by_user: Dict[str, dict] = {}
+    for t in tasks:
+        uid = t.get("assigned_to")
+        if not uid:
+            continue
+        hrs = _compute_completion_hours(t)
+        # Response time = accepted_at - created_at
+        response_hrs = None
+        try:
+            if t.get("accepted_at") and t.get("created_at"):
+                a = datetime.fromisoformat(t["accepted_at"].replace('Z', '+00:00'))
+                c = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                response_hrs = max(0, (a - c).total_seconds() / 3600)
+        except Exception:
+            pass
+        entry = by_user.setdefault(uid, {"user_id": uid, "completed": 0, "sum_completion_hrs": 0.0, "sum_response_hrs": 0.0, "n_response": 0, "n_hrs": 0})
+        entry["completed"] += 1
+        if hrs is not None:
+            entry["sum_completion_hrs"] += hrs
+            entry["n_hrs"] += 1
+        if response_hrs is not None:
+            entry["sum_response_hrs"] += response_hrs
+            entry["n_response"] += 1
+
+    # Enrich with user names
+    user_ids = list(by_user.keys())
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(len(user_ids) or 1)
+    user_map = {u["id"]: u for u in users}
+
+    rows = []
+    for uid, e in by_user.items():
+        u = user_map.get(uid, {})
+        avg_completion = round(e["sum_completion_hrs"] / e["n_hrs"], 2) if e["n_hrs"] else None
+        avg_response = round(e["sum_response_hrs"] / e["n_response"], 2) if e["n_response"] else None
+        rows.append({
+            "user_id": uid,
+            "name": u.get("name", "Unknown"),
+            "email": u.get("email", ""),
+            "completed": e["completed"],
+            "avg_completion_hours": avg_completion,
+            "avg_response_hours": avg_response,
+        })
+
+    # Sort: lower avg_completion is better; ties broken by more completed
+    rows.sort(key=lambda r: (r["avg_completion_hours"] if r["avg_completion_hours"] is not None else 1e9, -r["completed"]))
+    for idx, r in enumerate(rows, start=1):
+        r["rank"] = idx
+    return {"leaderboard": rows}
+
+
+@api_router.get("/leaderboard/org")
+async def org_leaderboard(
+    current_user: dict = Depends(get_current_user),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    team_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+):
+    """Org-wide leaderboard. Currently scoped by same email domain (proxy for org)."""
+    email = current_user.get("email", "")
+    domain = email.split("@")[-1] if "@" in email else ""
+    # Same-domain users
+    users = await db.users.find({"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(2000)
+    domain_uids = {u["id"] for u in users}
+    if user_id:
+        domain_uids = domain_uids.intersection({user_id})
+
+    query: dict = {"assigned_to": {"$in": list(domain_uids)}, "status": "Completed", "deleted": {"$ne": True}}
+    if start_date:
+        query["created_at"] = {"$gte": start_date}
+    if end_date:
+        query.setdefault("created_at", {})["$lte"] = end_date + "T23:59:59"
+
+    tasks = await db.tasks.find(query, {"_id": 0}).to_list(4000)
+    by_user: Dict[str, dict] = {}
+    for t in tasks:
+        uid = t.get("assigned_to")
+        hrs = _compute_completion_hours(t)
+        response_hrs = None
+        try:
+            if t.get("accepted_at") and t.get("created_at"):
+                a = datetime.fromisoformat(t["accepted_at"].replace('Z', '+00:00'))
+                c = datetime.fromisoformat(t["created_at"].replace('Z', '+00:00'))
+                response_hrs = max(0, (a - c).total_seconds() / 3600)
+        except Exception:
+            pass
+        entry = by_user.setdefault(uid, {"completed": 0, "sum_completion_hrs": 0.0, "sum_response_hrs": 0.0, "n_response": 0, "n_hrs": 0})
+        entry["completed"] += 1
+        if hrs is not None:
+            entry["sum_completion_hrs"] += hrs
+            entry["n_hrs"] += 1
+        if response_hrs is not None:
+            entry["sum_response_hrs"] += response_hrs
+            entry["n_response"] += 1
+
+    user_map = {u["id"]: u for u in users}
+    rows = []
+    for uid, e in by_user.items():
+        u = user_map.get(uid, {})
+        avg_c = round(e["sum_completion_hrs"] / e["n_hrs"], 2) if e["n_hrs"] else None
+        avg_r = round(e["sum_response_hrs"] / e["n_response"], 2) if e["n_response"] else None
+        # Simple composite performance score
+        perf = 0
+        if avg_c is not None:
+            perf += max(0, 100 - min(100, avg_c))
+        if avg_r is not None:
+            perf += max(0, 50 - min(50, avg_r))
+        perf += e["completed"] * 2
+        rows.append({
+            "user_id": uid,
+            "name": u.get("name", "Unknown"),
+            "email": u.get("email", ""),
+            "completed": e["completed"],
+            "avg_completion_hours": avg_c,
+            "avg_response_hours": avg_r,
+            "performance_score": round(perf, 1),
+        })
+
+    rows.sort(key=lambda r: -r["performance_score"])
+    for idx, r in enumerate(rows, start=1):
+        r["rank"] = idx
+    return {"leaderboard": rows, "scope": {"domain": domain, "user_id": user_id, "team_id": team_id}}
+
+
+# --- Personal analytics (only tasks I've assigned out) ---
+@api_router.post("/analytics/personal")
+async def personal_analytics(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+    query: dict = {"created_by": current_user["id"], "deleted": {"$ne": True}}
+    if start_date:
+        query["created_at"] = {"$gte": start_date}
+    if end_date:
+        query.setdefault("created_at", {})["$lte"] = end_date + "T23:59:59"
+    tasks = await db.tasks.find(query, {"_id": 0}).to_list(5000)
+
+    total = len(tasks)
+    completed = [t for t in tasks if t.get("status") == "Completed"]
+    pending = [t for t in tasks if t.get("status") not in ("Completed", "Declined")]
+    now = get_pst_now()
+    overdue = 0
+    for t in pending:
+        try:
+            due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+            if due.tzinfo is None:
+                due = PST.localize(due)
+            if due < now:
+                overdue += 1
+        except Exception:
+            pass
+
+    # Per-assignee breakdown
+    by_assignee: Dict[str, dict] = {}
+    for t in tasks:
+        aid = t.get("assigned_to")
+        if not aid:
+            continue
+        e = by_assignee.setdefault(aid, {"total": 0, "completed": 0, "sum_hrs": 0.0, "n_hrs": 0})
+        e["total"] += 1
+        if t.get("status") == "Completed":
+            e["completed"] += 1
+            hrs = _compute_completion_hours(t)
+            if hrs is not None:
+                e["sum_hrs"] += hrs
+                e["n_hrs"] += 1
+
+    uids = list(by_assignee.keys())
+    users = await db.users.find({"id": {"$in": uids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(uids) or 1)
+    umap = {u["id"]: u.get("name", "Unknown") for u in users}
+    breakdown = []
+    for aid, e in by_assignee.items():
+        breakdown.append({
+            "user_id": aid,
+            "name": umap.get(aid, "Unknown"),
+            "total": e["total"],
+            "completed": e["completed"],
+            "avg_completion_hours": round(e["sum_hrs"] / e["n_hrs"], 2) if e["n_hrs"] else None,
+        })
+    breakdown.sort(key=lambda x: -x["completed"])
+    return {
+        "total": total,
+        "completed": len(completed),
+        "pending": len(pending),
+        "overdue": overdue,
+        "completion_rate": round(len(completed) / total * 100, 1) if total else 0,
+        "assignee_breakdown": breakdown,
+    }
+
+
+# --- Enhanced AI Summary: urgent + due soon + recommendations ---
+@api_router.post("/dashboard/ai-summary-v2")
+async def dashboard_ai_summary_v2(
+    body: AISummaryRequest = None,
+    current_user: dict = Depends(get_current_user),
+):
+    view_mode = (body.view_mode if body else "active") or "active"
+    query = {
+        "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
+        "deleted": {"$ne": True},
+        "status": {"$ne": "Completed"} if view_mode != "completed" else "Completed",
+    }
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(200)
+    now = get_pst_now()
+    due_next_hours = []
+    due_today = []
+    high_urgent = []
+    overdue = []
+    for t in tasks:
+        try:
+            due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+            if due.tzinfo is None:
+                due = PST.localize(due)
+            delta_h = (due - now).total_seconds() / 3600
+        except Exception:
+            continue
+        if delta_h < 0:
+            overdue.append(t)
+        elif delta_h <= 6:
+            due_next_hours.append(t)
+        elif due.date() == now.date():
+            due_today.append(t)
+        if t.get("priority") == "High" and delta_h <= 24:
+            high_urgent.append(t)
+
+    stats = {
+        "urgent_high_count": len({t["id"] for t in high_urgent}),
+        "due_in_hours_count": len(due_next_hours),
+        "due_today_count": len(due_today),
+        "overdue_count": len(overdue),
+        "total": len(tasks),
+    }
+
+    key = os.getenv("EMERGENT_LLM_KEY")
+    if not key or stats["total"] == 0:
+        # Heuristic recommendation
+        recs = []
+        if stats["overdue_count"]:
+            recs.append(f"⚠️ Clear {stats['overdue_count']} overdue task(s) first.")
+        if stats["urgent_high_count"]:
+            recs.append(f"🔴 Focus on {stats['urgent_high_count']} High-priority item(s) due in <24h.")
+        if stats["due_in_hours_count"]:
+            recs.append(f"⏰ {stats['due_in_hours_count']} due in the next 6 hours.")
+        if stats["due_today_count"]:
+            recs.append(f"📅 {stats['due_today_count']} due later today.")
+        if not recs:
+            recs.append("You're on top of things — no urgent items.")
+        return {"stats": stats, "summary": " ".join(recs)}
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
+        lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
+        prompt = (
+            f"You are Jarvis. Given these urgent counts — overdue={stats['overdue_count']}, "
+            f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} — "
+            f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
+            f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
+        )
+        chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
+        resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=8.0)
+        return {"stats": stats, "summary": resp.content.strip()}
+    except Exception:
+        return {"stats": stats, "summary": f"{stats['overdue_count']} overdue, {stats['urgent_high_count']} high-priority urgent, {stats['due_in_hours_count']} due in <6h. Tackle overdue first."}
+
+
+# --- Sales-task filter helper (in-place on task fetches) ---
+@api_router.get("/tasks/sales-only-count")
+async def sales_only_count(current_user: dict = Depends(get_current_user)):
+    cnt = await db.tasks.count_documents({
+        "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
+        "deleted": {"$ne": True},
+        "is_sales_task": True,
+    })
+    return {"count": cnt}
+
+
+# --- End-of-day report (cron-able) ---
+@api_router.post("/cron/eod-report")
+async def cron_eod_report(secret: Optional[str] = None):
+    """Runs daily; send each user a summary of today's activity."""
+    expected = os.getenv("CRON_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    now = get_pst_now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(10000)
+    sent = 0
+    for u in users:
+        completed = await db.tasks.find({
+            "assigned_to": u["id"],
+            "status": "Completed",
+            "completed_at": {"$gte": today_start},
+            "deleted": {"$ne": True},
+        }, {"_id": 0}).to_list(200)
+
+        open_tasks_docs = await db.tasks.find({
+            "assigned_to": u["id"],
+            "status": {"$nin": ["Completed", "Declined"]},
+            "deleted": {"$ne": True},
+        }, {"_id": 0}).to_list(500)
+
+        # Compute "missed" — due < today AND due date wasn't rescheduled+accepted
+        missed = []
+        for t in open_tasks_docs:
+            try:
+                due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+                if due.tzinfo is None:
+                    due = PST.localize(due)
+                if due < now and not t.get("due_date_rescheduled_and_accepted"):
+                    missed.append(t)
+            except Exception:
+                pass
+
+        if not completed and not open_tasks_docs:
+            continue
+
+        rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> — completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
+        rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} — due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up — no open tasks.</li>"
+        missed_note = f"<p style='color:#b91c1c;'>⚠️ {len(missed)} task(s) missed their due date.</p>" if missed else ""
+
+        inner = f"""
+        <h2 style="margin:0 0 8px;font-size:20px;">Your day at Tskflow, {u.get('name','friend').split(' ')[0]}</h2>
+        <p style="color:#6b7280;margin:0 0 20px;">{now.strftime('%A, %b %d, %Y')}</p>
+        <h3 style="font-size:15px;margin:16px 0 6px;">✅ Completed today ({len(completed)})</h3>
+        <ul style="padding-left:20px;margin:0;">{rows_done}</ul>
+        <h3 style="font-size:15px;margin:20px 0 6px;">📋 Still open ({len(open_tasks_docs)})</h3>
+        <ul style="padding-left:20px;margin:0;">{rows_open}</ul>
+        {missed_note}
+        """
+        html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
+        try:
+            await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html)
+            sent += 1
+        except Exception:
+            pass
+
+    return {"ok": True, "sent": sent}
+
+
+# --- Transcript → task drafts (Google Meet flow) ---
+class TranscriptImportRequest(BaseModel):
+    text: Optional[str] = None
+    url: Optional[str] = None  # public Google Doc
+
+async def _fetch_google_doc_text(url: str) -> str:
+    """Best-effort fetch of a public Google Doc as plain text."""
+    if "docs.google.com/document" not in url:
+        # Not a Google Doc URL — treat as any URL
+        async with httpx.AsyncClient(timeout=15) as client_http:
+            r = await client_http.get(url, follow_redirects=True)
+            return r.text
+    # Try Google Doc export as txt
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+    if not m:
+        return ""
+    doc_id = m.group(1)
+    export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+    async with httpx.AsyncClient(timeout=15) as client_http:
+        r = await client_http.get(export_url, follow_redirects=True)
+        return r.text if r.status_code == 200 else ""
+
+
+@api_router.post("/task-drafts/from-transcript")
+async def create_drafts_from_transcript(
+    body: TranscriptImportRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Parse a transcript into candidate task drafts. Nothing goes live automatically."""
+    text = (body.text or "").strip()
+    if not text and body.url:
+        try:
+            text = (await _fetch_google_doc_text(body.url)).strip()
+        except Exception:
+            text = ""
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty transcript. Provide text or a public URL.")
+    if len(text) > 60000:
+        text = text[:60000]
+
+    key = os.getenv("EMERGENT_LLM_KEY")
+    drafts_data: List[dict] = []
+    if key:
+        try:
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            import json as _json
+            prompt = (
+                "You are Jarvis, a meeting-notes → action-items assistant. Extract concrete tasks from the transcript below. "
+                "For each task, return JSON with fields: title (short), description (one paragraph), "
+                "assignee_hint (name or role as mentioned, or null), due_date_hint (natural-language or null), "
+                "priority (High/Medium/Low), ambiguities (array of clarification questions if anything is unclear — assignee, deadline, scope).\n"
+                "Reply ONLY with a JSON object like {\"tasks\": [ ... ]}. No prose.\n\n"
+                "TRANSCRIPT:\n" + text
+            )
+            chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
+            resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=25.0)
+            raw = resp.content.strip()
+            # Strip markdown fences if any
+            raw = re.sub(r"^```(json)?", "", raw).strip()
+            raw = re.sub(r"```$", "", raw).strip()
+            parsed = _json.loads(raw)
+            drafts_data = parsed.get("tasks", []) if isinstance(parsed, dict) else []
+        except Exception as e:
+            logging.warning(f"Transcript parse failed: {e}")
+
+    if not drafts_data:
+        # Simple fallback: split on lines starting with "-" or numbered items
+        lines = [ln.strip("-*• 	").strip() for ln in text.splitlines() if ln.strip().startswith(("-", "*", "•")) or re.match(r"^\d+[\.)]", ln.strip())]
+        for ln in lines[:20]:
+            drafts_data.append({
+                "title": ln[:100],
+                "description": ln,
+                "assignee_hint": None,
+                "due_date_hint": None,
+                "priority": "Medium",
+                "ambiguities": ["Who should this be assigned to?", "When is this due?"],
+            })
+
+    created = []
+    for d in drafts_data:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "created_by": current_user["id"],
+            "title": (d.get("title") or "Untitled").strip()[:200],
+            "description": (d.get("description") or "").strip()[:2000],
+            "assignee_hint": d.get("assignee_hint"),
+            "due_date_hint": d.get("due_date_hint"),
+            "priority": d.get("priority") or "Medium",
+            "ambiguities": d.get("ambiguities") or [],
+            "source": "transcript",
+            "created_at": get_pst_now().isoformat(),
+            "status": "Draft",
+        }
+        await db.transcript_drafts.insert_one(doc)
+        created.append({k: v for k, v in doc.items() if k != "_id"})
+    return {"drafts": created}
+
+
+@api_router.get("/task-drafts")
+async def list_task_drafts(current_user: dict = Depends(get_current_user)):
+    docs = await db.transcript_drafts.find({"created_by": current_user["id"], "status": "Draft"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {"drafts": docs}
+
+
+@api_router.delete("/task-drafts/{draft_id}")
+async def delete_task_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
+    await db.transcript_drafts.delete_one({"id": draft_id, "created_by": current_user["id"]})
+    return {"ok": True}
+
+
+class PublishDraftRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigned_to: str
+    due_date: str
+    priority: str = "Medium"
+    is_sales_task: Optional[bool] = False
+
+
+@api_router.post("/task-drafts/{draft_id}/publish")
+async def publish_task_draft(draft_id: str, body: PublishDraftRequest, current_user: dict = Depends(get_current_user)):
+    draft = await db.transcript_drafts.find_one({"id": draft_id, "created_by": current_user["id"]})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    # Resolve assignee (id or email)
+    assigned_to_id = body.assigned_to
+    if "@" in body.assigned_to:
+        u = await db.users.find_one({"email": body.assigned_to})
+        if u:
+            assigned_to_id = u["id"]
+
+    task_id = str(uuid.uuid4())
+    task_doc = {
+        "id": task_id,
+        "title": body.title,
+        "description": body.description or "",
+        "assigned_to": assigned_to_id,
+        "assigned_to_email": body.assigned_to if "@" in body.assigned_to else None,
+        "created_by": current_user["id"],
+        "due_date": body.due_date,
+        "status": "Pending",
+        "priority": body.priority,
+        "category": "meeting",
+        "created_at": get_pst_now().isoformat(),
+        "comments": [],
+        "is_sales_task": body.is_sales_task or False,
+        "shareable_token": str(uuid.uuid4())[:12],
+        "source": "transcript",
+    }
+    await db.tasks.insert_one(task_doc)
+    await db.transcript_drafts.update_one({"id": draft_id}, {"$set": {"status": "Published", "published_task_id": task_id}})
+    return {"ok": True, "task_id": task_id}
+
+
+# --- Product updates feed (surface what changed in this batch to users) ---
+@api_router.get("/product-updates")
+async def get_product_updates(current_user: dict = Depends(get_current_user)):
+    """Static feed of what changed in the July 2025 batch."""
+    updates = [
+        {"id": "u01", "area": "Screen Recording", "change": "Loom-style flow with floating pause/resume/restart controls, mic + webcam toggle, and post-record editor screen.", "was": "Basic start/stop only — recordings sometimes didn't save."},
+        {"id": "u02", "area": "Group Task Expansion", "change": "Groups expand inline with live-sort: pending assignees pinned on top, completed sink to the bottom in real time.", "was": "Groups just navigated to a details page with no live sort."},
+        {"id": "u03", "area": "Group Task Detail Modal", "change": "Clicking a group opens a modal with leaderboard, avg completion rate, and per-person status columns (Viewed / Accepted / Submitted / Completed).", "was": "Navigated to a bare detail page."},
+        {"id": "u04", "area": "Search Bar", "change": "Search moved to the top header as a compact icon that expands to a short overlay bar — no longer stretches full-width or covers other UI.", "was": "Full-width input inside the tasks section, obstructive."},
+        {"id": "u05", "area": "AI Summary", "change": "Now shows urgent count, tasks due in the next 6h vs today, plus a Jarvis-authored recommendation on what to prioritize.", "was": "Generic 3-sentence overview with no urgency signal."},
+        {"id": "u06", "area": "Chatter Panel", "change": "Comments moved to a right-side panel on task detail — always visible next to task content.", "was": "Chatter lived below the task, requiring scroll."},
+        {"id": "u07", "area": "Notification Center", "change": "New in-app bell with unread badge and full history. Works even when browser push is blocked.", "was": "Only ephemeral toasts + browser notifications that vanished."},
+        {"id": "u08", "area": "Real-Time Chatter", "change": "WebSocket-driven live updates for comments and mentions — no more ~30s polling delay.", "was": "Poll every 30 seconds."},
+        {"id": "u09", "area": "Leaderboards & Analytics", "change": "Personal leaderboard (people you assigned to), personal analytics scoped to tasks you assigned out, and a separate Org leaderboard filterable by user. Date shortcuts: This Month / Last Month always visible, others under More.", "was": "Single team analytics page with no personal/org split and no shortcut chips."},
+        {"id": "u10", "area": "Email as Jarvis", "change": "All emails now come from Jarvis with a branded HTML template and are only sent on meaningful events (assignment, status change, completion, important responses).", "was": "System-flavored emails for every event, sometimes noisy."},
+        {"id": "u11", "area": "Sales Task Toggle", "change": "New optional 'This is a Sales Task' checkbox on task create + a top-level toggle to show only sales tasks.", "was": "No way to segregate sales tasks."},
+        {"id": "u12", "area": "End-of-Day Report", "change": "Daily Jarvis email with today's completions and still-open tasks. Rescheduled+accepted due dates don't count as missed.", "was": "No EOD summary."},
+        {"id": "u13", "area": "Meet Transcript → Tasks", "change": "Paste, upload, or link a Google Doc transcript; Jarvis auto-drafts tasks (with ambiguity flags) that you review before publishing.", "was": "Manual entry from meeting notes."},
+    ]
+    return {"updates": updates}
+
+
+# --- Ensure notifications collection has an index (best-effort) ---
+async def _ensure_indexes():
+    try:
+        await db.notifications.create_index("user_id")
+        await db.notifications.create_index([("user_id", 1), ("read", 1)])
+        await db.transcript_drafts.create_index("created_by")
+    except Exception:
+        pass
+
+@app.on_event("startup")
+async def _startup_indexes():
+    await _ensure_indexes()
 
 
 app.include_router(api_router)

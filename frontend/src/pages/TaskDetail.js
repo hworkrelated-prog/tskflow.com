@@ -66,6 +66,23 @@ const TaskDetail = () => {
         if (taskId) fetchComments();
     }, [taskId, token]);
 
+    // Real-time chatter — refresh when server pushes a new_comment for this task
+    useEffect(() => {
+        const handler = (e) => {
+            if (e.detail?.task_id === (task?.id || taskId)) fetchComments();
+        };
+        window.addEventListener('tskflow:new_comment', handler);
+        return () => window.removeEventListener('tskflow:new_comment', handler);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [task?.id, taskId]);
+
+    // Mark task viewed by assignee on open (populates the "Viewed" status column)
+    useEffect(() => {
+        const id = task?.id || taskId;
+        if (!id) return;
+        (async () => { try { await axios.post(`${API}/tasks/${id}/mark-viewed`); } catch (_) { /* silent */ } })();
+    }, [task?.id, taskId]);
+
     // Fetch mentionable users once
     useEffect(() => {
         (async () => {
@@ -480,7 +497,8 @@ const TaskDetail = () => {
                 </div>
             </header>
 
-            <main className="container mx-auto px-6 py-8 max-w-4xl">
+            <main className="container mx-auto px-6 py-8 max-w-7xl">
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1116,6 +1134,65 @@ const TaskDetail = () => {
                         </CardContent>
                     </Card>
                 </motion.div>
+
+                {/* Right-side Chatter panel (always visible on desktop) */}
+                <aside className="hidden lg:block lg:sticky lg:top-24">
+                    <Card className="border-2 rounded-2xl">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <MessageSquare className="w-5 h-5 text-indigo-600" />
+                                <h3 className="font-semibold">Chatter</h3>
+                                <span className="ml-auto text-xs text-muted-foreground">{comments.length} messages</span>
+                            </div>
+                            <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
+                                {comments.length === 0 ? (
+                                    <p className="text-center text-sm text-gray-500 py-6">No messages yet. Start the conversation.</p>
+                                ) : (
+                                    comments.map((c) => (
+                                        <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="font-semibold text-sm">{c.user_name}</span>
+                                                <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
+                                            </div>
+                                            <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            <div className="relative">
+                                <Textarea
+                                    ref={commentTextareaRef}
+                                    placeholder="Type @ to mention..."
+                                    value={newComment}
+                                    onChange={onCommentChange}
+                                    onKeyDown={onCommentKeyDown}
+                                    rows={3}
+                                    className="rounded-lg"
+                                />
+                                {showMentionSuggest && filteredMentionUsers.length > 0 && (
+                                    <div className="absolute bottom-full mb-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
+                                        {filteredMentionUsers.map((u, idx) => (
+                                            <button key={u.id} type="button"
+                                                onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
+                                                onMouseEnter={() => setMentionHighlight(idx)}
+                                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${idx === mentionHighlight ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'}`}
+                                            >
+                                                <span className="font-medium truncate">{u.name}</span>
+                                                <span className="text-xs text-gray-500 truncate ml-2">{u.email}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="flex justify-end mt-2">
+                                    <Button size="sm" onClick={handleAddComment} disabled={commentLoading || !newComment.trim()} className="rounded-full">
+                                        {commentLoading ? 'Posting...' : 'Post'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </aside>
+                </div>
             </main>
         </div>
     );

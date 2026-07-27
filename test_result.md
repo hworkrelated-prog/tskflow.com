@@ -395,16 +395,27 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 6
+  version: "1.2"
+  test_sequence: 7
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "New endpoints: /api/notifications, /api/notifications/{id}/read, /api/notifications/mark-all-read"
+    - "/api/leaderboard/personal and /api/leaderboard/org"
+    - "/api/analytics/personal"
+    - "/api/dashboard/ai-summary-v2 (returns stats + summary)"
+    - "/api/tasks/{parent_id}/subtasks (needed by group modal)"
+    - "/api/tasks/{task_id}/mark-viewed"
+    - "/api/task-drafts/from-transcript, list, publish, delete"
+    - "/api/product-updates"
+    - "is_sales_task field on task create (single + bulk) + reflected in TaskResponse"
+    - "WebSocket /api/ws?token=... auth accepts valid JWT, rejects invalid"
+    - "New comment broadcast + notification WS push"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
-  notes: "July 2025 continuation batch regression testing complete. All 15 backend tests passed (100%). AI Summary endpoints accept JSON body with graceful fallback, Standalone recording accepts JSON body, Mentionable users endpoint working, Pending notifications endpoint working. All regression sanity checks passed. Ready for main agent to summarize and finish."
+  notes: "July 2025 batch #2 — 13 feature rollup. Ensure backward compatibility on existing task/comment/analytics endpoints. is_sales_task defaults to false when omitted."
 
   - task: "Email Verification Flow - Security Enhancement"
     implemented: true
@@ -560,3 +571,141 @@ agent_communication:
 
   - agent: "testing"
     message: "✅ JULY 2025 CONTINUATION BATCH REGRESSION TEST COMPLETE (15/15 tests passed - 100%): Comprehensive backend testing completed successfully. All endpoints from the continuation batch are working correctly. RESULTS: (1) AI Summary Endpoints: Both POST /api/dashboard/ai-summary and POST /api/tasks/{task_id}/ai-summary accept JSON body, return 200 with graceful fallback when EMERGENT_LLM_KEY not configured. Latencies: 0.004s and 0.003s (well under 15s requirement). FIXED BUG: Task-specific AI summary was returning 500 when LLM key missing - now returns heuristic fallback. (2) Standalone Recording: POST /api/recordings/standalone accepts JSON body {recording_url}, backwards compatible with query params. All 4 tests passed. Latencies: 0.001-0.003s. (3) Mentionable Users: GET /api/users/mentionable returns 4 same-domain users (includes alice and owner). Latency: 0.002s. (4) Mentions Notifications: Full flow working - comment with mention creates notification, GET /api/notifications/pending returns notification on first call, empty on second call (delivered flag working). Latencies: 0.002-0.028s. (5) Regression Sanity: POST /api/tasks (single), POST /api/tasks/bulk (group of 2), GET /api/tasks/parents, GET /api/tasks/{parent_id}/leaderboard, POST /api/analytics all working. Analytics includes response_rate and avg_response_hours fields. All latencies under 2s requirement. NO 422 or 500 errors detected. All features production-ready.""
+  - agent: "main"
+    message: "[Jul 2025 batch #2] Massive 13-feature rollup. NEW endpoints to test: (1) GET /api/notifications (2) POST /api/notifications/{id}/read (3) POST /api/notifications/mark-all-read (4) GET /api/leaderboard/personal (5) GET /api/leaderboard/org (6) POST /api/analytics/personal (7) POST /api/dashboard/ai-summary-v2 (returns {stats, summary}) (8) GET /api/tasks/parents/{parent_id}/subtasks (9) POST /api/tasks/{task_id}/mark-viewed (10) POST /api/task-drafts/from-transcript (11) GET /api/task-drafts (12) POST /api/task-drafts/{id}/publish (13) DELETE /api/task-drafts/{id} (14) GET /api/product-updates (returns 13 updates) (15) POST /api/cron/eod-report. NEW field: is_sales_task on POST /api/tasks (single + bulk). WebSocket: ws://localhost:8001/api/ws?token=<JWT> should accept valid, reject invalid. Post a comment with mention -> the mentioned user's GET /api/notifications should include a new unread mention entry. Ensure existing endpoints (login, tasks, bulk tasks, comments, analytics, leaderboard, recordings, mentionable users, pending notifications) still work. Credentials: owner@acmecorp.com / Password123 (Teams), alice@acmecorp.com / Password123."
+
+  - task: "Notification Center Endpoints"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (3/3 tests passed): All notification center endpoints working correctly. (1) GET /api/notifications returns {notifications: [...], unread: count} with mention type notifications. (2) POST /api/notifications/{id}/read marks notification as read and decreases unread count. (3) POST /api/notifications/mark-all-read marks all notifications as read, unread count becomes 0. All endpoints respond in <5ms. Feature is production-ready."
+
+  - task: "Leaderboard Endpoints (Personal & Org)"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (2/2 tests passed): Both leaderboard endpoints working correctly. (1) GET /api/leaderboard/personal?start_date=2025-01-01&end_date=2025-12-31 returns {leaderboard: [...]} with all required fields: user_id, name, email, completed, avg_completion_hours, avg_response_hours, rank. (2) GET /api/leaderboard/org returns {leaderboard: [...], scope: {...}} with additional performance_score field. Both endpoints respond in <3ms. Feature is production-ready."
+
+  - task: "Personal Analytics Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: POST /api/analytics/personal working correctly. Returns all required fields: total, completed, pending, overdue, completion_rate, assignee_breakdown[]. Latency: 2ms. Feature is production-ready."
+
+  - task: "AI Summary v2 Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: POST /api/dashboard/ai-summary-v2 working correctly. Returns {stats: {urgent_high_count, due_in_hours_count, due_today_count, overdue_count, total}, summary: string}. Graceful fallback when EMERGENT_LLM_KEY not configured (returns heuristic summary). Latency: 3ms (well under 15s requirement). No 500 errors. Feature is production-ready."
+
+  - task: "Group Subtasks Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: GET /api/tasks/parents/{parent_id}/subtasks working correctly. Returns array of subtasks with assigned_to_name enriched. Created group task with 2 assignees, verified subtasks endpoint returns both with correct names. Latency: 3ms. Feature is production-ready."
+
+  - task: "Mark Viewed Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (2/2 tests passed): POST /api/tasks/{task_id}/mark-viewed working correctly. (1) First call sets viewed_at timestamp, returns {ok: true}. (2) Second call is idempotent, still returns {ok: true}. Both calls respond in <2ms. Feature is production-ready."
+
+  - task: "Transcript → Drafts Endpoints"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (4/4 tests passed): All transcript → drafts endpoints working correctly. (1) POST /api/task-drafts/from-transcript creates drafts from text with all required fields: id, title, description, priority, ambiguities, status='Draft'. (2) GET /api/task-drafts retrieves created drafts. (3) POST /api/task-drafts/{id}/publish converts draft to real task, verified task exists via GET /api/tasks/{task_id}. (4) DELETE /api/task-drafts/{id} deletes draft successfully. All endpoints respond in <3ms. Feature is production-ready."
+
+  - task: "Product Updates Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: GET /api/product-updates working correctly. Returns exactly 13 updates as required. Each update has all required fields: id, area, change, was. Latency: 2ms. Feature is production-ready."
+
+  - task: "Sales Task Field (is_sales_task)"
+    implemented: true
+    working: false
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "❌ CRITICAL BUG (2/3 tests failed): is_sales_task field not working correctly. (1) POST /api/tasks (single) with is_sales_task=true returns is_sales_task=false in response. (2) POST /api/tasks/bulk with is_sales_task=true returns is_sales_task=false in child tasks. (3) POST /api/tasks without is_sales_task correctly defaults to false. ROOT CAUSE: TaskResponse construction missing is_sales_task field in 3 places: (a) Line 875-892 in create_task endpoint, (b) Line 938-954 bulk task creation doesn't save is_sales_task to task_doc, (c) Line 1002-1016 bulk TaskResponse construction missing is_sales_task. FIX NEEDED: Add is_sales_task to task_doc in bulk creation and include is_sales_task in all TaskResponse constructions."
+
+  - task: "EOD Cron Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: POST /api/cron/eod-report working correctly. Returns {ok: true, sent: count}. Sent EOD report to 2 users. Latency: 5ms. No 401 errors when CRON_SECRET unset. Feature is production-ready."
+
+  - task: "WebSocket Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (2/2 tests passed): WebSocket endpoint working correctly. (1) ws://localhost:8001/api/ws?token=<VALID_JWT> accepts connection, ping/pong working. (2) ws://localhost:8001/api/ws?token=badtoken rejects connection with code 1008 as expected. Feature is production-ready."
+
+
+  - agent: "testing"
+    message: "✅ JULY 2025 BATCH #2 (13-FEATURE ROLLUP) TESTING COMPLETE (32/35 tests passed - 91.4%): Comprehensive backend testing completed for all new endpoints and regression sanity checks. NEW FEATURES TESTED: (1) Notification Center: All 3 endpoints working (GET /api/notifications, POST /api/notifications/{id}/read, POST /api/notifications/mark-all-read). (2) Leaderboards: Both personal and org leaderboards working with all required fields including performance_score. (3) Personal Analytics: POST /api/analytics/personal working with assignee breakdown. (4) AI Summary v2: Returns stats + summary with graceful fallback, latency <15s. (5) Group Subtasks: GET /api/tasks/parents/{parent_id}/subtasks enriches assigned_to_name. (6) Mark Viewed: POST /api/tasks/{task_id}/mark-viewed working, idempotent. (7) Transcript → Drafts: All 4 endpoints working (from-transcript, list, publish, delete). (8) Product Updates: Returns exactly 13 updates. (9) EOD Cron: POST /api/cron/eod-report working. (10) WebSocket: Accepts valid JWT, rejects invalid with 1008. REGRESSION SANITY: All 13 regression tests passed (login, tasks, bulk, parents, leaderboard, comments, analytics, ai-summary v1, recordings, notifications/pending, mentionable users). CRITICAL BUG FOUND: is_sales_task field not working - field is saved to database but not returned in TaskResponse for both single and bulk task creation. Root cause: TaskResponse construction missing is_sales_task parameter in 3 locations (lines 875-892, 938-954, 1002-1016). All other features production-ready."

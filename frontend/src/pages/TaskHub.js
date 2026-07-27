@@ -15,7 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -41,7 +42,8 @@ const TaskHub = () => {
         title: '',
         description: '',
         due_date: '',
-        priority: 'Medium'
+        priority: 'Medium',
+        is_sales_task: false,
     });
     const [selectedAssignees, setSelectedAssignees] = useState([]);
     const [attachments, setAttachments] = useState([]);
@@ -73,6 +75,8 @@ const TaskHub = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
     const searchInputRef = React.useRef(null);
+    const [salesOnly, setSalesOnly] = useState(false);
+    const [aiSummaryStats, setAiSummaryStats] = useState(null);
 
     // Multi-select delete state
     const [selectionMode, setSelectionMode] = useState(false);
@@ -367,11 +371,12 @@ const TaskHub = () => {
     const fetchDashboardAiSummary = async () => {
         setLoadingAiSummary(true);
         try {
-            const response = await axios.post(`${API}/dashboard/ai-summary`, {
+            const response = await axios.post(`${API}/dashboard/ai-summary-v2`, {
                 view_mode: viewMode,
                 date_filter: dateFilter
             });
             setAiSummary(response.data.summary);
+            setAiSummaryStats(response.data.stats || null);
         } catch (error) {
             toast.error('Failed to generate AI summary');
         } finally {
@@ -582,7 +587,8 @@ const TaskHub = () => {
                 title: '',
                 description: '',
                 due_date: '',
-                priority: 'Medium'
+                priority: 'Medium',
+                is_sales_task: false,
             });
             setSelectedAssignees([]);
             setAttachments([]);
@@ -605,7 +611,8 @@ const TaskHub = () => {
                 title: '',
                 description: '',
                 due_date: '',
-                priority: 'Medium'
+                priority: 'Medium',
+                is_sales_task: false,
             });
         }
     };
@@ -661,6 +668,7 @@ const TaskHub = () => {
             filtered = filterTodayAndOverdue(filtered);
         }
         filtered = filtered.filter(matchesSearch);
+        if (salesOnly) filtered = filtered.filter((t) => t.is_sales_task === true);
         return filtered;
     };
 
@@ -780,8 +788,55 @@ const TaskHub = () => {
                         ) : null}
                     </div>
                     <div className="flex items-center gap-3">
+                        {/* Compact search in header */}
+                        <div className={`relative transition-all duration-200 ${searchOpen || searchQuery ? 'w-[320px]' : 'w-10'}`}>
+                            {(searchOpen || searchQuery) ? (
+                                <div className="relative">
+                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        ref={searchInputRef}
+                                        data-testid="task-search-input"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
+                                        placeholder="Search tasks..."
+                                        className="pl-9 pr-9 rounded-full h-10 bg-white border-gray-200"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => { setSearchQuery(''); setSearchOpen(false); }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        aria-label="Close search"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 0); }}
+                                    className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                    title="Search"
+                                    data-testid="task-search-icon"
+                                >
+                                    <Search className="w-5 h-5" />
+                                </Button>
+                            )}
+                        </div>
+                        <NotificationBell />
                         <Button variant="outline" size="icon" onClick={reopenOnboarding} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help & Walkthrough">
                             <HelpCircle className="w-5 h-5" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={() => navigate('/updates')} className="rounded-full border-gray-300 text-gray-600 hover:text-indigo-700 hover:bg-indigo-50" title="What's new">
+                            <Sparkles className="w-5 h-5" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={() => navigate('/leaderboard')} className="rounded-full border-gray-300 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Leaderboards">
+                            <Trophy className="w-5 h-5" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={() => navigate('/transcript')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Meet transcript → tasks">
+                            <FileText className="w-5 h-5" />
                         </Button>
                         {user?.subscription_tier === 'teams' && (
                             <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Manage Team">
@@ -964,6 +1019,17 @@ const TaskHub = () => {
                                                 <Label>Attachments & Screen Recording</Label>
                                                 <AttachmentPicker attachments={attachments} setAttachments={setAttachments} />
                                             </div>
+                                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={taskForm.is_sales_task || false}
+                                                    onChange={(e) => setTaskForm({ ...taskForm, is_sales_task: e.target.checked })}
+                                                    data-testid="is-sales-task-checkbox"
+                                                    className="rounded"
+                                                />
+                                                <DollarSign className="w-4 h-4 text-emerald-600" />
+                                                <span>This is a Sales Task <span className="text-xs text-muted-foreground">(involves a customer or prospect)</span></span>
+                                            </label>
                                             <Button data-testid="submit-task-button" type="submit" className="w-full rounded-full" disabled={createLoading || selectedAssignees.length === 0}>
                                                 {createLoading ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
                                             </Button>
@@ -1118,44 +1184,13 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {/* Search Bar (condensed) — magnifying glass icon that expands into a search input */}
+                {/* Sales-only toggle (search now lives in the header) */}
                 <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className={`relative transition-all duration-200 ${searchOpen || searchQuery ? 'flex-1 min-w-[240px]' : 'w-10'}`}>
-                        {searchOpen || searchQuery ? (
-                            <>
-                                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    ref={searchInputRef}
-                                    data-testid="task-search-input"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
-                                    placeholder="Search across all buckets — owner, title, description, priority, status..."
-                                    className="pl-9 rounded-full h-10 bg-white border-gray-200"
-                                    autoFocus
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => { setSearchQuery(''); setSearchOpen(false); }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    aria-label="Close search"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 0); }}
-                                className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-gray-200 text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
-                                aria-label="Open search"
-                                data-testid="task-search-icon"
-                                title="Search tasks"
-                            >
-                                <Search className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
+                    <label className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border cursor-pointer transition-colors ${salesOnly ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-emerald-300'}`}>
+                        <input type="checkbox" checked={salesOnly} onChange={(e) => setSalesOnly(e.target.checked)} className="sr-only" />
+                        <DollarSign className="w-4 h-4" />
+                        Only Sales Tasks
+                    </label>
                 </div>
 
                 {/* AI Summary Display */}
@@ -1169,12 +1204,20 @@ const TaskHub = () => {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🤖</span>
-                                    <h3 className="font-semibold text-purple-900">AI Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
+                                    <h3 className="font-semibold text-purple-900">Jarvis Summary — {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
                                 </div>
+                                {aiSummaryStats && (
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">🔴 {aiSummaryStats.urgent_high_count} high-urgent</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-medium">⏰ {aiSummaryStats.due_in_hours_count} due in &lt;6h</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-medium">📅 {aiSummaryStats.due_today_count} due today</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800 font-medium">⚠️ {aiSummaryStats.overdue_count} overdue</span>
+                                    </div>
+                                )}
                                 <p className="text-sm text-purple-800">{aiSummary}</p>
                             </div>
                             <button
-                                onClick={() => setAiSummary(null)}
+                                onClick={() => { setAiSummary(null); setAiSummaryStats(null); }}
                                 className="text-purple-400 hover:text-purple-600 p-1"
                             >
                                 <X className="w-4 h-4" />
