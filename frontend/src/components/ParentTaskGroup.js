@@ -54,7 +54,13 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
 
     const unfinishedCount = useMemo(() => sorted.filter((s) => s.status !== 'Completed').length, [sorted]);
 
-    const openTask = (e) => { if (e) e.stopPropagation(); navigate(`/task/${group.id}`); };
+    const openTask = (e) => {
+        if (e) e.stopPropagation();
+        // In multi-select mode, clicking the card body toggles selection instead of navigating.
+        if (selectable) { if (onToggleSelect) onToggleSelect(group.id); return; }
+        navigate(`/task/${group.id}`);
+    };
+    const gotoTask = (e) => { if (e) e.stopPropagation(); navigate(`/task/${group.id}`); };
 
     const nudgeUnfinished = async (e) => {
         e.stopPropagation();
@@ -107,7 +113,7 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <Badge className={complete ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}>{group.percent}%</Badge>
-                        <Button size="sm" onClick={openTask} className="rounded-full h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid={`view-parent-group-${group.id}`}>
+                        <Button size="sm" onClick={gotoTask} className="rounded-full h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid={`view-parent-group-${group.id}`}>
                             View Task <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
                         </Button>
                         <button

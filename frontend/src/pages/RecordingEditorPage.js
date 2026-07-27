@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Copy, Check, Share2, ListPlus, Download } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
+import { loadRecordingBlob, clearRecordingBlob } from '@/lib/recordingStore';
 
 const RecordingEditorPage = () => {
     const navigate = useNavigate();
@@ -23,34 +24,62 @@ const RecordingEditorPage = () => {
     const [users, setUsers] = useState([]);
 
     useEffect(() => {
-        // Try to grab the blob from the opener tab first (works when window.opener is accessible)
-        try {
-            const w = window.opener || window;
-            const b = w && w.__tskLastRecordingBlob;
-            if (b && b.size > 0) {
-                setBlob(b);
-                setVideoUrl(URL.createObjectURL(b));
-                return;
-            }
-        } catch { /* opener not accessible (COOP) */ }
-        // Fallback to same-tab sessionStorage URL (won't work if we're in a new tab)
-        const url = sessionStorage.getItem('tsk_last_recording_url');
-        if (url) setVideoUrl(url);
-        // Poll opener briefly in case the blob is assigned after this tab loads
-        let tries = 0;
-        const poll = setInterval(() => {
-            tries += 1;
+        let cancelled = false;
+        let poll = null;
+
+        const setFromBlob = (b) => {
+            if (cancelled) return;
+            setBlob(b);
+            try { setVideoUrl(URL.createObjectURL(b)); } catch { /* noop */ }
+        };
+
+        const tryOpenerBlob = () => {
             try {
-                const b2 = window.opener && window.opener.__tskLastRecordingBlob;
-                if (b2 && b2.size > 0) {
-                    setBlob(b2);
-                    setVideoUrl(URL.createObjectURL(b2));
-                    clearInterval(poll);
+                const w = window.opener || window;
+                const b = w && w.__tskLastRecordingBlob;
+                if (b && b.size > 0) { setFromBlob(b); return true; }
+            } catch { /* opener not accessible (COOP) */ }
+            return false;
+        };
+
+        // 1) Try IndexedDB first (most reliable across new tabs / COOP restrictions)
+        (async () => {
+            try {
+                const entry = await loadRecordingBlob();
+                if (!cancelled && entry?.blob && entry.blob.size > 0) {
+                    setFromBlob(entry.blob);
+                    return;
                 }
             } catch { /* silent */ }
-            if (tries > 20) clearInterval(poll);
-        }, 300);
-        return () => clearInterval(poll);
+
+            // 2) Try opener bridge
+            if (tryOpenerBlob()) return;
+
+            // 3) Fall back to same-tab sessionStorage URL (only works if we navigated in same tab)
+            const url = sessionStorage.getItem('tsk_last_recording_url');
+            if (url && !cancelled) setVideoUrl(url);
+
+            // 4) Poll IndexedDB + opener for a few seconds in case recording finishes late
+            let tries = 0;
+            poll = setInterval(async () => {
+                tries += 1;
+                if (tryOpenerBlob()) { clearInterval(poll); return; }
+                try {
+                    const entry = await loadRecordingBlob();
+                    if (entry?.blob && entry.blob.size > 0) {
+                        setFromBlob(entry.blob);
+                        clearInterval(poll);
+                        return;
+                    }
+                } catch { /* silent */ }
+                if (tries > 30) clearInterval(poll);
+            }, 400);
+        })();
+
+        return () => {
+            cancelled = true;
+            if (poll) clearInterval(poll);
+        };
     }, []);
 
     useEffect(() => {
@@ -72,6 +101,7 @@ const RecordingEditorPage = () => {
             const res = await axios.post(`${API}/recordings/standalone`, { recording_url: ref.storage_path || ref.path });
             setShareLink(res.data.shareable_link);
             toast.success('Recording saved!');
+            try { await clearRecordingBlob(); } catch { /* noop */ }
         } catch (e) {
             toast.error(e?.response?.data?.detail || e?.message || 'Failed to save recording');
         } finally { setSaving(false); }
@@ -95,6 +125,7 @@ const RecordingEditorPage = () => {
                 priority: assignForm.priority,
             });
             toast.success('Task created with the recording attached');
+            try { await clearRecordingBlob(); } catch { /* noop */ }
             setTimeout(() => { try { window.close(); } catch { /* noop */ } navigate('/dashboard'); }, 800);
         } catch (e) {
             toast.error(e?.response?.data?.detail || 'Failed to assign task');
@@ -121,9 +152,17 @@ const RecordingEditorPage = () => {
                 <h1 className="text-2xl font-semibold mb-4">Preview &amp; Share</h1>
                 <div className="bg-black rounded-2xl overflow-hidden mb-6">
                     {videoUrl ? (
-                        <video src={videoUrl} controls className="w-full max-h-[60vh] bg-black" />
+                        <video src={videoUrl} controls autoPlay className="w-full max-h-[60vh] bg-black" />
                     ) : (
-                        <div className="p-10 text-center text-white">No recording found. Return to the app and record again.</div>
+                        <div className="p-10 text-center text-white">
+                            <div className="inline-flex items-center gap-2 mb-3">
+                                <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
+                                <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" style={{ animationDelay: '300ms' }} />
+                            </div>
+                            <p className="text-sm opacity-80">Looking for your recording...</p>
+                            <p className="text-xs opacity-60 mt-1">If nothing appears in a few seconds, return to the previous tab and try recording again.</p>
+                        </div>
                     )}
                 </div>
 

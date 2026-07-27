@@ -2,13 +2,33 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move } from 'lucide-react';
 import { toast } from 'sonner';
+import { saveRecordingBlob } from '@/lib/recordingStore';
 
 // Draggable floating control bar rendered as a fixed overlay (top-most z-index).
 const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
+    const clampPos = (p) => {
+        const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
+        const h = typeof window !== 'undefined' ? window.innerHeight : 768;
+        // Make sure the bar always ends up on-screen (fix "controls not visible" cases where
+        // stale saved positions push it below the viewport).
+        return {
+            x: Math.max(12, Math.min(w - 380, p?.x ?? 24)),
+            y: Math.max(12, Math.min(h - 96, p?.y ?? (h - 96))),
+        };
+    };
     const [pos, setPos] = useState(() => {
-        try { return JSON.parse(localStorage.getItem(storageKey) || 'null') || { x: 24, y: window.innerHeight - 96 }; }
-        catch { return { x: 24, y: window.innerHeight - 96 }; }
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            return clampPos(saved || { x: 24, y: (typeof window !== 'undefined' ? window.innerHeight : 768) - 96 });
+        } catch {
+            return clampPos({ x: 24, y: (typeof window !== 'undefined' ? window.innerHeight : 768) - 96 });
+        }
     });
+    useEffect(() => {
+        const onResize = () => setPos((p) => clampPos(p));
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
     const start = useRef(null);
     const posRef = useRef(pos);
     posRef.current = pos;
@@ -163,15 +183,21 @@ export const ScreenRecorder = ({ onSaved }) => {
                 const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
                 stopAllTracks();
                 if (blob.size === 0) { toast.error('Recording was empty'); return; }
-                // Open editor tab RIGHT NOW so the browser counts it as a user-gesture opening,
-                // and pass the blob via a shared in-memory bridge on window.opener.
-                const editorWin = window.open('/recording/edit?pending=1', '_blank', 'noopener=no');
+                // Persist the blob in IndexedDB so the editor can reliably retrieve it
+                // even when opened in a new tab (window.opener is unreliable with COOP).
+                try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
+                // Also stash on window and sessionStorage as best-effort fallbacks
                 try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
                 const localUrl = URL.createObjectURL(blob);
                 try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
                 try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
                 try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
                 if (onSaved) onSaved(blob, localUrl);
+                toast.success('Recording ready — opening preview...');
+                // Open the editor. Pass empty features string so window.opener stays accessible
+                // as an additional fallback (IndexedDB is the primary channel now).
+                let editorWin = null;
+                try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
                 if (!editorWin) {
                     // Popup blocked — same-tab fallback
                     toast.info('Popup blocked — opening editor in this tab');
