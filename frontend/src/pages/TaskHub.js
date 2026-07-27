@@ -890,10 +890,10 @@ const TaskHub = () => {
                             </>
                         ) : (
                             <>
-                                <ScreenRecorder />
-                                <Button variant="outline" onClick={() => navigate('/recordings')} className="rounded-full gap-2" data-testid="recording-library-button" title="Recording library">
+                                {/* Single "Recordings" button — merges Record + Library. Takes user to the library where they can start a new recording or browse past ones. */}
+                                <Button variant="outline" onClick={() => navigate('/recordings')} className="rounded-full gap-2" data-testid="recording-library-button" title="Screen recordings">
                                     <Library className="w-4 h-4" />
-                                    Library
+                                    Recordings
                                 </Button>
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
                                     <CheckSquare className="w-4 h-4" />

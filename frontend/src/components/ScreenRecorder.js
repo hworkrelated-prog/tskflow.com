@@ -83,13 +83,17 @@ const WebcamBubble = ({ stream, mirrored = true }) => {
         play();
     }, [stream]);
     return (
-        <div style={{ position: 'fixed', bottom: 24, left: 24, zIndex: 2147483646 }}
-            className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-black">
+        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 2147483646 }}
+            className="w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-black">
             <video
                 ref={videoRef}
                 autoPlay muted playsInline
                 style={{ transform: mirrored ? 'scaleX(-1)' : 'none', width: '100%', height: '100%', objectFit: 'cover' }}
             />
+            {/* Small "REC" label so users understand this preview is being recorded into the canvas composite */}
+            <div className="absolute bottom-1 left-1 right-1 flex justify-center pointer-events-none">
+                <span className="text-[10px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded shadow">● REC</span>
+            </div>
         </div>
     );
 };
@@ -110,6 +114,8 @@ export const ScreenRecorder = ({ onSaved }) => {
     const [seconds, setSeconds] = useState(0);
     const [displaySurface, setDisplaySurface] = useState(null);
     const [camStream, setCamStream] = useState(null);
+    const [popupOpen, setPopupOpen] = useState(false);
+    const controlsPopupRef = useRef(null);
 
     const displayStreamRef = useRef(null);
     const micStreamRef = useRef(null);
@@ -225,6 +231,22 @@ export const ScreenRecorder = ({ onSaved }) => {
     const camOnRef = useRef(camOn);
     useEffect(() => { camOnRef.current = camOn; }, [camOn]);
 
+    // Expose a small imperative API on window so the standalone controls popup can drive us.
+    useEffect(() => {
+        window.__tskRecorderApi = {
+            getState: () => ({ recording, paused, seconds, micOn, camOn }),
+            stop: () => stop(),
+            pauseResume: () => pauseResume(),
+            restart: () => restart(),
+            toggleMic: () => toggleMic(),
+            toggleCam: () => toggleCam(),
+        };
+        return () => {
+            try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recording, paused, seconds, micOn, camOn]);
+
     const start = async () => {
         setStarting(true);
         let micErr = null;
@@ -313,10 +335,14 @@ export const ScreenRecorder = ({ onSaved }) => {
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
+            // Open a small popup window with the controls so they truly "float over the selected screen"
+            // (as a separate OS window instead of an overlay inside the recorded tab).
+            openControlsPopup();
+
             const surf = settings.displaySurface;
             if (surf === 'monitor') toast.info('Recording your whole screen.');
             else if (surf === 'browser') toast.info('Recording this browser tab.');
-            else if (surf === 'window') toast.info('Recording a window — use the browser Stop Sharing bar to end.');
+            else if (surf === 'window') toast.info('Recording a window — controls opened in a separate mini window.');
 
             if (camErr) toast.warning('Webcam not available — continuing without it.');
             if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
@@ -329,6 +355,33 @@ export const ScreenRecorder = ({ onSaved }) => {
     const stop = () => {
         try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); }
         catch { stopAllTracks(); }
+        try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
+        setPopupOpen(false);
+    };
+
+    // Open a small standalone OS window (via popup features) so controls "float" separately from the recorded surface.
+    const openControlsPopup = () => {
+        try {
+            const width = 380;
+            const height = 120;
+            const left = Math.max(0, (window.screen?.availWidth || 1200) - width - 24);
+            const top = 24;
+            const features = `popup=1,noopener=0,width=${width},height=${height},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0,resizable=1`;
+            const w = window.open('/recording/controls', 'tsk_recording_controls', features);
+            if (w) {
+                controlsPopupRef.current = w;
+                setPopupOpen(true);
+                // Detect when user closes the popup so we can fall back to the in-tab bar
+                const check = setInterval(() => {
+                    if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
+                        clearInterval(check);
+                        setPopupOpen(false);
+                    }
+                }, 500);
+            } else {
+                toast.info('Popup blocked — using the in-tab floating controls instead.');
+            }
+        } catch { /* silent */ }
     };
 
     const pauseResume = () => {
@@ -369,7 +422,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </Button>
             )}
 
-            {recording && (
+            {recording && !popupOpen && (
                 <FloatingBar>
                     <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
                     <span className="font-mono font-bold text-base" data-testid="recording-timer">{fmt(seconds)}</span>
@@ -389,6 +442,15 @@ export const ScreenRecorder = ({ onSaved }) => {
                         <Square className="w-4 h-4 mr-1" /> Stop
                     </Button>
                 </FloatingBar>
+            )}
+
+            {/* When the popup controls window is up, show a small status indicator at the top-left. */}
+            {recording && popupOpen && (
+                <div style={{ position: 'fixed', top: 12, left: 12, zIndex: 2147483647 }}
+                    className="bg-black/70 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Recording · <span className="font-mono" data-testid="recording-timer">{fmt(seconds)}</span>
+                    <button onClick={() => { try { controlsPopupRef.current?.focus?.(); } catch { /* noop */ } }} className="ml-1 text-indigo-200 hover:text-white underline decoration-dotted">Focus controls</button>
+                </div>
             )}
 
             {recording && camOn && camStream && <WebcamBubble stream={camStream} />}

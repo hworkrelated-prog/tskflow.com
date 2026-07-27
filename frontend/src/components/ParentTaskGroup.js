@@ -153,13 +153,19 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                     ) : (
                         <ul className="divide-y">
                             {sorted.map((t) => (
-                                <li key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${t.status === 'Completed' ? 'opacity-60' : ''}`}>
+                                <li
+                                    key={t.id}
+                                    className={`flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50/50 cursor-pointer ${t.status === 'Completed' ? 'opacity-70' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/task/${t.id}`); }}
+                                    data-testid={`parent-group-subtask-${t.id}`}
+                                >
                                     {t.status === 'Completed' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Circle className="w-4 h-4 text-gray-400 shrink-0" />}
                                     <div className="flex-1 min-w-0">
                                         <div className="text-sm font-medium truncate">{t.assigned_to_name || t.assigned_to_email || 'Unknown'}</div>
                                         <div className="text-xs text-muted-foreground truncate">{t.status}{t.completed_at ? ` • ${format(new Date(t.completed_at), 'MMM d, h:mm a')}` : ''}</div>
                                     </div>
-                                    <Badge variant="outline" className={t.status === 'Completed' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : ''}>{t.status}</Badge>
+                                    <Badge variant="outline" className={t.status === 'Review Pending' ? 'text-amber-700 border-amber-200 bg-amber-50' : t.status === 'Completed' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : ''}>{t.status}</Badge>
+                                    <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                                 </li>
                             ))}
                         </ul>

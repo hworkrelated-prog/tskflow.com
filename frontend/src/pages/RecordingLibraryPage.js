@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Video, Copy, Trash2, Share2, ExternalLink, Clock, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
+import ScreenRecorder from '@/components/ScreenRecorder';
 
 const fmtDuration = (secs) => {
     if (!secs || Number.isNaN(secs)) return null;
@@ -71,11 +72,12 @@ const RecordingLibraryPage = () => {
                     </Button>
                     <div className="flex-1">
                         <h1 className="text-xl font-semibold flex items-center gap-2">
-                            <Video className="w-5 h-5 text-indigo-600" /> Recordings library
+                            <Video className="w-5 h-5 text-indigo-600" /> Recordings
                         </h1>
-                        <p className="text-xs text-muted-foreground">All your screen recordings — both one-off and task-attached — in one place.</p>
+                        <p className="text-xs text-muted-foreground">All your screen recordings — start a new one or browse past recordings.</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{recordings.length} recording{recordings.length === 1 ? '' : 's'}</span>
+                    <ScreenRecorder />
+                    <span className="text-xs text-muted-foreground hidden md:inline">{recordings.length} recording{recordings.length === 1 ? '' : 's'}</span>
                 </div>
             </header>
 
@@ -87,8 +89,7 @@ const RecordingLibraryPage = () => {
                         <CardContent className="py-16 text-center">
                             <Video className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
                             <h3 className="text-lg font-semibold mb-1">No recordings yet</h3>
-                            <p className="text-sm text-muted-foreground mb-4">Hit &quot;Record Screen&quot; on the dashboard to create your first one.</p>
-                            <Button onClick={() => navigate('/dashboard')} className="rounded-full">Go to dashboard</Button>
+                            <p className="text-sm text-muted-foreground mb-4">Hit the &quot;Record Screen&quot; button above to create your first one.</p>
                         </CardContent>
                     </Card>
                 ) : (

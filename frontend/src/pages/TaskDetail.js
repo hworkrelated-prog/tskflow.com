@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -685,7 +685,7 @@ const TaskDetail = () => {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <div>
                                     <Label className="text-muted-foreground">Priority</Label>
                                     <p className="font-semibold text-lg">{task.priority}</p>
@@ -698,6 +698,28 @@ const TaskDetail = () => {
                                     <div>
                                         <Label className="text-muted-foreground">Category</Label>
                                         <p className="font-semibold text-lg">{task.category}</p>
+                                    </div>
+                                )}
+                                {/* Assignee card — always visible for individual tasks. Group/parent tasks have a full Participants section below. */}
+                                {!task.is_parent && task.assigned_to_name && (
+                                    <div className="col-span-2 md:col-span-3">
+                                        <Label className="text-muted-foreground">Assigned to</Label>
+                                        <div className="flex items-center gap-3 mt-1 p-3 rounded-xl border bg-gray-50" data-testid="task-assignee-card">
+                                            <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0">
+                                                {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-sm truncate">{task.assigned_to_name}</p>
+                                                {task.assigned_to_email && (
+                                                    <p className="text-xs text-muted-foreground truncate">{task.assigned_to_email}</p>
+                                                )}
+                                            </div>
+                                            {task.parent_id && (
+                                                <Button size="sm" variant="outline" onClick={() => navigate(`/task/${task.parent_id}`)} className="rounded-full text-xs shrink-0" data-testid="open-parent-btn">
+                                                    <Users className="w-3.5 h-3.5 mr-1" /> View group
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -740,7 +762,7 @@ const TaskDetail = () => {
                                 />
                             )}
 
-                            {/* Action Buttons: Share, Email, Comments */}
+                            {/* Action Buttons: AI Summary, Share, Email */}
                             <div className="flex gap-2 flex-wrap pt-4 border-t">
                                 <Button
                                     variant="outline"
@@ -775,16 +797,6 @@ const TaskDetail = () => {
                                         Email Assignee
                                     </Button>
                                 )}
-                                
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowComments(!showComments)}
-                                    className="rounded-full"
-                                >
-                                    <MessageSquare className="w-4 h-4 mr-2" />
-                                    Comments ({comments.length})
-                                </Button>
                             </div>
 
                             {/* AI Summary */}
@@ -797,73 +809,8 @@ const TaskDetail = () => {
                                     <p className="text-sm text-purple-900">{aiSummary}</p>
                                 </div>
                             )}
-
-                            {/* Comments Section */}
-                            {showComments && (
-                                <div className="space-y-4 p-4 bg-gray-50 rounded-xl border">
-                                    <div className="space-y-3">
-                                        {comments.length === 0 ? (
-                                            <p className="text-center text-gray-500 text-sm">No comments yet. Be the first to comment!</p>
-                                        ) : (
-                                            comments.map((comment) => (
-                                                <div key={comment.id} className="bg-white p-3 rounded-lg shadow-sm">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="font-semibold text-sm">{comment.user_name}</span>
-                                                        <span className="text-xs text-gray-500">
-                                                            {comment.created_at && !isNaN(new Date(comment.created_at).getTime()) 
-                                                                ? format(new Date(comment.created_at), 'MMM dd, h:mm a')
-                                                                : ''}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-sm text-gray-700">{comment.content}</p>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                    
-                                    <div className="space-y-2 pt-3 border-t">
-                                        <div className="relative">
-                                            <Textarea
-                                                ref={commentTextareaRef}
-                                                placeholder="Add a comment... (type @ to mention users)"
-                                                value={newComment}
-                                                onChange={onCommentChange}
-                                                onKeyDown={onCommentKeyDown}
-                                                rows={3}
-                                                className="rounded-lg"
-                                            />
-                                            {showMentionSuggest && filteredMentionUsers.length > 0 && (
-                                                <div className="absolute bottom-full mb-2 w-full max-w-md bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
-                                                    {filteredMentionUsers.map((u, idx) => (
-                                                        <button
-                                                            key={u.id}
-                                                            type="button"
-                                                            onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
-                                                            onMouseEnter={() => setMentionHighlight(idx)}
-                                                            className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between ${
-                                                                idx === mentionHighlight ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'
-                                                            }`}
-                                                        >
-                                                            <span className="font-medium">{u.name}</span>
-                                                            <span className="text-xs text-gray-500">{u.email}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-end">
-                                            <Button
-                                                onClick={handleAddComment}
-                                                disabled={commentLoading || !newComment.trim()}
-                                                size="sm"
-                                                className="rounded-full"
-                                            >
-                                                {commentLoading ? 'Posting...' : 'Post Comment'}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            {/* Note: Comments live in the right-side "Comments" panel (or on mobile, at the bottom of this card). */}
+                            {/* Removed the redundant inline Comments/Chatter section — Comments and Chatter are the same thing. */}
 
                             {task.reason_for_decline && (
                                 <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -1207,14 +1154,14 @@ const TaskDetail = () => {
                     </Card>
                 </motion.div>
 
-                {/* Right-side Chatter panel (always visible on desktop) */}
-                <aside className="hidden lg:block lg:sticky lg:top-24">
+                {/* Comments panel (single unified section — was "Chatter") — visible on desktop as a sticky sidebar, and inline below the main card on mobile */}
+                <aside className="block lg:sticky lg:top-24" data-testid="comments-panel">
                     <Card className="border-2 rounded-2xl">
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <MessageSquare className="w-5 h-5 text-indigo-600" />
-                                <h3 className="font-semibold">Chatter</h3>
-                                <span className="ml-auto text-xs text-muted-foreground">{comments.length} messages</span>
+                                <h3 className="font-semibold">Comments</h3>
+                                <span className="ml-auto text-xs text-muted-foreground">{comments.length} message{comments.length === 1 ? '' : 's'}</span>
                             </div>
                             <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
                                 {comments.length === 0 ? (
@@ -1398,31 +1345,40 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 </div>
             </div>
             <ul className="divide-y">
-                {visible.map((r, i) => (
-                    <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''}`}>
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${r.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-700'}`}>{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{r.name}</div>
-                            <div className="flex gap-1 mt-0.5 flex-wrap">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
+                {visible.map((r, i) => {
+                    const canOpen = Boolean(r.subtaskId);
+                    return (
+                        <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''} ${canOpen ? 'hover:bg-indigo-50/50 cursor-pointer' : ''}`}
+                            onClick={() => { if (canOpen) window.location.assign(`/task/${r.subtaskId}`); }}
+                            data-testid={`participant-row-${r.subtaskId || i}`}
+                        >
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${r.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-700'}`}>{i + 1}</span>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{r.name}</div>
+                                <div className="flex gap-1 mt-0.5 flex-wrap">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
+                                </div>
                             </div>
-                        </div>
-                        <div className="text-xs text-gray-500 shrink-0">{r.completion_hours ? `${r.completion_hours}h` : '—'}</div>
-                        {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
-                            <Button
-                                size="sm"
-                                onClick={() => onReviewSubtask(r)}
-                                className="rounded-full h-7 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white shrink-0"
-                                data-testid={`review-subtask-${r.subtaskId}`}
-                            >
-                                Review
-                            </Button>
-                        )}
-                    </li>
-                ))}
+                            <div className="text-xs text-gray-500 shrink-0">{r.completion_hours ? `${r.completion_hours}h` : '—'}</div>
+                            {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
+                                <Button
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); onReviewSubtask(r); }}
+                                    className="rounded-full h-7 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white shrink-0"
+                                    data-testid={`review-subtask-${r.subtaskId}`}
+                                >
+                                    Review
+                                </Button>
+                            )}
+                            {canOpen && (
+                                <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            )}
+                        </li>
+                    );
+                })}
             </ul>
             {rows.length > 5 && (
                 <button

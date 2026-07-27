@@ -358,8 +358,8 @@ const AnalyticsPage = () => {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        {/* Table Header — sticky when scrolling within the card */}
-                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-gray-50 rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-0 z-10 shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
+                                        {/* Table Header — sticky when scrolling. Offset by page header height so it never gets hidden. */}
+                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-white rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-[68px] z-20 border shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }} data-testid="analytics-table-header">
                                             <div>Team Member</div>
                                             <div className="text-center">Assigned</div>
                                             <div className="text-center">Completed</div>
@@ -618,78 +618,42 @@ const BestWorstAnalysis = ({ breakdown }) => {
         const m = Math.floor(s.length / 2);
         return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
     };
-    const medCompletion = median(scored.map((s) => s.completion_rate || 0));
-    const medResponse = median(scored.map((s) => (s.avg_response_hours == null ? 0 : s.avg_response_hours)));
+    // Precompute medians so we can enrich the tooltip if we ever want to show a longer explanation.
+    void median(scored.map((s) => s.completion_rate || 0));
+    void median(scored.map((s) => (s.avg_response_hours == null ? 0 : s.avg_response_hours)));
 
     const fmtHrs = (h) => (h == null ? '—' : h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${h}h` : `${(h / 24).toFixed(1)}d`);
-
-    const bestReasons = [
-        `Completed ${best.tasks_completed}/${best.tasks_assigned} tasks (${best.completion_rate || 0}%)${medCompletion ? ` — ${Math.max(0, (best.completion_rate || 0) - medCompletion)} pts above the team median (${medCompletion}%).` : '.'}`,
-        `Responds in ~${fmtHrs(best.avg_response_hours)}${best.avg_response_hours != null && medResponse ? ` — ${best.avg_response_hours < medResponse ? 'faster' : 'slower'} than the team median (${fmtHrs(medResponse)}).` : '.'}`,
-        `Response rate: ${best.response_rate || 0}%.`,
-    ];
-    const worstReasons = [
-        `Only ${worst.tasks_completed}/${worst.tasks_assigned} tasks completed (${worst.completion_rate || 0}%)${medCompletion ? ` — ${Math.max(0, medCompletion - (worst.completion_rate || 0))} pts below the team median (${medCompletion}%).` : '.'}`,
-        `Responds in ~${fmtHrs(worst.avg_response_hours)}${worst.avg_response_hours != null && medResponse ? ` — ${worst.avg_response_hours > medResponse ? 'slower' : 'faster'} than the team median (${fmtHrs(medResponse)}).` : '.'}`,
-        `${(worst.tasks_pending || 0) > 0 ? `${worst.tasks_pending} tasks are still open.` : `Response rate: ${worst.response_rate || 0}%.`}`,
-    ];
+    // Note: removed the full "Why" bullet lists per user feedback that best/worst was too prominent.
 
     return (
-        <Card className="border-2 shadow-soft rounded-2xl" data-testid="best-worst-analysis-card">
-            <CardHeader>
-                <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                    <TrendingUp className="w-6 h-6" />
-                    Who&apos;s carrying the team &mdash; and who needs help
-                </CardTitle>
-                <CardDescription>Composite score of completion rate, response rate and speed. Scored out of 100.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Best */}
-                <div className="border-2 border-emerald-200 bg-emerald-50/50 rounded-2xl p-5" data-testid="best-performer-card">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-11 h-11 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                            <Trophy className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Top performer</p>
-                            <p className="font-semibold text-lg truncate">{best.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{best.email}</p>
-                        </div>
-                        <span className="text-2xl font-bold text-emerald-700 tabular-nums">{best._score}</span>
+        <Card className="border shadow-soft rounded-2xl bg-gradient-to-br from-white to-gray-50" data-testid="best-worst-analysis-card">
+            <CardContent className="py-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Best — compact */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100" data-testid="best-performer-card">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                        <Trophy className="w-4 h-4" />
                     </div>
-                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1.5">Why they&apos;re leading</p>
-                    <ul className="space-y-1.5 text-sm text-emerald-900">
-                        {bestReasons.map((r, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                                <span>{r}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">Top performer · {best._score}</p>
+                        <p className="text-sm font-semibold truncate">{best.name}</p>
+                        <p className="text-xs text-emerald-800 truncate">
+                            {best.tasks_completed}/{best.tasks_assigned} done ({best.completion_rate || 0}%) · responds in {fmtHrs(best.avg_response_hours)}
+                        </p>
+                    </div>
                 </div>
 
-                {/* Worst */}
-                <div className="border-2 border-red-200 bg-red-50/50 rounded-2xl p-5" data-testid="worst-performer-card">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-11 h-11 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
-                            <AlertTriangle className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-xs uppercase tracking-wide text-red-700 font-semibold">Needs a check-in</p>
-                            <p className="font-semibold text-lg truncate">{worst.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{worst.email}</p>
-                        </div>
-                        <span className="text-2xl font-bold text-red-700 tabular-nums">{worst._score}</span>
+                {/* Worst — compact */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50/60 border border-red-100" data-testid="worst-performer-card">
+                    <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-4 h-4" />
                     </div>
-                    <p className="text-xs font-semibold text-red-800 uppercase tracking-wide mb-1.5">Why they&apos;re struggling</p>
-                    <ul className="space-y-1.5 text-sm text-red-900">
-                        {worstReasons.map((r, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                                <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
-                                <span>{r}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] uppercase tracking-wide text-red-700 font-semibold">Needs a check-in · {worst._score}</p>
+                        <p className="text-sm font-semibold truncate">{worst.name}</p>
+                        <p className="text-xs text-red-800 truncate">
+                            {worst.tasks_completed}/{worst.tasks_assigned} done ({worst.completion_rate || 0}%) · responds in {fmtHrs(worst.avg_response_hours)}
+                        </p>
+                    </div>
                 </div>
             </CardContent>
         </Card>
