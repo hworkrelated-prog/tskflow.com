@@ -112,6 +112,16 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                         </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                        {(() => {
+                            if (!group.due_date || complete) return null;
+                            const d = new Date(group.due_date);
+                            if (isNaN(d.getTime()) || d >= new Date()) return null;
+                            return (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded" data-testid={`overdue-badge-${group.id}`}>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Overdue
+                                </span>
+                            );
+                        })()}
                         <Badge className={complete ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}>{group.percent}%</Badge>
                         <Button size="sm" onClick={gotoTask} className="rounded-full h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid={`view-parent-group-${group.id}`}>
                             View Task <ArrowUpRight className="w-3.5 h-3.5 ml-1" />

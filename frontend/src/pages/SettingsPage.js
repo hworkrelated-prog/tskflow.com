@@ -28,6 +28,12 @@ const SettingsPage = () => {
     const [displayName, setDisplayName] = React.useState('');
     const [savingName, setSavingName] = React.useState(false);
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
+    // End-of-day report preferences
+    const [eodEnabled, setEodEnabled] = React.useState(false);
+    const [eodHour, setEodHour] = React.useState(17);
+    const [eodChannel, setEodChannel] = React.useState('email');
+    const [eodSaving, setEodSaving] = React.useState(false);
+    const [eodPreviewing, setEodPreviewing] = React.useState(false);
 
     React.useEffect(() => {
         fetchPreferences();
@@ -39,10 +45,36 @@ const SettingsPage = () => {
             const response = await axios.get(`${API}/auth/preferences`);
             setTheme(response.data.theme || 'light');
             setSlackWebhook(response.data.slack_webhook_url || '');
+            setEodEnabled(Boolean(response.data.eod_enabled));
+            setEodHour(response.data.eod_hour ?? 17);
+            setEodChannel(response.data.eod_channel || 'email');
             document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
         } catch (error) {
             console.error('Failed to fetch preferences');
         }
+    };
+
+    const saveEod = async (patch = {}) => {
+        setEodSaving(true);
+        try {
+            const body = { eod_enabled: eodEnabled, eod_hour: eodHour, eod_channel: eodChannel, ...patch };
+            await axios.put(`${API}/auth/preferences`, body);
+            if (patch.eod_enabled !== undefined) setEodEnabled(patch.eod_enabled);
+            if (patch.eod_hour !== undefined) setEodHour(patch.eod_hour);
+            if (patch.eod_channel !== undefined) setEodChannel(patch.eod_channel);
+            toast.success('EOD settings saved');
+        } catch { toast.error('Failed to save EOD settings'); }
+        finally { setEodSaving(false); }
+    };
+
+    const previewEod = async () => {
+        setEodPreviewing(true);
+        try {
+            const res = await axios.post(`${API}/eod/preview`);
+            if (res.data?.sent) toast.success(`EOD preview sent to your ${(res.data.delivered_to || []).join(' + ') || 'inbox'}`);
+            else toast.info(res.data?.reason || 'Nothing to summarize yet');
+        } catch (e) { toast.error(e?.response?.data?.detail || 'Failed to send preview'); }
+        finally { setEodPreviewing(false); }
     };
 
     const handleThemeChange = async (newTheme) => {
@@ -494,6 +526,81 @@ const SettingsPage = () => {
                                 ))}
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* End-of-day report */}
+                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="eod-settings-card">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-base">End-of-day report</h3>
+                                <p className="text-xs text-muted-foreground">Get a daily digest of what you completed, what&apos;s still open, and what you missed.</p>
+                            </div>
+                            <label className="inline-flex items-center gap-2 cursor-pointer" data-testid="eod-enabled-toggle">
+                                <input
+                                    type="checkbox"
+                                    checked={eodEnabled}
+                                    onChange={(e) => { setEodEnabled(e.target.checked); saveEod({ eod_enabled: e.target.checked }); }}
+                                    className="sr-only peer"
+                                />
+                                <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-amber-500 transition-colors">
+                                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${eodEnabled ? 'translate-x-5' : ''}`}></span>
+                                </span>
+                            </label>
+                        </div>
+                        {eodEnabled && (
+                            <div className="space-y-3 pt-2 border-t">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Delivery time (PST)</Label>
+                                        <select
+                                            value={eodHour}
+                                            onChange={(e) => { const h = parseInt(e.target.value, 10); setEodHour(h); saveEod({ eod_hour: h }); }}
+                                            className="mt-1 w-full px-3 py-2 border-2 rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            data-testid="eod-hour-select"
+                                        >
+                                            {Array.from({ length: 24 }, (_, i) => (
+                                                <option key={i} value={i}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Send it via</Label>
+                                        <select
+                                            value={eodChannel}
+                                            onChange={(e) => { const v = e.target.value; setEodChannel(v); saveEod({ eod_channel: v }); }}
+                                            className="mt-1 w-full px-3 py-2 border-2 rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            data-testid="eod-channel-select"
+                                        >
+                                            <option value="email">📧 Email</option>
+                                            <option value="slack">💬 Slack {slackWebhook ? '' : '(connect Slack first)'}</option>
+                                            <option value="both">📧 + 💬 Both</option>
+                                        </select>
+                                        {(eodChannel === 'slack' || eodChannel === 'both') && !slackWebhook && (
+                                            <p className="text-xs text-amber-700 mt-1">⚠️ Slack channel selected but no webhook connected. Connect Slack below to receive there.</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Button size="sm" variant="outline" onClick={previewEod} disabled={eodPreviewing || eodSaving} className="rounded-lg" data-testid="eod-preview-btn">
+                                        {eodPreviewing ? 'Sending...' : '📨 Send me a preview now'}
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">You can override the schedule any time by hitting preview.</p>
+                                </div>
+                                <details className="rounded-xl border bg-gray-50/60 group">
+                                    <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
+                                        <span>What&apos;s inside the EOD report?</span>
+                                        <span className="text-xs text-muted-foreground">Expand</span>
+                                    </summary>
+                                    <ul className="px-5 pb-4 pt-1 text-xs text-gray-700 space-y-1 list-disc ml-4">
+                                        <li>Tasks you <strong>completed today</strong></li>
+                                        <li>Tasks that are <strong>still open</strong></li>
+                                        <li>Tasks that <strong>missed their due date</strong> (with a warning banner)</li>
+                                        <li>A link back to your dashboard so you can jump in and finish</li>
+                                    </ul>
+                                </details>
+                            </div>
+                        )}
                     </div>
 
                     {/* Slack Bridge — Simple 1-click setup */}

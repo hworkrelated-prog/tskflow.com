@@ -147,6 +147,7 @@ class BulkTaskCreate(BaseModel):
     note_images: Optional[List[str]] = None
     attachments: Optional[List[dict]] = None
     auto_reminder: Optional[bool] = False
+    requires_screen_recording: Optional[bool] = False
     is_sales_task: Optional[bool] = False
 
 class TaskComment(BaseModel):
@@ -958,6 +959,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "assigned_to_email": assigned_to_email,
             "attachments": task.attachments or None,
             "is_sales_task": task.is_sales_task or False,
+            "requires_screen_recording": task.requires_screen_recording or False,
         }
         
         await db.tasks.insert_one(task_doc)
@@ -1209,6 +1211,123 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
     reminded = len(messages)
 
     return {"message": f"Reminder sent to {reminded} outstanding assignee(s)", "reminded": reminded}
+
+
+class AssigneesAddRequest(BaseModel):
+    assignees: List[str] = []
+
+
+@api_router.post("/tasks/parents/{parent_id}/assignees")
+async def add_assignees_to_parent(parent_id: str, body: AssigneesAddRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Add one or more assignees (by user_id OR email) to an existing group/parent task.
+
+    Creates one subtask per new assignee (same title/desc/due/priority as parent).
+    Skips duplicates (any assignee id/email that already has a subtask under this parent).
+    """
+    parent = await db.tasks.find_one({"id": parent_id, "is_parent": True, "created_by": current_user["id"], "deleted": {"$ne": True}}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Task group not found")
+
+    existing = await db.tasks.find({"parent_id": parent_id, "deleted": {"$ne": True}}, {"_id": 0, "assigned_to": 1, "assigned_to_email": 1}).to_list(5000)
+    existing_ids = {e.get("assigned_to") for e in existing}
+    existing_emails = {(e.get("assigned_to_email") or "").lower() for e in existing if e.get("assigned_to_email")}
+
+    added_ids = []
+    for raw in (body.assignees or []):
+        assignee = (raw or "").strip()
+        if not assignee:
+            continue
+        assigned_to_id = None
+        assigned_to_email = None
+        assigned_user = None
+        # Detect email vs user id
+        if "@" in assignee:
+            if assignee.lower() in existing_emails:
+                continue
+            assigned_user = await db.users.find_one({"email": assignee}, {"_id": 0})
+            if assigned_user:
+                if assigned_user["id"] in existing_ids:
+                    continue
+                assigned_to_id = assigned_user["id"]
+                assigned_to_email = assigned_user["email"]
+            else:
+                assigned_to_id = f"email_{uuid.uuid4()}"
+                assigned_to_email = assignee
+        else:
+            if assignee in existing_ids:
+                continue
+            assigned_user = await db.users.find_one({"id": assignee}, {"_id": 0})
+            if not assigned_user:
+                continue
+            assigned_to_id = assigned_user["id"]
+            assigned_to_email = assigned_user["email"]
+
+        task_id = str(uuid.uuid4())
+        invite_token = str(uuid.uuid4())
+        shareable_token = str(uuid.uuid4())[:12]
+        initial_status = "Pending"
+        accepted_at = None
+        is_self = assigned_to_id == current_user["id"]
+        if is_self:
+            initial_status = "Accepted"
+            accepted_at = get_pst_now().isoformat()
+
+        subtask = {
+            "id": task_id,
+            "parent_id": parent_id,
+            "title": parent.get("title") or "",
+            "description": parent.get("description") or "",
+            "assigned_to": assigned_to_id,
+            "assigned_to_email": assigned_to_email,
+            "created_by": current_user["id"],
+            "due_date": parent.get("due_date"),
+            "status": initial_status,
+            "priority": parent.get("priority", "Medium"),
+            "category": parent.get("category"),
+            "created_at": get_pst_now().isoformat(),
+            "accepted_at": accepted_at,
+            "invite_token": invite_token,
+            "shareable_token": shareable_token,
+        }
+        await db.tasks.insert_one(subtask)
+        added_ids.append(task_id)
+        existing_ids.add(assigned_to_id)
+        if assigned_to_email:
+            existing_emails.add(assigned_to_email.lower())
+
+        if not is_self and assigned_to_email:
+            recipient_name = (assigned_user or {}).get("name") or assigned_to_email.split('@')[0]
+            content = f"""
+            <html><body style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">
+                <div style=\"background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 30px; text-align: center;\"><h1 style=\"color:white;margin:0;\">You've been added to a task</h1></div>
+                <div style=\"padding: 30px;\">
+                    <p>Hi {recipient_name},</p>
+                    <p><strong>{current_user['name']}</strong> added you to the task <strong>{parent.get('title','')}</strong>.</p>
+                    <div style=\"text-align:center;margin-top:20px;\"><a href=\"{APP_BASE_URL}/invite?token={invite_token}\" style=\"background:#4F46E5;color:white;padding:12px 24px;border-radius:20px;text-decoration:none;\">Open task</a></div>
+                </div>
+            </body></html>
+            """
+            background_tasks.add_task(send_email_notification, assigned_to_email, f"Added to task: {parent.get('title','')}", content)
+
+    # Bump child_count on the parent
+    if added_ids:
+        await db.tasks.update_one({"id": parent_id}, {"$inc": {"child_count": len(added_ids)}})
+
+    return {"added": len(added_ids), "subtask_ids": added_ids}
+
+
+@api_router.delete("/tasks/parents/{parent_id}/assignees/{subtask_id}")
+async def remove_assignee_from_parent(parent_id: str, subtask_id: str, current_user: dict = Depends(get_current_user)):
+    """Remove an assignee from a group task by soft-deleting their subtask."""
+    parent = await db.tasks.find_one({"id": parent_id, "is_parent": True, "created_by": current_user["id"], "deleted": {"$ne": True}}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Task group not found")
+    sub = await db.tasks.find_one({"id": subtask_id, "parent_id": parent_id, "deleted": {"$ne": True}}, {"_id": 0})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    await db.tasks.update_one({"id": subtask_id}, {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat()}})
+    await db.tasks.update_one({"id": parent_id}, {"$inc": {"child_count": -1}})
+    return {"ok": True, "removed": subtask_id}
 
 
 @api_router.get("/dashboard", response_model=TaskHubDashboard)
@@ -2995,6 +3114,10 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
 class UserPreferences(BaseModel):
     theme: Optional[str] = None  # 'light', 'dark', 'minimal'
     slack_webhook_url: Optional[str] = None  # per-user Slack Incoming Webhook
+    # End-of-day report opt-in + timing (a lightweight schedule the user controls in Settings).
+    eod_enabled: Optional[bool] = None       # true = user wants an EOD email/Slack summary
+    eod_hour: Optional[int] = None           # 0-23, PST (defaults to 17 = 5pm)
+    eod_channel: Optional[str] = None        # 'email' | 'slack' | 'both'
 
 @api_router.put("/auth/preferences")
 async def update_preferences(prefs: UserPreferences, current_user: dict = Depends(get_current_user)):
@@ -5591,83 +5714,138 @@ async def sales_only_count(current_user: dict = Depends(get_current_user)):
 
 
 # --- End-of-day report (cron-able) ---
+async def _build_eod_summary_for_user(u: dict, now):
+    """Build the HTML email + Slack text for one user. Returns (html, slack_text, counts) or None if nothing to send."""
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    completed = await db.tasks.find({
+        "assigned_to": u["id"],
+        "status": "Completed",
+        "completed_at": {"$gte": today_start},
+        "deleted": {"$ne": True},
+    }, {"_id": 0}).to_list(200)
+    open_tasks_docs = await db.tasks.find({
+        "assigned_to": u["id"],
+        "status": {"$nin": ["Completed", "Declined"]},
+        "deleted": {"$ne": True},
+    }, {"_id": 0}).to_list(500)
+    missed = []
+    for t in open_tasks_docs:
+        try:
+            due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+            if due.tzinfo is None:
+                due = PST.localize(due)
+            if due < now and not t.get("due_date_rescheduled_and_accepted"):
+                missed.append(t)
+        except Exception:
+            pass
+    if not completed and not open_tasks_docs:
+        return None
+
+    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> — completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
+    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} — due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up — no open tasks.</li>"
+    missed_note = f"<p style='color:#b91c1c;'>⚠️ {len(missed)} task(s) missed their due date.</p>" if missed else ""
+    inner = f"""
+    <h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {u.get('name','friend').split(' ')[0]}</h2>
+    <p style=\"color:#6b7280;margin:0 0 20px;\">{now.strftime('%A, %b %d, %Y')}</p>
+    <h3 style=\"font-size:15px;margin:16px 0 6px;\">✅ Completed today ({len(completed)})</h3>
+    <ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>
+    <h3 style=\"font-size:15px;margin:20px 0 6px;\">📋 Still open ({len(open_tasks_docs)})</h3>
+    <ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>
+    {missed_note}
+    """
+    html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
+    slack_text = (
+        f":sunset: *EOD summary — {now.strftime('%b %d')}*\n"
+        f"\u2705 Completed today: {len(completed)}\n"
+        f":clipboard: Still open: {len(open_tasks_docs)}\n"
+        + (f":warning: {len(missed)} missed due date(s)\n" if missed else "")
+        + f"<{APP_BASE_URL}/dashboard|Open Tskflow>"
+    )
+    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed)}
+
+
 @api_router.post("/cron/eod-report")
 async def cron_eod_report(secret: Optional[str] = None):
-    """Runs daily; send each user a summary of today's activity."""
+    """Runs every hour from the scheduler. For each user opted-in whose local hour matches
+    their preferred delivery hour (eod_hour, default 17 == 5pm), send their EOD digest to
+    the channel they chose (email / slack / both).
+    """
     expected = os.getenv("CRON_SECRET", "")
     if expected and secret != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     now = get_pst_now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(10000)
+    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1}).to_list(10000)
     sent = 0
     for u in users:
-        completed = await db.tasks.find({
-            "assigned_to": u["id"],
-            "status": "Completed",
-            "completed_at": {"$gte": today_start},
-            "deleted": {"$ne": True},
-        }, {"_id": 0}).to_list(200)
-
-        open_tasks_docs = await db.tasks.find({
-            "assigned_to": u["id"],
-            "status": {"$nin": ["Completed", "Declined"]},
-            "deleted": {"$ne": True},
-        }, {"_id": 0}).to_list(500)
-
-        # Compute "missed" — due < today AND due date wasn't rescheduled+accepted
-        missed = []
-        for t in open_tasks_docs:
-            try:
-                due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
-                if due.tzinfo is None:
-                    due = PST.localize(due)
-                if due < now and not t.get("due_date_rescheduled_and_accepted"):
-                    missed.append(t)
-            except Exception:
-                pass
-
-        if not completed and not open_tasks_docs:
+        prefs = u.get("preferences") or {}
+        # Opt-in gate: by default we DO NOT spam users — they must enable in Settings.
+        if not prefs.get("eod_enabled"):
+            continue
+        target_hour = prefs.get("eod_hour")
+        if target_hour is None:
+            target_hour = 17
+        try:
+            target_hour = int(target_hour)
+        except Exception:
+            target_hour = 17
+        # Only fire when the scheduler tick lines up with the user's chosen hour.
+        if now.hour != target_hour:
             continue
 
-        rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> — completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
-        rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} — due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up — no open tasks.</li>"
-        missed_note = f"<p style='color:#b91c1c;'>⚠️ {len(missed)} task(s) missed their due date.</p>" if missed else ""
+        built = await _build_eod_summary_for_user(u, now)
+        if not built:
+            continue
+        html, slack_text, _counts = built
+        channel = (prefs.get("eod_channel") or "email").lower()
 
-        inner = f"""
-        <h2 style="margin:0 0 8px;font-size:20px;">Your day at Tskflow, {u.get('name','friend').split(' ')[0]}</h2>
-        <p style="color:#6b7280;margin:0 0 20px;">{now.strftime('%A, %b %d, %Y')}</p>
-        <h3 style="font-size:15px;margin:16px 0 6px;">✅ Completed today ({len(completed)})</h3>
-        <ul style="padding-left:20px;margin:0;">{rows_done}</ul>
-        <h3 style="font-size:15px;margin:20px 0 6px;">📋 Still open ({len(open_tasks_docs)})</h3>
-        <ul style="padding-left:20px;margin:0;">{rows_open}</ul>
-        {missed_note}
-        """
-        html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
-        try:
-            await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html)
-            sent += 1
-        except Exception:
-            pass
-        # Slack bridge for EOD
-        try:
-            udoc = await db.users.find_one({"id": u["id"]}, {"_id": 0, "preferences": 1})
-            webhook = ((udoc or {}).get("preferences") or {}).get("slack_webhook_url")
+        if channel in ("email", "both"):
+            try:
+                await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html)
+                sent += 1
+            except Exception:
+                pass
+        if channel in ("slack", "both"):
+            webhook = prefs.get("slack_webhook_url")
             if webhook:
-                slack_text = (
-                    f":sunset: *EOD summary — {now.strftime('%b %d')}*\n"
-                    f"\u2705 Completed today: {len(completed)}\n"
-                    f":clipboard: Still open: {len(open_tasks_docs)}\n"
-                    + (f":warning: {len(missed)} missed due date(s)\n" if missed else "")
-                    + f"<{APP_BASE_URL}/dashboard|Open Tskflow>"
-                )
-                await _post_to_slack(webhook, slack_text)
-        except Exception:
-            pass
+                try:
+                    await _post_to_slack(webhook, slack_text)
+                except Exception:
+                    pass
 
     return {"ok": True, "sent": sent}
+
+
+@api_router.post("/eod/preview")
+async def eod_preview_now(current_user: dict = Depends(get_current_user)):
+    """Trigger an EOD digest immediately for the calling user, regardless of schedule.
+    Used by the "Send me a preview" button in Settings."""
+    u = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    now = get_pst_now()
+    built = await _build_eod_summary_for_user(u, now)
+    if not built:
+        return {"ok": True, "sent": False, "reason": "Nothing to summarize yet — no tasks today."}
+    html, slack_text, counts = built
+    prefs = u.get("preferences") or {}
+    channel = (prefs.get("eod_channel") or "email").lower()
+    delivered_to = []
+    if channel in ("email", "both"):
+        try:
+            await send_email_notification(u["email"], f"Tskflow EOD preview — {now.strftime('%b %d')}", html)
+            delivered_to.append("email")
+        except Exception:
+            pass
+    if channel in ("slack", "both"):
+        webhook = prefs.get("slack_webhook_url")
+        if webhook:
+            try:
+                await _post_to_slack(webhook, slack_text)
+                delivered_to.append("slack")
+            except Exception:
+                pass
+    return {"ok": True, "sent": bool(delivered_to), "delivered_to": delivered_to, "counts": counts}
 
 
 # --- Transcript → task drafts (Google Meet flow) ---

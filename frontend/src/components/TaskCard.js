@@ -125,8 +125,18 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                             {task.description ? task.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''}
                         </p>
                         <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <span className={getPriorityClass(task.priority)}>{task.priority}</span>
+                                {(() => {
+                                    if (!task.due_date || task.status === 'Completed' || task.status === 'Declined') return null;
+                                    const d = new Date(task.due_date);
+                                    if (isNaN(d.getTime()) || d >= new Date()) return null;
+                                    return (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded" data-testid={`overdue-badge-${task.id}`}>
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Overdue
+                                        </span>
+                                    );
+                                })()}
                                 {task.calendar_event_id && (
                                     <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                                         <Calendar className="w-3 h-3" />

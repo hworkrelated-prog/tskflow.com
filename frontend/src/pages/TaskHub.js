@@ -916,11 +916,12 @@ const TaskHub = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
-                                                    className="shrink-0 mt-1 text-xs px-2 py-1 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1"
+                                                    className="shrink-0 mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-50 hover:border-indigo-300 shadow-sm transition-colors"
                                                     data-testid="from-transcript-btn"
-                                                    title="Draft tasks from a meeting transcript"
+                                                    title="Auto-draft tasks from a meeting transcript"
                                                 >
-                                                    <FileText className="w-3.5 h-3.5" /> Transcript
+                                                    <FileText className="w-3.5 h-3.5" />
+                                                    <span className="whitespace-nowrap">From transcript</span>
                                                 </button>
                                             </div>
                                         </DialogHeader>
@@ -1039,6 +1040,30 @@ const TaskHub = () => {
                                                 <DollarSign className="w-4 h-4 text-emerald-600" />
                                                 <span>This is a Sales Task <span className="text-xs text-muted-foreground">(involves a customer or prospect)</span></span>
                                             </label>
+
+                                            {/* Advanced options — collapsed by default so the form stays short */}
+                                            <details className="rounded-xl border bg-gray-50/50 group" data-testid="advanced-options">
+                                                <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
+                                                    <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Advanced options</span>
+                                                    <ChevronDown className="w-4 h-4 text-gray-500 group-open:rotate-180 transition-transform" />
+                                                </summary>
+                                                <div className="px-4 pb-4 pt-2 space-y-3">
+                                                    <label className="flex items-start gap-2 text-sm cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={taskForm.requires_screen_recording || false}
+                                                            onChange={(e) => setTaskForm({ ...taskForm, requires_screen_recording: e.target.checked })}
+                                                            data-testid="requires-recording-checkbox"
+                                                            className="rounded mt-0.5"
+                                                        />
+                                                        <span>
+                                                            <span className="font-medium">Require a screen recording from the assignee</span>
+                                                            <span className="block text-xs text-muted-foreground mt-0.5">A prominent banner will appear on their task view asking them to attach a Loom-style recording before they can mark it done.</span>
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                            </details>
+
                                             <Button data-testid="submit-task-button" type="submit" className="w-full rounded-full" disabled={createLoading || selectedAssignees.length === 0}>
                                                 {createLoading ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
                                             </Button>

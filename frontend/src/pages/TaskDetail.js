@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -191,6 +191,15 @@ const TaskDetail = () => {
             // If this is a parent task, load participants + leaderboard for the collapsible section
             if (response.data.is_parent) {
                 const pid = response.data.id;
+                axios.get(`${API}/tasks/parents/${pid}/subtasks`).then((r) => {
+                    setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
+                }).catch(() => setSubtasks([]));
+                axios.get(`${API}/tasks/${pid}/leaderboard`).then((r) => {
+                    setLeaderboard(r.data?.leaderboard || []);
+                }).catch(() => setLeaderboard([]));
+            } else if (response.data.parent_id) {
+                // Subtask — load the parent's leaderboard so the receiver can see how their peers are doing
+                const pid = response.data.parent_id;
                 axios.get(`${API}/tasks/parents/${pid}/subtasks`).then((r) => {
                     setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
                 }).catch(() => setSubtasks([]));
@@ -426,6 +435,54 @@ const TaskDetail = () => {
         } catch (err) {
             toast.error(getErrorMessage(err, 'Failed to send reminders'));
         } finally { setNudging(false); }
+    };
+
+    // Add or remove assignees on an ongoing parent/group task
+    const [showAddAssignees, setShowAddAssignees] = useState(false);
+    const [addAssigneesEmailInput, setAddAssigneesEmailInput] = useState('');
+    const [addAssigneesSelected, setAddAssigneesSelected] = useState([]);
+    const [addAssigneesLoading, setAddAssigneesLoading] = useState(false);
+    const [mentionableUsers, setMentionableUsers] = useState([]);
+    useEffect(() => {
+        (async () => {
+            try {
+                const r = await axios.get(`${API}/users/mentionable`);
+                setMentionableUsers(r.data || []);
+            } catch { /* silent */ }
+        })();
+    }, []);
+
+    const submitAddAssignees = async () => {
+        const list = [...addAssigneesSelected.map((a) => a.type === 'user' ? a.id : a.value)];
+        // Also allow ad-hoc emails still in the input
+        const remaining = addAssigneesEmailInput.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+        remaining.forEach((e) => { if (!list.includes(e)) list.push(e); });
+        if (list.length === 0) { toast.error('Add at least one email or teammate'); return; }
+        setAddAssigneesLoading(true);
+        try {
+            const id = task?.id || taskId;
+            const res = await axios.post(`${API}/tasks/parents/${id}/assignees`, { assignees: list });
+            toast.success(`Added ${res.data?.added ?? 0} assignee(s)`);
+            setShowAddAssignees(false);
+            setAddAssigneesSelected([]);
+            setAddAssigneesEmailInput('');
+            await refreshParentSubtasks();
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'Failed to add assignees'));
+        } finally { setAddAssigneesLoading(false); }
+    };
+
+    const removeAssignee = async (row) => {
+        if (!row?.subtaskId) return;
+        if (!window.confirm(`Remove ${row.name} from this task?`)) return;
+        try {
+            const id = task?.id || taskId;
+            await axios.delete(`${API}/tasks/parents/${id}/assignees/${row.subtaskId}`);
+            toast.success(`Removed ${row.name}`);
+            await refreshParentSubtasks();
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'Failed to remove assignee'));
+        }
     };
 
     const handleCompletionImageUpload = (e) => {
@@ -675,9 +732,8 @@ const TaskDetail = () => {
                                         {user?.id === task.assigned_to && task.created_by_email && (
                                             <span className="text-xs text-gray-400 ml-1">({task.created_by_email})</span>
                                         )}
-                                        {' | '}Assigned to {task.assigned_to_name}
-                                        {user?.id === task.created_by && task.assigned_to_email && (
-                                            <span className="text-xs text-gray-400 ml-1">({task.assigned_to_email})</span>
+                                        {task.is_parent && Array.isArray(subtasks) && subtasks.length > 0 && (
+                                            <> {' | '}Assigned to <span className="font-medium">{subtasks.length} people</span></>
                                         )}
                                     </CardDescription>
                                 </div>
@@ -685,6 +741,29 @@ const TaskDetail = () => {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
+                            {/* Screen recording requirement — shown prominently so the assignee sees it. */}
+                            {task.requires_screen_recording && (
+                                <div className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl p-4 flex items-start gap-3" data-testid="requires-recording-banner">
+                                    <div className="w-9 h-9 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0">
+                                        <Video className="w-4 h-4" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                                            {user?.id === task.assigned_to ? 'A screen recording is required for this task' : 'Assignee must attach a screen recording'}
+                                        </h4>
+                                        <p className="text-sm text-purple-800 mt-0.5">
+                                            {user?.id === task.assigned_to
+                                                ? 'Please record a short Loom-style walkthrough of your work and attach it before marking this task complete.'
+                                                : 'The assignee is expected to attach a screen recording (Loom-style walkthrough) as proof-of-work when they complete this task.'}
+                                        </p>
+                                        {user?.id === task.assigned_to && (
+                                            <Button size="sm" onClick={() => navigate('/recordings')} className="rounded-full h-8 px-3 text-xs mt-2 bg-purple-600 hover:bg-purple-700 text-white" data-testid="open-recorder-btn">
+                                                <Video className="w-3.5 h-3.5 mr-1" /> Open recorder
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <div>
                                     <Label className="text-muted-foreground">Priority</Label>
@@ -700,28 +779,7 @@ const TaskDetail = () => {
                                         <p className="font-semibold text-lg">{task.category}</p>
                                     </div>
                                 )}
-                                {/* Assignee card — always visible for individual tasks. Group/parent tasks have a full Participants section below. */}
-                                {!task.is_parent && task.assigned_to_name && (
-                                    <div className="col-span-2 md:col-span-3">
-                                        <Label className="text-muted-foreground">Assigned to</Label>
-                                        <div className="flex items-center gap-3 mt-1 p-3 rounded-xl border bg-gray-50" data-testid="task-assignee-card">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0">
-                                                {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-semibold text-sm truncate">{task.assigned_to_name}</p>
-                                                {task.assigned_to_email && (
-                                                    <p className="text-xs text-muted-foreground truncate">{task.assigned_to_email}</p>
-                                                )}
-                                            </div>
-                                            {task.parent_id && (
-                                                <Button size="sm" variant="outline" onClick={() => navigate(`/task/${task.parent_id}`)} className="rounded-full text-xs shrink-0" data-testid="open-parent-btn">
-                                                    <Users className="w-3.5 h-3.5 mr-1" /> View group
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
+                                {/* NOTE: The "Assigned to" info is rendered only ONCE — in the "Assignees" card beneath the Comments/Chatter panel. */}
                             </div>
 
                             <div className="min-w-0">
@@ -749,19 +807,7 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
-                            {/* Participants + Leaderboard (only for parent/group tasks) */}
-                            {task.is_parent && (
-                                <ParticipantsSection
-                                    subtasks={subtasks}
-                                    leaderboard={leaderboard}
-                                    showAll={showAllParticipants}
-                                    setShowAll={setShowAllParticipants}
-                                    isCreator={user?.id === task.created_by}
-                                    onReviewSubtask={(sub) => { setSubtaskReviewFor(sub); setSubtaskReviewFeedback(''); }}
-                                    onNudge={handleNudgeUnfinished}
-                                    nudging={nudging}
-                                />
-                            )}
+                            {/* Participants section has been moved beneath the Comments panel so it lives in ONE place. */}
 
                             {/* Action Buttons: AI Summary, Share, Email */}
                             <div className="flex gap-2 flex-wrap pt-4 border-t">
@@ -1165,24 +1211,20 @@ const TaskDetail = () => {
                                 <span className="ml-auto text-xs text-muted-foreground">{comments.length} message{comments.length === 1 ? '' : 's'}</span>
                             </div>
                             <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
-                                {comments.length === 0 ? (
-                                    <p className="text-center text-sm text-gray-500 py-6">No messages yet. Start the conversation.</p>
-                                ) : (
-                                    comments.map((c) => (
-                                        <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="font-semibold text-sm">{c.user_name}</span>
-                                                <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
-                                            </div>
-                                            <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+                                {comments.map((c) => (
+                                    <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="font-semibold text-sm">{c.user_name}</span>
+                                            <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
                                         </div>
-                                    ))
-                                )}
+                                        <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+                                    </div>
+                                ))}
                             </div>
                             <div className="relative">
                                 <Textarea
                                     ref={commentTextareaRef}
-                                    placeholder="Type @ to mention..."
+                                    placeholder="Start the conversation... (type @ to mention someone)"
                                     value={newComment}
                                     onChange={onCommentChange}
                                     onKeyDown={onCommentKeyDown}
@@ -1212,66 +1254,166 @@ const TaskDetail = () => {
                         </CardContent>
                     </Card>
 
-                    {/* Assignees list — mirrors the dashboard "expand assignees" experience. Shown beneath the Comments panel.
-                        For parent/group tasks: lists all subtasks (each clickable to open). For individual tasks: shows the one assignee. */}
+                    {/* Assignees panel — lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
                     {(task.is_parent ? subtasks.length > 0 : Boolean(task.assigned_to_name)) && (
-                        <Card className="border-2 rounded-2xl mt-4" data-testid="task-assignees-panel">
-                            <CardContent className="pt-5">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Users className="w-5 h-5 text-indigo-600" />
-                                    <h3 className="font-semibold">{task.is_parent ? 'Assignees' : 'Assigned to'}</h3>
-                                    {task.is_parent && (
-                                        <span className="ml-auto text-xs text-muted-foreground">{subtasks.filter((s) => s.status === 'Completed').length}/{subtasks.length} done</span>
+                        <div className="mt-4" data-testid="task-assignees-panel">
+                            {task.is_parent ? (
+                                <ParticipantsSection
+                                    subtasks={subtasks}
+                                    leaderboard={leaderboard}
+                                    showAll={showAllParticipants}
+                                    setShowAll={setShowAllParticipants}
+                                    isCreator={user?.id === task.created_by}
+                                    onReviewSubtask={(sub) => { setSubtaskReviewFor(sub); setSubtaskReviewFeedback(''); }}
+                                    onNudge={handleNudgeUnfinished}
+                                    nudging={nudging}
+                                    onAddAssignees={() => setShowAddAssignees(true)}
+                                    onRemoveAssignee={removeAssignee}
+                                />
+                            ) : (
+                                <>
+                                    <Card className="border-2 rounded-2xl">
+                                        <CardContent className="pt-5">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Users className="w-5 h-5 text-indigo-600" />
+                                                <h3 className="font-semibold">Assigned to</h3>
+                                            </div>
+                                            <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0 text-sm">
+                                                    {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate">{task.assigned_to_name}</p>
+                                                    {task.assigned_to_email && <p className="text-xs text-muted-foreground truncate">{task.assigned_to_email}</p>}
+                                                </div>
+                                                {task.parent_id && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => navigate(`/task/${task.parent_id}`)}
+                                                        className="text-xs text-indigo-700 hover:underline shrink-0"
+                                                        data-testid="assignees-open-parent-btn"
+                                                    >
+                                                        View group →
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Peer leaderboard — visible to subtask receivers so they can see how their teammates are progressing. */}
+                                    {task.parent_id && subtasks.length > 1 && (
+                                        <Card className="border-2 rounded-2xl mt-4 overflow-hidden" data-testid="peer-leaderboard-card">
+                                            <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b flex items-center gap-2">
+                                                <Trophy className="w-5 h-5 text-amber-600" />
+                                                <h3 className="font-semibold text-amber-900">Team leaderboard</h3>
+                                                <span className="ml-auto text-xs text-amber-800">See how the team is doing 🚀</span>
+                                            </div>
+                                            <ul className="divide-y">
+                                                {[...subtasks].sort((a, b) => statusRank(a.status) - statusRank(b.status)).slice(0, 8).map((t, i) => {
+                                                    const isMe = t.assigned_to === user?.id;
+                                                    const done = t.status === 'Completed';
+                                                    return (
+                                                        <li key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-indigo-50/50' : ''}`} data-testid={`peer-leaderboard-row-${t.id}`}>
+                                                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? 'bg-emerald-500 text-white' : i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-700'}`}>{done ? '✓' : i + 1}</span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium truncate">
+                                                                    {t.assigned_to_name || t.assigned_to_email || 'Unknown'}
+                                                                    {isMe && <span className="ml-2 text-[10px] text-indigo-700 font-semibold uppercase tracking-wide">You</span>}
+                                                                </p>
+                                                                <p className="text-xs text-muted-foreground truncate">{t.status}</p>
+                                                            </div>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        </Card>
                                     )}
-                                </div>
-                                {task.is_parent ? (
-                                    <ul className="divide-y -mx-2">
-                                        {[...subtasks].sort((a, b) => statusRank(a.status) - statusRank(b.status)).map((t) => {
-                                            const done = t.status === 'Completed';
-                                            return (
-                                                <li
-                                                    key={t.id}
-                                                    className={`flex items-center gap-3 px-2 py-2.5 hover:bg-indigo-50/50 cursor-pointer rounded-lg ${done ? 'opacity-70' : ''}`}
-                                                    onClick={() => navigate(`/task/${t.id}`)}
-                                                    data-testid={`task-assignee-row-${t.id}`}
-                                                >
-                                                    {done ? <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" /> : <Clock className="w-4 h-4 text-gray-400 shrink-0" />}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate">{t.assigned_to_name || t.assigned_to_email || 'Unknown'}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{t.status}</p>
-                                                    </div>
-                                                    <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                ) : (
-                                    <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
-                                        <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0 text-sm">
-                                            {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{task.assigned_to_name}</p>
-                                            {task.assigned_to_email && <p className="text-xs text-muted-foreground truncate">{task.assigned_to_email}</p>}
-                                        </div>
-                                        {task.parent_id && (
-                                            <button
-                                                type="button"
-                                                onClick={() => navigate(`/task/${task.parent_id}`)}
-                                                className="text-xs text-indigo-700 hover:underline shrink-0"
-                                                data-testid="assignees-open-parent-btn"
-                                            >
-                                                View group →
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                                </>
+                            )}
+                        </div>
                     )}
                 </aside>
                 </div>
             </main>
+
+            {/* Add assignees to an ongoing group task */}
+            <Dialog open={showAddAssignees} onOpenChange={setShowAddAssignees}>
+                <DialogContent className="rounded-2xl max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Add teammates to this task</DialogTitle>
+                        <DialogDescription>Assignees will receive an email invite for this task.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        {addAssigneesSelected.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {addAssigneesSelected.map((a, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-1 rounded-full text-xs">
+                                        {a.type === 'user' ? `${a.name} <${a.email}>` : a.value}
+                                        <button type="button" onClick={() => setAddAssigneesSelected(addAssigneesSelected.filter((_, idx) => idx !== i))} className="ml-0.5 hover:text-indigo-950"><X className="w-3 h-3" /></button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <Input
+                            placeholder="Type email and press Enter — or pick from teammates below"
+                            value={addAssigneesEmailInput}
+                            onChange={(e) => setAddAssigneesEmailInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ',') {
+                                    e.preventDefault();
+                                    const emails = addAssigneesEmailInput.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+                                    if (emails.length === 0) return;
+                                    const next = [...addAssigneesSelected];
+                                    emails.forEach((em) => {
+                                        const found = mentionableUsers.find((u) => u.email?.toLowerCase() === em.toLowerCase());
+                                        const already = next.some((a) => (a.type === 'user' && a.email === em) || (a.type === 'email' && a.value === em));
+                                        if (already) return;
+                                        if (found) next.push({ type: 'user', id: found.id, name: found.name, email: found.email });
+                                        else next.push({ type: 'email', value: em });
+                                    });
+                                    setAddAssigneesSelected(next);
+                                    setAddAssigneesEmailInput('');
+                                }
+                            }}
+                            className="rounded-xl"
+                            data-testid="add-assignees-email-input"
+                        />
+                        <div className="border rounded-xl max-h-56 overflow-y-auto divide-y">
+                            {mentionableUsers.length === 0 ? (
+                                <div className="p-3 text-xs text-muted-foreground">No teammates found.</div>
+                            ) : mentionableUsers.filter((u) => !subtasks.some((s) => s.assigned_to === u.id)).map((u) => {
+                                const selected = addAssigneesSelected.some((a) => a.type === 'user' && a.id === u.id);
+                                return (
+                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${selected ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => {
+                                                if (selected) setAddAssigneesSelected(addAssigneesSelected.filter((a) => !(a.type === 'user' && a.id === u.id)));
+                                                else setAddAssigneesSelected([...addAssigneesSelected, { type: 'user', id: u.id, name: u.name, email: u.email }]);
+                                            }}
+                                            className="accent-indigo-600 w-4 h-4"
+                                        />
+                                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                                            {(u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium truncate">{u.name}</p>
+                                            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                                        </div>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-3">
+                        <Button variant="outline" onClick={() => setShowAddAssignees(false)} className="rounded-full">Cancel</Button>
+                        <Button onClick={submitAddAssignees} disabled={addAssigneesLoading} className="rounded-full bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="submit-add-assignees-btn">
+                            {addAssigneesLoading ? 'Adding...' : 'Add to task'}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Subtask review modal — for parent/group tasks, review each assignee's submission individually */}
             <Dialog open={Boolean(subtaskReviewFor)} onOpenChange={(o) => { if (!o) { setSubtaskReviewFor(null); setSubtaskReviewFeedback(''); } }}>
@@ -1333,7 +1475,7 @@ const statusRank = (s) => {
     return 1;
 };
 
-const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCreator = false, onReviewSubtask, onNudge, nudging = false }) => {
+const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCreator = false, onReviewSubtask, onNudge, nudging = false, onAddAssignees, onRemoveAssignee }) => {
     // Merge subtasks + leaderboard entries for status columns
     const rows = React.useMemo(() => {
         const byId = {};
@@ -1394,8 +1536,13 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                     <span className="font-semibold">Participants ({rows.length})</span>
                     <span className="text-xs text-muted-foreground">— pending first, completed at the bottom</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xs text-emerald-700">{completedCount}/{rows.length} done · {pct}%</span>
+                    {isCreator && onAddAssignees && (
+                        <Button size="sm" variant="outline" onClick={onAddAssignees} className="rounded-full h-7 px-3 text-xs" data-testid="add-assignees-btn">
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                        </Button>
+                    )}
                     {isCreator && unfinishedCount > 0 && onNudge && (
                         <Button size="sm" variant="outline" onClick={onNudge} disabled={nudging} className="rounded-full h-7 px-3 text-xs" data-testid="nudge-unfinished-btn">
                             <Mail className="w-3.5 h-3.5 mr-1" /> {nudging ? 'Sending...' : `Nudge ${unfinishedCount}`}
@@ -1431,6 +1578,17 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                                 >
                                     Review
                                 </Button>
+                            )}
+                            {isCreator && r.subtaskId && onRemoveAssignee && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onRemoveAssignee(r); }}
+                                    title="Remove from group"
+                                    className="p-1 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                                    data-testid={`remove-assignee-${r.subtaskId}`}
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
                             )}
                             {canOpen && (
                                 <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
