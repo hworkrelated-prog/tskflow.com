@@ -384,6 +384,50 @@ const TaskDetail = () => {
         }
     };
 
+    // Review a single subtask from the parent group task view (approve / send back)
+    const [subtaskReviewFor, setSubtaskReviewFor] = useState(null); // { id, name, note }
+    const [subtaskReviewFeedback, setSubtaskReviewFeedback] = useState('');
+    const [subtaskReviewLoading, setSubtaskReviewLoading] = useState(false);
+
+    const refreshParentSubtasks = async () => {
+        try {
+            const id = task?.id || taskId;
+            const r = await axios.get(`${API}/tasks/parents/${id}/subtasks`);
+            setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
+        } catch { /* silent */ }
+        try {
+            const id = task?.id || taskId;
+            const r = await axios.get(`${API}/tasks/${id}/leaderboard`);
+            setLeaderboard(r.data?.leaderboard || []);
+        } catch { /* silent */ }
+    };
+
+    const handleSubtaskReview = async (subtaskId, action, feedback = null) => {
+        setSubtaskReviewLoading(true);
+        try {
+            await axios.put(`${API}/tasks/${subtaskId}/review`, { action, feedback });
+            toast.success(action === 'accept' ? 'Submission approved' : 'Sent back for revision');
+            setSubtaskReviewFor(null);
+            setSubtaskReviewFeedback('');
+            await refreshParentSubtasks();
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'Failed to review submission'));
+        } finally { setSubtaskReviewLoading(false); }
+    };
+
+    // Nudge everyone in a parent group who hasn't finished yet
+    const [nudging, setNudging] = useState(false);
+    const handleNudgeUnfinished = async () => {
+        const id = task?.id || taskId;
+        setNudging(true);
+        try {
+            const res = await axios.post(`${API}/tasks/parents/${id}/remind`);
+            toast.success(`Reminder sent to ${res.data?.reminded ?? 'unfinished'} teammate(s)`);
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'Failed to send reminders'));
+        } finally { setNudging(false); }
+    };
+
     const handleCompletionImageUpload = (e) => {
         const files = Array.from(e.target.files);
         files.forEach(file => {
@@ -689,6 +733,10 @@ const TaskDetail = () => {
                                     leaderboard={leaderboard}
                                     showAll={showAllParticipants}
                                     setShowAll={setShowAllParticipants}
+                                    isCreator={user?.id === task.created_by}
+                                    onReviewSubtask={(sub) => { setSubtaskReviewFor(sub); setSubtaskReviewFeedback(''); }}
+                                    onNudge={handleNudgeUnfinished}
+                                    nudging={nudging}
                                 />
                             )}
 
@@ -1218,6 +1266,52 @@ const TaskDetail = () => {
                 </aside>
                 </div>
             </main>
+
+            {/* Subtask review modal — for parent/group tasks, review each assignee's submission individually */}
+            <Dialog open={Boolean(subtaskReviewFor)} onOpenChange={(o) => { if (!o) { setSubtaskReviewFor(null); setSubtaskReviewFeedback(''); } }}>
+                <DialogContent className="rounded-2xl max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Review submission — {subtaskReviewFor?.name}</DialogTitle>
+                        <DialogDescription>Approve their work or send it back with feedback.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        {subtaskReviewFor?.completion_note && (
+                            <div className="rounded-xl bg-gray-50 border p-3 max-h-48 overflow-y-auto">
+                                <p className="text-xs text-muted-foreground mb-1">Completion note</p>
+                                <p className="text-sm whitespace-pre-wrap">{subtaskReviewFor.completion_note}</p>
+                            </div>
+                        )}
+                        {Array.isArray(subtaskReviewFor?.completion_note_images) && subtaskReviewFor.completion_note_images.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {subtaskReviewFor.completion_note_images.map((img, i) => (
+                                    <img key={i} src={img} alt="attachment" className="w-24 h-24 object-cover rounded-lg border" />
+                                ))}
+                            </div>
+                        )}
+                        <Textarea placeholder="Optional feedback if sending back for revision..." rows={3} value={subtaskReviewFeedback} onChange={(e) => setSubtaskReviewFeedback(e.target.value)} className="rounded-xl" data-testid="subtask-review-feedback" />
+                    </div>
+                    <div className="flex gap-2 justify-end pt-3">
+                        <Button variant="outline" onClick={() => { setSubtaskReviewFor(null); setSubtaskReviewFeedback(''); }} className="rounded-full">Cancel</Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => handleSubtaskReview(subtaskReviewFor.subtaskId, 'send_back', subtaskReviewFeedback || null)}
+                            disabled={subtaskReviewLoading}
+                            className="rounded-full border-amber-300 text-amber-800 hover:bg-amber-50"
+                            data-testid="subtask-send-back-btn"
+                        >
+                            <RotateCcw className="w-4 h-4 mr-1" /> Send Back
+                        </Button>
+                        <Button
+                            onClick={() => handleSubtaskReview(subtaskReviewFor.subtaskId, 'accept')}
+                            disabled={subtaskReviewLoading}
+                            className="rounded-full bg-green-600 hover:bg-green-700 text-white"
+                            data-testid="subtask-approve-btn"
+                        >
+                            <CheckCircle className="w-4 h-4 mr-1" /> Approve
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
@@ -1233,7 +1327,7 @@ const statusRank = (s) => {
     return 1;
 };
 
-const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => {
+const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCreator = false, onReviewSubtask, onNudge, nudging = false }) => {
     // Merge subtasks + leaderboard entries for status columns
     const rows = React.useMemo(() => {
         const byId = {};
@@ -1243,13 +1337,17 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => 
             const status = t.status || lb.status || 'Pending';
             return {
                 key: t.id || lb.task_id || lb.user_id,
+                subtaskId: t.id || lb.task_id,
                 name: t.assigned_to_name || lb.name || 'Unknown',
+                email: t.assigned_to_email,
                 status,
                 completion_hours: lb.completion_hours ?? null,
                 completed: status === 'Completed',
                 submitted: ['Review Pending', 'Completed'].includes(status),
                 accepted: ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(status),
                 viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(status),
+                completion_note: t.completion_note,
+                completion_note_images: t.completion_note_images,
             };
         });
         // If leaderboard was empty, fall back to subtasks
@@ -1257,13 +1355,17 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => 
             subtasks.forEach((t) => {
                 merged.push({
                     key: t.id,
+                    subtaskId: t.id,
                     name: t.assigned_to_name || t.assigned_to_email || 'Unknown',
+                    email: t.assigned_to_email,
                     status: t.status || 'Pending',
                     completion_hours: null,
                     completed: t.status === 'Completed',
                     submitted: ['Review Pending', 'Completed'].includes(t.status),
                     accepted: ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(t.status),
                     viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(t.status),
+                    completion_note: t.completion_note,
+                    completion_note_images: t.completion_note_images,
                 });
             });
         }
@@ -1275,6 +1377,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => 
     if (rows.length === 0) return null;
     const visible = showAll ? rows : rows.slice(0, 5);
     const completedCount = rows.filter((r) => r.completed).length;
+    const unfinishedCount = rows.length - completedCount;
     const pct = Math.round((completedCount / rows.length) * 100);
 
     return (
@@ -1287,6 +1390,11 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => 
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-xs text-emerald-700">{completedCount}/{rows.length} done · {pct}%</span>
+                    {isCreator && unfinishedCount > 0 && onNudge && (
+                        <Button size="sm" variant="outline" onClick={onNudge} disabled={nudging} className="rounded-full h-7 px-3 text-xs" data-testid="nudge-unfinished-btn">
+                            <Mail className="w-3.5 h-3.5 mr-1" /> {nudging ? 'Sending...' : `Nudge ${unfinishedCount}`}
+                        </Button>
+                    )}
                 </div>
             </div>
             <ul className="divide-y">
@@ -1303,6 +1411,16 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => 
                             </div>
                         </div>
                         <div className="text-xs text-gray-500 shrink-0">{r.completion_hours ? `${r.completion_hours}h` : '—'}</div>
+                        {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
+                            <Button
+                                size="sm"
+                                onClick={() => onReviewSubtask(r)}
+                                className="rounded-full h-7 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white shrink-0"
+                                data-testid={`review-subtask-${r.subtaskId}`}
+                            >
+                                Review
+                            </Button>
+                        )}
                     </li>
                 ))}
             </ul>

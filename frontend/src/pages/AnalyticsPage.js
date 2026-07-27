@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle, Download } from 'lucide-react';
+import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle, Download, Trophy, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import { getErrorMessage } from '@/lib/utils';
@@ -134,7 +134,7 @@ const AnalyticsPage = () => {
                 )}
             </AnimatePresence>
 
-            <header className="glass-header border-b">
+            <header className="glass-header border-b sticky top-0 z-30 bg-white/95 backdrop-blur">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
@@ -328,6 +328,11 @@ const AnalyticsPage = () => {
                                 </Card>
                             </div>
 
+                            {/* Best / Worst executor analysis */}
+                            {analytics.assignee_breakdown && analytics.assignee_breakdown.length >= 2 && (
+                                <BestWorstAnalysis breakdown={analytics.assignee_breakdown} />
+                            )}
+
                             {/* Detailed Assignee Breakdown */}
                             {analytics.assignee_breakdown && analytics.assignee_breakdown.length > 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl">
@@ -353,8 +358,8 @@ const AnalyticsPage = () => {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        {/* Table Header */}
-                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-gray-50 rounded-xl mb-4 text-xs font-semibold text-muted-foreground" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
+                                        {/* Table Header — sticky when scrolling within the card */}
+                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-gray-50 rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-0 z-10 shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
                                             <div>Team Member</div>
                                             <div className="text-center">Assigned</div>
                                             <div className="text-center">Completed</div>
@@ -577,3 +582,116 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
 };
 
 export default AnalyticsPage;
+
+// ---- Best / Worst executor analysis card ----
+// Ranks assignees using a composite score:
+//   score = 0.55 * completion_rate + 0.25 * response_rate + 0.20 * speed_score
+// where speed_score = 100 * (1 - min(avg_response_hours, 72) / 72), so fast responders score higher.
+// Only assignees with tasks_assigned > 0 are considered.
+const BestWorstAnalysis = ({ breakdown }) => {
+    const rows = (breakdown || []).filter((a) => (a.tasks_assigned || 0) > 0);
+    if (rows.length < 2) return null;
+
+    const speedScore = (h) => {
+        if (h == null) return 50; // neutral if unknown
+        const capped = Math.min(72, Math.max(0, h));
+        return Math.round(100 * (1 - capped / 72));
+    };
+    const scored = rows.map((a) => ({
+        ...a,
+        _speed: speedScore(a.avg_response_hours),
+        _score: Math.round(
+            0.55 * (a.completion_rate || 0) +
+            0.25 * (a.response_rate || 0) +
+            0.20 * speedScore(a.avg_response_hours)
+        ),
+    })).sort((a, b) => b._score - a._score);
+
+    const best = scored[0];
+    const worst = scored[scored.length - 1];
+    if (best.email === worst.email) return null;
+
+    // Team medians for the "why"
+    const median = (arr) => {
+        if (arr.length === 0) return 0;
+        const s = [...arr].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+    };
+    const medCompletion = median(scored.map((s) => s.completion_rate || 0));
+    const medResponse = median(scored.map((s) => (s.avg_response_hours == null ? 0 : s.avg_response_hours)));
+
+    const fmtHrs = (h) => (h == null ? '—' : h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${h}h` : `${(h / 24).toFixed(1)}d`);
+
+    const bestReasons = [
+        `Completed ${best.tasks_completed}/${best.tasks_assigned} tasks (${best.completion_rate || 0}%)${medCompletion ? ` — ${Math.max(0, (best.completion_rate || 0) - medCompletion)} pts above the team median (${medCompletion}%).` : '.'}`,
+        `Responds in ~${fmtHrs(best.avg_response_hours)}${best.avg_response_hours != null && medResponse ? ` — ${best.avg_response_hours < medResponse ? 'faster' : 'slower'} than the team median (${fmtHrs(medResponse)}).` : '.'}`,
+        `Response rate: ${best.response_rate || 0}%.`,
+    ];
+    const worstReasons = [
+        `Only ${worst.tasks_completed}/${worst.tasks_assigned} tasks completed (${worst.completion_rate || 0}%)${medCompletion ? ` — ${Math.max(0, medCompletion - (worst.completion_rate || 0))} pts below the team median (${medCompletion}%).` : '.'}`,
+        `Responds in ~${fmtHrs(worst.avg_response_hours)}${worst.avg_response_hours != null && medResponse ? ` — ${worst.avg_response_hours > medResponse ? 'slower' : 'faster'} than the team median (${fmtHrs(medResponse)}).` : '.'}`,
+        `${(worst.tasks_pending || 0) > 0 ? `${worst.tasks_pending} tasks are still open.` : `Response rate: ${worst.response_rate || 0}%.`}`,
+    ];
+
+    return (
+        <Card className="border-2 shadow-soft rounded-2xl" data-testid="best-worst-analysis-card">
+            <CardHeader>
+                <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                    <TrendingUp className="w-6 h-6" />
+                    Who&apos;s carrying the team &mdash; and who needs help
+                </CardTitle>
+                <CardDescription>Composite score of completion rate, response rate and speed. Scored out of 100.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Best */}
+                <div className="border-2 border-emerald-200 bg-emerald-50/50 rounded-2xl p-5" data-testid="best-performer-card">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-11 h-11 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                            <Trophy className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Top performer</p>
+                            <p className="font-semibold text-lg truncate">{best.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{best.email}</p>
+                        </div>
+                        <span className="text-2xl font-bold text-emerald-700 tabular-nums">{best._score}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-1.5">Why they&apos;re leading</p>
+                    <ul className="space-y-1.5 text-sm text-emerald-900">
+                        {bestReasons.map((r, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                                <span>{r}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                {/* Worst */}
+                <div className="border-2 border-red-200 bg-red-50/50 rounded-2xl p-5" data-testid="worst-performer-card">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-11 h-11 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs uppercase tracking-wide text-red-700 font-semibold">Needs a check-in</p>
+                            <p className="font-semibold text-lg truncate">{worst.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{worst.email}</p>
+                        </div>
+                        <span className="text-2xl font-bold text-red-700 tabular-nums">{worst._score}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-red-800 uppercase tracking-wide mb-1.5">Why they&apos;re struggling</p>
+                    <ul className="space-y-1.5 text-sm text-red-900">
+                        {worstReasons.map((r, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                                <span>{r}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </CardContent>
+        </Card>
+    );
+};

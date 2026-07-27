@@ -400,11 +400,14 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Recording library backend endpoints"
+    - "Standalone recording title + metadata fields"
+    - "Per-subtask review on parent tasks"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
-  notes: "July 2025 batch #3 testing complete - all features working. Slack Bridge (preferences merge, test endpoint, best-effort posting), product updates expanded to 18 entries. All regression tests passed."
+  notes: "July 2025 batch #6 in progress — recording library, camera compositing, better group task review, sticky analytics header, best/worst performer analysis."
 
   - task: "Email Verification Flow - Security Enhancement"
     implemented: true
@@ -759,8 +762,63 @@ agent_communication:
   - agent: "testing"
     message: "✅ JULY 2025 BATCH #3 COMPREHENSIVE TESTING COMPLETE (32/34 tests passed - 94.1%): Full regression + new-feature testing completed successfully. BATCH #3 NEW FEATURES (13/13 tests passed - 100%): (1) Preferences MERGE: 6/6 tests passed - partial updates merge correctly, no overwriting of existing preferences. (2) Slack Test Endpoint: 3/3 tests passed - correctly rejects invalid URLs with 400, fake Slack URLs return 502 (not 500). (3) Slack Best-Effort Posting: 4/4 tests passed - comment creation returns 200 even with bad webhook, notifications still created, fire-and-forget working. (4) Product Updates: 1/1 test passed - returns 18 updates (was 13), u14.area='Slack Bridge' confirmed. BATCH #2 REGRESSION (19/21 tests passed - 90.5%): All critical endpoints working: is_sales_task field (single + bulk), parents/subtasks, leaderboards (personal + org), analytics (standard + personal), AI summaries (v1 + v2 + task-specific), recordings, notifications (all endpoints), mentionable users, EOD report. Minor issues (2): POST /api/task-drafts/from-transcript returns 400 for short text (expected validation), GET /api/task-drafts returns {drafts:[]} not [] (correct API design, test expectation issue). LATENCY ANALYSIS: AI endpoints avg=0.00s max=0.00s (<15s requirement ✅), Other endpoints avg=0.01s max=0.22s (<2s requirement ✅). ALL BATCH #3 FEATURES PRODUCTION-READY. No critical bugs found. EMERGENT_LLM_KEY not configured - graceful fallback working correctly (no 5xx errors)."
 
+
+  - agent: "main"
+    message: "[Jul 2025 batch #6 — recording library + review pass] Backend changes to verify: (A) POST /api/recordings/standalone now ALSO accepts optional title, description, duration_seconds, size_bytes, mime_type in the JSON body. Response should include title (defaults to `Recording {timestamp}` when omitted) along with the existing recording_id, shareable_link, shareable_token. (B) NEW: GET /api/recordings/mine — returns {recordings: [...], count: N} for the current user, newest first. Each item must include id, title, description, recording_url, shareable_token, shareable_link, created_at, duration_seconds, size_bytes, mime_type. Expired recordings (auto_delete_at in past) are filtered out. (C) NEW: DELETE /api/recordings/{recording_id} — 403 for other users' recordings, 404 if missing, 200 with {ok:true} on success. Verify: creating a recording with a JSON body {recording_url, title, duration_seconds, size_bytes, mime_type} correctly persists all fields (visible in GET /api/recordings/mine) and existing test users can delete their own recordings but not other users'. Also verify route order: /api/recordings/mine matches BEFORE /api/recordings/{token} — a request to /api/recordings/mine should return the list, not 404. Regression: (D) POST /api/recordings/standalone with only {recording_url} still works and returns a title auto-generated from the timestamp. (E) GET /api/recordings/{token} still works for shareable-link viewers. (F) PUT /api/tasks/{task_id}/review still works for subtasks — the frontend now calls it per-subtask on parent group tasks so the endpoint must still accept action='accept' or action='send_back' with optional feedback for any task the current user created, including subtasks that live under a parent. Credentials: owner@acmecorp.com / Password123, alice@acmecorp.com / Password123, bob@acmecorp.com / Password123."
+
   - agent: "main"
     message: "[Jul 2025 batch #4 — bug-fix pass] Fixes applied for reported issues: (1) TaskHub was rendering the OLD StandaloneRecorder instead of the new ScreenRecorder with floating controls + webcam bubble; swapped to ScreenRecorder. (2) Bulk-delete now cascades — when a parent/group task ID is included in POST /api/tasks/bulk-delete, all its subtasks are ALSO soft-deleted. Please verify: create a group of 2 subtasks via POST /api/tasks/bulk. Take note of parent_id + subtask_ids. POST /api/tasks/bulk-delete with just [parent_id] → response.deleted_count should be 3 (parent + 2 subtasks). Verify GET /api/tasks/{subtask_id} returns 404 or the subtask has deleted:true. (3) Simpler Slack UX and empty-string disconnect flow: PUT /api/auth/preferences with body {\"slack_webhook_url\":\"\"} should still merge cleanly (do not error out) and GET /api/auth/preferences.slack_webhook_url should reflect the empty string (or be absent). (4) Ensure GET /api/tasks/parents/{parent_id}/subtasks still works (used by the new inline expand + nudge flow). (5) POST /api/tasks/parents/{parent_id}/remind still returns {message, reminded: count}. Please regression-verify these plus the previous batches' endpoints. Credentials: owner@acmecorp.com / Password123, alice@acmecorp.com / Password123, bob@acmecorp.com / Password123."
 
   - agent: "main"
     message: "[Jul 2025 batch #5 — bug-fix + UX polish] Frontend-only changes. (1) Recording preview reliability: replaced fragile window.opener bridge with IndexedDB persistence (new /app/frontend/src/lib/recordingStore.js). ScreenRecorder now saves the blob to IndexedDB on stop AND opens the editor in a new tab (without noopener). RecordingEditorPage reads from IndexedDB first, then falls back to opener/sessionStorage, then polls IndexedDB for a few seconds. Video preview now shows an animated loading indicator instead of a scary 'No recording found' message. Blob is cleared from IndexedDB after successful save/share/assign. Floating recorder bar position now clamps to viewport bounds on load AND on window resize so it can never be pushed off-screen by stale localStorage. (2) Hide trash icon from main dashboard: removed the 'Recently Deleted' expandable section from TaskHub. Delete/restore controls now live only inside individual task view (TaskDetail already has this). (3) Group tasks in multi-select: ParentTaskGroup already supported selection via checkbox; extended so that clicking anywhere on the card body ALSO toggles selection when in selectionMode (vs. navigating to task detail). The 'View Task' button still navigates regardless. (4) Simpler Slack setup: rewrote the Slack section in SettingsPage with a big one-click 'Open Slack & create a webhook' button (with real Slack logo), a collapsible '<details> Show me how (30 seconds)' with 5-step walkthrough, and auto-connect on paste of a valid Slack URL (regex validation). Success state shows a masked webhook URL, test message button, and disconnect. No backend changes required. Please quickly re-verify: (a) frontend still compiles (webpack shows only pre-existing warnings), (b) Slack UI looks clean and the auto-connect happens on pasting a valid https://hooks.slack.com/services/... URL, (c) 'Recently Deleted' is gone from TaskHub, (d) Record Screen button still starts recording and produces preview in the editor tab. Screenshots confirm all four changes render correctly."
+
+  - task: "Recording Library - POST /api/recordings/standalone with Metadata"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (Batch #6): POST /api/recordings/standalone with full metadata working correctly. Accepts JSON body with recording_url, title, description, duration_seconds, size_bytes, mime_type. Response includes recording_id, shareable_link (format: http://localhost:3000/recording/{token}), shareable_token, and title='My test rec'. All required fields present. Latency: 0.003s. Also tested minimal version with only recording_url - title defaults to 'Recording {date}' as expected. Feature is production-ready."
+
+  - task: "Recording Library - GET /api/recordings/mine"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (Batch #6): GET /api/recordings/mine working correctly. Returns {recordings: [...], count: N} with all required fields: id, title, description, recording_url, shareable_token, shareable_link, created_at, duration_seconds, size_bytes, mime_type. Route order verified: /api/recordings/mine matches BEFORE /api/recordings/{token} (no 404 'recording not found' error). Retrieved 4 recordings, created recording found in list. Latency: 0.002s. Feature is production-ready."
+
+  - task: "Recording Library - DELETE /api/recordings/{recording_id}"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (Batch #6): DELETE /api/recordings/{recording_id} working correctly. (1) As owner: returns 200 with {ok: true}, recording deleted successfully and verified no longer in GET /api/recordings/mine. (2) As alice (different user): correctly returns 403 Forbidden when trying to delete owner's recording. (3) Non-existent recording_id: correctly returns 404 Not Found. All authorization and validation working as expected. Latencies: 0.002-0.003s. Feature is production-ready."
+
+  - task: "Per-Subtask Review - PUT /api/tasks/{task_id}/review"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED (Batch #6 Regression): PUT /api/tasks/{task_id}/review working correctly for subtasks. Full workflow tested: (1) Owner creates bulk task with 2 assignees (alice, bob). (2) Alice accepts and completes her subtask (status becomes 'Review Pending'). (3) Owner reviews alice's subtask with action='accept' - returns 200 with message 'Task approved and completed'. (4) Bob accepts and completes his subtask. (5) Owner reviews bob's subtask with action='send_back' and feedback='please redo' - returns 200, status changes back to 'Accepted', review_feedback field set correctly. Both review actions working as expected. Latencies: 0.004-0.005s. Feature is production-ready."
+
+  - agent: "testing"
+    message: "✅ JULY 2025 BATCH #6 COMPREHENSIVE TESTING COMPLETE (16/16 tests passed - 100%): All recording library endpoints and per-subtask review functionality tested successfully. BATCH #6 NEW FEATURES (10/10 tests passed - 100%): (1) POST /api/recordings/standalone with full metadata: accepts title, description, duration_seconds, size_bytes, mime_type. Returns recording_id, shareable_link, shareable_token, and title. (2) POST /api/recordings/standalone with minimal data: only recording_url required, title defaults to 'Recording {date}'. (3) GET /api/recordings/mine: returns {recordings: [...], count: N} with all required fields. Route order verified - /mine matches before /{token}. (4) DELETE /api/recordings/{recording_id}: owner can delete (200), other users get 403, non-existent returns 404. Verified deletion removes from GET /mine. (5) GET /api/recordings/{token}: regression test passed, shareable links work. (6) PUT /api/tasks/{task_id}/review: both action='accept' and action='send_back' work correctly for subtasks. Status changes and feedback field set as expected. BATCH #3 REGRESSION (6/6 tests passed - 100%): All critical endpoints still working: is_sales_task field, parents/subtasks with assigned_to_name enrichment, ai-summary-v2, leaderboard (personal + org), product-updates (18 entries). LATENCY ANALYSIS: AI endpoints avg=0.00s max=0.00s (<15s requirement ✅), Other endpoints avg=0.00s max=0.00s (<2s requirement ✅). ALL BATCH #6 FEATURES PRODUCTION-READY. No critical bugs found. Zero failures."

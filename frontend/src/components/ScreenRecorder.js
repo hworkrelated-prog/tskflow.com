@@ -115,18 +115,115 @@ export const ScreenRecorder = ({ onSaved }) => {
     const micStreamRef = useRef(null);
     const camStreamRef = useRef(null);
     const mixedStreamRef = useRef(null);
+    const canvasStreamRef = useRef(null);
+    const rafRef = useRef(null);
+    const screenVideoElRef = useRef(null);
+    const camVideoElRef = useRef(null);
     const recorderRef = useRef(null);
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
     const mimeTypeRef = useRef('video/webm');
 
     const stopAllTracks = () => {
-        [displayStreamRef, micStreamRef, camStreamRef, mixedStreamRef].forEach((r) => {
+        if (rafRef.current) { try { cancelAnimationFrame(rafRef.current); } catch { /* noop */ } rafRef.current = null; }
+        [displayStreamRef, micStreamRef, camStreamRef, mixedStreamRef, canvasStreamRef].forEach((r) => {
             try { r.current?.getTracks?.().forEach((t) => t.stop()); } catch { /* noop */ }
             r.current = null;
         });
+        screenVideoElRef.current = null;
+        camVideoElRef.current = null;
         setCamStream(null);
     };
+
+    // Composite screen video + circular webcam bubble into a canvas and return its stream.
+    const buildCompositeStream = async (displayStream, camMediaStream) => {
+        const displayTrack = displayStream.getVideoTracks()[0];
+        const settings = displayTrack?.getSettings?.() || {};
+        const width = settings.width || 1280;
+        const height = settings.height || 720;
+
+        const screenVideo = document.createElement('video');
+        screenVideo.srcObject = displayStream;
+        screenVideo.muted = true;
+        screenVideo.playsInline = true;
+        await screenVideo.play().catch(() => {});
+        screenVideoElRef.current = screenVideo;
+
+        let camVideo = null;
+        if (camMediaStream) {
+            camVideo = document.createElement('video');
+            camVideo.srcObject = camMediaStream;
+            camVideo.muted = true;
+            camVideo.playsInline = true;
+            await camVideo.play().catch(() => {});
+            camVideoElRef.current = camVideo;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        // Bubble geometry (~14% of the smaller dimension, min 120px, capped 260px)
+        const computeBubble = () => {
+            const size = Math.max(120, Math.min(260, Math.round(Math.min(width, height) * 0.16)));
+            const margin = Math.round(size * 0.14);
+            const cx = margin + size / 2;
+            const cy = height - margin - size / 2;
+            return { size, cx, cy, margin };
+        };
+
+        const draw = () => {
+            try {
+                // 1) Fill background (black) then draw the screen frame
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, width, height);
+                if (screenVideo.readyState >= 2) {
+                    ctx.drawImage(screenVideo, 0, 0, width, height);
+                }
+                // 2) Draw circular webcam bubble in bottom-left, mirrored, with white border
+                if (camVideo && camOnRef.current && camVideo.readyState >= 2) {
+                    const { size, cx, cy } = computeBubble();
+                    const r = size / 2;
+                    ctx.save();
+                    // White ring
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                    // Clip to circle
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                    ctx.clip();
+                    // Mirror the webcam horizontally to feel natural
+                    ctx.translate(cx + r, cy - r);
+                    ctx.scale(-1, 1);
+                    // Cover fit: compute source crop to preserve aspect
+                    const cw = camVideo.videoWidth || size;
+                    const ch = camVideo.videoHeight || size;
+                    const sr = cw / ch;
+                    let sx = 0, sy = 0, sW = cw, sH = ch;
+                    if (sr > 1) { // wider than tall
+                        sW = ch; sx = (cw - ch) / 2;
+                    } else if (sr < 1) {
+                        sH = cw; sy = (ch - cw) / 2;
+                    }
+                    ctx.drawImage(camVideo, sx, sy, sW, sH, 0, 0, size, size);
+                    ctx.restore();
+                }
+            } catch { /* keep looping */ }
+            rafRef.current = requestAnimationFrame(draw);
+        };
+        rafRef.current = requestAnimationFrame(draw);
+
+        const canvasStream = canvas.captureStream(30);
+        canvasStreamRef.current = canvasStream;
+        return canvasStream;
+    };
+
+    // Keep a live ref of camOn so the draw loop reflects toggles in real time
+    const camOnRef = useRef(camOn);
+    useEffect(() => { camOnRef.current = camOn; }, [camOn]);
 
     const start = async () => {
         setStarting(true);
@@ -161,12 +258,15 @@ export const ScreenRecorder = ({ onSaved }) => {
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
 
-            // 3) Build the mixed recording stream (video from display + audio from tab + mic if enabled)
+            // 3) Build the composite video via canvas (screen + circular webcam bubble)
+            const compositeStream = await buildCompositeStream(display, (camOn && camStreamRef.current) ? camStreamRef.current : null);
+
+            // Mix audio: tab audio (from getDisplayMedia) + mic audio (if enabled)
             const audioTracks = [
                 ...(display.getAudioTracks() || []),
                 ...((micStreamRef.current && micOn && micStreamRef.current.getAudioTracks()) || []),
             ];
-            const mixed = new MediaStream([...display.getVideoTracks(), ...audioTracks]);
+            const mixed = new MediaStream([...compositeStream.getVideoTracks(), ...audioTracks]);
             mixedStreamRef.current = mixed;
 
             const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];

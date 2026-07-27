@@ -159,6 +159,11 @@ class AISummaryRequest(BaseModel):
 
 class RecordingCreateRequest(BaseModel):
     recording_url: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1793,8 +1798,18 @@ async def create_standalone_recording(
     Accepts either JSON body {recording_url} or ?recording_url query param.
     """
     rec_url = None
+    title = None
+    description = None
+    duration_seconds = None
+    size_bytes = None
+    mime_type = None
     if body is not None:
         rec_url = body.recording_url
+        title = body.title
+        description = body.description
+        duration_seconds = body.duration_seconds
+        size_bytes = body.size_bytes
+        mime_type = body.mime_type
     if not rec_url and recording_url:
         rec_url = recording_url
 
@@ -1803,6 +1818,11 @@ async def create_standalone_recording(
         "id": recording_id,
         "created_by": current_user["id"],
         "recording_url": rec_url,
+        "title": title or f"Recording {get_pst_now().strftime('%b %d, %Y %I:%M %p')}",
+        "description": description,
+        "duration_seconds": duration_seconds,
+        "size_bytes": size_bytes,
+        "mime_type": mime_type,
         "created_at": get_pst_now().isoformat(),
         "shareable_token": str(uuid.uuid4())[:12],
         "auto_delete_at": None  # Set when associated task is completed
@@ -1815,8 +1835,58 @@ async def create_standalone_recording(
     return {
         "recording_id": recording_id,
         "shareable_link": shareable_link,
-        "shareable_token": recording_doc['shareable_token']
+        "shareable_token": recording_doc['shareable_token'],
+        "title": recording_doc["title"],
     }
+
+
+@api_router.get("/recordings/mine")
+async def list_my_recordings(current_user: dict = Depends(get_current_user)):
+    """List all recordings owned by the current user (both standalone and task-attached).
+
+    Returns newest first. Excludes expired/auto-deleted recordings.
+    """
+    now = get_pst_now()
+    cursor = db.recordings.find({"created_by": current_user["id"]}, {"_id": 0}).sort("created_at", -1)
+    items = await cursor.to_list(500)
+    out = []
+    for r in items:
+        expired = False
+        auto_delete_at = r.get("auto_delete_at")
+        if auto_delete_at:
+            try:
+                delete_time = datetime.fromisoformat(auto_delete_at.replace('Z', '+00:00'))
+                if now > delete_time:
+                    expired = True
+            except Exception:
+                pass
+        if expired:
+            continue
+        out.append({
+            "id": r["id"],
+            "title": r.get("title") or "Untitled recording",
+            "description": r.get("description"),
+            "recording_url": r.get("recording_url"),
+            "shareable_token": r.get("shareable_token"),
+            "shareable_link": f"{APP_BASE_URL}/recording/{r.get('shareable_token')}" if r.get("shareable_token") else None,
+            "created_at": r.get("created_at"),
+            "duration_seconds": r.get("duration_seconds"),
+            "size_bytes": r.get("size_bytes"),
+            "mime_type": r.get("mime_type"),
+        })
+    return {"recordings": out, "count": len(out)}
+
+
+@api_router.delete("/recordings/{recording_id}")
+async def delete_my_recording(recording_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a recording that belongs to the current user."""
+    rec = await db.recordings.find_one({"id": recording_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if rec.get("created_by") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own recordings")
+    await db.recordings.delete_one({"id": recording_id})
+    return {"ok": True}
 
 @api_router.get("/recordings/{token}")
 async def get_recording_by_token(token: str):
