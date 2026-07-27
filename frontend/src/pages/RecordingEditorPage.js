@@ -15,6 +15,7 @@ const RecordingEditorPage = () => {
     const [blob, setBlob] = useState(null);
     const [videoUrl, setVideoUrl] = useState('');
     const [saving, setSaving] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [shareLink, setShareLink] = useState('');
     const [copied, setCopied] = useState(false);
     const [mode, setMode] = useState('share'); // 'share' | 'assign'
@@ -22,19 +23,34 @@ const RecordingEditorPage = () => {
     const [users, setUsers] = useState([]);
 
     useEffect(() => {
-        // Get the blob passed from parent tab (opened via window.open)
+        // Try to grab the blob from the opener tab first (works when window.opener is accessible)
         try {
             const w = window.opener || window;
-            const b = w.__tskLastRecordingBlob;
-            if (b) {
+            const b = w && w.__tskLastRecordingBlob;
+            if (b && b.size > 0) {
                 setBlob(b);
                 setVideoUrl(URL.createObjectURL(b));
                 return;
             }
-        } catch { /* noop */ }
-        // Fallback to same-tab session
+        } catch { /* opener not accessible (COOP) */ }
+        // Fallback to same-tab sessionStorage URL (won't work if we're in a new tab)
         const url = sessionStorage.getItem('tsk_last_recording_url');
         if (url) setVideoUrl(url);
+        // Poll opener briefly in case the blob is assigned after this tab loads
+        let tries = 0;
+        const poll = setInterval(() => {
+            tries += 1;
+            try {
+                const b2 = window.opener && window.opener.__tskLastRecordingBlob;
+                if (b2 && b2.size > 0) {
+                    setBlob(b2);
+                    setVideoUrl(URL.createObjectURL(b2));
+                    clearInterval(poll);
+                }
+            } catch { /* silent */ }
+            if (tries > 20) clearInterval(poll);
+        }, 300);
+        return () => clearInterval(poll);
     }, []);
 
     useEffect(() => {
@@ -49,14 +65,15 @@ const RecordingEditorPage = () => {
     const saveAndShare = async () => {
         if (!blob) { toast.error('No recording data available'); return; }
         setSaving(true);
+        setUploadProgress(0);
         try {
             const filename = `recording-${Date.now()}.webm`;
-            const ref = await uploadBlob(blob, filename, blob.type || 'video/webm');
+            const ref = await uploadBlob(blob, filename, blob.type || 'video/webm', (p) => setUploadProgress(p));
             const res = await axios.post(`${API}/recordings/standalone`, { recording_url: ref.storage_path || ref.path });
             setShareLink(res.data.shareable_link);
             toast.success('Recording saved!');
         } catch (e) {
-            toast.error(e?.response?.data?.detail || 'Failed to save recording');
+            toast.error(e?.response?.data?.detail || e?.message || 'Failed to save recording');
         } finally { setSaving(false); }
     };
 
@@ -119,9 +136,16 @@ const RecordingEditorPage = () => {
                 {mode === 'share' && (
                     <div className="bg-white border-2 rounded-2xl p-5">
                         {!shareLink ? (
-                            <Button onClick={saveAndShare} disabled={saving || !blob} className="rounded-full">
-                                {saving ? 'Saving...' : 'Generate shareable link'}
-                            </Button>
+                            <>
+                                <Button onClick={saveAndShare} disabled={saving || !blob} className="rounded-full">
+                                    {saving ? `Uploading ${uploadProgress}%...` : 'Generate shareable link'}
+                                </Button>
+                                {saving && (
+                                    <div className="mt-3 w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                                    </div>
+                                )}
+                            </>
                         ) : (
                             <div className="flex items-center gap-2">
                                 <input value={shareLink} readOnly className="flex-1 border rounded px-3 py-2 text-sm bg-gray-50" />

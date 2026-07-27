@@ -27,6 +27,7 @@ import VoiceCommandCenter from '@/components/VoiceCommandCenter';
 import AttachmentPicker from '@/components/AttachmentPicker';
 import RichTextEditor from '@/components/RichTextEditor';
 import StandaloneRecorder from '@/components/StandaloneRecorder';
+import ScreenRecorder from '@/components/ScreenRecorder';
 import { registerPush } from '@/lib/push';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
@@ -889,7 +890,7 @@ const TaskHub = () => {
                             </>
                         ) : (
                             <>
-                                <StandaloneRecorder />
+                                <ScreenRecorder />
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
                                     <CheckSquare className="w-4 h-4" />
                                     Select
@@ -1411,7 +1412,14 @@ const TaskHub = () => {
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
                                 {parentGroups.filter(matchesGroupSearch).map((group) => (
-                                    <ParentTaskGroup key={group.id} group={group} onChanged={fetchParentGroups} />
+                                    <ParentTaskGroup
+                                        key={group.id}
+                                        group={group}
+                                        onChanged={fetchParentGroups}
+                                        selectable={selectionMode}
+                                        selected={selectedTasks.has(group.id)}
+                                        onToggleSelect={toggleTaskSelection}
+                                    />
                                 ))}
                                 {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 && parentGroups.filter(matchesGroupSearch).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No delegated tasks'}</p>

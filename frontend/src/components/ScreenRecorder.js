@@ -152,7 +152,7 @@ export const ScreenRecorder = ({ onSaved }) => {
             const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
             const mimeType = preferred.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || '';
             mimeTypeRef.current = mimeType || 'video/webm';
-            const rec = new MediaRecorder(mixed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 2_500_000 });
+            const rec = new MediaRecorder(mixed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 1_200_000 });
             chunksRef.current = [];
             rec.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
             rec.onstop = async () => {
@@ -163,12 +163,20 @@ export const ScreenRecorder = ({ onSaved }) => {
                 const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
                 stopAllTracks();
                 if (blob.size === 0) { toast.error('Recording was empty'); return; }
-                const url = URL.createObjectURL(blob);
-                try { sessionStorage.setItem('tsk_last_recording_url', url); } catch { /* noop */ }
+                // Open editor tab RIGHT NOW so the browser counts it as a user-gesture opening,
+                // and pass the blob via a shared in-memory bridge on window.opener.
+                const editorWin = window.open('/recording/edit?pending=1', '_blank', 'noopener=no');
+                try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
+                const localUrl = URL.createObjectURL(blob);
+                try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
                 try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
-                window.__tskLastRecordingBlob = blob;
-                if (onSaved) onSaved(blob, url);
-                window.open('/recording/edit', '_blank', 'noopener');
+                try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
+                if (onSaved) onSaved(blob, localUrl);
+                if (!editorWin) {
+                    // Popup blocked — same-tab fallback
+                    toast.info('Popup blocked — opening editor in this tab');
+                    window.location.href = '/recording/edit?pending=1';
+                }
             };
             recorderRef.current = rec;
             display.getVideoTracks()[0].addEventListener('ended', () => {

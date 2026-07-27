@@ -483,34 +483,55 @@ const SettingsPage = () => {
                     </div>
 
                     {/* Slack Bridge */}
-                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-8 h-8 rounded-lg bg-[#4A154B] text-white flex items-center justify-center font-bold">S</span>
+                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div>
-                                <h3 className="font-semibold text-base">Slack Bridge</h3>
-                                <p className="text-xs text-muted-foreground">Cross-post mentions, assignments and EOD summaries into a Slack channel.</p>
+                                <h3 className="font-semibold text-base">Slack notifications</h3>
+                                <p className="text-xs text-muted-foreground">Get Tskflow mentions and EOD summaries in Slack.</p>
                             </div>
+                            {slackWebhook && (
+                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected</span>
+                            )}
                         </div>
-                        <label className="text-xs font-medium text-gray-600">Incoming Webhook URL</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="url"
-                                placeholder="https://hooks.slack.com/services/..."
-                                value={slackWebhook}
-                                onChange={(e) => setSlackWebhook(e.target.value)}
-                                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white"
-                                data-testid="slack-webhook-input"
-                            />
-                            <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack || !slackWebhook.trim()} data-testid="slack-test-btn">
-                                {testingSlack ? 'Testing...' : 'Test'}
-                            </Button>
-                            <Button size="sm" onClick={saveSlack} disabled={savingSlack} className="rounded-lg" data-testid="slack-save-btn">
-                                {savingSlack ? 'Saving...' : 'Save'}
-                            </Button>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                            Create one at <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">api.slack.com/messaging/webhooks</a> → pick a channel → copy the URL and paste it here.
-                        </p>
+
+                        {!slackWebhook ? (
+                            <div className="rounded-xl border bg-gradient-to-br from-indigo-50 to-purple-50 p-4">
+                                <p className="text-sm font-medium mb-2">Connect in 2 clicks:</p>
+                                <ol className="text-sm text-gray-700 space-y-1.5 mb-3">
+                                    <li className="flex items-start gap-2"><span className="w-5 h-5 rounded-full bg-white border text-xs flex items-center justify-center shrink-0 font-semibold">1</span> <a href="https://api.slack.com/messaging/webhooks#getting_started" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-medium">Open Slack &rarr; Create a Webhook</a> and pick the channel you want.</li>
+                                    <li className="flex items-start gap-2"><span className="w-5 h-5 rounded-full bg-white border text-xs flex items-center justify-center shrink-0 font-semibold">2</span> Copy the webhook URL, paste it below, hit Save.</li>
+                                </ol>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                        type="url"
+                                        placeholder="Paste https://hooks.slack.com/services/... here"
+                                        value={slackWebhook}
+                                        onChange={(e) => setSlackWebhook(e.target.value)}
+                                        className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white"
+                                        data-testid="slack-webhook-input"
+                                    />
+                                    <Button size="sm" onClick={saveSlack} disabled={savingSlack || !slackWebhook.trim().startsWith('https://hooks.slack.com/')} className="rounded-lg" data-testid="slack-save-btn">
+                                        {savingSlack ? 'Saving...' : 'Connect'}
+                                    </Button>
+                                </div>
+                                {slackWebhook && !slackWebhook.startsWith('https://hooks.slack.com/') && (
+                                    <p className="text-xs text-red-600 mt-2">That doesn&apos;t look like a Slack webhook URL. It should start with <code>https://hooks.slack.com/</code>.</p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="text-xs text-gray-500 truncate bg-gray-50 border rounded-lg px-3 py-2 font-mono">{slackWebhook}</div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack} data-testid="slack-test-btn">
+                                        {testingSlack ? 'Sending test...' : 'Send test message'}
+                                    </Button>
+                                    <Button variant="outline" size="sm" onClick={async () => { setSlackWebhook(''); try { await axios.put(`${API}/auth/preferences`, { slack_webhook_url: '' }); toast.success('Disconnected'); } catch { toast.error('Failed'); } }} className="text-red-600 border-red-200 hover:bg-red-50">
+                                        Disconnect
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Feedback Link */}

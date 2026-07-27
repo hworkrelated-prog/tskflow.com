@@ -2530,16 +2530,29 @@ async def delete_task(task_id: str, current_user: dict = Depends(get_current_use
 
 @api_router.post("/tasks/bulk-delete")
 async def bulk_delete_tasks(task_ids: List[str], current_user: dict = Depends(get_current_user)):
+    """Soft-delete tasks. If a parent/group task is selected, all its subtasks are deleted too."""
     deleted_count = 0
+    now = get_pst_now().isoformat()
     for task_id in task_ids:
         task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-        if task and (task["created_by"] == current_user["id"] or task["assigned_to"] == current_user["id"]):
-            await db.tasks.update_one(
-                {"id": task_id},
-                {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
+        if not task:
+            continue
+        if task["created_by"] != current_user["id"] and task.get("assigned_to") != current_user["id"]:
+            continue
+        # Delete this task
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"]}}
+        )
+        deleted_count += 1
+        # If it's a parent/group task, cascade to its subtasks
+        if task.get("is_parent"):
+            cascade = await db.tasks.update_many(
+                {"parent_id": task_id, "deleted": {"$ne": True}},
+                {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"]}}
             )
-            deleted_count += 1
-    
+            deleted_count += cascade.modified_count
+
     return {"message": f"{deleted_count} tasks deleted", "deleted_count": deleted_count}
 
 @api_router.put("/tasks/{task_id}")
