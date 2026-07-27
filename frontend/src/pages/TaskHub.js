@@ -908,20 +908,22 @@ const TaskHub = () => {
                                     </DialogTrigger>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader>
-                                            <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
-                                            <DialogDescription>Assign to one or multiple people at once</DialogDescription>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
+                                                    <DialogDescription>Assign to one or multiple people at once</DialogDescription>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
+                                                    className="shrink-0 mt-1 text-xs px-2 py-1 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1"
+                                                    data-testid="from-transcript-btn"
+                                                    title="Draft tasks from a meeting transcript"
+                                                >
+                                                    <FileText className="w-3.5 h-3.5" /> Transcript
+                                                </button>
+                                            </div>
                                         </DialogHeader>
-                                        <div className="mb-3 flex justify-end">
-                                            <button
-                                                type="button"
-                                                onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
-                                                className="text-xs px-2.5 py-1 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1"
-                                                data-testid="from-transcript-btn"
-                                                title="Draft tasks from a meeting transcript"
-                                            >
-                                                <FileText className="w-3.5 h-3.5" /> From Meet Transcript
-                                            </button>
-                                        </div>
                                         <form onSubmit={handleCreateTask} className="space-y-5">
                                             <div className="space-y-2">
                                                 <Label htmlFor="title">Task Title</Label>
@@ -1120,15 +1122,51 @@ const TaskHub = () => {
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="group-email">Add members by email</Label>
+                                                    <Label htmlFor="group-user-picker" className="flex items-center gap-2"><Users className="w-4 h-4" />Add teammates</Label>
+                                                    <div className="border rounded-xl bg-white max-h-40 overflow-y-auto divide-y" data-testid="group-user-picker">
+                                                        {(users || []).filter((u) => u.id !== user?.id).length === 0 ? (
+                                                            <div className="p-3 text-xs text-muted-foreground">No teammates found yet — invite people to your workspace first, or just paste emails below.</div>
+                                                        ) : (
+                                                            (users || []).filter((u) => u.id !== user?.id).map((u) => {
+                                                                const already = groupForm.emails.includes(u.email);
+                                                                return (
+                                                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${already ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={already}
+                                                                            onChange={(e) => {
+                                                                                if (e.target.checked) {
+                                                                                    if (!groupForm.emails.includes(u.email)) setGroupForm({ ...groupForm, emails: [...groupForm.emails, u.email] });
+                                                                                } else {
+                                                                                    setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== u.email) });
+                                                                                }
+                                                                            }}
+                                                                            className="accent-indigo-600 w-4 h-4"
+                                                                            data-testid={`group-user-checkbox-${u.id}`}
+                                                                        />
+                                                                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                                                                            {(u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+                                                                        </div>
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <p className="text-sm font-medium truncate">{u.name}</p>
+                                                                            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                                                                        </div>
+                                                                    </label>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="group-email">Or paste external emails</Label>
                                                     <div className="flex gap-2">
                                                         <Textarea
                                                             id="group-email"
                                                             data-testid="group-email-input"
                                                             value={groupEmailInput}
                                                             onChange={(e) => setGroupEmailInput(e.target.value)}
-                                                            placeholder="name@company.com (or paste multiple emails from a spreadsheet)"
-                                                            className="rounded-xl min-h-[80px]"
+                                                            placeholder="external@vendor.com (or paste multiple emails from a spreadsheet)"
+                                                            className="rounded-xl min-h-[60px]"
                                                         />
                                                         <Button
                                                             type="button"

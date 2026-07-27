@@ -280,15 +280,24 @@ export const ScreenRecorder = ({ onSaved }) => {
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
 
-            // 3) Build the composite video via canvas (screen + circular webcam bubble)
-            const compositeStream = await buildCompositeStream(display, (camOn && camStreamRef.current) ? camStreamRef.current : null);
+            // 3) Build the composite video via canvas (screen + circular webcam bubble).
+            //    If canvas composite fails for any reason, fall back to the raw screen stream so recording still succeeds.
+            let compositeStream = null;
+            try {
+                compositeStream = await buildCompositeStream(display, (camOn && camStreamRef.current) ? camStreamRef.current : null);
+            } catch (err) {
+                console.warn('Canvas composite failed — falling back to raw screen stream', err);
+                toast.info('Webcam overlay disabled for this recording — continuing with just the screen.');
+            }
 
             // Mix audio: tab audio (from getDisplayMedia) + mic audio (if enabled)
             const audioTracks = [
                 ...(display.getAudioTracks() || []),
                 ...((micStreamRef.current && micOn && micStreamRef.current.getAudioTracks()) || []),
             ];
-            const mixed = new MediaStream([...compositeStream.getVideoTracks(), ...audioTracks]);
+            // Prefer the canvas composite (screen + webcam) but fall back to the raw screen tracks if the composite failed.
+            const videoTracks = compositeStream?.getVideoTracks?.() || display.getVideoTracks();
+            const mixed = new MediaStream([...videoTracks, ...audioTracks]);
             mixedStreamRef.current = mixed;
 
             const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];

@@ -768,6 +768,10 @@ agent_communication:
   - agent: "main"
     message: "[Jul 2025 batch #7 — UX polish + minor route additions] Only ONE backend change: no new endpoints; only a new frontend route /recording/controls that serves a small controls popup. Please backend-regression-test that the previous batch #6 endpoints still work exactly the same (no accidental route removals): GET /api/recordings/mine, DELETE /api/recordings/{id}, POST /api/recordings/standalone (with and without full metadata body), GET /api/recordings/{token}, PUT /api/tasks/{task_id}/review (accept + send_back with feedback) on a subtask. Nothing else changed in backend/server.py. Credentials: owner@acmecorp.com / Password123, alice@acmecorp.com / Password123, bob@acmecorp.com / Password123."
 
+  - agent: "main"
+    message: "[Jul 2025 batch #8 — group UX + task view polish] Zero backend endpoint changes; only frontend. Please quickly regression-verify the previously verified endpoints still work — I want to be sure my TaskHub / TaskDetail edits didn't accidentally change how the frontend calls them. Focus on the endpoints the changed screens use: (a) POST /api/groups (create), PUT /api/groups/{id} (update), DELETE /api/groups/{id}, GET /api/groups; (b) GET /api/users (returns id, name, email — used by the new user-picker in the group modal); (c) GET /api/tasks/parents/{parent_id}/subtasks (the new assignees panel beneath the Comments section calls this and expects assigned_to_name in the result); (d) POST /api/tasks + POST /api/tasks/bulk still create tasks correctly; (e) GET /api/tasks/{task_id} returns description, assigned_to_name, is_parent, parent_id, attachments — the new description-overflow fix + assignee card rely on those fields. And confirm that POST /api/cron/eod-report still works (no secret required in dev / accepts an empty secret when CRON_SECRET is unset) and returns {ok: true, sent: N}. Credentials: owner@acmecorp.com / Password123, alice@acmecorp.com / Password123, bob@acmecorp.com / Password123."
+
+
     message: "[Jul 2025 batch #6 — recording library + review pass] Backend changes to verify: (A) POST /api/recordings/standalone now ALSO accepts optional title, description, duration_seconds, size_bytes, mime_type in the JSON body. Response should include title (defaults to `Recording {timestamp}` when omitted) along with the existing recording_id, shareable_link, shareable_token. (B) NEW: GET /api/recordings/mine — returns {recordings: [...], count: N} for the current user, newest first. Each item must include id, title, description, recording_url, shareable_token, shareable_link, created_at, duration_seconds, size_bytes, mime_type. Expired recordings (auto_delete_at in past) are filtered out. (C) NEW: DELETE /api/recordings/{recording_id} — 403 for other users' recordings, 404 if missing, 200 with {ok:true} on success. Verify: creating a recording with a JSON body {recording_url, title, duration_seconds, size_bytes, mime_type} correctly persists all fields (visible in GET /api/recordings/mine) and existing test users can delete their own recordings but not other users'. Also verify route order: /api/recordings/mine matches BEFORE /api/recordings/{token} — a request to /api/recordings/mine should return the list, not 404. Regression: (D) POST /api/recordings/standalone with only {recording_url} still works and returns a title auto-generated from the timestamp. (E) GET /api/recordings/{token} still works for shareable-link viewers. (F) PUT /api/tasks/{task_id}/review still works for subtasks — the frontend now calls it per-subtask on parent group tasks so the endpoint must still accept action='accept' or action='send_back' with optional feedback for any task the current user created, including subtasks that live under a parent. Credentials: owner@acmecorp.com / Password123, alice@acmecorp.com / Password123, bob@acmecorp.com / Password123."
 
   - agent: "main"
@@ -841,3 +845,79 @@ agent_communication:
 
   - agent: "testing"
     message: "✅ BATCH #6 REGRESSION TEST COMPLETE (10/10 tests passed - 100%): Quick regression verification after frontend-only changes in batch #7. All batch #6 backend endpoints still working correctly with no accidental regressions. RESULTS: (1) POST /api/recordings/standalone: Both full metadata body and minimal body tests passed. Full body with {recording_url, title, description, duration_seconds, size_bytes, mime_type} returns 200 with all fields. Minimal body with only {recording_url} returns 200 with auto-generated title. (2) GET /api/recordings/mine: Returns 200 with {recordings: [...], count: 6}. Both test recordings found with all required fields (id, title, description, recording_url, shareable_token, shareable_link, created_at, duration_seconds, size_bytes, mime_type). (3) DELETE /api/recordings/{id}: Owner delete returns 200 {ok: true}. Alice trying to delete owner's recording returns 403 Forbidden. Nonexistent ID returns 404 Not Found. (4) GET /api/recordings/{token}: Returns 200 with recording data for valid token. (5) Route order sanity: GET /api/recordings/mine returns 200 with list (not 404 from {token} route). (6) PUT /api/tasks/{subtask_id}/review: Full workflow tested with 2 subtasks. Alice's subtask reviewed with action='accept' returns 200. Bob's subtask reviewed with action='send_back' and feedback='redo' returns 200, status changes to 'Accepted', review_feedback set correctly. LATENCY ANALYSIS: All endpoints avg=0.005s, max=0.020s (<2s requirement ✅). NO REGRESSIONS DETECTED. All batch #6 features remain production-ready."
+
+  - task: "Backend Regression - Groups CRUD"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED (5/5 tests): Groups CRUD endpoints working correctly after frontend changes. (1) POST /api/groups creates group with name and emails → 200. (2) GET /api/groups returns created group in list → 200. (3) PUT /api/groups/{id} updates group name and emails → 200. (4) DELETE /api/groups/{id} removes group → 200. (5) GET /api/groups confirms deletion (group no longer in list) → 200. All endpoints functioning as expected."
+
+  - task: "Backend Regression - Users Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: GET /api/users endpoint working correctly after frontend changes. Returns list of workspace teammates with required fields (id, name, email) → 200. Used by user-picker in group modal. Endpoint functioning as expected."
+
+  - task: "Backend Regression - Subtasks Endpoint"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: GET /api/tasks/parents/{parent_id}/subtasks endpoint working correctly after frontend changes. Created parent task via POST /api/tasks/bulk with 2 assignees (alice, bob). Subtasks endpoint returns 2 items with assigned_to_name and assigned_to_email fields → 200. Used by assignees panel beneath Comments. Endpoint functioning as expected."
+
+  - task: "Backend Regression - Task Fields"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: GET /api/tasks/{task_id} endpoint working correctly after frontend changes. Returns task with required fields: description (HTML string), assigned_to_name, parent_id (nullable), attachments (list) → 200. Note: is_parent field not returned by API (existing behavior). Endpoint functioning as expected."
+
+  - task: "Backend Regression - Single Task Creation"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: POST /api/tasks endpoint working correctly after frontend changes. Creates single task with title, description, assigned_to, due_date, priority → 200. Returns created task with id. Endpoint functioning as expected."
+
+  - task: "Backend Regression - EOD Cron"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ REGRESSION TEST PASSED: POST /api/cron/eod-report endpoint working correctly after frontend changes. Returns {ok: true, sent: N} → 200 when CRON_SECRET is unset (dev mode). Endpoint functioning as expected."
+
+
+  - agent: "testing"
+    message: "✅ BACKEND REGRESSION TEST COMPLETE (10/10 tests passed - 100%): Quick regression pass on backend endpoints after frontend-only changes. All endpoints functioning correctly. RESULTS: (1) Groups CRUD: POST/GET/PUT/DELETE /api/groups all working → 200. (2) Users endpoint: GET /api/users returns teammates with id, name, email → 200. (3) Subtasks endpoint: GET /api/tasks/parents/{parent_id}/subtasks returns subtasks with assigned_to_name and assigned_to_email → 200. (4) Task fields: GET /api/tasks/{task_id} returns description, assigned_to_name, parent_id, attachments → 200 (Note: is_parent field not in API response, existing behavior). (5) Single task creation: POST /api/tasks creates task → 200. (6) EOD cron: POST /api/cron/eod-report returns {ok: true, sent: N} → 200 (CRON_SECRET unset). No backend regressions detected. All endpoints stable after frontend changes."

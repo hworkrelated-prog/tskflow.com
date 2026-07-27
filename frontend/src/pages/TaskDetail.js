@@ -724,10 +724,11 @@ const TaskDetail = () => {
                                 )}
                             </div>
 
-                            <div>
+                            <div className="min-w-0">
                                 <Label className="text-muted-foreground">Description</Label>
                                 <div 
-                                    className="mt-2 text-base leading-relaxed prose prose-sm max-w-none"
+                                    className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
+                                    style={{ overflowWrap: 'anywhere' }}
                                     dangerouslySetInnerHTML={{ __html: task.description || '' }}
                                 />
                             </div>
@@ -1210,6 +1211,64 @@ const TaskDetail = () => {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Assignees list — mirrors the dashboard "expand assignees" experience. Shown beneath the Comments panel.
+                        For parent/group tasks: lists all subtasks (each clickable to open). For individual tasks: shows the one assignee. */}
+                    {(task.is_parent ? subtasks.length > 0 : Boolean(task.assigned_to_name)) && (
+                        <Card className="border-2 rounded-2xl mt-4" data-testid="task-assignees-panel">
+                            <CardContent className="pt-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Users className="w-5 h-5 text-indigo-600" />
+                                    <h3 className="font-semibold">{task.is_parent ? 'Assignees' : 'Assigned to'}</h3>
+                                    {task.is_parent && (
+                                        <span className="ml-auto text-xs text-muted-foreground">{subtasks.filter((s) => s.status === 'Completed').length}/{subtasks.length} done</span>
+                                    )}
+                                </div>
+                                {task.is_parent ? (
+                                    <ul className="divide-y -mx-2">
+                                        {[...subtasks].sort((a, b) => statusRank(a.status) - statusRank(b.status)).map((t) => {
+                                            const done = t.status === 'Completed';
+                                            return (
+                                                <li
+                                                    key={t.id}
+                                                    className={`flex items-center gap-3 px-2 py-2.5 hover:bg-indigo-50/50 cursor-pointer rounded-lg ${done ? 'opacity-70' : ''}`}
+                                                    onClick={() => navigate(`/task/${t.id}`)}
+                                                    data-testid={`task-assignee-row-${t.id}`}
+                                                >
+                                                    {done ? <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" /> : <Clock className="w-4 h-4 text-gray-400 shrink-0" />}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium truncate">{t.assigned_to_name || t.assigned_to_email || 'Unknown'}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{t.status}</p>
+                                                    </div>
+                                                    <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                ) : (
+                                    <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+                                        <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0 text-sm">
+                                            {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{task.assigned_to_name}</p>
+                                            {task.assigned_to_email && <p className="text-xs text-muted-foreground truncate">{task.assigned_to_email}</p>}
+                                        </div>
+                                        {task.parent_id && (
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/task/${task.parent_id}`)}
+                                                className="text-xs text-indigo-700 hover:underline shrink-0"
+                                                data-testid="assignees-open-parent-btn"
+                                            >
+                                                View group →
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </aside>
                 </div>
             </main>
