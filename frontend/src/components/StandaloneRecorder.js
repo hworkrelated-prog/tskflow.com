@@ -25,13 +25,13 @@ export const StandaloneRecorder = () => {
     const startRecording = async () => {
         setStarting(true);
         try {
-            // Prefer the current tab so our floating controls stay visible in the capture
+            // Prefer robust picker: let the user freely pick tab/window/screen
             const stream = await navigator.mediaDevices.getDisplayMedia({
                 video: { frameRate: 30 },
                 audio: true,
-                preferCurrentTab: true,
                 selfBrowserSurface: 'include',
                 surfaceSwitching: 'include',
+                systemAudio: 'include',
             });
             streamRef.current = stream;
 

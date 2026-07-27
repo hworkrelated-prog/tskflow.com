@@ -829,21 +829,12 @@ const TaskHub = () => {
                         <Button variant="outline" size="icon" onClick={reopenOnboarding} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help & Walkthrough">
                             <HelpCircle className="w-5 h-5" />
                         </Button>
-                        <Button variant="outline" size="icon" onClick={() => navigate('/updates')} className="rounded-full border-gray-300 text-gray-600 hover:text-indigo-700 hover:bg-indigo-50" title="What's new">
-                            <Sparkles className="w-5 h-5" />
-                        </Button>
-                        <Button variant="outline" size="icon" onClick={() => navigate('/leaderboard')} className="rounded-full border-gray-300 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Leaderboards">
-                            <Trophy className="w-5 h-5" />
-                        </Button>
-                        <Button variant="outline" size="icon" onClick={() => navigate('/transcript')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Meet transcript → tasks">
-                            <FileText className="w-5 h-5" />
-                        </Button>
                         {user?.subscription_tier === 'teams' && (
                             <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Manage Team">
                                 <Users className="w-5 h-5" />
                             </Button>
                         )}
-                        <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                        <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
                             <BarChart3 className="w-5 h-5" />
                         </Button>
                         <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
@@ -915,6 +906,17 @@ const TaskHub = () => {
                                             <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
                                             <DialogDescription>Assign to one or multiple people at once</DialogDescription>
                                         </DialogHeader>
+                                        <div className="mb-3 flex justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
+                                                className="text-xs px-2.5 py-1 rounded-full border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1"
+                                                data-testid="from-transcript-btn"
+                                                title="Draft tasks from a meeting transcript"
+                                            >
+                                                <FileText className="w-3.5 h-3.5" /> From Meet Transcript
+                                            </button>
+                                        </div>
                                         <form onSubmit={handleCreateTask} className="space-y-5">
                                             <div className="space-y-2">
                                                 <Label htmlFor="title">Task Title</Label>
@@ -1184,14 +1186,7 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {/* Sales-only toggle (search now lives in the header) */}
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <label className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border cursor-pointer transition-colors ${salesOnly ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-emerald-300'}`}>
-                        <input type="checkbox" checked={salesOnly} onChange={(e) => setSalesOnly(e.target.checked)} className="sr-only" />
-                        <DollarSign className="w-4 h-4" />
-                        Only Sales Tasks
-                    </label>
-                </div>
+                {/* (Search moved to header; Sales toggle is now next to Active/Completed) */}
 
                 {/* AI Summary Display */}
                 {aiSummary && (
@@ -1231,6 +1226,19 @@ const TaskHub = () => {
                     <div className="flex items-center bg-gray-100 rounded-full p-1">
                         <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-600 hover:text-gray-900'}`}>Active Tasks</button>
                         <button data-testid="view-completed-tasks" onClick={() => setViewMode('completed')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'completed' ? 'bg-white shadow-sm text-green-600' : 'text-gray-600 hover:text-gray-900'}`}><CheckCircle2 className="w-4 h-4" />Completed</button>
+                        {/* Sales-only compact toggle: dollar sign that expands on hover / when active */}
+                        <button
+                            type="button"
+                            data-testid="toggle-sales-only"
+                            onClick={() => setSalesOnly((v) => !v)}
+                            title={salesOnly ? 'Showing only sales tasks — click to disable' : 'Show only sales tasks'}
+                            className={`group ml-1 flex items-center gap-1.5 h-9 px-2.5 rounded-full text-sm font-medium transition-all ${salesOnly ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-emerald-600'}`}
+                        >
+                            <DollarSign className="w-4 h-4" />
+                            <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${salesOnly ? 'max-w-[120px]' : 'max-w-0 group-hover:max-w-[120px]'}`}>
+                                Sales only
+                            </span>
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">

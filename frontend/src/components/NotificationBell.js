@@ -89,6 +89,16 @@ export const NotificationBell = () => {
                             </button>
                         )}
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => { setOpen(false); navigate('/updates'); }}
+                        className="w-full px-4 py-2.5 text-left border-b bg-indigo-50/50 hover:bg-indigo-50 text-sm text-indigo-800 flex items-center gap-2"
+                        data-testid="whats-new-link"
+                    >
+                        <span className="text-base">✨</span>
+                        <span className="font-medium">What&apos;s new in Tskflow</span>
+                        <span className="ml-auto text-xs text-indigo-500">See changelog →</span>
+                    </button>
                     <div className="max-h-96 overflow-y-auto">
                         {items.length === 0 ? (
                             <div className="px-6 py-10 text-center text-sm text-gray-500">You&apos;re all caught up.</div>

@@ -2910,19 +2910,26 @@ async def change_password(request: ChangePasswordRequest, current_user: dict = D
     return {"message": "Password updated successfully"}
 
 class UserPreferences(BaseModel):
-    theme: str  # 'light', 'dark', 'minimal'
+    theme: Optional[str] = None  # 'light', 'dark', 'minimal'
+    slack_webhook_url: Optional[str] = None  # per-user Slack Incoming Webhook
 
 @api_router.put("/auth/preferences")
 async def update_preferences(prefs: UserPreferences, current_user: dict = Depends(get_current_user)):
+    # Merge with existing preferences instead of overwriting
+    current_prefs = current_user.get("preferences") or {}
+    update = {k: v for k, v in prefs.dict(exclude_none=True).items()}
+    merged = {**current_prefs, **update}
     await db.users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"preferences": prefs.dict()}}
+        {"$set": {"preferences": merged}}
     )
-    return {"message": "Preferences updated"}
+    return {"message": "Preferences updated", "preferences": merged}
 
 @api_router.get("/auth/preferences")
 async def get_preferences(current_user: dict = Depends(get_current_user)):
-    prefs = current_user.get("preferences", {"theme": "light"})
+    prefs = current_user.get("preferences") or {"theme": "light"}
+    if "theme" not in prefs:
+        prefs["theme"] = "light"
     return prefs
 
 # Stripe Payment Routes
@@ -5037,6 +5044,21 @@ async def websocket_endpoint(ws: WebSocket, token: str = None):
 # --- Notification helper (in-app center + optional email) ---
 IMPORTANT_EMAIL_EVENTS = {"task_assigned", "status_change", "task_completed", "important_response"}
 
+async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict]] = None) -> bool:
+    """Best-effort Slack post. Returns True on success."""
+    if not webhook_url or not webhook_url.startswith("https://hooks.slack.com/"):
+        return False
+    try:
+        payload = {"text": text}
+        if blocks:
+            payload["blocks"] = blocks
+        async with httpx.AsyncClient(timeout=6) as client_http:
+            r = await client_http.post(webhook_url, json=payload)
+            return r.status_code < 400
+    except Exception:
+        return False
+
+
 async def create_notification(
     user_id: str,
     n_type: str,
@@ -5065,6 +5087,16 @@ async def create_notification(
     # Push over WebSocket if user is online
     try:
         await ws_manager.send(user_id, {"event": "notification", "notification": {k: v for k, v in doc.items() if k != "_id"}})
+    except Exception:
+        pass
+    # Slack bridge — cross-post to user's linked Slack channel (mentions only)
+    try:
+        u = await db.users.find_one({"id": user_id}, {"_id": 0, "preferences": 1})
+        webhook = ((u or {}).get("preferences") or {}).get("slack_webhook_url")
+        if webhook and n_type in ("mention", "task_assigned", "status_change", "task_completed"):
+            link = f"{APP_BASE_URL}/task/{task_id}" if task_id else APP_BASE_URL
+            slack_text = f":bell: *{title}*\n{body}\n<{link}|Open in Tskflow>"
+            await _post_to_slack(webhook, slack_text)
     except Exception:
         pass
     # Send email only on IMPORTANT events, and only if user has an email
@@ -5536,6 +5568,21 @@ async def cron_eod_report(secret: Optional[str] = None):
             sent += 1
         except Exception:
             pass
+        # Slack bridge for EOD
+        try:
+            udoc = await db.users.find_one({"id": u["id"]}, {"_id": 0, "preferences": 1})
+            webhook = ((udoc or {}).get("preferences") or {}).get("slack_webhook_url")
+            if webhook:
+                slack_text = (
+                    f":sunset: *EOD summary — {now.strftime('%b %d')}*\n"
+                    f"\u2705 Completed today: {len(completed)}\n"
+                    f":clipboard: Still open: {len(open_tasks_docs)}\n"
+                    + (f":warning: {len(missed)} missed due date(s)\n" if missed else "")
+                    + f"<{APP_BASE_URL}/dashboard|Open Tskflow>"
+                )
+                await _post_to_slack(webhook, slack_text)
+        except Exception:
+            pass
 
     return {"ok": True, "sent": sent}
 
@@ -5695,23 +5742,40 @@ async def publish_task_draft(draft_id: str, body: PublishDraftRequest, current_u
 
 
 # --- Product updates feed (surface what changed in this batch to users) ---
+@api_router.post("/integrations/slack/test")
+async def test_slack_webhook(body: dict, current_user: dict = Depends(get_current_user)):
+    """Verify a Slack Incoming Webhook by posting a test message."""
+    webhook = (body or {}).get("webhook_url") or ""
+    if not webhook.startswith("https://hooks.slack.com/"):
+        raise HTTPException(status_code=400, detail="Please provide a valid Slack Incoming Webhook URL (must start with https://hooks.slack.com/).")
+    ok = await _post_to_slack(webhook, f":wave: Hello from Tskflow — this is a test from {current_user.get('name', 'a teammate')}. If you can read this, your Slack bridge is working!")
+    if not ok:
+        raise HTTPException(status_code=502, detail="Slack rejected the webhook. Double-check the URL.")
+    return {"ok": True}
+
+
 @api_router.get("/product-updates")
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
     """Static feed of what changed in the July 2025 batch."""
     updates = [
+        {"id": "u14", "area": "Slack Bridge", "change": "Paste your Slack Incoming Webhook in Settings to cross-post mentions, assignments, and EOD summaries into a Slack channel.", "was": "No Slack integration \u2014 mentions could get missed if you lived in Slack."},
+        {"id": "u15", "area": "Screen Recording (robust)", "change": "Screen picker now lets you pick tab / window / entire screen freely; webcam preview is requested first and reliably renders in the recording bubble.", "was": "Was forced to current tab and the webcam bubble often didn\u2019t appear."},
+        {"id": "u16", "area": "Unified Task View", "change": "Group tasks now open the same detail page as single tasks, with a collapsible Participants section (unfinished on top, top 5 visible, Show more).", "was": "Group tasks opened a separate stripped-down page."},
+        {"id": "u17", "area": "Cleaner Header", "change": "Leaderboards moved into Analytics, What\u2019s New moved into the notification bell, and Meet Transcript moved inside the Create Task modal.", "was": "8+ icons crammed on the top-right of the dashboard."},
+        {"id": "u18", "area": "Sales Toggle", "change": "\u201COnly Sales Tasks\u201D lives right next to Active/Completed as a compact dollar icon that expands on hover.", "was": "A separate row of chips taking full width."},
         {"id": "u01", "area": "Screen Recording", "change": "Loom-style flow with floating pause/resume/restart controls, mic + webcam toggle, and post-record editor screen.", "was": "Basic start/stop only — recordings sometimes didn't save."},
         {"id": "u02", "area": "Group Task Expansion", "change": "Groups expand inline with live-sort: pending assignees pinned on top, completed sink to the bottom in real time.", "was": "Groups just navigated to a details page with no live sort."},
-        {"id": "u03", "area": "Group Task Detail Modal", "change": "Clicking a group opens a modal with leaderboard, avg completion rate, and per-person status columns (Viewed / Accepted / Submitted / Completed).", "was": "Navigated to a bare detail page."},
-        {"id": "u04", "area": "Search Bar", "change": "Search moved to the top header as a compact icon that expands to a short overlay bar — no longer stretches full-width or covers other UI.", "was": "Full-width input inside the tasks section, obstructive."},
+        {"id": "u03", "area": "Group Task Detail", "change": "Clicking a group opens the same task view as single tasks, plus a leaderboard and per-person status columns (Viewed / Accepted / Submitted / Completed).", "was": "Navigated to a bare detail page."},
+        {"id": "u04", "area": "Search Bar", "change": "Search moved to the top header as a compact icon that expands to a short overlay bar \u2014 no longer stretches full-width or covers other UI.", "was": "Full-width input inside the tasks section, obstructive."},
         {"id": "u05", "area": "AI Summary", "change": "Now shows urgent count, tasks due in the next 6h vs today, plus a Jarvis-authored recommendation on what to prioritize.", "was": "Generic 3-sentence overview with no urgency signal."},
-        {"id": "u06", "area": "Chatter Panel", "change": "Comments moved to a right-side panel on task detail — always visible next to task content.", "was": "Chatter lived below the task, requiring scroll."},
+        {"id": "u06", "area": "Chatter Panel", "change": "Comments moved to a right-side panel on task detail \u2014 always visible next to task content.", "was": "Chatter lived below the task, requiring scroll."},
         {"id": "u07", "area": "Notification Center", "change": "New in-app bell with unread badge and full history. Works even when browser push is blocked.", "was": "Only ephemeral toasts + browser notifications that vanished."},
-        {"id": "u08", "area": "Real-Time Chatter", "change": "WebSocket-driven live updates for comments and mentions — no more ~30s polling delay.", "was": "Poll every 30 seconds."},
-        {"id": "u09", "area": "Leaderboards & Analytics", "change": "Personal leaderboard (people you assigned to), personal analytics scoped to tasks you assigned out, and a separate Org leaderboard filterable by user. Date shortcuts: This Month / Last Month always visible, others under More.", "was": "Single team analytics page with no personal/org split and no shortcut chips."},
-        {"id": "u10", "area": "Email as Jarvis", "change": "All emails now come from Jarvis with a branded HTML template and are only sent on meaningful events (assignment, status change, completion, important responses).", "was": "System-flavored emails for every event, sometimes noisy."},
-        {"id": "u11", "area": "Sales Task Toggle", "change": "New optional 'This is a Sales Task' checkbox on task create + a top-level toggle to show only sales tasks.", "was": "No way to segregate sales tasks."},
-        {"id": "u12", "area": "End-of-Day Report", "change": "Daily Jarvis email with today's completions and still-open tasks. Rescheduled+accepted due dates don't count as missed.", "was": "No EOD summary."},
-        {"id": "u13", "area": "Meet Transcript → Tasks", "change": "Paste, upload, or link a Google Doc transcript; Jarvis auto-drafts tasks (with ambiguity flags) that you review before publishing.", "was": "Manual entry from meeting notes."},
+        {"id": "u08", "area": "Real-Time Chatter", "change": "WebSocket-driven live updates for comments and mentions \u2014 no more ~30s polling delay.", "was": "Poll every 30 seconds."},
+        {"id": "u09", "area": "Leaderboards & Analytics", "change": "Personal leaderboard, personal analytics scoped to tasks you assigned out, and a separate Org leaderboard \u2014 now living inside the Analytics tab.", "was": "Single team analytics page with no personal/org split."},
+        {"id": "u10", "area": "Email as Jarvis", "change": "All emails now come from Jarvis with a branded HTML template and are only sent on meaningful events.", "was": "System-flavored emails for every event."},
+        {"id": "u11", "area": "Sales Task Toggle", "change": "Optional \u201CThis is a Sales Task\u201D checkbox on task create + a hover-expand \u201COnly Sales Tasks\u201D toggle next to view mode.", "was": "No way to segregate sales tasks."},
+        {"id": "u12", "area": "End-of-Day Report", "change": "Daily Jarvis email + optional Slack post with today\u2019s completions and still-open tasks.", "was": "No EOD summary."},
+        {"id": "u13", "area": "Meet Transcript \u2192 Tasks", "change": "Now lives inside the Create Task modal \u2014 paste, upload, or link a Google Doc; Jarvis drafts tasks that you review before publishing.", "was": "Manual entry from meeting notes."},
     ]
     return {"updates": updates}
 

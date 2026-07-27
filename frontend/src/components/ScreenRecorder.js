@@ -3,17 +3,19 @@ import { Button } from '@/components/ui/button';
 import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Draggable floating control bar rendered in a portal-friendly fixed container.
+// Draggable floating control bar rendered as a fixed overlay (top-most z-index).
 const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     const [pos, setPos] = useState(() => {
         try { return JSON.parse(localStorage.getItem(storageKey) || 'null') || { x: 24, y: window.innerHeight - 96 }; }
         catch { return { x: 24, y: window.innerHeight - 96 }; }
     });
-    const dragRef = useRef(null);
     const start = useRef(null);
+    const posRef = useRef(pos);
+    posRef.current = pos;
+
     const onDown = (e) => {
         const evt = e.touches ? e.touches[0] : e;
-        start.current = { x: evt.clientX - pos.x, y: evt.clientY - pos.y };
+        start.current = { x: evt.clientX - posRef.current.x, y: evt.clientY - posRef.current.y };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('touchmove', onMove, { passive: false });
         window.addEventListener('mouseup', onUp);
@@ -23,19 +25,23 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
         if (!start.current) return;
         if (e.cancelable) e.preventDefault?.();
         const evt = e.touches ? e.touches[0] : e;
-        const next = { x: Math.max(4, Math.min(window.innerWidth - 320, evt.clientX - start.current.x)), y: Math.max(4, Math.min(window.innerHeight - 80, evt.clientY - start.current.y)) };
+        const next = {
+            x: Math.max(4, Math.min(window.innerWidth - 340, evt.clientX - start.current.x)),
+            y: Math.max(4, Math.min(window.innerHeight - 80, evt.clientY - start.current.y)),
+        };
         setPos(next);
     };
     const onUp = () => {
+        try { localStorage.setItem(storageKey, JSON.stringify(posRef.current)); } catch { /* noop */ }
         start.current = null;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('touchmove', onMove);
         window.removeEventListener('mouseup', onUp);
         window.removeEventListener('touchend', onUp);
-        try { localStorage.setItem(storageKey, JSON.stringify(pos)); } catch { /* noop */ }
     };
+
     return (
-        <div ref={dragRef} style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 2147483647 }}
+        <div style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 2147483647 }}
             className="bg-red-600 text-white rounded-2xl shadow-2xl flex items-center gap-2 px-3 py-2 select-none">
             <div className="cursor-grab active:cursor-grabbing p-1" onMouseDown={onDown} onTouchStart={onDown} title="Drag">
                 <Move className="w-4 h-4 opacity-80" />
@@ -47,15 +53,34 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
 
 const WebcamBubble = ({ stream, mirrored = true }) => {
     const videoRef = useRef(null);
-    useEffect(() => { if (videoRef.current && stream) { videoRef.current.srcObject = stream; } }, [stream]);
+    useEffect(() => {
+        const v = videoRef.current;
+        if (!v || !stream) return;
+        v.srcObject = stream;
+        // Kick playback (autoplay is muted so browser allows it)
+        const play = () => v.play().catch(() => {});
+        v.onloadedmetadata = play;
+        play();
+    }, [stream]);
     return (
         <div style={{ position: 'fixed', bottom: 24, left: 24, zIndex: 2147483646 }}
             className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-black">
-            <video ref={videoRef} autoPlay muted playsInline style={{ transform: mirrored ? 'scaleX(-1)' : 'none' }} className="w-full h-full object-cover" />
+            <video
+                ref={videoRef}
+                autoPlay muted playsInline
+                style={{ transform: mirrored ? 'scaleX(-1)' : 'none', width: '100%', height: '100%', objectFit: 'cover' }}
+            />
         </div>
     );
 };
 
+/**
+ * Robust screen recorder:
+ *  - Requests webcam + mic FIRST (so the getDisplayMedia dialog isn't the only prompt)
+ *  - Does NOT set preferCurrentTab (some browsers use it to force tab selection)
+ *  - Lets the user freely pick monitor / window / tab in the browser picker
+ *  - Falls back gracefully if webcam or mic fail
+ */
 export const ScreenRecorder = ({ onSaved }) => {
     const [starting, setStarting] = useState(false);
     const [recording, setRecording] = useState(false);
@@ -64,6 +89,7 @@ export const ScreenRecorder = ({ onSaved }) => {
     const [camOn, setCamOn] = useState(true);
     const [seconds, setSeconds] = useState(0);
     const [displaySurface, setDisplaySurface] = useState(null);
+    const [camStream, setCamStream] = useState(null);
 
     const displayStreamRef = useRef(null);
     const micStreamRef = useRef(null);
@@ -79,45 +105,48 @@ export const ScreenRecorder = ({ onSaved }) => {
             try { r.current?.getTracks?.().forEach((t) => t.stop()); } catch { /* noop */ }
             r.current = null;
         });
+        setCamStream(null);
     };
 
     const start = async () => {
         setStarting(true);
+        let micErr = null;
+        let camErr = null;
         try {
+            // 1) Ask for webcam + mic FIRST so the small bubble is ready before the screen picker
+            if (camOn) {
+                try {
+                    const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 320, facingMode: 'user' } });
+                    camStreamRef.current = cam;
+                    setCamStream(cam);
+                } catch (e) { camErr = e; }
+            }
+            if (micOn) {
+                try {
+                    const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+                    micStreamRef.current = mic;
+                } catch (e) { micErr = e; }
+            }
+
+            // 2) Screen picker (native dialog offers Screen / Window / Chrome Tab tabs)
             const display = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: 30 },
+                video: { frameRate: 30, cursor: 'always' },
                 audio: true,
-                preferCurrentTab: true,
+                // Do NOT set preferCurrentTab — that forces the picker to only offer current tab in some browsers.
                 selfBrowserSurface: 'include',
                 surfaceSwitching: 'include',
+                systemAudio: 'include',
             });
             displayStreamRef.current = display;
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
 
-            // Mic
-            try {
-                if (micOn) {
-                    micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-                }
-            } catch { toast.warning('Mic not available'); }
-
-            // Webcam (small preview + baked into video)
-            try {
-                if (camOn) {
-                    camStreamRef.current = await navigator.mediaDevices.getUserMedia({ video: { width: 240, height: 240 } });
-                }
-            } catch { toast.warning('Webcam not available'); }
-
-            // Build a mixed stream: video from display (webcam remains a visible bubble that is captured only when recording current tab or entire screen).
+            // 3) Build the mixed recording stream (video from display + audio from tab + mic if enabled)
             const audioTracks = [
                 ...(display.getAudioTracks() || []),
-                ...((micStreamRef.current && micStreamRef.current.getAudioTracks()) || []),
+                ...((micStreamRef.current && micOn && micStreamRef.current.getAudioTracks()) || []),
             ];
-            const mixed = new MediaStream([
-                ...display.getVideoTracks(),
-                ...audioTracks,
-            ]);
+            const mixed = new MediaStream([...display.getVideoTracks(), ...audioTracks]);
             mixedStreamRef.current = mixed;
 
             const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -137,14 +166,11 @@ export const ScreenRecorder = ({ onSaved }) => {
                 const url = URL.createObjectURL(blob);
                 try { sessionStorage.setItem('tsk_last_recording_url', url); } catch { /* noop */ }
                 try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
-                // Save blob to window for editor page pickup (URL survives session)
                 window.__tskLastRecordingBlob = blob;
                 if (onSaved) onSaved(blob, url);
-                // Open editor in a new tab
                 window.open('/recording/edit', '_blank', 'noopener');
             };
             recorderRef.current = rec;
-            // Auto-stop if user hits browser "Stop sharing"
             display.getVideoTracks()[0].addEventListener('ended', () => {
                 if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop();
             });
@@ -154,11 +180,14 @@ export const ScreenRecorder = ({ onSaved }) => {
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
             const surf = settings.displaySurface;
-            if (surf === 'monitor') toast.info('Recording whole screen \u2014 controls visible.');
-            else if (surf === 'browser') toast.info('Recording this tab \u2014 controls visible in the recording.');
-            else if (surf === 'window') toast.info('Recording a window \u2014 use browser Stop bar to end.');
+            if (surf === 'monitor') toast.info('Recording your whole screen.');
+            else if (surf === 'browser') toast.info('Recording this browser tab.');
+            else if (surf === 'window') toast.info('Recording a window — use the browser Stop Sharing bar to end.');
+
+            if (camErr) toast.warning('Webcam not available — continuing without it.');
+            if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
         } catch (e) {
-            if (e?.name !== 'NotAllowedError') toast.error('Could not start recording');
+            if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
             stopAllTracks();
         } finally { setStarting(false); }
     };
@@ -176,11 +205,9 @@ export const ScreenRecorder = ({ onSaved }) => {
     };
 
     const restart = () => {
-        // Full restart: stop & discard current, then start fresh
         try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); } catch { /* noop */ }
         chunksRef.current = [];
-        // Slight delay to let stop complete
-        setTimeout(() => { start(); }, 300);
+        setTimeout(() => { start(); }, 400);
     };
 
     const toggleMic = () => {
@@ -230,7 +257,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </FloatingBar>
             )}
 
-            {recording && camOn && camStreamRef.current && <WebcamBubble stream={camStreamRef.current} />}
+            {recording && camOn && camStream && <WebcamBubble stream={camStream} />}
 
             {recording && displaySurface === 'window' && (
                 <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2147483645 }}

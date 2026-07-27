@@ -22,6 +22,9 @@ const SettingsPage = () => {
     const [passwordForm, setPasswordForm] = React.useState({ current: '', new: '', confirm: '' });
     const [changingPassword, setChangingPassword] = React.useState(false);
     const [theme, setTheme] = React.useState('light');
+    const [slackWebhook, setSlackWebhook] = React.useState('');
+    const [savingSlack, setSavingSlack] = React.useState(false);
+    const [testingSlack, setTestingSlack] = React.useState(false);
     const [displayName, setDisplayName] = React.useState('');
     const [savingName, setSavingName] = React.useState(false);
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
@@ -35,6 +38,7 @@ const SettingsPage = () => {
         try {
             const response = await axios.get(`${API}/auth/preferences`);
             setTheme(response.data.theme || 'light');
+            setSlackWebhook(response.data.slack_webhook_url || '');
             document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
         } catch (error) {
             console.error('Failed to fetch preferences');
@@ -50,6 +54,26 @@ const SettingsPage = () => {
         } catch (error) {
             toast.error('Failed to update theme');
         }
+    };
+
+    const saveSlack = async () => {
+        setSavingSlack(true);
+        try {
+            await axios.put(`${API}/auth/preferences`, { slack_webhook_url: slackWebhook.trim() });
+            toast.success('Slack bridge saved');
+        } catch { toast.error('Failed to save'); }
+        finally { setSavingSlack(false); }
+    };
+
+    const testSlack = async () => {
+        if (!slackWebhook.trim()) { toast.error('Paste your webhook URL first'); return; }
+        setTestingSlack(true);
+        try {
+            await axios.post(`${API}/integrations/slack/test`, { webhook_url: slackWebhook.trim() });
+            toast.success('Test message sent to Slack ✅');
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || 'Slack test failed');
+        } finally { setTestingSlack(false); }
     };
 
     const handleNameUpdate = async () => {
@@ -456,6 +480,37 @@ const SettingsPage = () => {
                                 ))}
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* Slack Bridge */}
+                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-3">
+                        <div className="flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-[#4A154B] text-white flex items-center justify-center font-bold">S</span>
+                            <div>
+                                <h3 className="font-semibold text-base">Slack Bridge</h3>
+                                <p className="text-xs text-muted-foreground">Cross-post mentions, assignments and EOD summaries into a Slack channel.</p>
+                            </div>
+                        </div>
+                        <label className="text-xs font-medium text-gray-600">Incoming Webhook URL</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="url"
+                                placeholder="https://hooks.slack.com/services/..."
+                                value={slackWebhook}
+                                onChange={(e) => setSlackWebhook(e.target.value)}
+                                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white"
+                                data-testid="slack-webhook-input"
+                            />
+                            <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack || !slackWebhook.trim()} data-testid="slack-test-btn">
+                                {testingSlack ? 'Testing...' : 'Test'}
+                            </Button>
+                            <Button size="sm" onClick={saveSlack} disabled={savingSlack} className="rounded-lg" data-testid="slack-save-btn">
+                                {savingSlack ? 'Saving...' : 'Save'}
+                            </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            Create one at <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">api.slack.com/messaging/webhooks</a> → pick a channel → copy the URL and paste it here.
+                        </p>
                     </div>
 
                     {/* Feedback Link */}

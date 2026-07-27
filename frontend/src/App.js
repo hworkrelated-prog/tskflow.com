@@ -342,11 +342,12 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+                    {/* Group tasks now use the unified TaskDetail view */}
                     <Route
-                        path="/group-task/:groupId"
+                        path="/group-task/:taskId"
                         element={
                             <ProtectedRoute>
-                                <GroupTaskDetail />
+                                <TaskDetail />
                             </ProtectedRoute>
                         }
                     />

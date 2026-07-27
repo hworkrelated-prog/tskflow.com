@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -24,6 +24,10 @@ const TaskDetail = () => {
     const isFreeUser = user?.subscription_tier === 'free';
     const [task, setTask] = useState(null);
     const [loading, setLoading] = useState(true);
+    // Parent-task specific state
+    const [subtasks, setSubtasks] = useState([]);
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [showAllParticipants, setShowAllParticipants] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
     const [showCounterDialog, setShowCounterDialog] = useState(false);
@@ -184,6 +188,16 @@ const TaskDetail = () => {
                 priority: response.data.priority,
                 category: response.data.category || ''
             });
+            // If this is a parent task, load participants + leaderboard for the collapsible section
+            if (response.data.is_parent) {
+                const pid = response.data.id;
+                axios.get(`${API}/tasks/parents/${pid}/subtasks`).then((r) => {
+                    setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
+                }).catch(() => setSubtasks([]));
+                axios.get(`${API}/tasks/${pid}/leaderboard`).then((r) => {
+                    setLeaderboard(r.data?.leaderboard || []);
+                }).catch(() => setLeaderboard([]));
+            }
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to load task'));
             navigate('/dashboard');
@@ -666,6 +680,16 @@ const TaskDetail = () => {
                                         <AttachmentViewer attachments={task.attachments} />
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Participants + Leaderboard (only for parent/group tasks) */}
+                            {task.is_parent && (
+                                <ParticipantsSection
+                                    subtasks={subtasks}
+                                    leaderboard={leaderboard}
+                                    showAll={showAllParticipants}
+                                    setShowAll={setShowAllParticipants}
+                                />
                             )}
 
                             {/* Action Buttons: Share, Email, Comments */}
@@ -1199,3 +1223,99 @@ const TaskDetail = () => {
 };
 
 export default TaskDetail;
+
+// ---- Participants section for parent/group tasks ----
+const statusRank = (s) => {
+    if (s === 'Pending') return 0;
+    if (s === 'Accepted' || s === 'In Progress') return 1;
+    if (s === 'Review Pending') return 2;
+    if (s === 'Completed') return 3;
+    return 1;
+};
+
+const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll }) => {
+    // Merge subtasks + leaderboard entries for status columns
+    const rows = React.useMemo(() => {
+        const byId = {};
+        subtasks.forEach((t) => { byId[t.assigned_to] = t; });
+        const merged = leaderboard.map((lb) => {
+            const t = byId[lb.assignee_id || lb.user_id] || {};
+            const status = t.status || lb.status || 'Pending';
+            return {
+                key: t.id || lb.task_id || lb.user_id,
+                name: t.assigned_to_name || lb.name || 'Unknown',
+                status,
+                completion_hours: lb.completion_hours ?? null,
+                completed: status === 'Completed',
+                submitted: ['Review Pending', 'Completed'].includes(status),
+                accepted: ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(status),
+                viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(status),
+            };
+        });
+        // If leaderboard was empty, fall back to subtasks
+        if (merged.length === 0) {
+            subtasks.forEach((t) => {
+                merged.push({
+                    key: t.id,
+                    name: t.assigned_to_name || t.assigned_to_email || 'Unknown',
+                    status: t.status || 'Pending',
+                    completion_hours: null,
+                    completed: t.status === 'Completed',
+                    submitted: ['Review Pending', 'Completed'].includes(t.status),
+                    accepted: ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(t.status),
+                    viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(t.status),
+                });
+            });
+        }
+        // Pending (not completed) on top; within group sort by statusRank ascending
+        merged.sort((a, b) => statusRank(a.status) - statusRank(b.status));
+        return merged;
+    }, [subtasks, leaderboard]);
+
+    if (rows.length === 0) return null;
+    const visible = showAll ? rows : rows.slice(0, 5);
+    const completedCount = rows.filter((r) => r.completed).length;
+    const pct = Math.round((completedCount / rows.length) * 100);
+
+    return (
+        <div className="border rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    <span className="font-semibold">Participants ({rows.length})</span>
+                    <span className="text-xs text-muted-foreground">— pending first, completed at the bottom</span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs text-emerald-700">{completedCount}/{rows.length} done · {pct}%</span>
+                </div>
+            </div>
+            <ul className="divide-y">
+                {visible.map((r, i) => (
+                    <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''}`}>
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${r.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-700'}`}>{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{r.name}</div>
+                            <div className="flex gap-1 mt-0.5 flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
+                            </div>
+                        </div>
+                        <div className="text-xs text-gray-500 shrink-0">{r.completion_hours ? `${r.completion_hours}h` : '—'}</div>
+                    </li>
+                ))}
+            </ul>
+            {rows.length > 5 && (
+                <button
+                    type="button"
+                    onClick={() => setShowAll(!showAll)}
+                    className="w-full py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 border-t"
+                    data-testid="participants-show-more"
+                >
+                    {showAll ? 'Show less' : `Show ${rows.length - 5} more`}
+                </button>
+            )}
+        </div>
+    );
+};

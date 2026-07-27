@@ -46,6 +46,7 @@ const AnalyticsPage = () => {
     const [startDate, setStartDate] = useState(presets.current.start);
     const [endDate, setEndDate] = useState(presets.current.end);
     const [activePreset, setActivePreset] = useState('current');
+    const [section, setSection] = useState('analytics');
     const [analytics, setAnalytics] = useState(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -168,6 +169,31 @@ const AnalyticsPage = () => {
                         <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
                     </div>
 
+                    {/* Section tabs — Analytics + Personal Leaderboard + Org Leaderboard */}
+                    <div className="flex flex-wrap gap-2 justify-center">
+                        {[
+                            { key: 'analytics', label: 'Team Analytics' },
+                            { key: 'personal_lb', label: 'Personal Leaderboard' },
+                            { key: 'org_lb', label: 'Organization Leaderboard' },
+                        ].map((t) => (
+                            <button
+                                key={t.key}
+                                type="button"
+                                onClick={() => setSection(t.key)}
+                                data-testid={`analytics-section-${t.key}`}
+                                className={`px-4 py-2 rounded-full text-sm font-medium border ${section === t.key ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'}`}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {section !== 'analytics' && (
+                        <LeaderboardTab section={section} startDate={startDate} endDate={endDate} />
+                    )}
+
+                    {section === 'analytics' && (
+                    <>
                     <Card className="border-2 shadow-soft rounded-2xl">
                         <CardHeader>
                             <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Select Time Period</CardTitle>
@@ -481,9 +507,72 @@ const AnalyticsPage = () => {
                             )}
                         </>
                     )}
+                    </>
+                    )}
                 </motion.div>
             </main>
         </div>
+    );
+};
+
+// Simple leaderboard tab embedded inside Analytics
+const LeaderboardTab = ({ section, startDate, endDate }) => {
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const endpoint = section === 'org_lb' ? 'org' : 'personal';
+
+    useEffect(() => {
+        (async () => {
+            if (!startDate || !endDate) return;
+            setLoading(true);
+            try {
+                const res = await axios.get(`${API}/leaderboard/${endpoint}`, { params: { start_date: startDate, end_date: endDate } });
+                setRows(res.data?.leaderboard || []);
+            } catch (_) { setRows([]); }
+            finally { setLoading(false); }
+        })();
+    }, [endpoint, startDate, endDate]);
+
+    return (
+        <Card className="border-2 rounded-2xl">
+            <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground mb-3">
+                    {section === 'org_lb'
+                        ? 'Everyone in your organization, ranked by an overall performance score.'
+                        : 'People you\u2019ve assigned tasks to, ranked by how quickly they get things done (across all revision rounds).'}
+                </p>
+                {loading && <div className="text-sm text-muted-foreground py-4">Loading...</div>}
+                {!loading && (
+                    <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 text-gray-600">
+                                <tr>
+                                    <th className="text-left px-3 py-2 font-medium">#</th>
+                                    <th className="text-left px-3 py-2 font-medium">Person</th>
+                                    <th className="text-left px-3 py-2 font-medium">Completed</th>
+                                    <th className="text-left px-3 py-2 font-medium">Avg completion</th>
+                                    <th className="text-left px-3 py-2 font-medium">Avg response</th>
+                                    {section === 'org_lb' && <th className="text-left px-3 py-2 font-medium">Performance</th>}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.length === 0 && (<tr><td colSpan="6" className="px-3 py-8 text-center text-gray-500">No data yet for this range.</td></tr>)}
+                                {rows.map((r) => (
+                                    <tr key={r.user_id} className="border-t">
+                                        <td className="px-3 py-2 font-mono">{r.rank}</td>
+                                        <td className="px-3 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-gray-500">{r.email}</div></td>
+                                        <td className="px-3 py-2">{r.completed}</td>
+                                        <td className="px-3 py-2">{r.avg_completion_hours != null ? `${r.avg_completion_hours}h` : '—'}</td>
+                                        <td className="px-3 py-2">{r.avg_response_hours != null ? `${r.avg_response_hours}h` : '—'}</td>
+                                        {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-indigo-700">{r.performance_score}</td>}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
     );
 };
 
