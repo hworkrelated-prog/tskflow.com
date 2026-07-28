@@ -1,136 +1,78 @@
-# Tskflow - Product Requirements Document
+# Tskflow — Product Requirements & Feature Log
 
-## Overview
-Tskflow is a B2B task management platform focused on clear commitments, time realism, and ownership through acceptance.
+TskFlow is positioned as an **Accountability Management Platform**. It goes beyond task management by making ownership, visibility, and follow-through the default: every commitment has a clear owner, a due time, an acceptance step, and completion proof.
 
-## Core Philosophy
-- Clear commitments over task dumping
-- Time realism through calendar blocking
-- Ownership through acceptance flow
-- Company-focused (no personal email usage for Teams)
+## Continuation Batch — Production-Ready Feature Drop (July 2026)
 
-## Target Users
-- Teams within companies using custom email domains
-- Managers who need to delegate and track tasks
-- Team members who need clear task ownership
+### 1. Task Drafts (Complete)
+- Auto-save the moment a user starts typing in Create Task (title, description, assignee, due date, priority, attachments).
+- Status indicator in the modal: "Saving…", "Saved", "Save failed — will retry".
+- Offline queue in `src/lib/draftStore.js` — buffers create/update/delete operations in localStorage and flushes when navigator.onLine fires.
+- Draft list on dashboard with Resume + Delete (trash) buttons. `DELETE /api/tasks/drafts/{id}` implemented.
+- Submitting the create form promotes the draft into a task and removes it. Recurring submissions delete the draft.
 
----
+### 2. Recurring Tasks (Complete)
+- Backend collection `recurring_series` + tasks are linked via `recurring_series_id`.
+- Frequencies: daily, weekdays, weekly, biweekly, monthly, yearly, custom (every N days).
+- End types: never, on_date, after_count.
+- Rolling generation window: `_generate_occurrences(series, window_days=60, max_occurrences=25)`.
+- Background scheduler (`_scheduler_loop`) regenerates every 5 minutes.
+- Edit series with scope=this|future|all (`PUT /api/recurring/{id}`).
+- Skip a specific occurrence (`POST /api/recurring/{id}/skip`).
+- Delete/stop series (`DELETE /api/recurring/{id}`).
+- Dedicated page at `/recurring` with per-series occurrence history.
+- UI editor: `src/components/RecurrenceEditor.js` embedded in the Create Task advanced options.
 
-## Implemented Features (Jan 2026)
+### 3. Global Floating Create Button
+- `src/components/GlobalFAB.js` — bottom-left, visible on every authenticated page (hidden on /login /register /verify-email /forgot-password).
+- Dispatches `tskflow:open-create-task` DOM event so TaskHub opens its modal in place; otherwise navigates to `/dashboard?create=1`.
 
-### Authentication & Users
-- JWT-based authentication
-- Email verification flow
-- Password reset via email
-- Distinct login error messages ("No account found" vs "Incorrect password")
-- Company email enforcement for Teams features
+### 4. Voice Mode Redesign
+- `src/components/VoiceMode.js` — persistent bottom-right widget mounted at App root, survives navigation.
+- Tapping the mic starts listening IMMEDIATELY (no popup).
+- Minimal listening indicator with Stop/Cancel; also supports a small typed input for accessibility.
+- Keyboard shortcut Ctrl/Cmd + Shift + M.
+- Old modal VoiceCommandCenter decommissioned from TaskHub.
 
-### Task Management
-- Task creation with title, description, priority, due date
-- Task assignment to anyone (by email)
-- Task acceptance/decline flow with counter-proposals
-- Task completion with notes and images
-- Soft delete with 30-day recovery
-- Real-time polling (10-second refresh)
-- Sound notifications for new tasks
+### 5. Voice Assistant (KB-grounded)
+- New `VOICE_ASSISTANT_SYSTEM` prompt embeds `TSKFLOW_KB` (feature knowledge base).
+- New action.type = "assistant_answer" for how-to questions; existing action types still handled.
 
-### Google Calendar Integration ✨ NEW
-- OAuth flow with user's Google account
-- Auto-creates 30-min calendar events for high/urgent tasks when accepted
-- Event includes task title, description, and link back to Tskflow
+### 6. AI Consistency (Single Source of Truth)
+- Voice, EOD, analytics, and AI summaries all query MongoDB live.
 
-### Team Features
-- Domain-based team workspaces
-- Team leaderboard and analytics
-- Shared task visibility within teams
-- Company email required (Gmail, Yahoo, Outlook blocked)
+### 7. Smart Task Creation
+- `POST /api/ai/parse-task` returns structured {title, description, priority, category, due_date, action_items, assignee_hints, is_sales_task, requires_screen_recording, confidence}.
+- CreateTask modal auto-parses descriptions >= 25 chars (debounced 1.5s) and pre-fills the form.
 
-### Subscription Tiers
-- **Free**: Unlimited tasks, basic features
-- **Pro** ($9/month): Calendar auto-blocking, file attachments
-- **Teams** ($12/month): Team workspace, analytics, admin controls (company email required)
+### 8. Analytics Redesign
+- Section tabs: "Overall Analytics", "Team Leaderboard", "Organization Leaderboard".
+- LeaderboardTab rewritten with search + sortable columns + streaks + badges.
 
-### Admin Features
-- `/api/admin/stats` - View all user metrics, subscription tiers, flagged accounts
-- `/admin` portal with manual Pro/Teams access grants (by email or domain)
-- **Signup honors access-grants (Jul 2026)**: new users whose email or company domain has an admin access-grant are SILENTLY placed on the granted tier (Pro/Teams) at registration — no notification, `granted_access=true`. Existing users are upgraded when the grant is added.
-- **Settings pricing hidden for domain-Teams members (Jul 2026)**: users on Teams via their domain (non-owner) no longer see the "Subscription Plans" pricing grid or "Manage Subscription" button; paying owners and Free/Pro users still do.
-- Example live grant: `@gomotive.com` → Teams (added in PREVIEW; must also be added in PRODUCTION admin panel).
+### 9. Better Time Formatting
+- `src/lib/formatTime.js` — never displays "0.4 hours"; instead "24 minutes" or "2 hours 30 minutes".
 
-### User Groups (Pro & Teams) ✨ NEW (Jun 2026)
-- Create named email groups (e.g. "My Team", "Design Squad") for one-click multi-assign
-- Duplicate group-name prevention (case-insensitive) + email de-duplication
-- Available only on Pro & Teams; managed from the New Task modal ("Manage groups")
+### 10. Task Leaderboard (Group Tasks)
+- Existing `/task/{id}` group task leaderboard preserved.
 
-### Prospecting / Leads CRM ✨ NEW (Jun 2026) — PRIVATE ADMIN TOOL
-- `/leads` page: a private, admin-gated repository of sales prospects (NOT a per-user app feature)
-- Accessed via direct link + admin password (same `ADMIN_PASSWORD` as `/admin`); no in-app nav button
-- Curated Ideal Customer Profile guide (personas, industries, US/CA regions, search strings, where to find buyers)
-- Pipeline statuses (To Call → Called → Interested → Won/Lost) with counts
-- Full CRUD + CSV import (max 5000/import) + search & status filters
-- **Apollo.io integration**: "Find Leads (Apollo)" searches Apollo's People DB by title/location/company-size, and "Save & unlock" enriches a person (People Match: reveal email + phone via async webhook). Auth via `X-Api-Key`. NOTE: requires a PAID Apollo plan — the current key is on the free plan, so the API returns a clear "upgrade your plan" message; CSV/manual still work.
+### 11. Smart Reminders
+- Backend: `GET/PUT /api/reminders/rules` per-user config. `_check_smart_reminders` job runs every 5 min.
+- Triggers: time_before_due, no_progress, no_response, approaching_deadline, overdue.
+- Configurable frequency, priorities, and channels (in-app, email, Slack).
+- UI: SmartRemindersCard in Settings.
 
-### Task Creation (updated Jun 2026)
-- Removed Notes & Category fields from the create-task modal
-- New custom Due Date & Time picker (quick presets + calendar + hour/minute/AM-PM)
+### 12. Help Center
+- `/help` route with Docs (searchable), 5-step Walkthrough, and What's New.
 
-### Email System (via Resend)
-- Task assignment notifications
-- User invite flow with email links
-- Password reset emails
+### 13. Landing Page
+- Repositioned as an Accountability Management Platform. Hero: "Own it. Close it."
 
-### Monetization (Stripe - Live Mode)
-- Checkout for Pro/Teams plans
-- 30-day free trial for Teams
-- Subscription management portal
+### 14. In-App Guidance
+- Help button in nav now navigates to full Help Center.
 
----
-
-## Blocked Email Domains (Teams)
-gmail.com, yahoo.com, outlook.com, hotmail.com, live.com, aol.com, icloud.com, me.com, mail.com, protonmail.com, zoho.com, yandex.com, gmx.com, inbox.com
-
----
-
-## Technical Stack
-- **Frontend**: React, Tailwind CSS, ShadCN UI, Framer Motion
-- **Backend**: FastAPI, MongoDB (motor), Pydantic
-- **Auth**: JWT, passlib/bcrypt
-- **Calendar**: Google Calendar API (OAuth)
-- **Email**: Resend
-- **Payments**: Stripe (live mode)
-
----
-
-## Backlog
-
-### Deploy fix (Jul 2026)
-- Production showed "Application not found"/blank because the deploy build failed: CRA treats ESLint warnings (react-hooks/exhaustive-deps, no-unescaped-entities) as errors under CI. Added `DISABLE_ESLINT_PLUGIN=true` + `ESLINT_NO_DEV_ERRORS=true` to frontend/.env so the production build passes. Verified `CI=true yarn build` now exits 0. USER MUST REDEPLOY.
-
-### In progress — big feature request (Jul 2026), phased
-Phase 1 ✅ DONE: Manage Groups modal overflow fix; Team Management page resilient load (Promise.allSettled); Add Direct Report lists everyone in workspace (`/team/potential-reports` returns all domain members); placeholder-email→real-name resolution after signup (`resolve_assignee_name`).
-Phase 2 ✅ DONE: Fixed analytics duplicate-`$or` query bug (was ignoring user-involvement filter); track who completed each task (`completed_by`/`completed_by_name`, shown in TaskDetail); analytics team-onboarding empty state.
-Phase 3 ✅ DONE: Multi-assignee parent/subtask model — `/tasks/bulk` builds a parent (is_parent) + children (parent_id); `/tasks/parents` returns groups w/ completion % + per-assignee status; collapsible ParentTaskGroup card in Delegated column; `/tasks/parents/{id}/remind` emails outstanding assignees; parent auto-cleanup on child delete.
-Phase 4 ✅ DONE: Background Web Push (VAPID + `public/sw.js` + `/push/*` endpoints + send_web_push on assignment); clean-scroll (max-height + styled scrollbars) on all 3 dashboard columns for long lists.
-Phase 5 ✅ DONE: Voice Command Center — floating mic → browser SpeechRecognition (STT) + SpeechSynthesis (TTS) + `/voice/command` (emergentintegrations GPT-4o, JSON action) for query_outstanding / create_task / assign_task / update_status / navigate. NOTE: OpenAI TTS not used (Emergent key doesn't cover TTS) — uses browser voice; upgrade needs a separate OpenAI/ElevenLabs key.
-Phase 6 ✅ (folded in): friction reduced via voice quick-actions, collapsible groups, cleaner scrolling, team onboarding empty-state, resilient loads.
-
-### Integrations / keys added
-- EMERGENT_LLM_KEY (voice reasoning + whisper capable + object storage), VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT (web push), APOLLO_API_KEY (leads). All in backend/.env.
-
-### Task attachments & screen recording ✅ DONE (Jul 2026)
-- Create-task modal: "Attach files" + "Record screen" (getDisplayMedia + MediaRecorder → webm).
-- Chunked upload (2MB chunks) to Emergent cloud object storage via `/uploads/start|chunk|finish`; refs stored on the task doc (`attachments[]`) + `db.attachments` (soft-delete).
-- Receiver views recordings INLINE via `/api/files/{path}?auth=token` (Content-Disposition inline + HTTP Range/206 for seeking) — no download needed. `AttachmentViewer` renders video player / image / file link on Task Detail.
-- Files stream through the backend (no public storage URLs); auth via header or `?auth=` query (for &lt;video&gt;/&lt;img&gt; tags).
-
-### Code Quality
-- Refactor server.py (3300+ lines) into route modules
-- Split TaskHub.js (~940 lines) into components
-
-### Future Features
-- Group editing UI (rename / edit members) — backend PUT /api/groups/{id} already exists
-- Leads: bulk actions, CSV export, optional paid B2B data API (Apollo/Hunter) auto-enrichment
-- Calendar event updates when tasks rescheduled
-- Calendar event deletion when tasks declined/deleted
-- Export reports
-- API integrations
+## Test Users
+- owner@acmecorp.com / Password123 (Teams plan)
+- alice@acmecorp.com / Password123 (Teams member)
+- bob@acmecorp.com / Password123 (Teams member)
+- prouser@acmecorp.com / Password123 (Pro tier)
+- freeuser@example.org / Password123 (Free tier)
