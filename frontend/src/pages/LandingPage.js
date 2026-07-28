@@ -39,35 +39,35 @@ const LandingPage = () => {
 
     const features = [
         {
-            icon: <Clock className="w-6 h-6" />,
-            title: "Auto Calendar Blocking",
-            description: "High-priority tasks automatically block time on Google Calendar when accepted. No more forgotten deadlines.",
+            icon: <CheckCircle2 className="w-6 h-6" />,
+            title: "Acceptance & Ownership",
+            description: "Every task has a clear owner. Assignees explicitly accept, counter-propose, or decline — nothing sits in limbo.",
             highlight: true
         },
         {
             icon: <Zap className="w-6 h-6" />,
-            title: "Lightning Fast",
-            description: "Create and assign tasks in seconds. No complex setup, just pure productivity."
+            title: "Voice-First Assistant",
+            description: "Tap the mic. Create tasks by voice, ask what's outstanding, or ask how any feature works. Zero learning curve."
         },
         {
             icon: <Users className="w-6 h-6" />,
-            title: "Team Collaboration",
-            description: "Assign tasks to anyone via email. They'll receive instant notifications."
+            title: "Group Accountability",
+            description: "Assign one task to many. Everyone sees a live leaderboard ranking participants by speed and engagement."
         },
         {
-            icon: <GitBranch className="w-6 h-6" />,
-            title: "Org Hierarchy",
-            description: "Build your reporting structure. Track direct reports and their progress."
+            icon: <Clock className="w-6 h-6" />,
+            title: "Recurring & Smart Reminders",
+            description: "Turn routines into series (daily, weekly, custom). Smart reminders escalate before, on, and after due dates."
         },
         {
             icon: <BarChart3 className="w-6 h-6" />,
-            title: "Smart Analytics",
-            description: "Get insights into task completion rates, team performance, and trends."
+            title: "Follow-through Analytics",
+            description: "Completion rate, response time, streaks, overdue trends — plus a Team Leaderboard that rewards execution."
         },
         {
             icon: <Shield className="w-6 h-6" />,
-            title: "Company Email Only",
-            description: "Teams require company email. Serious B2B execution, not personal todo lists."
+            title: "Proof of Completion",
+            description: "Require screen recordings, completion notes, or reviewer approval — so 'Done' actually means done."
         }
     ];
 
@@ -597,19 +597,19 @@ const LandingPage = () => {
                         >
                             <Badge className="mb-6 bg-indigo-100 text-indigo-700 hover:bg-indigo-100 rounded-full px-4 py-2 text-sm font-medium">
                                 <Sparkles className="w-4 h-4 mr-2" />
-                                Simple. Powerful. Effective.
+                                Accountability Management Platform
                             </Badge>
                             
                             <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6" style={{ fontFamily: 'Outfit' }}>
-                                Tasks flow.
+                                Own it.
                                 <br />
                                 <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                                    Teams grow.
+                                    Close it.
                                 </span>
                             </h1>
                             
                             <p className="text-xl text-gray-600 mb-8 leading-relaxed max-w-lg">
-                                The task management platform built for modern teams. Assign, track, and complete work with clarity. See who reports to whom, without the chaos.
+                                TskFlow is the Accountability Management Platform for teams who want ownership, visibility, and follow-through — not another to-do list. Every commitment has a clear owner, a due time, an acceptance step, and completion proof.
                             </p>
                             
                             <div className="flex flex-col sm:flex-row gap-4 mb-12">
@@ -618,7 +618,7 @@ const LandingPage = () => {
                                     size="lg"
                                     className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-xl shadow-indigo-500/30 h-14 px-8 text-lg font-semibold"
                                 >
-                                    Get Started
+                                    Start Free
                                     <ArrowRight className="w-5 h-5 ml-2" />
                                 </Button>
                                 <Button 
@@ -636,15 +636,15 @@ const LandingPage = () => {
                             <div className="flex flex-wrap gap-6">
                                 <div className="flex items-center gap-2 text-gray-600">
                                     <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                    <span>Free forever plan</span>
+                                    <span>Built for follow-through</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                    <span>Voice-first assistant</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-gray-600">
                                     <CheckCircle2 className="w-5 h-5 text-green-500" />
                                     <span>No credit card required</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-gray-600">
-                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                    <span>Setup in 2 minutes</span>
                                 </div>
                             </div>
                         </motion.div>
@@ -702,11 +702,11 @@ const LandingPage = () => {
                             Everything you need to
                             <br />
                             <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                                ship faster
+                                close the loop
                             </span>
                         </h2>
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                            Built for teams who value clarity, speed, and getting things done without the overhead.
+                            Accountability is a system, not a hope. TskFlow makes ownership, visibility, and follow-through the default.
                         </p>
                     </motion.div>
 
@@ -759,7 +759,7 @@ const LandingPage = () => {
                             See it in action
                         </h2>
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                            Watch how Tskflow helps teams stay accountable
+                            Watch how TskFlow turns commitments into closed-out work
                         </p>
                     </motion.div>
 
@@ -772,9 +772,9 @@ const LandingPage = () => {
                         <div className="hidden md:block absolute top-24 left-1/4 right-1/4 h-0.5 bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300" />
                         
                         {[
-                            { step: "01", title: "Create & Assign", description: "Create tasks and assign them to yourself or anyone via email. Set priorities and due dates." },
-                            { step: "02", title: "Build Your Team", description: "Set up your org hierarchy. Add direct reports and define who reports to whom." },
-                            { step: "03", title: "Track & Deliver", description: "Monitor progress, get insights, and celebrate wins. All with privacy respected." }
+                            { step: "01", title: "Commit", description: "Create a task by voice or by typing. Smart Task Creation pre-fills due date, priority, and category from your description." },
+                            { step: "02", title: "Accept", description: "Assignees explicitly accept, counter-propose, or decline. No commitments in limbo — ownership is unambiguous." },
+                            { step: "03", title: "Close it out", description: "Completion notes, screen recordings, reviewer approval, and Smart Reminders make follow-through unavoidable." }
                         ].map((item, index) => (
                             <motion.div
                                 key={index}
@@ -819,7 +819,7 @@ const LandingPage = () => {
                             </span>
                         </h2>
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                            We built Tskflow because team accountability shouldn't require enterprise software.
+                            We built TskFlow because accountability shouldn&apos;t require enterprise software.
                             <br />
                             <span className="text-gray-500">Pay only for what you use. No surprises.</span>
                         </p>
@@ -917,10 +917,10 @@ const LandingPage = () => {
                         className="text-center max-w-3xl mx-auto"
                     >
                         <h2 className="text-4xl md:text-6xl font-bold text-white mb-6" style={{ fontFamily: 'Outfit' }}>
-                            Ready to get organized?
+                            Turn intent into action.
                         </h2>
                         <p className="text-xl text-white/80 mb-10">
-                            Join teams who are already shipping faster with Tskflow. Start free, no credit card required.
+                            TskFlow makes accountability visible. Start free, no credit card required — see the follow-through your team&apos;s been missing.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <Button 
@@ -950,7 +950,7 @@ const LandingPage = () => {
                                 </span>
                             </div>
                             <p className="text-gray-400 mb-6">
-                                The task management platform built for modern teams who value clarity and speed.
+                                The Accountability Management Platform for teams who value ownership, visibility, and follow-through.
                             </p>
                             <div className="flex gap-4">
                                 <a href="#" className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">

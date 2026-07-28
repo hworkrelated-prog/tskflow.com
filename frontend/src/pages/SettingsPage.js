@@ -603,6 +603,9 @@ const SettingsPage = () => {
                         )}
                     </div>
 
+                    {/* Smart Reminders */}
+                    <SmartRemindersCard slackConnected={!!slackWebhook} />
+
                     {/* Slack Bridge — Simple 1-click setup */}
                     <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
                         <div className="flex items-center gap-3">
@@ -878,3 +881,154 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
+
+// -------- Smart Reminders card --------
+const SmartRemindersCard = ({ slackConnected }) => {
+    const [rule, setRule] = React.useState({
+        enabled: true,
+        triggers: ['time_before_due', 'no_response', 'overdue'],
+        hours_before_due: 4,
+        frequency_hours: 12,
+        channels: ['in_app', 'email'],
+        priorities: ['High', 'Urgent'],
+    });
+    const [saving, setSaving] = React.useState(false);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const r = await axios.get(`${API}/reminders/rules`);
+                setRule({ ...rule, ...(r.data?.rules || {}) });
+            } catch (_) { /* noop */ } finally { setLoading(false); }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const save = async (patch) => {
+        const next = { ...rule, ...patch };
+        setRule(next);
+        setSaving(true);
+        try {
+            await axios.put(`${API}/reminders/rules`, next);
+        } catch (_) { toast.error('Failed to save reminders'); }
+        finally { setSaving(false); }
+    };
+
+    const toggleFrom = (list, item) => list.includes(item) ? list.filter(x => x !== item) : [...list, item];
+
+    if (loading) return <div className="bg-white/70 border-2 rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
+
+    const triggerOpts = [
+        { key: 'time_before_due', label: 'Time before due', help: 'Ping X hours before a task is due.' },
+        { key: 'approaching_deadline', label: 'Approaching deadline', help: 'Extra nudge as the deadline gets very close.' },
+        { key: 'no_response', label: 'No response after assignment', help: 'Fire when a Pending task hasn\u2019t been accepted for a while.' },
+        { key: 'no_progress', label: 'No progress', help: 'Fire when an Accepted task has been idle before the deadline.' },
+        { key: 'overdue', label: 'Overdue', help: 'Keep reminding when the task has passed its due date.' },
+    ];
+
+    return (
+        <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
+            <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
+                <div className="flex-1">
+                    <h3 className="font-semibold text-base">Smart Reminders</h3>
+                    <p className="text-xs text-muted-foreground">Automated reminders for High and Urgent tasks — so nothing important goes cold.</p>
+                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={rule.enabled} onChange={(e) => save({ enabled: e.target.checked })} className="sr-only peer" data-testid="reminders-enable-toggle" />
+                    <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-rose-500 transition-colors">
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`}></span>
+                    </span>
+                </label>
+            </div>
+            {rule.enabled && (
+                <div className="space-y-4 pt-2 border-t">
+                    <div>
+                        <Label className="text-xs text-muted-foreground">Triggers</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                            {triggerOpts.map((t) => (
+                                <label key={t.key} className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer ${rule.triggers.includes(t.key) ? 'bg-rose-50 border-rose-200' : 'bg-white hover:bg-slate-50'}`} data-testid={`reminder-trigger-${t.key}`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={rule.triggers.includes(t.key)}
+                                        onChange={() => save({ triggers: toggleFrom(rule.triggers, t.key) })}
+                                        className="mt-0.5"
+                                    />
+                                    <div className="text-sm">
+                                        <div className="font-medium">{t.label}</div>
+                                        <div className="text-[11px] text-muted-foreground">{t.help}</div>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <Label className="text-xs text-muted-foreground">Hours before due (time-before trigger)</Label>
+                            <Input
+                                type="number"
+                                min={1}
+                                max={72}
+                                value={rule.hours_before_due}
+                                onChange={(e) => save({ hours_before_due: parseInt(e.target.value || '1', 10) })}
+                                className="rounded-xl mt-1"
+                                data-testid="reminder-hours-before"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs text-muted-foreground">Minimum hours between reminders</Label>
+                            <Input
+                                type="number"
+                                min={1}
+                                max={72}
+                                value={rule.frequency_hours}
+                                onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '1', 10) })}
+                                className="rounded-xl mt-1"
+                                data-testid="reminder-frequency"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <Label className="text-xs text-muted-foreground">Deliver via</Label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                            {[
+                                { key: 'in_app', label: '🔔 In-app + browser' },
+                                { key: 'email', label: '📧 Email' },
+                                { key: 'slack', label: '💬 Slack' + (slackConnected ? '' : ' (connect Slack first)') },
+                            ].map((c) => (
+                                <button
+                                    type="button"
+                                    key={c.key}
+                                    onClick={() => save({ channels: toggleFrom(rule.channels, c.key) })}
+                                    disabled={c.key === 'slack' && !slackConnected}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.channels.includes(c.key) ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-rose-300'} disabled:opacity-40`}
+                                    data-testid={`reminder-channel-${c.key}`}
+                                >
+                                    {c.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <Label className="text-xs text-muted-foreground">Apply to priorities</Label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                            {['Low', 'Medium', 'High', 'Urgent'].map((p) => (
+                                <button
+                                    type="button"
+                                    key={p}
+                                    onClick={() => save({ priorities: toggleFrom(rule.priorities, p) })}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.priorities.includes(p) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'}`}
+                                    data-testid={`reminder-priority-${p}`}
+                                >
+                                    {p}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {saving && <p className="text-xs text-muted-foreground">Saving…</p>}
+                </div>
+            )}
+        </div>
+    );
+};

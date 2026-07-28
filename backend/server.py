@@ -4932,7 +4932,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         chat = LlmChat(
             api_key=emergent_key,
             session_id=f"voice_{current_user['id']}",
-            system_message=VOICE_SYSTEM_PROMPT
+            system_message=VOICE_ASSISTANT_SYSTEM
         ).with_model("openai", "gpt-4o")
         user_msg = UserMessage(text=f"Transcript: {transcript}\n\nContext JSON: {_json.dumps(context)}")
         raw = await chat.send_message(user_msg)
@@ -6048,18 +6048,767 @@ async def get_product_updates(current_user: dict = Depends(get_current_user)):
     return {"updates": updates}
 
 
+# ==========================================================================
+# RECURRING TASKS — series + rolling-window occurrence generation
+# ==========================================================================
+
+class RecurrenceRule(BaseModel):
+    frequency: str  # "daily" | "weekdays" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom"
+    interval: Optional[int] = 1  # For custom: every N days
+    weekdays: Optional[List[int]] = None  # 0-6 (Mon-Sun), for weekly custom days
+    day_of_month: Optional[int] = None  # For monthly (1-31), defaults to due_date day
+    month_of_year: Optional[int] = None  # For yearly (1-12), defaults to due_date month
+    end_type: Optional[str] = "never"  # "never" | "on_date" | "after_count"
+    end_date: Optional[str] = None  # YYYY-MM-DD when end_type=="on_date"
+    end_count: Optional[int] = None  # When end_type=="after_count"
+
+class RecurringSeriesCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigned_to: str  # "self", user id, or email
+    start_due_date: str  # First occurrence due date (ISO)
+    priority: str = "Medium"
+    category: Optional[str] = None
+    is_sales_task: Optional[bool] = False
+    requires_screen_recording: Optional[bool] = False
+    auto_reminder: Optional[bool] = False
+    attachments: Optional[List[dict]] = None
+    recurrence: RecurrenceRule
+
+class RecurringSeriesUpdate(BaseModel):
+    scope: str = "all"  # "this" | "future" | "all"
+    occurrence_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[str] = None  # For "this" scope
+    recurrence: Optional[RecurrenceRule] = None
+    is_sales_task: Optional[bool] = None
+    requires_screen_recording: Optional[bool] = None
+    category: Optional[str] = None
+
+
+def _next_occurrence_date(prev_dt: datetime, rule: dict) -> Optional[datetime]:
+    """Given previous occurrence datetime + rule dict, compute the next occurrence dt."""
+    freq = rule.get("frequency", "daily")
+    interval = int(rule.get("interval") or 1)
+    if freq == "daily":
+        return prev_dt + timedelta(days=1)
+    if freq == "weekdays":
+        nxt = prev_dt + timedelta(days=1)
+        # Mon=0 ... Sun=6; skip Sat/Sun
+        while nxt.weekday() >= 5:
+            nxt += timedelta(days=1)
+        return nxt
+    if freq == "weekly":
+        wds = rule.get("weekdays")
+        if wds:
+            # Find next weekday in list after prev_dt
+            for i in range(1, 15):
+                cand = prev_dt + timedelta(days=i)
+                if cand.weekday() in wds:
+                    return cand
+            return None
+        return prev_dt + timedelta(weeks=1)
+    if freq == "biweekly":
+        return prev_dt + timedelta(weeks=2)
+    if freq == "monthly":
+        # Add roughly one month, snap day
+        year = prev_dt.year + (1 if prev_dt.month == 12 else 0)
+        month = 1 if prev_dt.month == 12 else prev_dt.month + 1
+        target_day = int(rule.get("day_of_month") or prev_dt.day)
+        # clamp to end of month
+        import calendar as _cal
+        last_day = _cal.monthrange(year, month)[1]
+        day = min(target_day, last_day)
+        return prev_dt.replace(year=year, month=month, day=day)
+    if freq == "yearly":
+        try:
+            return prev_dt.replace(year=prev_dt.year + 1)
+        except ValueError:  # e.g. feb 29
+            return prev_dt.replace(year=prev_dt.year + 1, day=28)
+    if freq == "custom":
+        return prev_dt + timedelta(days=max(1, interval))
+    return None
+
+
+async def _generate_occurrences(series: dict, window_days: int = 60, max_occurrences: int = 25) -> int:
+    """Generate upcoming occurrences for a series based on rolling window. Returns count generated."""
+    if series.get("stopped"):
+        return 0
+    rule = series.get("recurrence") or {}
+    end_type = rule.get("end_type", "never")
+    end_date = None
+    if end_type == "on_date" and rule.get("end_date"):
+        try:
+            end_date = datetime.fromisoformat(rule["end_date"]).replace(tzinfo=PST)
+        except Exception:
+            try:
+                end_date = datetime.strptime(rule["end_date"], "%Y-%m-%d").replace(tzinfo=PST)
+            except Exception:
+                end_date = None
+    end_count = rule.get("end_count") if end_type == "after_count" else None
+
+    now = get_pst_now()
+    window_end = now + timedelta(days=window_days)
+
+    # Find last generated occurrence
+    existing = await db.tasks.find({
+        "recurring_series_id": series["id"],
+        "deleted": {"$ne": True}
+    }, {"_id": 0, "due_date": 1, "id": 1}).sort("due_date", -1).to_list(1000)
+    existing_count = len(existing)
+
+    if end_count and existing_count >= end_count:
+        return 0
+
+    if not existing:
+        # First occurrence uses start_due_date
+        try:
+            last_dt = datetime.fromisoformat(series["start_due_date"].replace("Z", "+00:00"))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=PST)
+        except Exception:
+            return 0
+        # Insert the first occurrence
+        first_id = await _insert_series_task(series, last_dt.isoformat())
+        if first_id:
+            existing_count += 1
+    else:
+        try:
+            last_dt = datetime.fromisoformat(existing[0]["due_date"].replace("Z", "+00:00"))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=PST)
+        except Exception:
+            return 0
+
+    generated = 0
+    for _ in range(max_occurrences):
+        nxt = _next_occurrence_date(last_dt, rule)
+        if not nxt:
+            break
+        if end_date and nxt > end_date:
+            break
+        if end_count and existing_count >= end_count:
+            break
+        if nxt > window_end:
+            break
+        # Skip if this date is in the skipped_dates
+        skip_key = nxt.strftime("%Y-%m-%d")
+        skipped = series.get("skipped_dates") or []
+        if skip_key in skipped:
+            last_dt = nxt
+            continue
+        tid = await _insert_series_task(series, nxt.isoformat())
+        if tid:
+            generated += 1
+            existing_count += 1
+        last_dt = nxt
+
+    return generated
+
+
+async def _insert_series_task(series: dict, due_date_iso: str) -> Optional[str]:
+    """Create a task from a recurring series template with the given due date."""
+    tid = str(uuid.uuid4())
+    creator_id = series["created_by"]
+    creator = await db.users.find_one({"id": creator_id}, {"_id": 0})
+    if not creator:
+        return None
+
+    assigned_to = series.get("assigned_to") or "self"
+    if assigned_to == "self":
+        assigned_to_id = creator_id
+        assigned_to_email = creator["email"]
+        is_self = True
+    elif "@" in assigned_to:
+        existing = await db.users.find_one({"email": assigned_to}, {"_id": 0})
+        if existing:
+            assigned_to_id = existing["id"]
+            assigned_to_email = existing["email"]
+            is_self = (assigned_to_id == creator_id)
+        else:
+            assigned_to_id = f"email_{assigned_to}"
+            assigned_to_email = assigned_to
+            is_self = False
+    else:
+        u = await db.users.find_one({"id": assigned_to}, {"_id": 0})
+        if not u:
+            return None
+        assigned_to_id = u["id"]
+        assigned_to_email = u["email"]
+        is_self = (assigned_to_id == creator_id)
+
+    task_doc = {
+        "id": tid,
+        "title": series["title"],
+        "description": series.get("description") or "",
+        "assigned_to": assigned_to_id,
+        "assigned_to_email": assigned_to_email,
+        "created_by": creator_id,
+        "due_date": due_date_iso,
+        "status": "Accepted" if is_self else "Pending",
+        "priority": series.get("priority", "Medium"),
+        "category": series.get("category"),
+        "created_at": get_pst_now().isoformat(),
+        "accepted_at": get_pst_now().isoformat() if is_self else None,
+        "invite_token": str(uuid.uuid4())[:8],
+        "shareable_token": str(uuid.uuid4())[:12],
+        "attachments": series.get("attachments") or None,
+        "is_sales_task": series.get("is_sales_task", False),
+        "requires_screen_recording": series.get("requires_screen_recording", False),
+        "auto_reminder": series.get("auto_reminder", False),
+        "recurring_series_id": series["id"],
+        "comments": []
+    }
+    await db.tasks.insert_one(task_doc)
+    return tid
+
+
+@api_router.post("/recurring")
+async def create_recurring_series(series: RecurringSeriesCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    series_id = str(uuid.uuid4())
+    doc = {
+        "id": series_id,
+        "created_by": current_user["id"],
+        "created_by_name": current_user["name"],
+        "title": series.title,
+        "description": series.description or "",
+        "assigned_to": series.assigned_to,
+        "start_due_date": series.start_due_date,
+        "priority": series.priority,
+        "category": series.category,
+        "is_sales_task": series.is_sales_task or False,
+        "requires_screen_recording": series.requires_screen_recording or False,
+        "auto_reminder": series.auto_reminder or False,
+        "attachments": series.attachments or None,
+        "recurrence": series.recurrence.dict(),
+        "skipped_dates": [],
+        "stopped": False,
+        "created_at": get_pst_now().isoformat(),
+    }
+    await db.recurring_series.insert_one(doc)
+    # Immediately generate the initial batch of occurrences
+    generated = await _generate_occurrences(doc, window_days=60, max_occurrences=25)
+    return {"series_id": series_id, "generated": generated}
+
+
+@api_router.get("/recurring")
+async def list_recurring_series(current_user: dict = Depends(get_current_user)):
+    series_list = await db.recurring_series.find({
+        "created_by": current_user["id"]
+    }, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+    # Enrich with occurrence counts
+    for s in series_list:
+        upcoming = await db.tasks.count_documents({
+            "recurring_series_id": s["id"],
+            "deleted": {"$ne": True},
+            "status": {"$nin": ["Completed", "Declined"]}
+        })
+        completed = await db.tasks.count_documents({
+            "recurring_series_id": s["id"],
+            "deleted": {"$ne": True},
+            "status": "Completed"
+        })
+        s["upcoming_count"] = upcoming
+        s["completed_count"] = completed
+    return {"series": series_list}
+
+
+@api_router.get("/recurring/{series_id}/occurrences")
+async def get_recurring_occurrences(series_id: str, current_user: dict = Depends(get_current_user)):
+    series = await db.recurring_series.find_one({"id": series_id}, {"_id": 0})
+    if not series:
+        raise HTTPException(status_code=404, detail="Series not found")
+    if series["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    occs = await db.tasks.find({
+        "recurring_series_id": series_id,
+        "deleted": {"$ne": True}
+    }, {"_id": 0, "id": 1, "title": 1, "due_date": 1, "status": 1, "priority": 1, "completed_at": 1}).sort("due_date", 1).to_list(500)
+    return {"series": series, "occurrences": occs}
+
+
+@api_router.post("/recurring/{series_id}/skip")
+async def skip_recurring_occurrence(series_id: str, body: dict, current_user: dict = Depends(get_current_user)):
+    """Skip an occurrence: pass either occurrence_id or date (YYYY-MM-DD)."""
+    series = await db.recurring_series.find_one({"id": series_id}, {"_id": 0})
+    if not series:
+        raise HTTPException(status_code=404, detail="Series not found")
+    if series["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    occ_id = body.get("occurrence_id")
+    date_str = body.get("date")
+    if occ_id:
+        occ = await db.tasks.find_one({"id": occ_id}, {"_id": 0})
+        if occ:
+            try:
+                dt = datetime.fromisoformat(occ["due_date"].replace("Z", "+00:00"))
+                date_str = dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+            await db.tasks.update_one({"id": occ_id}, {"$set": {"deleted": True, "skipped": True}})
+    if date_str:
+        skipped = series.get("skipped_dates") or []
+        if date_str not in skipped:
+            skipped.append(date_str)
+        await db.recurring_series.update_one({"id": series_id}, {"$set": {"skipped_dates": skipped}})
+    return {"ok": True}
+
+
+@api_router.put("/recurring/{series_id}")
+async def update_recurring_series(series_id: str, upd: RecurringSeriesUpdate, current_user: dict = Depends(get_current_user)):
+    series = await db.recurring_series.find_one({"id": series_id}, {"_id": 0})
+    if not series:
+        raise HTTPException(status_code=404, detail="Series not found")
+    if series["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    scope = upd.scope or "all"
+
+    if scope == "this":
+        # Update just one occurrence
+        if not upd.occurrence_id:
+            raise HTTPException(status_code=400, detail="occurrence_id required for scope=this")
+        update_fields = {}
+        for f in ["title", "description", "priority", "assigned_to", "due_date", "category"]:
+            v = getattr(upd, f)
+            if v is not None:
+                update_fields[f] = v
+        if update_fields:
+            await db.tasks.update_one({"id": upd.occurrence_id}, {"$set": update_fields})
+        return {"ok": True, "scope": "this"}
+
+    # For "future" and "all" we update the series template and regenerate upcoming
+    series_updates = {}
+    for f in ["title", "description", "priority", "assigned_to", "category", "is_sales_task", "requires_screen_recording"]:
+        v = getattr(upd, f)
+        if v is not None:
+            series_updates[f] = v
+    if upd.recurrence is not None:
+        series_updates["recurrence"] = upd.recurrence.dict()
+
+    if series_updates:
+        await db.recurring_series.update_one({"id": series_id}, {"$set": series_updates})
+
+    now_iso = get_pst_now().isoformat()
+    # Delete upcoming non-completed occurrences (from now on if "future", else all not-yet-due)
+    cutoff = now_iso if scope == "future" else None
+    query = {"recurring_series_id": series_id, "status": {"$nin": ["Completed"]}, "deleted": {"$ne": True}}
+    if cutoff:
+        query["due_date"] = {"$gte": cutoff}
+    await db.tasks.update_many(query, {"$set": {"deleted": True}})
+
+    # Regenerate
+    fresh = await db.recurring_series.find_one({"id": series_id}, {"_id": 0})
+    generated = await _generate_occurrences(fresh, window_days=60, max_occurrences=25)
+    return {"ok": True, "scope": scope, "generated": generated}
+
+
+@api_router.delete("/recurring/{series_id}")
+async def delete_recurring_series(series_id: str, current_user: dict = Depends(get_current_user)):
+    series = await db.recurring_series.find_one({"id": series_id}, {"_id": 0})
+    if not series:
+        raise HTTPException(status_code=404, detail="Series not found")
+    if series["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    # Mark series stopped + soft-delete any upcoming (non-completed) occurrences
+    await db.recurring_series.update_one({"id": series_id}, {"$set": {"stopped": True}})
+    await db.tasks.update_many({
+        "recurring_series_id": series_id,
+        "status": {"$nin": ["Completed"]},
+        "deleted": {"$ne": True}
+    }, {"$set": {"deleted": True}})
+    return {"ok": True}
+
+
+@api_router.post("/recurring/generate-all")
+async def generate_all_recurring(current_user: dict = Depends(get_current_user)):
+    """Manually trigger occurrence generation for all this user's active series."""
+    total = 0
+    series_list = await db.recurring_series.find({
+        "created_by": current_user["id"],
+        "stopped": {"$ne": True}
+    }, {"_id": 0}).to_list(200)
+    for s in series_list:
+        total += await _generate_occurrences(s, window_days=60, max_occurrences=25)
+    return {"generated": total, "series_count": len(series_list)}
+
+
+async def _background_generate_all_recurring():
+    """Global cron-style task to keep the rolling window of upcoming occurrences filled."""
+    try:
+        cursor = db.recurring_series.find({"stopped": {"$ne": True}}, {"_id": 0})
+        async for s in cursor:
+            try:
+                await _generate_occurrences(s, window_days=60, max_occurrences=25)
+            except Exception as e:
+                logging.warning(f"[recurring] gen error for {s.get('id')}: {e}")
+    except Exception as e:
+        logging.error(f"[recurring] batch error: {e}")
+
+
+# ==========================================================================
+# DELETE DRAFT
+# ==========================================================================
+
+@api_router.delete("/tasks/drafts/{task_id}")
+async def delete_draft_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    draft = await db.tasks.find_one({"id": task_id, "status": "Draft"}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if draft["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    await db.tasks.delete_one({"id": task_id})
+    return {"ok": True}
+
+
+# ==========================================================================
+# SMART TASK CREATION — parse a natural-language description into fields
+# ==========================================================================
+
+class SmartParseRequest(BaseModel):
+    text: str
+    context_hint: Optional[str] = None  # e.g. "engineering", "sales meeting" — optional
+
+SMART_PARSE_SYSTEM = """You are Tskflow's task-creation assistant. From a user's natural-language description you infer clean, structured task fields.
+
+Return ONE JSON object ONLY (no markdown, no prose) with this shape:
+{
+  "title": "<clear 4-8 word title>",
+  "description": "<short 1-2 sentence description or empty string>",
+  "priority": "Low|Medium|High|Urgent",
+  "category": "Sales|Engineering|Marketing|Design|Product|Operations|Finance|HR|Support|Legal|General",
+  "due_date": "YYYY-MM-DDTHH:MM" or null,
+  "action_items": ["<step 1>", "<step 2>"],
+  "assignee_hints": ["email or name if explicitly mentioned"],
+  "is_sales_task": true|false,
+  "requires_screen_recording": true|false,
+  "confidence": {
+    "title": 0-1, "priority": 0-1, "category": 0-1, "due_date": 0-1, "assignees": 0-1
+  }
+}
+
+Rules:
+- Infer priority based on urgency words ("asap", "urgent", "immediately" -> Urgent; "important", "high" -> High; "when you can" -> Low; default Medium).
+- Category should reflect the domain the task belongs to.
+- If the text mentions "tomorrow", "next Friday", "in 3 days", "end of month", compute the actual date in ISO.
+- is_sales_task=true if there's a customer, prospect, deal, quota, revenue, demo, proposal, or CRM mention.
+- requires_screen_recording=true if the text asks for a walkthrough, demo, tutorial, or "record" something.
+- Keep title free of dates or names.
+- Never invent assignees; only include if explicitly named (@person, "assign to X", "have X do it")."""
+
+
+@api_router.post("/ai/parse-task")
+async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(get_current_user)):
+    text = (req.text or "").strip()
+    if not text or len(text) < 3:
+        raise HTTPException(status_code=400, detail="Text too short")
+
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    fallback = {
+        "title": text[:60],
+        "description": "",
+        "priority": "Medium",
+        "category": "General",
+        "due_date": None,
+        "action_items": [],
+        "assignee_hints": [],
+        "is_sales_task": False,
+        "requires_screen_recording": False,
+        "confidence": {"title": 0.3, "priority": 0.2, "category": 0.2, "due_date": 0.0, "assignees": 0.0}
+    }
+    if not emergent_key:
+        return fallback
+
+    now = get_pst_now()
+    context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}."
+    if req.context_hint:
+        context += f" Hint: {req.context_hint}"
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=emergent_key,
+            session_id=f"parse_{current_user['id']}",
+            system_message=SMART_PARSE_SYSTEM + "\n\n" + context
+        ).with_model("openai", "gpt-4o")
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=12.0)
+    except Exception as e:
+        logging.warning(f"smart_parse LLM error: {e}")
+        return fallback
+
+    text_out = raw if isinstance(raw, str) else str(raw)
+    text_out = text_out.strip()
+    if text_out.startswith("```"):
+        text_out = text_out.strip("`")
+        if text_out.lower().startswith("json"):
+            text_out = text_out[4:]
+    try:
+        start = text_out.index("{")
+        end = text_out.rindex("}") + 1
+        parsed = _json.loads(text_out[start:end])
+    except Exception:
+        return fallback
+
+    # Merge with fallback to ensure shape
+    for k, v in fallback.items():
+        if k not in parsed:
+            parsed[k] = v
+    # Normalize priority
+    if parsed.get("priority") not in ["Low", "Medium", "High", "Urgent"]:
+        parsed["priority"] = "Medium"
+    return parsed
+
+
+# ==========================================================================
+# VOICE ASSISTANT KNOWLEDGE BASE — answer product/how-to questions
+# ==========================================================================
+
+TSKFLOW_KB = """TskFlow is an Accountability Management Platform. Use these facts when answering how-to questions:
+
+CORE CONCEPTS
+- Purpose: help teams close the loop on commitments. Every task has a clear owner, due time, acceptance step, and completion proof.
+- Task lifecycle: Pending → Accepted → In Progress → Completed → Approved. Assignees can also Counter-Propose a new due date, or Decline with a reason.
+- Group tasks: assign one task to several people; each assignee gets their own subtask with its own status. A Group Task Leaderboard ranks them by speed & engagement.
+
+FEATURES
+- Drafts: as soon as you start typing in Create Task, TskFlow auto-saves a draft. Resume unfinished drafts from the yellow "Unfinished Drafts" strip on your dashboard, or delete them with the trash icon.
+- Recurring tasks: turn any task into a series (Daily, Weekdays, Weekly, Every 2 Weeks, Monthly, Yearly, or Custom). It stops when you set an end date, an end-after count, or never (you stop it manually). Edit a series with three scopes: This occurrence / This + future / Entire series.
+- Voice Mode: tap the microphone. It listens immediately (no popup), understands "what's outstanding", "create a task to call Alex tomorrow", "open analytics", and answers "how do I…" questions about TskFlow itself. Voice Mode keeps running as you navigate.
+- Smart Task Creation: type a description (or dictate one). TskFlow infers title, due date, priority, category, and assignee hints, then pre-fills the form. You can always override.
+- Screen Recordings: attach a Loom-style recording to a task or share a standalone recording. The receiver plays it inline (no download).
+- Analytics: Overall Analytics (completion rate, overdue count, avg completion time, response time, trends, team + date filters) and a separate Team Leaderboard (fastest completions, highest completion rate, most completed, streaks, badges).
+- End-of-Day Report: daily Jarvis email summarizing today's completions and open items.
+- Smart Reminders: enable in Settings → Reminders. Choose triggers (time-before-due, no progress, no response, approaching deadline, overdue) and channels (in-app, email, Slack).
+- Help Center: /help — quick start, feature docs, walkthrough, FAQs, and "What's New".
+
+NAVIGATION
+- Dashboard is /dashboard; Analytics /analytics; Team Leaderboard /analytics#leaderboard; Team & Reports /team; Settings /settings; Recordings /recordings; Help Center /help; Recurring series /recurring.
+
+BEST PRACTICES
+- Only mark a task Done when it's actually done — the reviewer must approve to close it.
+- Use Group tasks for "one thing, many people" (e.g. quarterly training) so accountability is visible.
+- Turn important routines into Recurring series so nothing slips.
+- Enable Smart Reminders for High/Urgent priorities so no important task goes cold.
+"""
+
+
+VOICE_ASSISTANT_SYSTEM = """You are TskFlow's voice assistant AND in-app helper. You do two things:
+1) EXECUTE task commands ("create a task to X", "what's outstanding", "open analytics", etc.)
+2) ANSWER questions about how to use TskFlow, its features, best practices, and navigation.
+
+Return ONE JSON object ONLY (no markdown), shape:
+{
+  "reply": "<short spoken reply, 1-3 sentences, warm and natural>",
+  "action": {
+    "type": "query_outstanding | create_task | assign_task | update_status | navigate | assistant_answer | none",
+    "params": { ... }
+  }
+}
+
+Rules:
+- If the user is asking HOW to do something, or WHERE a feature is, or WHAT something means, use action.type="assistant_answer" and put the guidance in reply. Ground your answer in the Knowledge Base below — never invent features.
+- Task commands use the existing action types (query_outstanding / create_task / assign_task / update_status / navigate).
+- If the user is confused or unclear, action.type="none" and ask a short clarifying question in reply.
+- Never contradict the application's task data provided in the context. If the user asks about outstanding tasks, use the provided list.
+- For assistant_answer, params can include {"topic": "<short label>"}.
+- Keep replies conversational and brief — max ~40 words.
+
+KNOWLEDGE BASE:
+""" + TSKFLOW_KB
+
+
+# Replace existing VOICE_SYSTEM_PROMPT usage. (We keep the old one for backward compat but the endpoint now uses this.)
+
+
+# ==========================================================================
+# SMART REMINDERS
+# ==========================================================================
+
+class ReminderRule(BaseModel):
+    enabled: bool = True
+    triggers: List[str] = ["time_before_due", "no_response", "overdue"]  # possible: time_before_due, no_progress, no_response, approaching_deadline, overdue
+    hours_before_due: int = 4
+    frequency_hours: int = 12  # min gap between reminders
+    channels: List[str] = ["in_app", "email"]  # in_app, email, slack
+    priorities: List[str] = ["High", "Urgent"]
+
+
+@api_router.get("/reminders/rules")
+async def get_reminder_rules(current_user: dict = Depends(get_current_user)):
+    doc = await db.reminder_rules.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    if not doc:
+        defaults = ReminderRule().dict()
+        return {"rules": defaults}
+    return {"rules": {k: v for k, v in doc.items() if k not in ("_id", "user_id")}}
+
+
+@api_router.put("/reminders/rules")
+async def set_reminder_rules(rule: ReminderRule, current_user: dict = Depends(get_current_user)):
+    await db.reminder_rules.update_one(
+        {"user_id": current_user["id"]},
+        {"$set": {**rule.dict(), "user_id": current_user["id"], "updated_at": get_pst_now().isoformat()}},
+        upsert=True
+    )
+    return {"ok": True}
+
+
+async def _check_smart_reminders():
+    """Enhanced reminder job — respects user rules + multiple trigger types."""
+    try:
+        now = get_pst_now()
+        # Load all rules keyed by user
+        rules_by_user = {}
+        async for r in db.reminder_rules.find({"enabled": True}, {"_id": 0}):
+            rules_by_user[r["user_id"]] = r
+        # Also apply defaults to users without a rule
+        # Find candidate open tasks
+        tasks = await db.tasks.find({
+            "status": {"$nin": ["Completed", "Declined", "Draft"]},
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True}
+        }, {"_id": 0}).to_list(500)
+
+        default_rule = ReminderRule().dict()
+        for t in tasks:
+            aid = t.get("assigned_to")
+            if not aid or aid.startswith("email_"):
+                continue
+            r = rules_by_user.get(aid, default_rule)
+            if not r.get("enabled", True):
+                continue
+            if t.get("priority") not in r.get("priorities", ["High", "Urgent"]):
+                continue
+            # Frequency gate
+            last = t.get("last_smart_reminder_sent")
+            gap_hours = int(r.get("frequency_hours", 12))
+            if last:
+                try:
+                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                    if last_dt.tzinfo is None:
+                        last_dt = last_dt.replace(tzinfo=PST)
+                    if (now - last_dt).total_seconds() < gap_hours * 3600:
+                        continue
+                except Exception:
+                    pass
+
+            triggers = r.get("triggers", [])
+            try:
+                due = datetime.fromisoformat(t["due_date"].replace("Z", "+00:00"))
+                if due.tzinfo is None:
+                    due = due.replace(tzinfo=PST)
+            except Exception:
+                continue
+
+            fired = None
+            hours_to_due = (due - now).total_seconds() / 3600.0
+            hb = int(r.get("hours_before_due", 4))
+
+            if "overdue" in triggers and hours_to_due < 0:
+                fired = "Overdue"
+            elif "approaching_deadline" in triggers and 0 <= hours_to_due <= max(1, hb / 2):
+                fired = "Deadline approaching"
+            elif "time_before_due" in triggers and 0 <= hours_to_due <= hb:
+                fired = "Due soon"
+            elif "no_response" in triggers and t.get("status") == "Pending":
+                # No response at all
+                created = t.get("created_at")
+                if created:
+                    try:
+                        cdt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                        if cdt.tzinfo is None:
+                            cdt = cdt.replace(tzinfo=PST)
+                        if (now - cdt).total_seconds() >= 4 * 3600:
+                            fired = "Awaiting your response"
+                    except Exception:
+                        pass
+            elif "no_progress" in triggers and t.get("status") == "Accepted":
+                acc = t.get("accepted_at")
+                if acc:
+                    try:
+                        adt = datetime.fromisoformat(acc.replace("Z", "+00:00"))
+                        if adt.tzinfo is None:
+                            adt = adt.replace(tzinfo=PST)
+                        if (now - adt).total_seconds() >= 24 * 3600 and hours_to_due < 24:
+                            fired = "No progress yet"
+                    except Exception:
+                        pass
+
+            if not fired:
+                continue
+
+            # Fire notification (in-app always; email if channel selected)
+            user = await db.users.find_one({"id": aid}, {"_id": 0})
+            if not user:
+                continue
+            nid = str(uuid.uuid4())
+            await db.notifications.insert_one({
+                "id": nid,
+                "user_id": aid,
+                "type": "reminder",
+                "title": f"Reminder: {fired}",
+                "body": f"{t['title']} — priority {t.get('priority')}",
+                "task_id": t["id"],
+                "read": False,
+                "delivered": False,
+                "created_at": now.isoformat(),
+            })
+            if "email" in r.get("channels", []):
+                await send_email_notification(
+                    user["email"],
+                    f"[TskFlow] {fired}: {t['title']}",
+                    f"""<html><body style='font-family:sans-serif;background:#f9fafb;padding:20px;'><div style='max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:24px;'>
+                    <h2 style='margin:0 0 10px 0;color:#111;'>{fired}</h2>
+                    <p style='margin:0 0 14px 0;color:#374151;'>Your task <strong>{t['title']}</strong> (priority {t.get('priority')}) needs attention.</p>
+                    <p style='margin:0 0 14px 0;color:#6b7280;font-size:13px;'>Due: {t['due_date'].replace('T',' at ').split('.')[0]}</p>
+                    <a href='{APP_BASE_URL}/task/{t['id']}' style='display:inline-block;background:#4F46E5;color:white;padding:10px 20px;border-radius:20px;text-decoration:none;font-weight:600;'>Open task</a>
+                    </div></body></html>"""
+                )
+            await db.tasks.update_one({"id": t["id"]}, {"$set": {"last_smart_reminder_sent": now.isoformat()}})
+    except Exception as e:
+        logging.error(f"[smart_reminders] {e}")
+
+
+# ==========================================================================
+# BACKGROUND SCHEDULER — recurring occurrences + reminders (every 5 min)
+# ==========================================================================
+
+_scheduler_task = None
+
+async def _scheduler_loop():
+    """Runs periodic maintenance jobs while the app is up."""
+    await asyncio.sleep(20)  # let the app settle
+    while True:
+        try:
+            await _background_generate_all_recurring()
+            await _check_smart_reminders()
+        except Exception as e:
+            logging.error(f"[scheduler] {e}")
+        await asyncio.sleep(300)  # every 5 min
+
+
 # --- Ensure notifications collection has an index (best-effort) ---
 async def _ensure_indexes():
     try:
         await db.notifications.create_index("user_id")
         await db.notifications.create_index([("user_id", 1), ("read", 1)])
         await db.transcript_drafts.create_index("created_by")
+        await db.recurring_series.create_index("created_by")
+        await db.tasks.create_index("recurring_series_id")
+        await db.reminder_rules.create_index("user_id")
     except Exception:
         pass
 
 @app.on_event("startup")
 async def _startup_indexes():
+    global _scheduler_task
     await _ensure_indexes()
+    if _scheduler_task is None:
+        _scheduler_task = asyncio.create_task(_scheduler_loop())
 
 
 app.include_router(api_router)

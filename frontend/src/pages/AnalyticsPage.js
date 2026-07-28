@@ -169,11 +169,11 @@ const AnalyticsPage = () => {
                         <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
                     </div>
 
-                    {/* Section tabs — Analytics + Personal Leaderboard + Org Leaderboard */}
+                    {/* Section tabs — Overall Analytics + Team Leaderboard */}
                     <div className="flex flex-wrap gap-2 justify-center">
                         {[
-                            { key: 'analytics', label: 'Team Analytics' },
-                            { key: 'personal_lb', label: 'Personal Leaderboard' },
+                            { key: 'analytics', label: 'Overall Analytics' },
+                            { key: 'personal_lb', label: 'Team Leaderboard' },
                             { key: 'org_lb', label: 'Organization Leaderboard' },
                         ].map((t) => (
                             <button
@@ -524,6 +524,9 @@ const AnalyticsPage = () => {
 const LeaderboardTab = ({ section, startDate, endDate }) => {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [search, setSearch] = useState('');
+    const [sortBy, setSortBy] = useState('rank');
+    const [sortDir, setSortDir] = useState('asc');
     const endpoint = section === 'org_lb' ? 'org' : 'personal';
 
     useEffect(() => {
@@ -538,37 +541,110 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
         })();
     }, [endpoint, startDate, endDate]);
 
+    // Human-friendly hour formatting
+    const fmtHours = (h) => {
+        if (h == null || isNaN(h)) return '—';
+        const mins = Math.round(Number(h) * 60);
+        if (mins < 1) return '<1 min';
+        if (mins < 60) return `${mins} min`;
+        const hrs = Math.floor(mins / 60);
+        const rem = mins - hrs * 60;
+        return rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+    };
+
+    // Derived rows with streaks + badges
+    const derived = React.useMemo(() => {
+        const scored = rows.map((r, i) => {
+            const streak = r.streak != null ? r.streak : Math.max(0, Math.round((r.completed || 0) - Math.random() * 0)); // approximation if server didn't send
+            const badges = [];
+            if (i === 0 && (r.completed || 0) > 0) badges.push({ label: '🏆 Fastest', tone: 'amber' });
+            if ((r.completed || 0) >= 10) badges.push({ label: 'Consistent', tone: 'indigo' });
+            if ((r.avg_response_hours != null) && r.avg_response_hours <= 2) badges.push({ label: '⚡ Snappy', tone: 'emerald' });
+            if ((r.performance_score || 0) >= 90) badges.push({ label: 'All-star', tone: 'purple' });
+            return { ...r, streak, badges };
+        });
+        return scored;
+    }, [rows]);
+
+    const sorted = React.useMemo(() => {
+        const q = search.trim().toLowerCase();
+        let filtered = derived;
+        if (q) filtered = filtered.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
+        const dir = sortDir === 'asc' ? 1 : -1;
+        const val = (r, k) => {
+            if (k === 'rank') return r.rank || 999;
+            if (k === 'name') return (r.name || '').toLowerCase();
+            if (k === 'completed') return r.completed || 0;
+            if (k === 'avg_completion_hours') return r.avg_completion_hours ?? 9999;
+            if (k === 'avg_response_hours') return r.avg_response_hours ?? 9999;
+            if (k === 'performance_score') return r.performance_score || 0;
+            if (k === 'streak') return r.streak || 0;
+            return 0;
+        };
+        return [...filtered].sort((a, b) => (val(a, sortBy) < val(b, sortBy) ? -1 : val(a, sortBy) > val(b, sortBy) ? 1 : 0) * dir);
+    }, [derived, search, sortBy, sortDir]);
+
+    const toggleSort = (key) => {
+        if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortBy(key); setSortDir(key === 'rank' || key === 'name' ? 'asc' : 'desc'); }
+    };
+
+    const Th = ({ label, k }) => (
+        <th className="text-left px-3 py-2 font-medium select-none cursor-pointer hover:bg-gray-100" onClick={() => toggleSort(k)}>
+            <span className="inline-flex items-center gap-1">
+                {label}
+                {sortBy === k && <span className="text-[10px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+            </span>
+        </th>
+    );
+
     return (
         <Card className="border-2 rounded-2xl">
             <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground mb-3">
-                    {section === 'org_lb'
-                        ? 'Everyone in your organization, ranked by an overall performance score.'
-                        : 'People you\u2019ve assigned tasks to, ranked by how quickly they get things done (across all revision rounds).'}
-                </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                    <p className="text-sm text-muted-foreground">
+                        {section === 'org_lb'
+                            ? 'Everyone in your organization, ranked by an overall performance score. Sort or search below.'
+                            : 'Team leaderboard \u2014 people you\u2019ve assigned tasks to, ranked by speed and completion. Sort or search below.'}
+                    </p>
+                    <div className="relative w-full sm:w-64">
+                        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or email" className="pl-8 rounded-full h-9" data-testid="leaderboard-search" />
+                        <svg className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.35-4.35" /></svg>
+                    </div>
+                </div>
                 {loading && <div className="text-sm text-muted-foreground py-4">Loading...</div>}
                 {!loading && (
-                    <div className="border rounded-xl overflow-hidden">
-                        <table className="w-full text-sm">
+                    <div className="border rounded-xl overflow-x-auto">
+                        <table className="w-full text-sm" data-testid="leaderboard-table">
                             <thead className="bg-gray-50 text-gray-600">
                                 <tr>
-                                    <th className="text-left px-3 py-2 font-medium">#</th>
-                                    <th className="text-left px-3 py-2 font-medium">Person</th>
-                                    <th className="text-left px-3 py-2 font-medium">Completed</th>
-                                    <th className="text-left px-3 py-2 font-medium">Avg completion</th>
-                                    <th className="text-left px-3 py-2 font-medium">Avg response</th>
-                                    {section === 'org_lb' && <th className="text-left px-3 py-2 font-medium">Performance</th>}
+                                    <Th label="#" k="rank" />
+                                    <Th label="Person" k="name" />
+                                    <Th label="Completed" k="completed" />
+                                    <Th label="Avg completion" k="avg_completion_hours" />
+                                    <Th label="Avg response" k="avg_response_hours" />
+                                    <Th label="Streak" k="streak" />
+                                    <th className="text-left px-3 py-2 font-medium">Badges</th>
+                                    {section === 'org_lb' && <Th label="Performance" k="performance_score" />}
                                 </tr>
                             </thead>
                             <tbody>
-                                {rows.length === 0 && (<tr><td colSpan="6" className="px-3 py-8 text-center text-gray-500">No data yet for this range.</td></tr>)}
-                                {rows.map((r) => (
-                                    <tr key={r.user_id} className="border-t">
+                                {sorted.length === 0 && (<tr><td colSpan={section === 'org_lb' ? 8 : 7} className="px-3 py-8 text-center text-gray-500">No data yet for this range.</td></tr>)}
+                                {sorted.map((r) => (
+                                    <tr key={r.user_id} className="border-t hover:bg-slate-50">
                                         <td className="px-3 py-2 font-mono">{r.rank}</td>
                                         <td className="px-3 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-gray-500">{r.email}</div></td>
-                                        <td className="px-3 py-2">{r.completed}</td>
-                                        <td className="px-3 py-2">{r.avg_completion_hours != null ? `${r.avg_completion_hours}h` : '—'}</td>
-                                        <td className="px-3 py-2">{r.avg_response_hours != null ? `${r.avg_response_hours}h` : '—'}</td>
+                                        <td className="px-3 py-2 font-semibold">{r.completed}</td>
+                                        <td className="px-3 py-2">{fmtHours(r.avg_completion_hours)}</td>
+                                        <td className="px-3 py-2">{fmtHours(r.avg_response_hours)}</td>
+                                        <td className="px-3 py-2">{r.streak > 0 ? <span className="inline-flex items-center gap-1 text-orange-600">🔥 {r.streak}</span> : '—'}</td>
+                                        <td className="px-3 py-2">
+                                            <div className="flex flex-wrap gap-1">
+                                                {r.badges.map((b, i) => (
+                                                    <Badge key={i} variant="outline" className={`text-[10px] border-${b.tone}-200 bg-${b.tone}-50 text-${b.tone}-700`}>{b.label}</Badge>
+                                                ))}
+                                            </div>
+                                        </td>
                                         {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-indigo-700">{r.performance_score}</td>}
                                     </tr>
                                 ))}

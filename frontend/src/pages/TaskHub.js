@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2 } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,12 +23,13 @@ import { getErrorMessage } from '@/lib/utils';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import DateTimePicker from '@/components/DateTimePicker';
 import ParentTaskGroup from '@/components/ParentTaskGroup';
-import VoiceCommandCenter from '@/components/VoiceCommandCenter';
 import AttachmentPicker from '@/components/AttachmentPicker';
 import RichTextEditor from '@/components/RichTextEditor';
 import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
+import RecurrenceEditor from '@/components/RecurrenceEditor';
 import { registerPush } from '@/lib/push';
+import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const TaskHub = () => {
@@ -46,6 +47,10 @@ const TaskHub = () => {
         priority: 'Medium',
         is_sales_task: false,
     });
+    const [recurrence, setRecurrence] = useState({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
+    const [smartParsing, setSmartParsing] = useState(false);
+    const [draftInModal, setDraftInModal] = useState({ id: null, status: '' }); // status: 'idle'|'saving'|'saved'|'error'
+    const draftSaveTimer = useRef(null);
     const [selectedAssignees, setSelectedAssignees] = useState([]);
     const [attachments, setAttachments] = useState([]);
     const [emailInput, setEmailInput] = useState('');
@@ -153,6 +158,146 @@ const TaskHub = () => {
     useEffect(() => {
         registerPush();
     }, []);
+
+    // Listen for the Global FAB to open the create modal from anywhere
+    useEffect(() => {
+        const openHandler = () => setShowCreateModal(true);
+        window.addEventListener('tskflow:open-create-task', openHandler);
+        // Query-string trigger from other pages: /dashboard?create=1
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('create') === '1') setShowCreateModal(true);
+        } catch (_) { /* noop */ }
+        return () => window.removeEventListener('tskflow:open-create-task', openHandler);
+    }, []);
+
+    // Flush offline draft queue when we come back online
+    useEffect(() => {
+        const detach = attachOnlineFlusher(API, ({ flushed }) => {
+            if (flushed) {
+                toast.success(`Synced ${flushed} offline draft change${flushed === 1 ? '' : 's'}`);
+                fetchDrafts();
+            }
+        });
+        return detach;
+    }, []);
+
+    // Voice-executed side effects (create/update task) — refresh
+    useEffect(() => {
+        const handler = () => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); };
+        window.addEventListener('tskflow:voice-executed', handler);
+        return () => window.removeEventListener('tskflow:voice-executed', handler);
+    }, []);
+
+    // Auto-save draft inside the create modal (debounced)
+    useEffect(() => {
+        if (!showCreateModal) return; // only when modal is open
+        // Only start a draft when the user has typed something meaningful
+        const hasContent = !!(taskForm.title || taskForm.description || selectedAssignees.length || taskForm.due_date);
+        if (!hasContent) return;
+        // Debounce
+        if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+        setDraftInModal((d) => ({ ...d, status: 'saving' }));
+        draftSaveTimer.current = setTimeout(async () => {
+            const payload = {
+                title: taskForm.title || '',
+                description: taskForm.description || '',
+                assigned_to: selectedAssignees[0]?.email || selectedAssignees[0]?.id || (selectedAssignees[0]?.type === 'self' ? 'self' : ''),
+                due_date: taskForm.due_date || '',
+                priority: taskForm.priority || 'Medium',
+                attachments: attachments || null,
+                auto_reminder: taskForm.auto_reminder || false,
+            };
+            try {
+                if (!navigator.onLine) {
+                    // Queue for later
+                    if (draftInModal.id) enqueue({ kind: 'update', id: draftInModal.id, payload });
+                    else enqueue({ kind: 'create', payload });
+                    setDraftInModal((d) => ({ ...d, status: 'saved' }));
+                    return;
+                }
+                if (draftInModal.id) {
+                    await axios.put(`${API}/tasks/drafts/${draftInModal.id}`, payload);
+                } else {
+                    const res = await axios.post(`${API}/tasks/drafts`, payload);
+                    setDraftInModal({ id: res.data.id, status: 'saved' });
+                    fetchDrafts();
+                    return;
+                }
+                setDraftInModal((d) => ({ ...d, status: 'saved' }));
+            } catch (e) {
+                setDraftInModal((d) => ({ ...d, status: 'error' }));
+            }
+        }, 900);
+        return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [taskForm, selectedAssignees, attachments, showCreateModal]);
+
+    // Smart Task Creation — infer fields from description on debounce (only if title empty)
+    useEffect(() => {
+        if (!showCreateModal) return;
+        const desc = (taskForm.description || '').replace(/<[^>]+>/g, '').trim();
+        if (desc.length < 25) return;
+        // Skip if user already filled in title AND due date
+        if (taskForm.title && taskForm.due_date) return;
+        const timer = setTimeout(async () => {
+            try {
+                setSmartParsing(true);
+                const res = await axios.post(`${API}/ai/parse-task`, { text: desc });
+                const p = res.data || {};
+                setTaskForm((f) => ({
+                    ...f,
+                    title: f.title || p.title || '',
+                    due_date: f.due_date || p.due_date || '',
+                    priority: f.priority && f.priority !== 'Medium' ? f.priority : (p.priority || 'Medium'),
+                    is_sales_task: f.is_sales_task || !!p.is_sales_task,
+                    requires_screen_recording: f.requires_screen_recording || !!p.requires_screen_recording,
+                    category: f.category || p.category || '',
+                }));
+            } catch (_) { /* silent */ }
+            finally { setSmartParsing(false); }
+        }, 1500);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [taskForm.description, showCreateModal]);
+
+    // Delete draft
+    const deleteDraft = async (id, e) => {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        if (!window.confirm('Delete this draft?')) return;
+        try {
+            if (!navigator.onLine) {
+                enqueue({ kind: 'delete', id });
+                toast('Queued for deletion when back online');
+                setDrafts((d) => d.filter(x => x.id !== id));
+                return;
+            }
+            await axios.delete(`${API}/tasks/drafts/${id}`);
+            setDrafts((d) => d.filter(x => x.id !== id));
+            toast.success('Draft deleted');
+        } catch (err) {
+            toast.error('Failed to delete draft');
+        }
+    };
+
+    // Resume a draft — open modal and populate
+    const resumeDraft = async (draft) => {
+        setShowCreateModal(true);
+        setDraftInModal({ id: draft.id, status: 'saved' });
+        setTaskForm({
+            title: draft.title || '',
+            description: draft.description || '',
+            due_date: draft.due_date || '',
+            priority: draft.priority || 'Medium',
+            is_sales_task: draft.is_sales_task || false,
+            requires_screen_recording: draft.requires_screen_recording || false,
+        });
+        setAttachments(draft.attachments || []);
+        // Best-effort restore of assignee
+        if (draft.assigned_to === 'self') setSelectedAssignees([{ type: 'self' }]);
+        else if (draft.assigned_to && draft.assigned_to.includes('@')) setSelectedAssignees([{ type: 'email', email: draft.assigned_to }]);
+        else if (draft.assigned_to) setSelectedAssignees([{ type: 'user', id: draft.assigned_to, name: draft.assigned_to_email || 'User', email: draft.assigned_to_email || '' }]);
+    };
 
     // Auto-refresh polling with sound notification for new tasks
     const lastTaskCountRef = useRef(null);
@@ -553,11 +698,6 @@ const TaskHub = () => {
             return;
         }
 
-        if (false) {
-            toast.error('Free tier limit reached. Upgrade to Pro for unlimited tasks!');
-            return;
-        }
-
         setCreateLoading(true);
         try {
             const assigneeList = selectedAssignees.map(a => {
@@ -569,7 +709,55 @@ const TaskHub = () => {
 
             const taskData = { ...taskForm, attachments };
 
-            if (assigneeList.length === 1) {
+            // Recurring series path — one series per assignee
+            if (recurrence.enabled) {
+                const rule = {
+                    frequency: recurrence.frequency,
+                    interval: recurrence.interval,
+                    end_type: recurrence.end_type,
+                    end_date: recurrence.end_date || null,
+                    end_count: recurrence.end_count || null,
+                };
+                for (const a of assigneeList) {
+                    await axios.post(`${API}/recurring`, {
+                        title: taskForm.title,
+                        description: taskForm.description,
+                        assigned_to: a,
+                        start_due_date: taskForm.due_date,
+                        priority: taskForm.priority,
+                        is_sales_task: !!taskForm.is_sales_task,
+                        requires_screen_recording: !!taskForm.requires_screen_recording,
+                        attachments,
+                        recurrence: rule,
+                    });
+                }
+                toast.success(`Recurring series created (${assigneeList.length} assignee${assigneeList.length === 1 ? '' : 's'})`);
+                // If we had a draft, delete it since it's been superseded
+                if (draftInModal.id) {
+                    try { await axios.delete(`${API}/tasks/drafts/${draftInModal.id}`); } catch { /* noop */ }
+                }
+            } else if (draftInModal.id) {
+                // If exactly one assignee, use the complete-draft endpoint (preserves ID)
+                if (assigneeList.length === 1) {
+                    await axios.put(`${API}/tasks/drafts/${draftInModal.id}`, {
+                        title: taskForm.title,
+                        description: taskForm.description,
+                        assigned_to: assigneeList[0],
+                        due_date: taskForm.due_date,
+                        priority: taskForm.priority,
+                    });
+                    await axios.post(`${API}/tasks/drafts/${draftInModal.id}/complete`);
+                    toast.success('Task created from draft');
+                } else {
+                    // Multi-assignee: create bulk and delete the draft
+                    await axios.post(`${API}/tasks/bulk`, {
+                        ...taskData,
+                        assigned_to: assigneeList
+                    });
+                    try { await axios.delete(`${API}/tasks/drafts/${draftInModal.id}`); } catch { /* noop */ }
+                    toast.success(`${assigneeList.length} tasks created successfully!`);
+                }
+            } else if (assigneeList.length === 1) {
                 await axios.post(`${API}/tasks`, {
                     ...taskData,
                     assigned_to: assigneeList[0]
@@ -591,10 +779,13 @@ const TaskHub = () => {
                 priority: 'Medium',
                 is_sales_task: false,
             });
+            setRecurrence({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
+            setDraftInModal({ id: null, status: '' });
             setSelectedAssignees([]);
             setAttachments([]);
             fetchDashboard();
             fetchParentGroups();
+            fetchDrafts();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to create task'));
         } finally {
@@ -605,6 +796,10 @@ const TaskHub = () => {
     const handleModalChange = (open) => {
         setShowCreateModal(open);
         if (!open) {
+            // Best-effort final save before closing (if a draft exists)
+            if (draftInModal.id && draftInModal.status === 'saving') {
+                // Let the pending timer fire; nothing more to do
+            }
             setSelectedAssignees([]);
             setEmailInput('');
             setAttachments([]);
@@ -615,6 +810,9 @@ const TaskHub = () => {
                 priority: 'Medium',
                 is_sales_task: false,
             });
+            setRecurrence({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
+            setDraftInModal({ id: null, status: '' });
+            fetchDrafts();
         }
     };
 
@@ -827,8 +1025,11 @@ const TaskHub = () => {
                             )}
                         </div>
                         <NotificationBell />
-                        <Button variant="outline" size="icon" onClick={reopenOnboarding} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help & Walkthrough">
+                        <Button variant="outline" size="icon" onClick={() => navigate('/help')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help Center — or ask Voice Mode anything" data-testid="help-center-button">
                             <HelpCircle className="w-5 h-5" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
+                            <Repeat className="w-5 h-5" />
                         </Button>
                         {user?.subscription_tier === 'teams' && (
                             <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Manage Team">
@@ -913,16 +1114,22 @@ const TaskHub = () => {
                                                     <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
                                                     <DialogDescription>Assign to one or multiple people at once</DialogDescription>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
-                                                    className="shrink-0 mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-50 hover:border-indigo-300 shadow-sm transition-colors"
-                                                    data-testid="from-transcript-btn"
-                                                    title="Auto-draft tasks from a meeting transcript"
-                                                >
-                                                    <FileText className="w-3.5 h-3.5" />
-                                                    <span className="whitespace-nowrap">From transcript</span>
-                                                </button>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
+                                                    {draftInModal.status === 'saved' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
+                                                    {draftInModal.status === 'error' && <span className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Save failed — will retry</span>}
+                                                    {smartParsing && <span className="text-[11px] text-indigo-600 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Analyzing…</span>}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-50 hover:border-indigo-300 shadow-sm transition-colors"
+                                                        data-testid="from-transcript-btn"
+                                                        title="Auto-draft tasks from a meeting transcript"
+                                                    >
+                                                        <FileText className="w-3.5 h-3.5" />
+                                                        <span className="whitespace-nowrap">From transcript</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </DialogHeader>
                                         <form onSubmit={handleCreateTask} className="space-y-5">
@@ -1061,6 +1268,9 @@ const TaskHub = () => {
                                                             <span className="block text-xs text-muted-foreground mt-0.5">A prominent banner will appear on their task view asking them to attach a Loom-style recording before they can mark it done.</span>
                                                         </span>
                                                     </label>
+                                                    <div className="pt-3 border-t">
+                                                        <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
+                                                    </div>
                                                 </div>
                                             </details>
 
@@ -1414,10 +1624,20 @@ const TaskHub = () => {
                                     {drafts.map((draft) => (
                                         <Card 
                                             key={draft.id} 
-                                            className="p-4 cursor-pointer hover:shadow-md transition-shadow border border-amber-200"
-                                            onClick={() => navigate('/create-task', { state: { draftId: draft.id } })}
+                                            className="relative p-4 cursor-pointer hover:shadow-md transition-shadow border border-amber-200 group"
+                                            onClick={() => resumeDraft(draft)}
+                                            data-testid={`draft-card-${draft.id}`}
                                         >
-                                            <h4 className="font-semibold text-sm truncate">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => deleteDraft(draft.id, e)}
+                                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:bg-red-50 rounded-full p-1"
+                                                title="Delete draft"
+                                                data-testid={`delete-draft-${draft.id}`}
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            <h4 className="font-semibold text-sm truncate pr-6">
                                                 {draft.title || 'Untitled Draft'}
                                             </h4>
                                             <p className="text-xs text-gray-600 mt-1">
@@ -1503,8 +1723,6 @@ const TaskHub = () => {
                 {/* Recently Deleted has been moved to inside the individual task view.
                     The trash/restore controls now live only on TaskDetail. */}
             </main>
-
-            <VoiceCommandCenter onAction={() => { fetchDashboard(); fetchParentGroups(); }} />
         </div>
     );
 };

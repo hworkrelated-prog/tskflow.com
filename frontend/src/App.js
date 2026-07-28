@@ -26,7 +26,11 @@ import AdminPage from '@/pages/AdminPage';
 import LeadsPage from '@/pages/LeadsPage';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
+import HelpCenter from '@/pages/HelpCenter';
+import RecurringPage from '@/pages/RecurringPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import GlobalFAB from '@/components/GlobalFAB';
+import VoiceMode from '@/components/VoiceMode';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
@@ -391,7 +395,11 @@ function App() {
                     <Route path="/recording/edit" element={<ProtectedRoute><RecordingEditorPage /></ProtectedRoute>} />
                     <Route path="/recording/controls" element={<RecordingControlsPopup />} />
                     <Route path="/recordings" element={<ProtectedRoute><RecordingLibraryPage /></ProtectedRoute>} />
+                    <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
+                    <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
                 </Routes>
+                <GlobalFAB />
+                <VoiceMode />
             </BrowserRouter>
             <Toaster position="top-right" />
         </AuthProvider>
