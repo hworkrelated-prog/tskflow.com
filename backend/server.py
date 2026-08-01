@@ -6856,6 +6856,20 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         if fb:
             parsed["due_date"] = fb
 
+    # ASAP override — if the text is explicitly ASAP/urgent, force within-2h regardless of what LLM said
+    low_text = (text or "").lower()
+    if re.search(r"\b(asap|urgent(ly)?|immediately|right now|right away|as soon as possible)\b", low_text):
+        parsed["priority"] = "Urgent"
+        try:
+            current_dt = datetime.fromisoformat(parsed["due_date"]) if parsed.get("due_date") else None
+            need_override = current_dt is None or (current_dt - now.replace(tzinfo=None)).total_seconds() > 4 * 3600
+        except Exception:
+            need_override = True
+        if need_override:
+            parsed["due_date"] = _round_to_quarter(now + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+            if not parsed.get("due_date_expression"):
+                parsed["due_date_expression"] = "ASAP"
+
     # If still no date, add a clarifying question
     if not parsed.get("due_date") and not any("when" in q.lower() or "due" in q.lower() or "deadline" in q.lower() for q in parsed["clarifying_questions"]):
         parsed["clarifying_questions"].insert(0, "When should this be done by?")
