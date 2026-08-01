@@ -6473,73 +6473,333 @@ async def delete_draft_task(task_id: str, current_user: dict = Depends(get_curre
 class SmartParseRequest(BaseModel):
     text: str
     context_hint: Optional[str] = None  # e.g. "engineering", "sales meeting" — optional
+    resolve: Optional[bool] = False  # if True, resolve assignee_hints against DB users + groups
 
-SMART_PARSE_SYSTEM = """You are Tskflow's task-creation assistant. From a user's natural-language description you infer clean, structured task fields.
 
-Return ONE JSON object ONLY (no markdown, no prose) with this shape:
+SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI. Turn one short sentence into a perfect task.
+
+Return ONE JSON object ONLY (no markdown, no prose):
 {
-  "title": "<clear 4-8 word title>",
-  "description": "<short 1-2 sentence description or empty string>",
+  "title": "<crisp 4-8 word instruction, imperative mood, no names or dates>",
+  "description": "<one short helpful sentence telling the assignee exactly what they need to do — empty string if the title says it all>",
   "priority": "Low|Medium|High|Urgent",
   "category": "Sales|Engineering|Marketing|Design|Product|Operations|Finance|HR|Support|Legal|General",
   "due_date": "YYYY-MM-DDTHH:MM" or null,
-  "action_items": ["<step 1>", "<step 2>"],
-  "assignee_hints": ["email or name if explicitly mentioned"],
+  "due_date_expression": "<the exact word/phrase from input that produced the date, e.g. 'by 12 PST', 'tomorrow morning', 'ASAP', ''>",
+  "action_items": ["<optional step 1>", "<optional step 2>"],
+  "assignee_hints": ["<name>", "<@handle>", "<email>", "<'sales team'>", "<'my team'>"],
   "is_sales_task": true|false,
   "requires_screen_recording": true|false,
-  "confidence": {
-    "title": 0-1, "priority": 0-1, "category": 0-1, "due_date": 0-1, "assignees": 0-1
-  }
+  "clarifying_questions": ["<max 2 short questions if something critical is ambiguous>"],
+  "confidence": { "title": 0-1, "priority": 0-1, "due_date": 0-1, "assignees": 0-1 }
 }
 
-Rules:
-- Infer priority based on urgency words ("asap", "urgent", "immediately" -> Urgent; "important", "high" -> High; "when you can" -> Low; default Medium).
-- Category should reflect the domain the task belongs to.
-- If the text mentions "tomorrow", "next Friday", "in 3 days", "end of month", compute the actual date in ISO.
-- is_sales_task=true if there's a customer, prospect, deal, quota, revenue, demo, proposal, or CRM mention.
-- requires_screen_recording=true if the text asks for a walkthrough, demo, tutorial, or "record" something.
-- Keep title free of dates or names.
-- Never invent assignees; only include if explicitly named (@person, "assign to X", "have X do it")."""
+DATE RULES (this is the most important part — be aggressive and accurate):
+- "ASAP" / "urgently" / "immediately" → 2 HOURS from now (rounded to nearest 15 min), priority Urgent
+- "today" alone → 5:00 PM today (business EOD)
+- Time-only (e.g. "12 PST", "3pm", "at 2:30", "by 12") → same day at that time (PST). If that time already passed today, use tomorrow.
+- "EOD" / "end of day" / "close of business" → 5:00 PM today
+- "EOM" / "end of month" → last day of current month at 5:00 PM
+- "tomorrow" alone → 12:00 PM tomorrow
+- "tomorrow morning" → 9:00 AM tomorrow
+- "tomorrow afternoon" → 2:00 PM tomorrow
+- "before standup" → 9:00 AM the next working day
+- Weekday names ("Monday", "this Friday", "next Tuesday") → next occurrence of that weekday at 5:00 PM. "next X" always means the following week's X.
+- "next week" → Monday of next week at 12:00 PM
+- "in N days/hours/weeks" → arithmetic from now
+- If NO date/time is present at all, set due_date=null and add a clarifying question about it.
+- Always output ISO YYYY-MM-DDTHH:MM (no seconds, no timezone).
+
+PRIORITY RULES:
+- "urgent", "ASAP", "immediately", "critical", "fire drill" → Urgent
+- "important", "high priority", "please prioritize" → High
+- "when you can", "no rush", "eventually", "low priority" → Low
+- Default → Medium
+
+ASSIGNEE HINTS:
+- Extract explicit @mentions (strip @ prefix)
+- Extract first names/full names that appear in a "for X", "to X", "assign to X", "have X", "tell X", "@X" pattern
+- Extract team/group names like "sales team", "managers", "engineering", "@Sales team"
+- If speaker refers to "my team" or "the team" or "our team", include the literal string "my team"
+- NEVER invent assignees. If none found, return empty array.
+
+CLARIFYING QUESTIONS:
+- Ask AT MOST 2 questions.
+- Only ask if something critical is missing. Don't ask questions the sentence already answered.
+- Prefer yes/no or A-or-B questions.
+- Never ask about title, description, priority, or category if you can infer them from context.
+- Ask about due_date only if truly ambiguous.
+- Ask about assignees only if hints are ambiguous (e.g. multiple "John"s could exist).
+
+TITLE RULES:
+- Imperative mood: "Submit MEA report", "Call Alex about Q3", "Review Alice's PR".
+- No names, no dates, no priority words.
+- Keep between 4-8 words.
+
+is_sales_task=true when there's a customer/prospect/deal/demo/proposal/pipeline/CRM/quota reference.
+requires_screen_recording=true when the request explicitly asks for a walkthrough, demo, tutorial, or "record" something.
+"""
 
 
-@api_router.post("/ai/parse-task")
-async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(get_current_user)):
-    text = (req.text or "").strip()
-    if not text or len(text) < 3:
-        raise HTTPException(status_code=400, detail="Text too short")
+# ---------------- helpers: post-LLM date + assignee resolution ----------------
 
+def _round_to_quarter(dt: datetime) -> datetime:
+    """Round a datetime to the nearest 15-minute mark."""
+    minute = (dt.minute // 15) * 15
+    dt = dt.replace(minute=minute, second=0, microsecond=0)
+    if dt.minute % 15 == 0 and dt.minute != minute:
+        dt = dt + timedelta(minutes=15 - (dt.minute % 15))
+    return dt
+
+
+def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
+    """Regex/keyword fallback when the LLM refuses to return a date but the text has one."""
+    if not expr:
+        return None
+    e = expr.lower().strip()
+    now = now.replace(second=0, microsecond=0)
+
+    # ASAP / urgently → +2h
+    if re.search(r"\b(asap|urgent(ly)?|immediately|right now|right away)\b", e):
+        target = _round_to_quarter(now + timedelta(hours=2))
+        return target.strftime("%Y-%m-%dT%H:%M")
+
+    # EOD / end of day / close of business → today 17:00
+    if re.search(r"\b(eod|end of day|end of the day|close of business|cob)\b", e):
+        return now.replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+
+    # Tomorrow morning / afternoon / evening
+    if "tomorrow morning" in e:
+        return (now + timedelta(days=1)).replace(hour=9, minute=0).strftime("%Y-%m-%dT%H:%M")
+    if "tomorrow afternoon" in e:
+        return (now + timedelta(days=1)).replace(hour=14, minute=0).strftime("%Y-%m-%dT%H:%M")
+    if "tomorrow evening" in e or "tomorrow night" in e:
+        return (now + timedelta(days=1)).replace(hour=18, minute=0).strftime("%Y-%m-%dT%H:%M")
+    if re.search(r"\btomorrow\b", e):
+        return (now + timedelta(days=1)).replace(hour=12, minute=0).strftime("%Y-%m-%dT%H:%M")
+
+    # Today at HH / HH PST / HHpm
+    m = re.search(r"\b(?:by |at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(pst|pt|pdt|est|et|edt|utc|gmt)?\b", e)
+    if m:
+        hour = int(m.group(1))
+        minute = int(m.group(2) or 0)
+        ampm = m.group(3)
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        if ampm == "am" and hour == 12:
+            hour = 0
+        # Heuristic: if hour ≤ 7 and no am/pm → assume PM (business hours)
+        if not ampm and hour <= 7:
+            hour += 12
+        target = now.replace(hour=hour, minute=minute)
+        # If it's already passed and no "today" keyword, roll to tomorrow
+        if target < now and "today" not in e:
+            target = target + timedelta(days=1)
+        return target.strftime("%Y-%m-%dT%H:%M")
+
+    # "today"
+    if re.search(r"\btoday\b", e):
+        return now.replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+
+    # Weekdays
+    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    for i, wd in enumerate(weekdays):
+        if re.search(rf"\b(next\s+)?{wd}\b", e):
+            days_ahead = (i - now.weekday()) % 7
+            if days_ahead == 0 or "next" in e:
+                days_ahead += 7
+            target = (now + timedelta(days=days_ahead)).replace(hour=17, minute=0)
+            return target.strftime("%Y-%m-%dT%H:%M")
+
+    # in N hours/days/weeks
+    m = re.search(r"in\s+(\d+)\s*(hour|hr|day|week)s?", e)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2)
+        if unit in ("hour", "hr"):
+            return _round_to_quarter(now + timedelta(hours=n)).strftime("%Y-%m-%dT%H:%M")
+        if unit == "day":
+            return (now + timedelta(days=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+        if unit == "week":
+            return (now + timedelta(weeks=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+
+    if "next week" in e:
+        # Monday of next week 12:00
+        days_ahead = (7 - now.weekday()) % 7 or 7
+        target = (now + timedelta(days=days_ahead)).replace(hour=12, minute=0)
+        return target.strftime("%Y-%m-%dT%H:%M")
+
+    return None
+
+
+def _fuzzy_name_score(haystack: str, needle: str) -> int:
+    """Lower is better; -1 means no match at all."""
+    if not haystack or not needle:
+        return -1
+    h = haystack.lower()
+    n = needle.lower().strip()
+    if not n:
+        return -1
+    if h == n:
+        return 0
+    if h.startswith(n):
+        return 1
+    if n in h:
+        return 2 + h.index(n)
+    # Token overlap: first token match
+    ht = h.split()
+    nt = n.split()
+    if ht and nt and ht[0] == nt[0]:
+        return 5
+    if any(t == n for t in ht):
+        return 6
+    return -1
+
+
+async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
+    """
+    Match each raw hint against real users (same company_domain) and groups.
+    Also handles special tokens: 'my team' / 'the team' / 'our team' → the manager's direct reports.
+    Returns:
+      { 'resolved': [ {kind, id, name, email, members?:[user_ids], member_count} ],
+        'ambiguous': [ {hint, candidates: [{id,name,email}] } ],
+        'unresolved': [hint, ...] }
+    """
+    if not hints:
+        return {"resolved": [], "ambiguous": [], "unresolved": []}
+
+    domain = current_user.get("company_domain")
+    users = []
+    if domain:
+        users = await db.users.find({"company_domain": domain}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
+    groups = []
+    if domain:
+        groups = await db.user_groups.find({"company_domain": domain}, {"_id": 0}).to_list(200)
+
+    # Preload direct reports (for 'my team')
+    my_reports = []
+    if current_user.get("id"):
+        my_reports = await db.users.find({"manager_id": current_user["id"]}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(200)
+
+    resolved = []
+    ambiguous = []
+    unresolved = []
+    seen_ids = set()
+
+    for raw in hints:
+        h = (raw or "").strip()
+        if not h:
+            continue
+        low = h.lower().strip().lstrip("@")
+        # Special: "me" / "myself"
+        if low in ("me", "myself", "self"):
+            if current_user["id"] not in seen_ids:
+                resolved.append({"kind": "user", "id": current_user["id"], "name": current_user["name"], "email": current_user["email"]})
+                seen_ids.add(current_user["id"])
+            continue
+
+        # Special: my team / the team / our team → direct reports (if any) else all same-domain users
+        if low in ("my team", "the team", "our team", "team"):
+            targets = my_reports or [u for u in users if u["id"] != current_user["id"]]
+            member_ids = [u["id"] for u in targets]
+            if member_ids:
+                resolved.append({
+                    "kind": "team",
+                    "id": "my-team",
+                    "name": "My team" if my_reports else f"Everyone in {domain}",
+                    "email": None,
+                    "members": member_ids,
+                    "member_count": len(member_ids),
+                    "member_names": [u["name"] for u in targets],
+                })
+            continue
+
+        # Exact-ish email match
+        if "@" in low:
+            match = next((u for u in users if u["email"].lower() == low), None)
+            if match:
+                if match["id"] not in seen_ids:
+                    resolved.append({"kind": "user", "id": match["id"], "name": match["name"], "email": match["email"]})
+                    seen_ids.add(match["id"])
+            else:
+                # Unresolved email → keep as an email address for bulk-create
+                resolved.append({"kind": "email", "id": None, "name": low.split("@")[0], "email": low})
+            continue
+
+        # Try group match first (managers, sales team, etc.)
+        gmatch = None
+        gscore = 9999
+        for g in groups:
+            s = _fuzzy_name_score(g["name"], low)
+            if s != -1 and s < gscore:
+                gscore = s
+                gmatch = g
+        # Also match hardcoded team words
+        if gmatch and gscore <= 5:
+            member_ids = []
+            member_names = []
+            for em in gmatch.get("emails", []):
+                u = next((x for x in users if x["email"].lower() == em.lower()), None)
+                if u:
+                    member_ids.append(u["id"])
+                    member_names.append(u["name"])
+            resolved.append({
+                "kind": "group",
+                "id": gmatch["id"],
+                "name": gmatch["name"],
+                "email": None,
+                "members": member_ids,
+                "member_count": len(gmatch.get("emails", [])),
+                "member_names": member_names,
+                "emails": gmatch.get("emails", []),
+            })
+            continue
+
+        # Fuzzy match on users
+        user_candidates = []
+        for u in users:
+            s = _fuzzy_name_score(u["name"], low)
+            s_email = _fuzzy_name_score(u["email"].split("@")[0], low)
+            best = min([x for x in (s, s_email) if x != -1], default=-1)
+            if best != -1:
+                user_candidates.append((best, u))
+        user_candidates.sort(key=lambda x: x[0])
+
+        if not user_candidates:
+            unresolved.append(h)
+        elif len(user_candidates) == 1 or user_candidates[0][0] < user_candidates[1][0]:
+            u = user_candidates[0][1]
+            if u["id"] not in seen_ids:
+                resolved.append({"kind": "user", "id": u["id"], "name": u["name"], "email": u["email"]})
+                seen_ids.add(u["id"])
+        else:
+            # Ambiguous — top score tied with next
+            top_score = user_candidates[0][0]
+            top = [u for s, u in user_candidates if s == top_score][:5]
+            ambiguous.append({"hint": h, "candidates": top})
+
+    return {"resolved": resolved, "ambiguous": ambiguous, "unresolved": unresolved}
+
+
+async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    fallback = {
-        "title": text[:60],
-        "description": "",
-        "priority": "Medium",
-        "category": "General",
-        "due_date": None,
-        "action_items": [],
-        "assignee_hints": [],
-        "is_sales_task": False,
-        "requires_screen_recording": False,
-        "confidence": {"title": 0.3, "priority": 0.2, "category": 0.2, "due_date": 0.0, "assignees": 0.0}
-    }
     if not emergent_key:
-        return fallback
-
+        return None
     now = get_pst_now()
-    context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}."
-    if req.context_hint:
-        context += f" Hint: {req.context_hint}"
-
+    context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}, org: {current_user.get('company_domain', 'personal')}."
+    if context_hint:
+        context += f" Hint: {context_hint}"
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(
             api_key=emergent_key,
-            session_id=f"parse_{current_user['id']}",
+            session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
             system_message=SMART_PARSE_SYSTEM + "\n\n" + context
         ).with_model("openai", "gpt-4o")
         raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=12.0)
     except Exception as e:
         logging.warning(f"smart_parse LLM error: {e}")
-        return fallback
+        return None
 
     text_out = raw if isinstance(raw, str) else str(raw)
     text_out = text_out.strip()
@@ -6550,17 +6810,89 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     try:
         start = text_out.index("{")
         end = text_out.rindex("}") + 1
-        parsed = _json.loads(text_out[start:end])
+        return _json.loads(text_out[start:end])
     except Exception:
-        return fallback
+        return None
 
-    # Merge with fallback to ensure shape
+
+@api_router.post("/ai/parse-task")
+async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(get_current_user)):
+    text = (req.text or "").strip()
+    if not text or len(text) < 3:
+        raise HTTPException(status_code=400, detail="Text too short")
+
+    now = get_pst_now()
+    fallback = {
+        "title": text[:60],
+        "description": "",
+        "priority": "Medium",
+        "category": "General",
+        "due_date": None,
+        "due_date_expression": "",
+        "action_items": [],
+        "assignee_hints": [],
+        "is_sales_task": False,
+        "requires_screen_recording": False,
+        "clarifying_questions": [],
+        "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
+    }
+
+    parsed = await _llm_parse(text, current_user, req.context_hint) or fallback
+
+    # Merge shape
     for k, v in fallback.items():
         if k not in parsed:
             parsed[k] = v
-    # Normalize priority
     if parsed.get("priority") not in ["Low", "Medium", "High", "Urgent"]:
         parsed["priority"] = "Medium"
+    if not isinstance(parsed.get("assignee_hints"), list):
+        parsed["assignee_hints"] = []
+    if not isinstance(parsed.get("clarifying_questions"), list):
+        parsed["clarifying_questions"] = []
+
+    # Date fallback — if LLM didn't produce a date but the text clearly has one
+    if not parsed.get("due_date"):
+        fb = _fallback_parse_date_expression(parsed.get("due_date_expression") or text, now)
+        if fb:
+            parsed["due_date"] = fb
+
+    # If still no date, add a clarifying question
+    if not parsed.get("due_date") and not any("when" in q.lower() or "due" in q.lower() or "deadline" in q.lower() for q in parsed["clarifying_questions"]):
+        parsed["clarifying_questions"].insert(0, "When should this be done by?")
+        parsed["clarifying_questions"] = parsed["clarifying_questions"][:2]
+
+    # Optionally resolve assignees
+    if req.resolve:
+        parsed["assignee_resolution"] = await _resolve_assignee_hints(parsed.get("assignee_hints", []), current_user)
+        # If nothing resolved and no unresolved hints, ask who
+        ar = parsed["assignee_resolution"]
+        if not ar["resolved"] and not ar["ambiguous"] and not ar["unresolved"]:
+            if not any("who" in q.lower() or "assign" in q.lower() for q in parsed["clarifying_questions"]):
+                parsed["clarifying_questions"].append("Who should own this task?")
+                parsed["clarifying_questions"] = parsed["clarifying_questions"][:2]
+    return parsed
+
+
+class QuickCreatePreviewRequest(BaseModel):
+    text: str
+    answers: Optional[Dict[str, str]] = None  # optional Q&A pass-through
+
+
+@api_router.post("/ai/quick-create-preview")
+async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dict = Depends(get_current_user)):
+    """One-shot: parse + resolve → returns a ready-to-confirm task preview + clarifying questions."""
+    # If answers were provided, append them to the text so the LLM has more context
+    text = req.text or ""
+    if req.answers:
+        add = " ".join([f"{k}: {v}" for k, v in req.answers.items() if v])
+        if add:
+            text = f"{text}. Additional info: {add}"
+
+    parse_req = SmartParseRequest(text=text, resolve=True)
+    parsed = await smart_parse_task(parse_req, current_user)
+    # Add ready-to-confirm flag: no clarifying questions AND at least one assignee
+    ar = parsed.get("assignee_resolution", {"resolved": [], "ambiguous": [], "unresolved": []})
+    parsed["ready_to_confirm"] = bool(parsed.get("due_date")) and len(ar.get("resolved", [])) > 0 and len(parsed.get("clarifying_questions", [])) == 0
     return parsed
 
 
@@ -6658,7 +6990,7 @@ async def set_reminder_rules(rule: ReminderRule, current_user: dict = Depends(ge
 
 
 async def _check_smart_reminders():
-    """Enhanced reminder job — respects user rules + multiple trigger types."""
+    """Enhanced reminder job — respects user rules + multiple trigger types with rotating wording."""
     try:
         now = get_pst_now()
         # Load all rules keyed by user
@@ -6686,15 +7018,6 @@ async def _check_smart_reminders():
             # Frequency gate
             last = t.get("last_smart_reminder_sent")
             gap_hours = int(r.get("frequency_hours", 12))
-            if last:
-                try:
-                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                    if last_dt.tzinfo is None:
-                        last_dt = last_dt.replace(tzinfo=PST)
-                    if (now - last_dt).total_seconds() < gap_hours * 3600:
-                        continue
-                except Exception:
-                    pass
 
             triggers = r.get("triggers", [])
             try:
@@ -6704,18 +7027,40 @@ async def _check_smart_reminders():
             except Exception:
                 continue
 
-            fired = None
             hours_to_due = (due - now).total_seconds() / 3600.0
-            hb = int(r.get("hours_before_due", 4))
 
-            if "overdue" in triggers and hours_to_due < 0:
-                fired = "Overdue"
-            elif "approaching_deadline" in triggers and 0 <= hours_to_due <= max(1, hb / 2):
-                fired = "Deadline approaching"
-            elif "time_before_due" in triggers and 0 <= hours_to_due <= hb:
-                fired = "Due soon"
+            # Determine which time-bucket this fire is (3h/2h/30m/overdue).
+            # We only fire once per bucket per task to avoid spam.
+            fired_buckets = t.get("reminder_buckets_fired", []) or []
+            bucket = None
+            if hours_to_due < 0:
+                bucket = "overdue"
+            elif hours_to_due <= 0.5:
+                bucket = "30min"
+            elif hours_to_due <= 2 and hours_to_due > 0.5:
+                bucket = "2h"
+            elif hours_to_due <= 3 and hours_to_due > 2:
+                bucket = "3h"
+
+            # If bucket already fired, skip UNLESS overdue (overdue rotates every gap_hours)
+            if bucket and bucket != "overdue" and bucket in fired_buckets:
+                continue
+            if bucket == "overdue" and last:
+                try:
+                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                    if last_dt.tzinfo is None:
+                        last_dt = last_dt.replace(tzinfo=PST)
+                    # For overdue, respect frequency gap
+                    if (now - last_dt).total_seconds() < gap_hours * 3600:
+                        continue
+                except Exception:
+                    pass
+
+            # If no bucket matched but existing trigger types apply (no_response, no_progress)
+            fired_kind = None
+            if bucket:
+                fired_kind = bucket
             elif "no_response" in triggers and t.get("status") == "Pending":
-                # No response at all
                 created = t.get("created_at")
                 if created:
                     try:
@@ -6723,7 +7068,14 @@ async def _check_smart_reminders():
                         if cdt.tzinfo is None:
                             cdt = cdt.replace(tzinfo=PST)
                         if (now - cdt).total_seconds() >= 4 * 3600:
-                            fired = "Awaiting your response"
+                            # Respect frequency gap
+                            if last:
+                                last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                                if last_dt.tzinfo is None:
+                                    last_dt = last_dt.replace(tzinfo=PST)
+                                if (now - last_dt).total_seconds() < gap_hours * 3600:
+                                    continue
+                            fired_kind = "no_response"
                     except Exception:
                         pass
             elif "no_progress" in triggers and t.get("status") == "Accepted":
@@ -6734,12 +7086,21 @@ async def _check_smart_reminders():
                         if adt.tzinfo is None:
                             adt = adt.replace(tzinfo=PST)
                         if (now - adt).total_seconds() >= 24 * 3600 and hours_to_due < 24:
-                            fired = "No progress yet"
+                            if last:
+                                last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                                if last_dt.tzinfo is None:
+                                    last_dt = last_dt.replace(tzinfo=PST)
+                                if (now - last_dt).total_seconds() < gap_hours * 3600:
+                                    continue
+                            fired_kind = "no_progress"
                     except Exception:
                         pass
 
-            if not fired:
+            if not fired_kind:
                 continue
+
+            # Rotating wording — never the exact same twice
+            wording = _reminder_wording(fired_kind, t)
 
             # Fire notification (in-app always; email if channel selected)
             user = await db.users.find_one({"id": aid}, {"_id": 0})
@@ -6750,7 +7111,7 @@ async def _check_smart_reminders():
                 "id": nid,
                 "user_id": aid,
                 "type": "reminder",
-                "title": f"Reminder: {fired}",
+                "title": wording["title"],
                 "body": f"{t['title']} — priority {t.get('priority')}",
                 "task_id": t["id"],
                 "read": False,
@@ -6760,17 +7121,260 @@ async def _check_smart_reminders():
             if "email" in r.get("channels", []):
                 await send_email_notification(
                     user["email"],
-                    f"[TskFlow] {fired}: {t['title']}",
-                    f"""<html><body style='font-family:sans-serif;background:#f9fafb;padding:20px;'><div style='max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:24px;'>
-                    <h2 style='margin:0 0 10px 0;color:#111;'>{fired}</h2>
-                    <p style='margin:0 0 14px 0;color:#374151;'>Your task <strong>{t['title']}</strong> (priority {t.get('priority')}) needs attention.</p>
-                    <p style='margin:0 0 14px 0;color:#6b7280;font-size:13px;'>Due: {t['due_date'].replace('T',' at ').split('.')[0]}</p>
-                    <a href='{APP_BASE_URL}/task/{t['id']}' style='display:inline-block;background:#4F46E5;color:white;padding:10px 20px;border-radius:20px;text-decoration:none;font-weight:600;'>Open task</a>
-                    </div></body></html>"""
+                    f"[TskFlow] {wording['title']}: {t['title']}",
+                    render_reminder_email(user["name"], t, wording, APP_BASE_URL)
                 )
-            await db.tasks.update_one({"id": t["id"]}, {"$set": {"last_smart_reminder_sent": now.isoformat()}})
+            # Update state
+            update_doc = {
+                "last_smart_reminder_sent": now.isoformat(),
+                "last_reminder_wording_idx": (t.get("last_reminder_wording_idx", -1) + 1) % 100,
+            }
+            if bucket and bucket != "overdue":
+                update_doc["reminder_buckets_fired"] = list(set(fired_buckets + [bucket]))
+            await db.tasks.update_one({"id": t["id"]}, {"$set": update_doc})
     except Exception as e:
         logging.error(f"[smart_reminders] {e}")
+
+
+# ---------- Rotating reminder wording ----------
+
+_REMINDER_LINES = {
+    "3h": [
+        {"title": "Reminder — due in ~3 hours", "line": "Heads up: this is due in about 3 hours. A quick win closes it out."},
+        {"title": "3 hours to go", "line": "Just a nudge — you've got about 3 hours before this is due."},
+        {"title": "Roughly 3 hours left", "line": "Keeping this on your radar: about 3 hours until the deadline."},
+    ],
+    "2h": [
+        {"title": "2 hours left", "line": "Two hours to the deadline. If you're close, keep going — you've got this."},
+        {"title": "Heads up — 2 hours to go", "line": "The deadline is in about 2 hours. Anything blocking you?"},
+        {"title": "T-2 hours", "line": "About 2 hours left. If you need more time, tap Counter-Propose on the task."},
+    ],
+    "30min": [
+        {"title": "You're almost out of time", "line": "Only 30 minutes left. Wrap it up if you can — or propose a new time."},
+        {"title": "Final 30 minutes", "line": "Deadline is 30 minutes away. Now's the moment to close this out."},
+        {"title": "Half an hour to go", "line": "30 minutes remaining. If it's done, mark complete; if not, let the requester know."},
+    ],
+    "overdue": [
+        {"title": "This task is now overdue", "line": "The deadline has passed. Please close it out or update the requester with a new plan."},
+        {"title": "Still open — please close it out", "line": "This one's overdue. Even a quick status update helps."},
+        {"title": "Overdue — quick check-in", "line": "It's past due. If it's done, mark it complete. If not, propose a new deadline."},
+        {"title": "This is overdue", "line": "The task blew past its due time. Please prioritize it or renegotiate."},
+    ],
+    "no_response": [
+        {"title": "Awaiting your response", "line": "This task is still waiting for you to accept or decline. Even a quick reply keeps things moving."},
+        {"title": "Have you seen this task?", "line": "It's been assigned to you but not yet acted on. Please accept, decline, or counter-propose."},
+    ],
+    "no_progress": [
+        {"title": "No progress yet — need help?", "line": "You accepted this task but haven't updated it. Everything OK? Reply on the task or complete it."},
+        {"title": "Quick check-in", "line": "The deadline's approaching and there's been no update. Is anything blocking you?"},
+    ],
+}
+
+
+def _reminder_wording(kind: str, task: dict) -> dict:
+    lines = _REMINDER_LINES.get(kind) or _REMINDER_LINES["overdue"]
+    idx = (task.get("last_reminder_wording_idx", -1) + 1) % len(lines)
+    return lines[idx]
+
+
+def render_reminder_email(user_name: str, task: dict, wording: dict, app_url: str) -> str:
+    """Consistent, professional reminder email."""
+    due_display = ""
+    try:
+        due_display = task["due_date"].replace("T", " at ").split(".")[0]
+    except Exception:
+        pass
+    priority = task.get("priority", "")
+    task_id = task.get("id", "")
+    title = task.get("title", "")
+    color = "#EF4444" if kind_is_overdue(wording["title"]) else "#4F46E5"
+
+    return f"""<html><body style="margin:0;padding:0;background:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:24px;">
+        <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+            <div style="background:linear-gradient(135deg,{color},{color}dd);padding:24px 28px;">
+                <p style="margin:0;color:rgba(255,255,255,0.85);font-size:12px;letter-spacing:1px;font-weight:600;">TSKFLOW REMINDER</p>
+                <h1 style="margin:6px 0 0 0;color:white;font-size:22px;font-weight:700;">{wording['title']}</h1>
+            </div>
+            <div style="padding:28px;">
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">Hi {user_name},</p>
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;line-height:1.6;">{wording['line']}</p>
+                <div style="background:#F9FAFB;border-radius:12px;padding:20px;margin:18px 0;border-left:4px solid {color};">
+                    <p style="margin:0 0 6px 0;font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Task</p>
+                    <p style="margin:0 0 12px 0;font-size:17px;color:#111827;font-weight:600;">{title}</p>
+                    <div style="display:inline-block;background:#FEF3C7;color:#92400E;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;margin-right:8px;">{priority}</div>
+                    <span style="color:#6B7280;font-size:13px;">Due: {due_display}</span>
+                </div>
+                <div style="text-align:center;margin:28px 0 8px 0;">
+                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task →</a>
+                </div>
+                <p style="margin:16px 0 0 0;color:#6B7280;font-size:13px;text-align:center;">
+                    Not the right time? <a href="{app_url}/task/{task_id}" style="color:{color};">Counter-propose a new deadline</a>.
+                </p>
+            </div>
+            <div style="padding:16px;text-align:center;background:#F9FAFB;color:#9CA3AF;font-size:11px;">
+                © 2025 Tskflow — accountability, simplified. <a href="{app_url}/settings" style="color:#9CA3AF;">Manage reminders</a>
+            </div>
+        </div>
+    </div></body></html>"""
+
+
+def kind_is_overdue(title: str) -> bool:
+    return "overdue" in (title or "").lower()
+
+
+# ==========================================================================
+# NUDGE — send preset/custom urgency emails to specific assignees (used by
+# managers on the group task leaderboard).
+# ==========================================================================
+
+class NudgeRequest(BaseModel):
+    assignee_ids: List[str] = []
+    preset: Optional[str] = "gentle_nudge"  # gentle_nudge | urgent_reminder | final_notice | custom
+    custom_subject: Optional[str] = None
+    custom_message: Optional[str] = None
+
+
+NUDGE_PRESETS = {
+    "gentle_nudge": {
+        "subject": "Quick check-in: {task_title}",
+        "headline": "Just a gentle nudge",
+        "body": "We're still waiting on <strong>{task_title}</strong>. When you get a moment, please jump in and close it out — even a status update helps the whole team.",
+        "color": "#4F46E5",
+    },
+    "urgent_reminder": {
+        "subject": "URGENT: {task_title} needs your attention",
+        "headline": "This is urgent",
+        "body": "<strong>{task_title}</strong> is well past due and blocking others. Please prioritize this today. If something's in the way, reply on the task with details.",
+        "color": "#F59E0B",
+    },
+    "final_notice": {
+        "subject": "Final notice: {task_title}",
+        "headline": "Final notice",
+        "body": "This is a final follow-up on <strong>{task_title}</strong>. If we don't hear from you by end of day, the task will be escalated to leadership. Please act on it now.",
+        "color": "#EF4444",
+    },
+}
+
+
+def render_nudge_email(recipient_name: str, sender_name: str, task_title: str, task_id: str, headline: str, body_html: str, color: str, app_url: str, custom_message: Optional[str] = None) -> str:
+    extra = ""
+    if custom_message:
+        extra = f'<div style="background:#FFFBEB;border-left:4px solid #F59E0B;padding:14px 18px;border-radius:8px;margin:14px 0;color:#78350F;font-size:14px;font-style:italic;">"{custom_message}"</div>'
+    return f"""<html><body style="margin:0;padding:0;background:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:24px;">
+        <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.06);">
+            <div style="background:linear-gradient(135deg,{color},{color}dd);padding:24px 28px;">
+                <p style="margin:0;color:rgba(255,255,255,0.85);font-size:12px;letter-spacing:1px;font-weight:600;">A MESSAGE FROM {sender_name.upper()}</p>
+                <h1 style="margin:6px 0 0 0;color:white;font-size:22px;font-weight:700;">{headline}</h1>
+            </div>
+            <div style="padding:28px;">
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">Hi {recipient_name},</p>
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;line-height:1.6;">{body_html}</p>
+                {extra}
+                <div style="text-align:center;margin:28px 0 8px 0;">
+                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task →</a>
+                </div>
+                <p style="margin:16px 0 0 0;color:#6B7280;font-size:13px;text-align:center;">
+                    Stuck? Reply on the task with what's blocking you and we'll help.
+                </p>
+            </div>
+            <div style="padding:16px;text-align:center;background:#F9FAFB;color:#9CA3AF;font-size:11px;">
+                Sent via TskFlow · <a href="{app_url}/task/{task_id}" style="color:#9CA3AF;">Task link</a>
+            </div>
+        </div>
+    </div></body></html>"""
+
+
+@api_router.post("/tasks/{task_id}/nudge")
+async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Send a nudge (preset or custom urgency email) to one or more assignees of a task/group.
+    - If task_id is a parent (group task), nudges go to the specific child assignees.
+    - If task_id is a single task, nudges go to that task's assignee (assignee_ids ignored).
+    Only the creator or a same-domain user with manager privileges can nudge.
+    """
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Permission: creator OR same-domain user who is a manager
+    if task.get("created_by") != current_user["id"]:
+        creator = await db.users.find_one({"id": task.get("created_by")}, {"_id": 0}) or {}
+        if creator.get("company_domain") != current_user.get("company_domain"):
+            raise HTTPException(status_code=403, detail="Not allowed to nudge on this task")
+
+    # Determine actual assignees to nudge
+    is_parent = task.get("is_parent") or task.get("parent_id") is None and False
+    # Better parent check: look for children
+    children = await db.tasks.find({"parent_id": task_id, "deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
+    if children:
+        # Filter children by requested assignee_ids
+        wanted = set(req.assignee_ids or [])
+        targets_children = [c for c in children if not wanted or c.get("assigned_to") in wanted]
+        assignee_ids = [c["assigned_to"] for c in targets_children if c.get("assigned_to")]
+        # Use the first child for task title context, but link to parent
+    else:
+        assignee_ids = [task.get("assigned_to")] if task.get("assigned_to") else []
+
+    if not assignee_ids:
+        raise HTTPException(status_code=400, detail="No assignees to nudge")
+
+    # Fetch user info
+    users = await db.users.find({"id": {"$in": assignee_ids}}, {"_id": 0}).to_list(500)
+    users_by_id = {u["id"]: u for u in users}
+
+    # Resolve template
+    preset_key = (req.preset or "gentle_nudge").lower()
+    if preset_key == "custom":
+        subject = req.custom_subject or f"Message about: {task['title']}"
+        headline = "A message from your team"
+        body_html = req.custom_message or "Please give this task your attention."
+        color = "#4F46E5"
+    else:
+        p = NUDGE_PRESETS.get(preset_key) or NUDGE_PRESETS["gentle_nudge"]
+        subject = p["subject"].format(task_title=task["title"])
+        headline = p["headline"]
+        body_html = p["body"].format(task_title=task["title"])
+        color = p["color"]
+
+    now = get_pst_now()
+    sent = 0
+    for uid in assignee_ids:
+        u = users_by_id.get(uid)
+        if not u or not u.get("email"):
+            continue
+        # Send in-app notification
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": uid,
+            "type": "nudge",
+            "title": headline,
+            "body": f"{current_user['name']}: {task['title']}",
+            "task_id": task_id,
+            "read": False,
+            "delivered": False,
+            "created_at": now.isoformat(),
+        })
+        email_html = render_nudge_email(
+            recipient_name=u.get("name") or u["email"].split("@")[0],
+            sender_name=current_user.get("name", "TskFlow"),
+            task_title=task["title"],
+            task_id=task_id,
+            headline=headline,
+            body_html=body_html,
+            color=color,
+            app_url=APP_BASE_URL,
+            custom_message=req.custom_message if preset_key != "custom" else None,
+        )
+        background_tasks.add_task(send_email_notification, u["email"], subject, email_html)
+        sent += 1
+
+    return {"ok": True, "sent": sent, "preset": preset_key}
+
+
+async def _check_smart_reminders_deprecated():
+    """Deprecated old reminder job kept for reference."""
+    pass
 
 
 # ==========================================================================

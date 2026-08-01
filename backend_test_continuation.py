@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://26f5b6b5-3c3c-4c9f-af94-b3f70d855767.preview.emergentagent.com/api"
+BASE_URL = "https://smart-reminders-hub-1.preview.emergentagent.com/api"
 OWNER_EMAIL = "owner@acmecorp.com"
 OWNER_PASSWORD = "Password123"
 ALICE_EMAIL = "alice@acmecorp.com"

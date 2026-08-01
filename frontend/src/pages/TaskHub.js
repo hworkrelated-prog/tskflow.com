@@ -28,6 +28,7 @@ import RichTextEditor from '@/components/RichTextEditor';
 import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
 import RecurrenceEditor from '@/components/RecurrenceEditor';
+import AIQuickCreate from '@/components/AIQuickCreate';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
@@ -1597,6 +1598,24 @@ const TaskHub = () => {
                         </div>
                     </DialogContent>
                 </Dialog>
+
+                {/* AI Quick Create — one sentence → perfect task */}
+                <AIQuickCreate
+                    onCreated={() => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); }}
+                    onOpenAdvanced={(prefill) => {
+                        if (prefill) {
+                            setTaskForm((f) => ({
+                                ...f,
+                                title: prefill.title || f.title,
+                                description: prefill.description || f.description,
+                                due_date: prefill.due_date || f.due_date,
+                                priority: prefill.priority || f.priority,
+                                is_sales_task: prefill.is_sales_task || f.is_sales_task,
+                            }));
+                        }
+                        setShowCreateModal(true);
+                    }}
+                />
 
                 {/* Drafts Section */}
                 {drafts.length > 0 && (
