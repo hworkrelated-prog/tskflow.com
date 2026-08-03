@@ -2707,12 +2707,30 @@ async def delete_task(task_id: str, current_user: dict = Depends(get_current_use
         {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
     )
 
+    # Remove the Google Calendar event from the assignee's calendar (if one was created)
+    if task.get("calendar_event_id") and task.get("assigned_to"):
+        try:
+            ok = await delete_calendar_event(task["assigned_to"], task["calendar_event_id"])
+            if ok:
+                await db.tasks.update_one({"id": task_id}, {"$unset": {"calendar_event_id": ""}})
+        except Exception as _e:
+            logging.error(f"delete_task: calendar cleanup failed: {_e}")
+
     # If this is a parent group, delete its children too
     if task.get("is_parent"):
+        children = await db.tasks.find({"parent_id": task_id}, {"_id": 0}).to_list(500)
         await db.tasks.update_many(
             {"parent_id": task_id},
             {"$set": {"deleted": True, "deleted_at": get_pst_now().isoformat(), "deleted_by": current_user["id"]}}
         )
+        # Best-effort per-child calendar cleanup
+        for c in children:
+            if c.get("calendar_event_id") and c.get("assigned_to"):
+                try:
+                    await delete_calendar_event(c["assigned_to"], c["calendar_event_id"])
+                    await db.tasks.update_one({"id": c["id"]}, {"$unset": {"calendar_event_id": ""}})
+                except Exception:
+                    pass
     # If this was the last active child of a parent, remove the empty parent
     elif task.get("parent_id"):
         remaining = await db.tasks.count_documents({"parent_id": task["parent_id"], "deleted": {"$ne": True}})
@@ -2741,13 +2759,30 @@ async def bulk_delete_tasks(task_ids: List[str], current_user: dict = Depends(ge
             {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"]}}
         )
         deleted_count += 1
+        # Remove Google Calendar event for this task (if any)
+        if task.get("calendar_event_id") and task.get("assigned_to"):
+            try:
+                ok = await delete_calendar_event(task["assigned_to"], task["calendar_event_id"])
+                if ok:
+                    await db.tasks.update_one({"id": task_id}, {"$unset": {"calendar_event_id": ""}})
+            except Exception:
+                pass
         # If it's a parent/group task, cascade to its subtasks
         if task.get("is_parent"):
+            children = await db.tasks.find({"parent_id": task_id, "deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
             cascade = await db.tasks.update_many(
                 {"parent_id": task_id, "deleted": {"$ne": True}},
                 {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"]}}
             )
             deleted_count += cascade.modified_count
+            # Cleanup calendar events on each child
+            for c in children:
+                if c.get("calendar_event_id") and c.get("assigned_to"):
+                    try:
+                        await delete_calendar_event(c["assigned_to"], c["calendar_event_id"])
+                        await db.tasks.update_one({"id": c["id"]}, {"$unset": {"calendar_event_id": ""}})
+                    except Exception:
+                        pass
 
     return {"message": f"{deleted_count} tasks deleted", "deleted_count": deleted_count}
 
@@ -4285,6 +4320,36 @@ async def create_calendar_event(user_id: str, task: dict):
     except Exception as e:
         logging.error(f"Calendar event creation failed: {e}")
         return None
+
+
+async def delete_calendar_event(user_id: str, event_id: str) -> bool:
+    """Remove a previously-created Google Calendar event from the assignee's calendar.
+    Uses the assignee's stored OAuth credentials — the same ones used to create it."""
+    if not user_id or not event_id:
+        return False
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user or not user.get("google_calendar_connected") or not user.get("google_credentials"):
+        return False
+    try:
+        creds_data = user["google_credentials"]
+        credentials = Credentials(
+            token=creds_data["token"],
+            refresh_token=creds_data.get("refresh_token"),
+            token_uri=creds_data["token_uri"],
+            client_id=creds_data["client_id"],
+            client_secret=creds_data["client_secret"]
+        )
+        service = build('calendar', 'v3', credentials=credentials)
+        # sendUpdates=all so any attendees also see the cancellation
+        service.events().delete(calendarId='primary', eventId=event_id, sendUpdates='all').execute()
+        return True
+    except Exception as e:
+        # 404/410 = event already gone — treat as success
+        msg = str(e).lower()
+        if '404' in msg or '410' in msg or 'not found' in msg or 'deleted' in msg:
+            return True
+        logging.error(f"Calendar event delete failed for user={user_id} event={event_id}: {e}")
+        return False
 
 # ==========================================================================
 # USER GROUPS (Pro & Teams) - save a named group of emails for quick assign
