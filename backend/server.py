@@ -847,7 +847,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     </p>
                     <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
                         <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.description[:300]}{'...' if len(task.description) > 300 else ''}</p>
+                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
                         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                             <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
                                 {task.priority} Priority
@@ -986,7 +986,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                             </p>
                             <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
                                 <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.description[:300]}{'...' if len(task.description) > 300 else ''}</p>
+                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
                                 <div>
                                     <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
                                         {task.priority} Priority
@@ -6555,6 +6555,18 @@ Return ONE JSON object ONLY (no markdown, no prose):
   "assignee_hints": ["<name>", "<@handle>", "<email>", "<'sales team'>", "<'my team'>"],
   "is_sales_task": true|false,
   "requires_screen_recording": true|false,
+  "recurring": {
+    "is_recurring": true|false,
+    "frequency": "daily|weekdays|weekly|biweekly|monthly|yearly|custom|null",
+    "days_of_week": [0,1,2,3,4,5,6] or null,     // 0=Mon..6=Sun
+    "time_of_day": "HH:MM" or null,
+    "end_time_of_day": "HH:MM" or null,           // if the user said "from X to Y"
+    "end_type": "never|on_date|after_count|null",
+    "end_date": "YYYY-MM-DD" or null,
+    "end_count": <int or null>,
+    "raw_phrase": "<original phrase e.g. 'every day from 12 to 3pm PST'>"
+  },
+  "intent": "task | question | none",   // If the user is asking a HOW/WHAT question about Tskflow, set intent="question"
   "clarifying_questions": ["<max 2 short questions if something critical is ambiguous>"],
   "confidence": { "title": 0-1, "priority": 0-1, "due_date": 0-1, "assignees": 0-1 }
 }
@@ -6575,18 +6587,39 @@ DATE RULES (this is the most important part — be aggressive and accurate):
 - If NO date/time is present at all, set due_date=null and add a clarifying question about it.
 - Always output ISO YYYY-MM-DDTHH:MM (no seconds, no timezone).
 
+RECURRING RULES:
+- Detect phrases: "every day", "daily", "every weekday", "every Monday", "every M/W/F", "weekly", "every 2 weeks", "biweekly", "monthly", "yearly", "annually", "each morning", "each week", "from X to Y each day".
+- When recurring, set recurring.is_recurring=true and pick frequency:
+  - "every day" / "daily" / "each day" → daily
+  - "every weekday" / "every working day" → weekdays
+  - "every Monday" / "each Monday" → weekly with days_of_week=[0]
+  - "every Monday and Wednesday" → weekly with days_of_week=[0,2]
+  - "every 2 weeks" → biweekly
+  - "monthly" / "each month" → monthly
+  - "yearly" / "annually" → yearly
+- When user says a time-range like "from 12 to 3pm PST", set time_of_day="12:00" and end_time_of_day="15:00".
+- If no explicit end phrase, end_type="never".
+- For recurring tasks, due_date should be the FIRST occurrence (today or the next matching weekday) at time_of_day (or end_time_of_day if that's the deadline).
+- If the user says "everyday is working day" or something confirming which days are counted, respect that hint.
+
 PRIORITY RULES:
-- "urgent", "ASAP", "immediately", "critical", "fire drill" → Urgent
+- "urgent", "ASAP", "immediately", "critical", "fire drill", "serious task" → Urgent
 - "important", "high priority", "please prioritize" → High
 - "when you can", "no rush", "eventually", "low priority" → Low
 - Default → Medium
 
 ASSIGNEE HINTS:
 - Extract explicit @mentions (strip @ prefix)
-- Extract first names/full names that appear in a "for X", "to X", "assign to X", "have X", "tell X", "@X" pattern
+- Extract first names/full names that appear in a "for X", "to X", "assign to X", "have X", "tell X", "@X", "I want X to..." pattern
 - Extract team/group names like "sales team", "managers", "engineering", "@Sales team"
 - If speaker refers to "my team" or "the team" or "our team", include the literal string "my team"
+- If they say "my direct reports" or "my reports" include the literal string "my reports"
+- If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
 - NEVER invent assignees. If none found, return empty array.
+
+INTENT DETECTION:
+- If the text is a QUESTION about Tskflow (e.g. "How do I...", "Where is...", "What does X do?"), set intent="question" and title/priority may be nulls/defaults; the frontend will route to help.
+- Otherwise intent="task".
 
 CLARIFYING QUESTIONS:
 - Ask AT MOST 2 questions.
@@ -6746,6 +6779,24 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     if current_user.get("id"):
         my_reports = await db.users.find({"manager_id": current_user["id"]}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(200)
 
+    # Preload FULL transitive subordinates (direct reports of direct reports, ...)
+    async def _all_subordinates(root_id: str) -> List[dict]:
+        seen = {root_id}
+        frontier = [root_id]
+        all_subs = []
+        while frontier:
+            next_frontier = []
+            reports = await db.users.find({"manager_id": {"$in": frontier}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
+            for u in reports:
+                if u["id"] in seen:
+                    continue
+                seen.add(u["id"])
+                all_subs.append(u)
+                next_frontier.append(u["id"])
+            frontier = next_frontier
+        return all_subs
+    everyone_under_me = await _all_subordinates(current_user["id"]) if current_user.get("id") else []
+
     resolved = []
     ambiguous = []
     unresolved = []
@@ -6764,18 +6815,53 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             continue
 
         # Special: my team / the team / our team → direct reports (if any) else all same-domain users
-        if low in ("my team", "the team", "our team", "team"):
+        if low in ("my team", "the team", "our team", "team", "my reports", "my direct reports", "direct reports"):
             targets = my_reports or [u for u in users if u["id"] != current_user["id"]]
             member_ids = [u["id"] for u in targets]
             if member_ids:
+                # Provide alternates so frontend can show a subtle dropdown
+                alternates = []
+                if my_reports:
+                    alternates.append({
+                        "kind": "team", "id": "everyone-under-me",
+                        "name": f"Everyone under me ({len(everyone_under_me)})",
+                        "members": [u["id"] for u in everyone_under_me],
+                        "member_count": len(everyone_under_me),
+                        "member_names": [u["name"] for u in everyone_under_me],
+                    })
+                # Always offer the flat domain list as an alt
+                domain_flat = [u for u in users if u["id"] != current_user["id"]]
+                if domain_flat and len(domain_flat) != len(targets):
+                    alternates.append({
+                        "kind": "team", "id": "everyone-in-domain",
+                        "name": f"Everyone in {domain}" if domain else "Everyone",
+                        "members": [u["id"] for u in domain_flat],
+                        "member_count": len(domain_flat),
+                        "member_names": [u["name"] for u in domain_flat],
+                    })
                 resolved.append({
                     "kind": "team",
                     "id": "my-team",
-                    "name": "My team" if my_reports else f"Everyone in {domain}",
+                    "name": "My team" if my_reports else (f"Everyone in {domain}" if domain else "Everyone"),
                     "email": None,
                     "members": member_ids,
                     "member_count": len(member_ids),
                     "member_names": [u["name"] for u in targets],
+                    "alternates": alternates,
+                })
+            continue
+
+        # Special: everyone under me → transitive
+        if low in ("everyone under me", "everyone reporting to me", "my whole team", "whole team", "all my reports"):
+            if everyone_under_me:
+                resolved.append({
+                    "kind": "team",
+                    "id": "everyone-under-me",
+                    "name": f"Everyone under me ({len(everyone_under_me)})",
+                    "email": None,
+                    "members": [u["id"] for u in everyone_under_me],
+                    "member_count": len(everyone_under_me),
+                    "member_names": [u["name"] for u in everyone_under_me],
                 })
             continue
 
@@ -6898,6 +6984,8 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "assignee_hints": [],
         "is_sales_task": False,
         "requires_screen_recording": False,
+        "recurring": {"is_recurring": False, "frequency": None, "days_of_week": None, "time_of_day": None, "end_time_of_day": None, "end_type": None, "end_date": None, "end_count": None, "raw_phrase": ""},
+        "intent": "task",
         "clarifying_questions": [],
         "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
@@ -7069,26 +7157,73 @@ async def set_reminder_rules(rule: ReminderRule, current_user: dict = Depends(ge
 
 
 async def _check_smart_reminders():
-    """Enhanced reminder job — respects user rules + multiple trigger types with rotating wording."""
+    """Enhanced reminder job — respects user rules + multiple trigger types with rotating wording.
+    Also auto-cleans orphan tasks (missing/deleted parent, missing user, invalid due date).
+    """
     try:
         now = get_pst_now()
         # Load all rules keyed by user
         rules_by_user = {}
         async for r in db.reminder_rules.find({"enabled": True}, {"_id": 0}):
             rules_by_user[r["user_id"]] = r
-        # Also apply defaults to users without a rule
-        # Find candidate open tasks
+        # Find candidate open tasks — MUST match the dashboard's "live task" definition
         tasks = await db.tasks.find({
-            "status": {"$nin": ["Completed", "Declined", "Draft"]},
+            "status": {"$nin": ["Completed", "Declined", "Draft", "Cancelled", "Rejected"]},
             "deleted": {"$ne": True},
             "is_parent": {"$ne": True}
-        }, {"_id": 0}).to_list(500)
+        }, {"_id": 0}).to_list(1000)
+
+        # Cache parent + user existence to keep the loop cheap
+        parent_ids_needed = list({t["parent_id"] for t in tasks if t.get("parent_id")})
+        parents_by_id = {}
+        if parent_ids_needed:
+            async for p in db.tasks.find({"id": {"$in": parent_ids_needed}}, {"_id": 0, "id": 1, "deleted": 1, "status": 1}):
+                parents_by_id[p["id"]] = p
+        user_ids_needed = list({t["assigned_to"] for t in tasks if t.get("assigned_to") and not str(t["assigned_to"]).startswith("email_")})
+        users_by_id = {}
+        if user_ids_needed:
+            async for u in db.users.find({"id": {"$in": user_ids_needed}}, {"_id": 0, "id": 1, "deleted": 1, "email": 1, "name": 1, "company_domain": 1}):
+                users_by_id[u["id"]] = u
 
         default_rule = ReminderRule().dict()
+        orphans_marked = 0
         for t in tasks:
             aid = t.get("assigned_to")
-            if not aid or aid.startswith("email_"):
+
+            # ---- ORPHAN GUARDS ----
+            if not aid or str(aid).startswith("email_"):
                 continue
+
+            # 1) Orphan: parent gone/deleted → auto-mark this child deleted
+            if t.get("parent_id"):
+                parent = parents_by_id.get(t["parent_id"])
+                if not parent or parent.get("deleted"):
+                    await db.tasks.update_one(
+                        {"id": t["id"]},
+                        {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
+                    )
+                    orphans_marked += 1
+                    continue
+
+            # 2) Orphan: assignee no longer exists / marked deleted → auto-mark task deleted
+            u = users_by_id.get(aid)
+            if not u or u.get("deleted"):
+                await db.tasks.update_one(
+                    {"id": t["id"]},
+                    {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
+                )
+                orphans_marked += 1
+                continue
+
+            # 3) Invalid due_date → mark deleted (nothing to remind about)
+            if not t.get("due_date"):
+                await db.tasks.update_one(
+                    {"id": t["id"]},
+                    {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
+                )
+                orphans_marked += 1
+                continue
+
             r = rules_by_user.get(aid, default_rule)
             if not r.get("enabled", True):
                 continue
@@ -7104,6 +7239,12 @@ async def _check_smart_reminders():
                 if due.tzinfo is None:
                     due = due.replace(tzinfo=PST)
             except Exception:
+                # Corrupted due_date → treat as orphan
+                await db.tasks.update_one(
+                    {"id": t["id"]},
+                    {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
+                )
+                orphans_marked += 1
                 continue
 
             hours_to_due = (due - now).total_seconds() / 3600.0
@@ -7211,8 +7352,107 @@ async def _check_smart_reminders():
             if bucket and bucket != "overdue":
                 update_doc["reminder_buckets_fired"] = list(set(fired_buckets + [bucket]))
             await db.tasks.update_one({"id": t["id"]}, {"$set": update_doc})
+        if orphans_marked:
+            logging.info(f"[smart_reminders] auto-cleaned {orphans_marked} orphan task(s)")
     except Exception as e:
         logging.error(f"[smart_reminders] {e}")
+
+
+# ==========================================================================
+# TASK CLEANUP — remove orphaned / garbage tasks from the database
+# ==========================================================================
+
+@api_router.post("/tasks/cleanup-orphaned")
+async def cleanup_orphaned_tasks(current_user: dict = Depends(get_current_user)):
+    """Soft-delete tasks that are effectively dead — orphaned children, tasks with missing
+    assignees or invalid due_date. Scoped to what the current user can see:
+      • For Teams tier: all tasks in their company_domain.
+      • Otherwise: their own created_by tasks.
+    Returns a per-reason breakdown so managers can see exactly what got cleaned.
+    """
+    now = get_pst_now().isoformat()
+    reasons = {"parent_deleted": 0, "no_assignee_or_user": 0, "invalid_due_date": 0, "status_stuck_no_parent_or_user": 0}
+
+    # Domain scope
+    if current_user.get("subscription_tier") == "teams" and current_user.get("company_domain"):
+        domain_users = await db.users.find({"company_domain": current_user["company_domain"]}, {"_id": 0, "id": 1}).to_list(1000)
+        domain_ids = [u["id"] for u in domain_users]
+        scope = {"$or": [{"assigned_to": {"$in": domain_ids}}, {"created_by": {"$in": domain_ids}}]}
+    else:
+        scope = {"created_by": current_user["id"]}
+
+    live_scope = {**scope, "deleted": {"$ne": True}, "is_parent": {"$ne": True}}
+    tasks = await db.tasks.find(live_scope, {"_id": 0}).to_list(5000)
+
+    # Bulk-fetch parents & users
+    parent_ids = list({t["parent_id"] for t in tasks if t.get("parent_id")})
+    parents_by_id = {}
+    if parent_ids:
+        async for p in db.tasks.find({"id": {"$in": parent_ids}}, {"_id": 0, "id": 1, "deleted": 1}):
+            parents_by_id[p["id"]] = p
+    user_ids = list({t["assigned_to"] for t in tasks if t.get("assigned_to") and not str(t["assigned_to"]).startswith("email_")})
+    users_by_id = {}
+    if user_ids:
+        async for u in db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "deleted": 1}):
+            users_by_id[u["id"]] = u
+
+    to_delete_ids = []
+    for t in tasks:
+        aid = t.get("assigned_to")
+        reason = None
+        # Orphaned parent
+        if t.get("parent_id"):
+            p = parents_by_id.get(t["parent_id"])
+            if not p or p.get("deleted"):
+                reason = "parent_deleted"
+        # No assignee OR assignee is gone
+        if not reason:
+            if not aid:
+                reason = "no_assignee_or_user"
+            elif not str(aid).startswith("email_"):
+                u = users_by_id.get(aid)
+                if not u or u.get("deleted"):
+                    reason = "no_assignee_or_user"
+        # Invalid due date
+        if not reason:
+            due = t.get("due_date")
+            if not due:
+                reason = "invalid_due_date"
+            else:
+                try:
+                    datetime.fromisoformat(str(due).replace("Z", "+00:00"))
+                except Exception:
+                    reason = "invalid_due_date"
+
+        if reason:
+            reasons[reason] += 1
+            to_delete_ids.append(t["id"])
+
+    if to_delete_ids:
+        await db.tasks.update_many(
+            {"id": {"$in": to_delete_ids}},
+            {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"], "cleanup_reason": "orphan"}}
+        )
+
+    # Also cascade delete: any parent that has no live children left → mark it deleted
+    parents_still_alive = await db.tasks.find({**scope, "is_parent": True, "deleted": {"$ne": True}}, {"_id": 0, "id": 1}).to_list(500)
+    orphan_parents = []
+    for p in parents_still_alive:
+        live_children = await db.tasks.count_documents({"parent_id": p["id"], "deleted": {"$ne": True}})
+        if live_children == 0:
+            orphan_parents.append(p["id"])
+    if orphan_parents:
+        await db.tasks.update_many(
+            {"id": {"$in": orphan_parents}},
+            {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"], "cleanup_reason": "empty_parent"}}
+        )
+
+    return {
+        "ok": True,
+        "cleaned": len(to_delete_ids) + len(orphan_parents),
+        "reasons": reasons,
+        "empty_parents_removed": len(orphan_parents),
+    }
 
 
 # ---------- Rotating reminder wording ----------

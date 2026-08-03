@@ -90,6 +90,9 @@ const TaskHub = () => {
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
 
+    // AI Command Center dialog (primary flow for + New Task)
+    const [showAIDialog, setShowAIDialog] = useState(false);
+
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
     const [showDeleted, setShowDeleted] = useState(false);
@@ -987,48 +990,8 @@ const TaskHub = () => {
                             </Badge>
                         ) : null}
                     </div>
-                    <div className="flex items-center gap-3">
-                        {/* Compact search in header */}
-                        <div className={`relative transition-all duration-200 ${searchOpen || searchQuery ? 'w-[320px]' : 'w-10'}`}>
-                            {(searchOpen || searchQuery) ? (
-                                <div className="relative">
-                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        ref={searchInputRef}
-                                        data-testid="task-search-input"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
-                                        placeholder="Search tasks..."
-                                        className="pl-9 pr-9 rounded-full h-10 bg-white border-gray-200"
-                                        autoFocus
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => { setSearchQuery(''); setSearchOpen(false); }}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                        aria-label="Close search"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : (
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 0); }}
-                                    className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                                    title="Search"
-                                    data-testid="task-search-icon"
-                                >
-                                    <Search className="w-5 h-5" />
-                                </Button>
-                            )}
-                        </div>
+                    <div className="flex items-center gap-2 sm:gap-3">
                         <NotificationBell />
-                        <Button variant="outline" size="icon" onClick={() => navigate('/help')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Help Center — or ask Voice Mode anything" data-testid="help-center-button">
-                            <HelpCircle className="w-5 h-5" />
-                        </Button>
                         <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
                             <Repeat className="w-5 h-5" />
                         </Button>
@@ -1101,13 +1064,16 @@ const TaskHub = () => {
                                     <CheckSquare className="w-4 h-4" />
                                     Select
                                 </Button>
+                                <Button
+                                    data-testid="create-task-button"
+                                    onClick={() => setShowAIDialog(true)}
+                                    className="rounded-full gap-2"
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    <span className="hidden sm:inline">New Task</span>
+                                    <span className="sm:hidden">New</span>
+                                </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
-                                    <DialogTrigger asChild>
-                                        <Button data-testid="create-task-button" className="rounded-full gap-2" disabled={false}>
-                                            <Plus className="w-4 h-4" />
-                                            New Task
-                                        </Button>
-                                    </DialogTrigger>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader>
                                             <div className="flex items-start justify-between gap-3">
@@ -1520,7 +1486,29 @@ const TaskHub = () => {
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap flex-1 justify-end">
+                        {/* Compact search bar — sits right before the date filters */}
+                        <div className="relative min-w-[180px] max-w-[240px] hidden sm:block">
+                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                            <Input
+                                ref={searchInputRef}
+                                data-testid="task-search-input"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search tasks…"
+                                className="pl-9 pr-8 h-8 rounded-full bg-white border-gray-200 text-sm"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    aria-label="Clear search"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
                         <button data-testid="date-filter-all" onClick={() => setDateFilter('all')} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${dateFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'}`}>All</button>
                         
                         {primaryFilters.map((option) => (
@@ -1599,78 +1587,78 @@ const TaskHub = () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* AI Quick Create — one sentence → perfect task */}
-                <AIQuickCreate
-                    onCreated={() => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); }}
-                    onOpenAdvanced={(prefill) => {
-                        if (prefill) {
-                            setTaskForm((f) => ({
-                                ...f,
-                                title: prefill.title || f.title,
-                                description: prefill.description || f.description,
-                                due_date: prefill.due_date || f.due_date,
-                                priority: prefill.priority || f.priority,
-                                is_sales_task: prefill.is_sales_task || f.is_sales_task,
-                            }));
-                        }
-                        setShowCreateModal(true);
-                    }}
-                />
+                {/* AI Command Center Dialog — primary flow for new tasks + Q&A + help */}
+                <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
+                    <DialogContent className="rounded-2xl max-w-2xl w-[96vw] sm:w-full max-h-[92vh] overflow-y-auto p-0">
+                        <div className="p-5 sm:p-6">
+                            <DialogHeader className="mb-3">
+                                <DialogTitle className="flex items-center gap-2 text-xl">
+                                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                                    What do you need?
+                                </DialogTitle>
+                                <DialogDescription className="text-sm">
+                                    Describe a task in one sentence, ask a &quot;how do I…&quot; question, or paste a recurring instruction. I&apos;ll figure the rest out.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <AIQuickCreate
+                                embedded
+                                onCreated={() => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); setShowAIDialog(false); }}
+                                onOpenAdvanced={(prefill) => {
+                                    if (prefill) {
+                                        setTaskForm((f) => ({
+                                            ...f,
+                                            title: prefill.title || f.title,
+                                            description: prefill.description || f.description,
+                                            due_date: prefill.due_date || f.due_date,
+                                            priority: prefill.priority || f.priority,
+                                            is_sales_task: prefill.is_sales_task || f.is_sales_task,
+                                        }));
+                                    }
+                                    setShowAIDialog(false);
+                                    setShowCreateModal(true);
+                                }}
+                            />
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
-                {/* Drafts Section */}
+                {/* Compact drafts pill — tucked away, one line, one tap to expand */}
                 {drafts.length > 0 && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }} 
-                        animate={{ opacity: 1, y: 0 }} 
-                        transition={{ duration: 0.3 }}
-                        className="mb-6"
-                    >
-                        <Card className="border-2 shadow-soft rounded-2xl bg-amber-50">
-                            <CardHeader className="pb-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                                            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                                            Unfinished Drafts
-                                        </CardTitle>
-                                        <CardDescription>Resume your draft tasks</CardDescription>
+                    <details className="mb-4 group" data-testid="drafts-compact">
+                        <summary className="cursor-pointer select-none inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="font-medium">{drafts.length} unfinished {drafts.length === 1 ? 'draft' : 'drafts'}</span>
+                            <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
+                        </summary>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {drafts.map((draft) => (
+                                <div
+                                    key={draft.id}
+                                    className="relative flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs cursor-pointer hover:bg-amber-100 group/draft"
+                                    onClick={() => resumeDraft(draft)}
+                                    data-testid={`draft-card-${draft.id}`}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-semibold text-slate-900 truncate">{draft.title || 'Untitled draft'}</p>
+                                        <p className="text-[10px] text-amber-700">
+                                            {draft.created_at && !isNaN(new Date(draft.created_at).getTime())
+                                                ? format(new Date(draft.created_at), 'MMM dd, h:mm a')
+                                                : 'Recent'}
+                                        </p>
                                     </div>
-                                    <Badge variant="secondary">{drafts.length}</Badge>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => deleteDraft(draft.id, e)}
+                                        className="opacity-0 group-hover/draft:opacity-100 text-red-500 hover:bg-red-50 rounded-full p-1"
+                                        title="Delete draft"
+                                        data-testid={`delete-draft-${draft.id}`}
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
                                 </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    {drafts.map((draft) => (
-                                        <Card 
-                                            key={draft.id} 
-                                            className="relative p-4 cursor-pointer hover:shadow-md transition-shadow border border-amber-200 group"
-                                            onClick={() => resumeDraft(draft)}
-                                            data-testid={`draft-card-${draft.id}`}
-                                        >
-                                            <button
-                                                type="button"
-                                                onClick={(e) => deleteDraft(draft.id, e)}
-                                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:bg-red-50 rounded-full p-1"
-                                                title="Delete draft"
-                                                data-testid={`delete-draft-${draft.id}`}
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                            <h4 className="font-semibold text-sm truncate pr-6">
-                                                {draft.title || 'Untitled Draft'}
-                                            </h4>
-                                            <p className="text-xs text-gray-600 mt-1">
-                                                Started {draft.created_at && !isNaN(new Date(draft.created_at).getTime()) 
-                                                    ? format(new Date(draft.created_at), 'MMM dd, h:mm a')
-                                                    : ''}
-                                            </p>
-                                            <Badge variant="outline" className="mt-2 text-xs">Draft</Badge>
-                                        </Card>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                            ))}
+                        </div>
+                    </details>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">

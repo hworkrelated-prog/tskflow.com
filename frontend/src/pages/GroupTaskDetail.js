@@ -399,12 +399,11 @@ const GroupTaskDetail = () => {
     const all = leaderboard?.leaderboard || [];
     const activeOnly = all.filter((e) => e.status !== 'Completed');
     const completedOnly = all.filter((e) => e.status === 'Completed');
-    // Top 5: fastest completers or highest engagement (best rank first)
-    const top5 = all.slice(0, Math.min(5, all.length));
-    // Bottom 5: worst engagement (lowest ranks first)
-    const bottom5 = [...all].reverse().slice(0, Math.min(5, all.length));
-    // Show top/bottom split only when we have enough people
-    const showTopBottomSplit = all.length >= 6;
+    // Adaptive Top/Bottom split: show for 4+ people. Sizes shrink for small groups.
+    const showTopBottomSplit = all.length >= 4;
+    const splitSize = all.length >= 10 ? 5 : Math.max(2, Math.floor(all.length / 2));
+    const top5 = all.slice(0, splitSize);
+    const bottom5 = [...all].reverse().slice(0, splitSize);
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -541,7 +540,7 @@ const GroupTaskDetail = () => {
                             <CardContent className="pt-6">
                                 <div className="flex items-center gap-2 mb-3">
                                     <TrendingUp className="w-5 h-5 text-emerald-600" />
-                                    <h3 className="text-lg font-semibold text-emerald-900">Top 5 performers</h3>
+                                    <h3 className="text-lg font-semibold text-emerald-900">Top {splitSize} performers</h3>
                                 </div>
                                 <p className="text-xs text-emerald-700 mb-3">Fastest and most engaged on this task.</p>
                                 <div className="space-y-2">
@@ -564,7 +563,7 @@ const GroupTaskDetail = () => {
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
                                         <TrendingDown className="w-5 h-5 text-red-600" />
-                                        <h3 className="text-lg font-semibold text-red-900">Bottom 5 performers</h3>
+                                        <h3 className="text-lg font-semibold text-red-900">Bottom {splitSize} performers</h3>
                                     </div>
                                     {isCreator && (
                                         <Button

@@ -23,13 +23,15 @@ import DateTimePicker from '@/components/DateTimePicker';
  *       - Clarifying questions (with quick answer chips or free text)
  *   4) User taps Send → bulk create task via existing /api/tasks/bulk
  */
-const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
+const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState(null);
     const [answers, setAnswers] = useState({});
     const [sending, setSending] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    const [answerMode, setAnswerMode] = useState(null); // for intent=question — display AI answer inline
+    const [answerLoading, setAnswerLoading] = useState(false);
     const inputRef = useRef(null);
 
     // Preview edits
@@ -55,12 +57,39 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
         return () => window.removeEventListener('keydown', onKey);
     }, [focusInput]);
 
+    // Auto-focus when embedded in a dialog
+    useEffect(() => {
+        if (embedded) focusInput();
+    }, [embedded, focusInput]);
+
+    const runQA = async (question) => {
+        // Ask the voice assistant to answer this question (help center replacement)
+        setAnswerLoading(true);
+        try {
+            const res = await axios.post(`${API}/voice/command`, { text: question });
+            const reply = res?.data?.reply || res?.data?.answer || 'I can help with tasks and how-to questions. Try again in a different way?';
+            setAnswerMode({ question, reply });
+        } catch (err) {
+            setAnswerMode({ question, reply: err?.response?.data?.detail || 'Sorry, I could not answer that right now.' });
+        } finally {
+            setAnswerLoading(false);
+        }
+    };
+
     const runPreview = async (overrideText, overrideAnswers) => {
         const t = (overrideText ?? text).trim();
         if (!t || t.length < 4) {
             toast.error('Type a bit more so I can understand what you need.');
             return;
         }
+        // Fast heuristic: obvious help questions route straight to Q&A
+        const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does)\b/i.test(t) && /\?$/.test(t);
+        if (looksLikeQuestion) {
+            setAnswerMode(null);
+            await runQA(t);
+            return;
+        }
+        setAnswerMode(null);
         setLoading(true);
         try {
             const res = await axios.post(`${API}/ai/quick-create-preview`, {
@@ -68,6 +97,11 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
                 answers: overrideAnswers ?? answers,
             });
             const p = res.data;
+            // If the AI decided this is a question rather than a task, run Q&A instead
+            if (p.intent === 'question') {
+                await runQA(t);
+                return;
+            }
             setPreview(p);
             setEditTitle(p.title || '');
             setEditDesc(p.description || '');
@@ -136,22 +170,44 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
 
         setSending(true);
         try {
-            const payload = {
-                title: editTitle.trim(),
-                description: editDesc || '',
-                assigned_to: unique,
-                due_date: editDue,
-                priority: editPriority,
-                is_sales_task: preview?.is_sales_task || false,
-                requires_screen_recording: preview?.requires_screen_recording || false,
-            };
-            if (unique.length === 1) {
-                // Single task
-                await axios.post(`${API}/tasks`, { ...payload, assigned_to: unique[0] });
+            const rec = preview?.recurring;
+            const isRecurring = rec && rec.is_recurring && rec.frequency;
+            if (isRecurring) {
+                // Build a recurring series payload; API expects one assignee per series so we create N series
+                const payloads = unique.map((aid) => ({
+                    title: editTitle.trim(),
+                    description: editDesc || '',
+                    assigned_to: aid,
+                    priority: editPriority,
+                    frequency: rec.frequency,
+                    days_of_week: rec.days_of_week || null,
+                    time_of_day: rec.time_of_day || (editDue ? editDue.slice(11, 16) : '09:00'),
+                    end_time_of_day: rec.end_time_of_day || null,
+                    end_type: rec.end_type || 'never',
+                    end_date: rec.end_date || null,
+                    end_count: rec.end_count || null,
+                    start_date: editDue ? editDue.slice(0, 10) : undefined,
+                    is_sales_task: preview?.is_sales_task || false,
+                }));
+                await Promise.all(payloads.map((p) => axios.post(`${API}/recurring`, p)));
+                toast.success(`Recurring series set up for ${unique.length} ${unique.length === 1 ? 'person' : 'people'} ♻️`);
             } else {
-                await axios.post(`${API}/tasks/bulk`, payload);
+                const payload = {
+                    title: editTitle.trim(),
+                    description: editDesc || '',
+                    assigned_to: unique,
+                    due_date: editDue,
+                    priority: editPriority,
+                    is_sales_task: preview?.is_sales_task || false,
+                    requires_screen_recording: preview?.requires_screen_recording || false,
+                };
+                if (unique.length === 1) {
+                    await axios.post(`${API}/tasks`, { ...payload, assigned_to: unique[0] });
+                } else {
+                    await axios.post(`${API}/tasks/bulk`, payload);
+                }
+                toast.success(`Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'} ✨`);
             }
-            toast.success(`Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'} ✨`);
             reset();
             onCreated?.();
         } catch (err) {
@@ -159,6 +215,11 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
         } finally {
             setSending(false);
         }
+    };
+
+    // Swap a "my team" chip to an alternate (e.g. "Everyone under me")
+    const swapAlternate = (idx, alt) => {
+        setEditAssignees((prev) => prev.map((a, i) => (i === idx ? { ...alt, kind: alt.kind || 'team' } : a)));
     };
 
     const clarifying = preview?.clarifying_questions || [];
@@ -180,23 +241,27 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
     }[kind] || 'bg-slate-100 text-slate-700');
 
     return (
-        <div className="w-full mb-6" data-testid="ai-quick-create">
-            <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-4 shadow-sm">
+        <div className={embedded ? "w-full" : "w-full mb-6"} data-testid="ai-quick-create">
+            <div className={embedded ? "" : "rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-4 shadow-sm"}>
                 <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
-                        <Sparkles className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Quick create with AI</p>
-                            <button
-                                onClick={() => onOpenAdvanced?.()}
-                                className="text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2"
-                                data-testid="ai-advanced-btn"
-                            >
-                                Prefer the full form?
-                            </button>
+                    {!embedded && (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
+                            <Sparkles className="w-5 h-5 text-white" />
                         </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                        {!embedded && (
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Quick create with AI</p>
+                                <button
+                                    onClick={() => onOpenAdvanced?.()}
+                                    className="text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2"
+                                    data-testid="ai-advanced-btn"
+                                >
+                                    Prefer the full form?
+                                </button>
+                            </div>
+                        )}
                         <div className="flex items-center gap-2">
                             <Input
                                 ref={inputRef}
@@ -208,27 +273,48 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
                                         runPreview();
                                     }
                                 }}
-                                placeholder='e.g., "Tell my team to submit their MEAs by 12 PST — urgently"'
-                                className="flex-1 bg-white/90 border-indigo-200 rounded-xl text-sm h-11 focus-visible:ring-indigo-400"
+                                placeholder={embedded ? 'e.g. "Have Harold call leads 12–3pm every weekday — urgent" or "How do I share a task?"' : 'e.g., "Tell my team to submit their MEAs by 12 PST — urgently"'}
+                                className={`flex-1 rounded-xl text-sm h-11 focus-visible:ring-indigo-400 ${embedded ? 'bg-white border-indigo-200' : 'bg-white/90 border-indigo-200'}`}
                                 data-testid="ai-quick-input"
-                                disabled={loading || sending}
+                                disabled={loading || sending || answerLoading}
                             />
                             <Button
                                 type="button"
                                 onClick={() => runPreview()}
-                                disabled={loading || sending || !text.trim()}
+                                disabled={loading || sending || answerLoading || !text.trim()}
                                 className="rounded-xl bg-indigo-600 hover:bg-indigo-700 h-11 px-4 gap-2"
                                 data-testid="ai-quick-preview-btn"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                <span className="hidden sm:inline">{loading ? 'Reading…' : 'Preview'}</span>
+                                {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                <span className="hidden sm:inline">{loading ? 'Reading…' : answerLoading ? 'Thinking…' : 'Go'}</span>
                             </Button>
                         </div>
-                        <p className="text-[11px] text-indigo-500/80 mt-1.5">
-                            One sentence in, perfect task out. Press <kbd className="px-1 py-0.5 bg-white/70 rounded border border-indigo-200 font-mono text-[10px]">/</kbd> anywhere to focus.
+                        <p className={`text-[11px] mt-1.5 ${embedded ? 'text-slate-500' : 'text-indigo-500/80'}`}>
+                            Create tasks, set recurring, or ask &quot;how do I…&quot; — press <kbd className="px-1 py-0.5 bg-slate-100 rounded border border-slate-200 font-mono text-[10px]">/</kbd> to focus.
                         </p>
                     </div>
                 </div>
+
+                {/* Q&A answer inline (replaces help center) */}
+                {answerMode && (
+                    <div className="mt-4 bg-white rounded-xl border border-indigo-100 p-4" data-testid="ai-qa-answer">
+                        <div className="flex items-start gap-2">
+                            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                                <p className="text-xs text-slate-500 mb-1">You asked</p>
+                                <p className="text-sm font-medium text-slate-800 mb-3">{answerMode.question}</p>
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{answerMode.reply}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => { setAnswerMode(null); setText(''); focusInput(); }}
+                                    className="text-xs text-indigo-600 hover:text-indigo-900 underline underline-offset-2 mt-3"
+                                >
+                                    Ask another question or create a task
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Preview card */}
                 {preview && expanded && (
@@ -319,6 +405,26 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
                                                 <span className="opacity-70 ml-1">· {a.member_count}</span>
                                             )}
                                         </span>
+                                        {/* Subtle dropdown to swap "my team" ↔ "everyone under me" ↔ "everyone in domain" */}
+                                        {a.kind === 'team' && Array.isArray(a.alternates) && a.alternates.length > 0 && (
+                                            <details className="relative">
+                                                <summary className="list-none cursor-pointer opacity-60 hover:opacity-100 flex items-center">
+                                                    <ChevronDown className="w-3 h-3" />
+                                                </summary>
+                                                <div className="absolute z-30 mt-1 right-0 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[220px]">
+                                                    {a.alternates.map((alt) => (
+                                                        <button
+                                                            key={alt.id}
+                                                            type="button"
+                                                            onClick={(e) => { e.preventDefault(); swapAlternate(i, alt); e.currentTarget.closest('details').open = false; }}
+                                                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-slate-700"
+                                                        >
+                                                            {alt.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => removeAssignee(i)}
@@ -387,8 +493,14 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced }) => {
                         </div>
 
                         {/* Tags */}
-                        {(preview.is_sales_task || preview.requires_screen_recording) && (
+                        {(preview.is_sales_task || preview.requires_screen_recording || preview.recurring?.is_recurring) && (
                             <div className="flex flex-wrap gap-2">
+                                {preview.recurring?.is_recurring && (
+                                    <Badge className="bg-indigo-100 text-indigo-800">
+                                        ♻️ Recurring · {preview.recurring.frequency}
+                                        {preview.recurring.time_of_day ? ` · ${preview.recurring.time_of_day}${preview.recurring.end_time_of_day ? '–' + preview.recurring.end_time_of_day : ''}` : ''}
+                                    </Badge>
+                                )}
                                 {preview.is_sales_task && (
                                     <Badge className="bg-emerald-100 text-emerald-800">💰 Sales task</Badge>
                                 )}
