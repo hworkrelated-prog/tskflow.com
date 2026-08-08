@@ -28,6 +28,7 @@ import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
+import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalFAB from '@/components/GlobalFAB';
 import VoiceMode from '@/components/VoiceMode';
@@ -332,6 +333,7 @@ function App() {
                     <Route path="/leads" element={<LeadsPage />} />
                     <Route path="/privacy" element={<PrivacyPolicy />} />
                     <Route path="/terms" element={<TermsOfService />} />
+                    <Route path="/contact" element={<ContactPage />} />
                     <Route
                         path="/dashboard"
                         element={

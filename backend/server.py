@@ -354,7 +354,7 @@ async def check_and_send_reminders():
                 <html>
                     <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
                         <div style="background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">⚠️ Task Reminder</h1>
+                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">â ï¸ Task Reminder</h1>
                         </div>
                         <div style="padding: 40px 30px; background: white;">
                             <p style="font-size: 16px; color: #374151;">Hi {assignee['name']},</p>
@@ -501,7 +501,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
             </div>
             <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
                 <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                    © 2025 Tskflow. All rights reserved.
+                    Â© 2025 Tskflow. All rights reserved.
                 </p>
             </div>
         </body>
@@ -578,7 +578,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
                 </div>
             </div>
             <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
+                <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Â© 2025 Tskflow. All rights reserved.</p>
             </div>
         </body>
     </html>
@@ -868,7 +868,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                 </div>
                 <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
                     <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                        © 2025 Tskflow. All rights reserved.
+                        Â© 2025 Tskflow. All rights reserved.
                     </p>
                 </div>
             </body>
@@ -1001,7 +1001,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                             </div>
                         </div>
                         <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
+                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Â© 2025 Tskflow. All rights reserved.</p>
                         </div>
                     </body>
                 </html>
@@ -1200,7 +1200,7 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
             <div style="padding: 30px;">
                 <p>Hi {name},</p>
                 <p><strong>{current_user['name']}</strong> is waiting on this task: <strong>{parent['title']}</strong>.</p>
-                <p>It's still outstanding — please take a look when you can.</p>
+                <p>It's still outstanding â please take a look when you can.</p>
                 <div style="text-align: center; margin-top: 20px;">
                     <a href="{app_url}/task/{c['id']}" style="background: #4F46E5; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
                 </div>
@@ -1752,7 +1752,7 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
                     user_id=mentioned_user["id"],
                     n_type="mention",
                     title=f"{current_user['name']} mentioned you",
-                    body=f"In: {task['title']} — {comment.content[:120]}",
+                    body=f"In: {task['title']} â {comment.content[:120]}",
                     task_id=task_id,
                     actor_name=current_user["name"],
                 )
@@ -2155,7 +2155,7 @@ async def get_task_leaderboard(task_id: str, current_user: dict = Depends(get_cu
     
     return {
         "leaderboard": leaderboard,
-        "visibility_message": "⚡ Your speed and engagement are visible to everyone on this task"
+        "visibility_message": "â¡ Your speed and engagement are visible to everyone on this task"
     }
 
 # ===== AI SUMMARIES =====
@@ -2173,7 +2173,7 @@ async def get_task_ai_summary(task_id: str, current_user: dict = Depends(get_cur
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
         # Provide a quick heuristic summary if AI is unavailable
-        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority, due {task['due_date']}. Status: {task['status']}."}
+        return {"summary": f"{task['title']} â {task.get('priority', 'Medium')} priority, due {task['due_date']}. Status: {task['status']}."}
     
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -2193,10 +2193,10 @@ Status: {task['status']}"""
         
         return {"summary": response.content.strip()}
     except asyncio.TimeoutError:
-        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority, due {task['due_date']}. (Summary timed out.)"}
+        return {"summary": f"{task['title']} â {task.get('priority', 'Medium')} priority, due {task['due_date']}. (Summary timed out.)"}
     except Exception as e:
         logging.error(f"AI summary error: {e}")
-        return {"summary": f"{task['title']} — {task.get('priority', 'Medium')} priority. Status: {task['status']}."}
+        return {"summary": f"{task['title']} â {task.get('priority', 'Medium')} priority. Status: {task['status']}."}
 
 @api_router.post("/dashboard/ai-summary")
 async def get_dashboard_ai_summary(
@@ -2249,7 +2249,7 @@ async def get_dashboard_ai_summary(
                     overdue += 1
             except Exception:
                 pass
-        return {"summary": f"You have {total} {view_mode} tasks. {overdue} are overdue. Priorities — High: {priorities.get('High',0)}, Medium: {priorities.get('Medium',0)}, Low: {priorities.get('Low',0)}."}
+        return {"summary": f"You have {total} {view_mode} tasks. {overdue} are overdue. Priorities â High: {priorities.get('High',0)}, Medium: {priorities.get('Medium',0)}, Low: {priorities.get('Low',0)}."}
     
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -2275,7 +2275,7 @@ async def get_dashboard_ai_summary(
         
         return {"summary": response.content.strip()}
     except asyncio.TimeoutError:
-        return {"summary": f"You have {len(tasks)} {view_mode} tasks. (AI summary timed out — showing quick stats.)"}
+        return {"summary": f"You have {len(tasks)} {view_mode} tasks. (AI summary timed out â showing quick stats.)"}
     except Exception as e:
         logging.error(f"Dashboard AI summary error: {e}")
         # Fall back to heuristic instead of failing
@@ -2798,34 +2798,34 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
     
     # Build update dict with only provided fields
     update_data = {}
-    changes = []  # Track before→after changes
+    changes = []  # Track beforeâafter changes
     
     if task_update.title is not None:
         update_data["title"] = task_update.title
         if task_update.title != task.get("title"):
-            changes.append(f"<strong>Title:</strong> {task.get('title', 'None')} → {task_update.title}")
+            changes.append(f"<strong>Title:</strong> {task.get('title', 'None')} â {task_update.title}")
     
     if task_update.description is not None:
         update_data["description"] = task_update.description
         if task_update.description != task.get("description"):
             old_desc = task.get("description", "None")[:50] + ("..." if len(task.get("description", "")) > 50 else "")
             new_desc = task_update.description[:50] + ("..." if len(task_update.description) > 50 else "")
-            changes.append(f"<strong>Description:</strong> {old_desc} → {new_desc}")
+            changes.append(f"<strong>Description:</strong> {old_desc} â {new_desc}")
     
     if task_update.due_date is not None:
         update_data["due_date"] = task_update.due_date
         if task_update.due_date != task.get("due_date"):
-            changes.append(f"<strong>Due date:</strong> {task.get('due_date', 'None').replace('T', ' at ').split('.')[0]} → {task_update.due_date.replace('T', ' at ').split('.')[0]}")
+            changes.append(f"<strong>Due date:</strong> {task.get('due_date', 'None').replace('T', ' at ').split('.')[0]} â {task_update.due_date.replace('T', ' at ').split('.')[0]}")
     
     if task_update.priority is not None:
         update_data["priority"] = task_update.priority
         if task_update.priority != task.get("priority"):
-            changes.append(f"<strong>Priority:</strong> {task.get('priority', 'None')} → {task_update.priority}")
+            changes.append(f"<strong>Priority:</strong> {task.get('priority', 'None')} â {task_update.priority}")
     
     if task_update.category is not None:
         update_data["category"] = task_update.category
         if task_update.category != task.get("category"):
-            changes.append(f"<strong>Category:</strong> {task.get('category', 'None')} → {task_update.category}")
+            changes.append(f"<strong>Category:</strong> {task.get('category', 'None')} â {task_update.category}")
     
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -2867,7 +2867,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
                         </div>
                     </div>
                     <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                        <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
+                        <p style="font-size: 12px; color: #9CA3AF; margin: 0;">Â© 2025 Tskflow. All rights reserved.</p>
                     </div>
                 </body>
             </html>
@@ -3904,7 +3904,7 @@ async def send_daily_analytics():
                 <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Daily Active Users</strong></td><td>{dau}</td></tr>
                 <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Created (24h)</strong></td><td>{tasks_today}</td></tr>
                 <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Completed (24h)</strong></td><td>{completed_today}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Signup → Verified Rate</strong></td><td>{conversion_rate:.1f}%</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Signup â Verified Rate</strong></td><td>{conversion_rate:.1f}%</td></tr>
             </table>
             
             <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Domain Intelligence</h2>
@@ -3934,7 +3934,7 @@ async def send_daily_analytics():
             </div>
             
             <p style="color: #9CA3AF; font-size: 12px; margin-top: 30px; text-align: center;">
-                Tskflow Analytics • {today.strftime('%Y')}
+                Tskflow Analytics â¢ {today.strftime('%Y')}
             </p>
         </body>
     </html>
@@ -4301,7 +4301,7 @@ async def create_calendar_event(user_id: str, task: dict):
         end_time = start_time + timedelta(minutes=30)
         
         event = {
-            'summary': f"🔴 {task['title']}" if task.get('priority') in ['high', 'urgent'] else task['title'],
+            'summary': f"ð´ {task['title']}" if task.get('priority') in ['high', 'urgent'] else task['title'],
             'description': f"{task.get('description', '')}\n\n---\nView in Tskflow: {APP_BASE_URL}/tasks/{task['id']}",
             'start': {'dateTime': start_time.isoformat(), 'timeZone': 'UTC'},
             'end': {'dateTime': end_time.isoformat(), 'timeZone': 'UTC'},
@@ -4324,7 +4324,7 @@ async def create_calendar_event(user_id: str, task: dict):
 
 async def delete_calendar_event(user_id: str, event_id: str) -> bool:
     """Remove a previously-created Google Calendar event from the assignee's calendar.
-    Uses the assignee's stored OAuth credentials — the same ones used to create it."""
+    Uses the assignee's stored OAuth credentials â the same ones used to create it."""
     if not user_id or not event_id:
         return False
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
@@ -4344,7 +4344,7 @@ async def delete_calendar_event(user_id: str, event_id: str) -> bool:
         service.events().delete(calendarId='primary', eventId=event_id, sendUpdates='all').execute()
         return True
     except Exception as e:
-        # 404/410 = event already gone — treat as success
+        # 404/410 = event already gone â treat as success
         msg = str(e).lower()
         if '404' in msg or '410' in msg or 'not found' in msg or 'deleted' in msg:
             return True
@@ -5077,7 +5077,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
 
 # Include router
 # ==========================================================================
-# CLOUD OBJECT STORAGE — task attachments & screen recordings
+# CLOUD OBJECT STORAGE â task attachments & screen recordings
 # ==========================================================================
 from fastapi import Header, Query
 from fastapi.responses import Response
@@ -5255,7 +5255,7 @@ async def stream_file(path: str, request: HTTPRequest, authorization: Optional[s
 
 
 # ==============================================================================
-# JULY 2025 CONTINUATION BATCH — 13 FEATURE ROLLUP
+# JULY 2025 CONTINUATION BATCH â 13 FEATURE ROLLUP
 # ==============================================================================
 
 # --- WebSocket manager for real-time chatter/notifications ---
@@ -5367,7 +5367,7 @@ async def create_notification(
         await ws_manager.send(user_id, {"event": "notification", "notification": {k: v for k, v in doc.items() if k != "_id"}})
     except Exception:
         pass
-    # Slack bridge — cross-post to user's linked Slack channel (mentions only)
+    # Slack bridge â cross-post to user's linked Slack channel (mentions only)
     try:
         u = await db.users.find_one({"id": user_id}, {"_id": 0, "preferences": 1})
         webhook = ((u or {}).get("preferences") or {}).get("slack_webhook_url")
@@ -5411,7 +5411,7 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
           {cta}
         </td></tr>
         <tr><td style="background:#f9fafb;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #eef0f3;">
-          <div>— <strong>Jarvis</strong>, Tskflow assistant</div>
+          <div>â <strong>Jarvis</strong>, Tskflow assistant</div>
           <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#4F46E5;text-decoration:none;">Manage notifications</a></div>
         </td></tr>
       </table>
@@ -5746,15 +5746,15 @@ async def dashboard_ai_summary_v2(
         # Heuristic recommendation
         recs = []
         if stats["overdue_count"]:
-            recs.append(f"⚠️ Clear {stats['overdue_count']} overdue task(s) first.")
+            recs.append(f"â ï¸ Clear {stats['overdue_count']} overdue task(s) first.")
         if stats["urgent_high_count"]:
-            recs.append(f"🔴 Focus on {stats['urgent_high_count']} High-priority item(s) due in <24h.")
+            recs.append(f"ð´ Focus on {stats['urgent_high_count']} High-priority item(s) due in <24h.")
         if stats["due_in_hours_count"]:
-            recs.append(f"⏰ {stats['due_in_hours_count']} due in the next 6 hours.")
+            recs.append(f"â° {stats['due_in_hours_count']} due in the next 6 hours.")
         if stats["due_today_count"]:
-            recs.append(f"📅 {stats['due_today_count']} due later today.")
+            recs.append(f"ð {stats['due_today_count']} due later today.")
         if not recs:
-            recs.append("You're on top of things — no urgent items.")
+            recs.append("You're on top of things â no urgent items.")
         return {"stats": stats, "summary": " ".join(recs)}
 
     try:
@@ -5762,8 +5762,8 @@ async def dashboard_ai_summary_v2(
         top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
         lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
         prompt = (
-            f"You are Jarvis. Given these urgent counts — overdue={stats['overdue_count']}, "
-            f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} — "
+            f"You are Jarvis. Given these urgent counts â overdue={stats['overdue_count']}, "
+            f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} â "
             f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
             f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
         )
@@ -5813,21 +5813,21 @@ async def _build_eod_summary_for_user(u: dict, now):
     if not completed and not open_tasks_docs:
         return None
 
-    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> — completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
-    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} — due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up — no open tasks.</li>"
-    missed_note = f"<p style='color:#b91c1c;'>⚠️ {len(missed)} task(s) missed their due date.</p>" if missed else ""
+    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> â completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
+    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} â due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up â no open tasks.</li>"
+    missed_note = f"<p style='color:#b91c1c;'>â ï¸ {len(missed)} task(s) missed their due date.</p>" if missed else ""
     inner = f"""
     <h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {u.get('name','friend').split(' ')[0]}</h2>
     <p style=\"color:#6b7280;margin:0 0 20px;\">{now.strftime('%A, %b %d, %Y')}</p>
-    <h3 style=\"font-size:15px;margin:16px 0 6px;\">✅ Completed today ({len(completed)})</h3>
+    <h3 style=\"font-size:15px;margin:16px 0 6px;\">â Completed today ({len(completed)})</h3>
     <ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>
-    <h3 style=\"font-size:15px;margin:20px 0 6px;\">📋 Still open ({len(open_tasks_docs)})</h3>
+    <h3 style=\"font-size:15px;margin:20px 0 6px;\">ð Still open ({len(open_tasks_docs)})</h3>
     <ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>
     {missed_note}
     """
     html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
     slack_text = (
-        f":sunset: *EOD summary — {now.strftime('%b %d')}*\n"
+        f":sunset: *EOD summary â {now.strftime('%b %d')}*\n"
         f"\u2705 Completed today: {len(completed)}\n"
         f":clipboard: Still open: {len(open_tasks_docs)}\n"
         + (f":warning: {len(missed)} missed due date(s)\n" if missed else "")
@@ -5851,7 +5851,7 @@ async def cron_eod_report(secret: Optional[str] = None):
     sent = 0
     for u in users:
         prefs = u.get("preferences") or {}
-        # Opt-in gate: by default we DO NOT spam users — they must enable in Settings.
+        # Opt-in gate: by default we DO NOT spam users â they must enable in Settings.
         if not prefs.get("eod_enabled"):
             continue
         target_hour = prefs.get("eod_hour")
@@ -5873,7 +5873,7 @@ async def cron_eod_report(secret: Optional[str] = None):
 
         if channel in ("email", "both"):
             try:
-                await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html)
+                await send_email_notification(u["email"], f"Your Tskflow EOD summary â {now.strftime('%b %d')}", html)
                 sent += 1
             except Exception:
                 pass
@@ -5898,14 +5898,14 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
     now = get_pst_now()
     built = await _build_eod_summary_for_user(u, now)
     if not built:
-        return {"ok": True, "sent": False, "reason": "Nothing to summarize yet — no tasks today."}
+        return {"ok": True, "sent": False, "reason": "Nothing to summarize yet â no tasks today."}
     html, slack_text, counts = built
     prefs = u.get("preferences") or {}
     channel = (prefs.get("eod_channel") or "email").lower()
     delivered_to = []
     if channel in ("email", "both"):
         try:
-            await send_email_notification(u["email"], f"Tskflow EOD preview — {now.strftime('%b %d')}", html)
+            await send_email_notification(u["email"], f"Tskflow EOD preview â {now.strftime('%b %d')}", html)
             delivered_to.append("email")
         except Exception:
             pass
@@ -5920,7 +5920,7 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
     return {"ok": True, "sent": bool(delivered_to), "delivered_to": delivered_to, "counts": counts}
 
 
-# --- Transcript → task drafts (Google Meet flow) ---
+# --- Transcript â task drafts (Google Meet flow) ---
 class TranscriptImportRequest(BaseModel):
     text: Optional[str] = None
     url: Optional[str] = None  # public Google Doc
@@ -5928,7 +5928,7 @@ class TranscriptImportRequest(BaseModel):
 async def _fetch_google_doc_text(url: str) -> str:
     """Best-effort fetch of a public Google Doc as plain text."""
     if "docs.google.com/document" not in url:
-        # Not a Google Doc URL — treat as any URL
+        # Not a Google Doc URL â treat as any URL
         async with httpx.AsyncClient(timeout=15) as client_http:
             r = await client_http.get(url, follow_redirects=True)
             return r.text
@@ -5967,10 +5967,10 @@ async def create_drafts_from_transcript(
             from emergentintegrations.llm.chat import LlmChat, UserMessage
             import json as _json
             prompt = (
-                "You are Jarvis, a meeting-notes → action-items assistant. Extract concrete tasks from the transcript below. "
+                "You are Jarvis, a meeting-notes â action-items assistant. Extract concrete tasks from the transcript below. "
                 "For each task, return JSON with fields: title (short), description (one paragraph), "
                 "assignee_hint (name or role as mentioned, or null), due_date_hint (natural-language or null), "
-                "priority (High/Medium/Low), ambiguities (array of clarification questions if anything is unclear — assignee, deadline, scope).\n"
+                "priority (High/Medium/Low), ambiguities (array of clarification questions if anything is unclear â assignee, deadline, scope).\n"
                 "Reply ONLY with a JSON object like {\"tasks\": [ ... ]}. No prose.\n\n"
                 "TRANSCRIPT:\n" + text
             )
@@ -5987,7 +5987,7 @@ async def create_drafts_from_transcript(
 
     if not drafts_data:
         # Simple fallback: split on lines starting with "-" or numbered items
-        lines = [ln.strip("-*• 	").strip() for ln in text.splitlines() if ln.strip().startswith(("-", "*", "•")) or re.match(r"^\d+[\.)]", ln.strip())]
+        lines = [ln.strip("-*â¢ 	").strip() for ln in text.splitlines() if ln.strip().startswith(("-", "*", "â¢")) or re.match(r"^\d+[\.)]", ln.strip())]
         for ln in lines[:20]:
             drafts_data.append({
                 "title": ln[:100],
@@ -6081,7 +6081,7 @@ async def test_slack_webhook(body: dict, current_user: dict = Depends(get_curren
     webhook = (body or {}).get("webhook_url") or ""
     if not webhook.startswith("https://hooks.slack.com/"):
         raise HTTPException(status_code=400, detail="Please provide a valid Slack Incoming Webhook URL (must start with https://hooks.slack.com/).")
-    ok = await _post_to_slack(webhook, f":wave: Hello from Tskflow — this is a test from {current_user.get('name', 'a teammate')}. If you can read this, your Slack bridge is working!")
+    ok = await _post_to_slack(webhook, f":wave: Hello from Tskflow â this is a test from {current_user.get('name', 'a teammate')}. If you can read this, your Slack bridge is working!")
     if not ok:
         raise HTTPException(status_code=502, detail="Slack rejected the webhook. Double-check the URL.")
     return {"ok": True}
@@ -6096,7 +6096,7 @@ async def get_product_updates(current_user: dict = Depends(get_current_user)):
         {"id": "u16", "area": "Unified Task View", "change": "Group tasks now open the same detail page as single tasks, with a collapsible Participants section (unfinished on top, top 5 visible, Show more).", "was": "Group tasks opened a separate stripped-down page."},
         {"id": "u17", "area": "Cleaner Header", "change": "Leaderboards moved into Analytics, What\u2019s New moved into the notification bell, and Meet Transcript moved inside the Create Task modal.", "was": "8+ icons crammed on the top-right of the dashboard."},
         {"id": "u18", "area": "Sales Toggle", "change": "\u201COnly Sales Tasks\u201D lives right next to Active/Completed as a compact dollar icon that expands on hover.", "was": "A separate row of chips taking full width."},
-        {"id": "u01", "area": "Screen Recording", "change": "Loom-style flow with floating pause/resume/restart controls, mic + webcam toggle, and post-record editor screen.", "was": "Basic start/stop only — recordings sometimes didn't save."},
+        {"id": "u01", "area": "Screen Recording", "change": "Loom-style flow with floating pause/resume/restart controls, mic + webcam toggle, and post-record editor screen.", "was": "Basic start/stop only â recordings sometimes didn't save."},
         {"id": "u02", "area": "Group Task Expansion", "change": "Groups expand inline with live-sort: pending assignees pinned on top, completed sink to the bottom in real time.", "was": "Groups just navigated to a details page with no live sort."},
         {"id": "u03", "area": "Group Task Detail", "change": "Clicking a group opens the same task view as single tasks, plus a leaderboard and per-person status columns (Viewed / Accepted / Submitted / Completed).", "was": "Navigated to a bare detail page."},
         {"id": "u04", "area": "Search Bar", "change": "Search moved to the top header as a compact icon that expands to a short overlay bar \u2014 no longer stretches full-width or covers other UI.", "was": "Full-width input inside the tasks section, obstructive."},
@@ -6114,7 +6114,7 @@ async def get_product_updates(current_user: dict = Depends(get_current_user)):
 
 
 # ==========================================================================
-# RECURRING TASKS — series + rolling-window occurrence generation
+# RECURRING TASKS â series + rolling-window occurrence generation
 # ==========================================================================
 
 class RecurrenceRule(BaseModel):
@@ -6532,12 +6532,12 @@ async def delete_draft_task(task_id: str, current_user: dict = Depends(get_curre
 
 
 # ==========================================================================
-# SMART TASK CREATION — parse a natural-language description into fields
+# SMART TASK CREATION â parse a natural-language description into fields
 # ==========================================================================
 
 class SmartParseRequest(BaseModel):
     text: str
-    context_hint: Optional[str] = None  # e.g. "engineering", "sales meeting" — optional
+    context_hint: Optional[str] = None  # e.g. "engineering", "sales meeting" â optional
     resolve: Optional[bool] = False  # if True, resolve assignee_hints against DB users + groups
 
 
@@ -6546,7 +6546,7 @@ SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI. Turn one short sente
 Return ONE JSON object ONLY (no markdown, no prose):
 {
   "title": "<crisp 4-8 word instruction, imperative mood, no names or dates>",
-  "description": "<one short helpful sentence telling the assignee exactly what they need to do — empty string if the title says it all>",
+  "description": "<one short helpful sentence telling the assignee exactly what they need to do â empty string if the title says it all>",
   "priority": "Low|Medium|High|Urgent",
   "category": "Sales|Engineering|Marketing|Design|Product|Operations|Finance|HR|Support|Legal|General",
   "due_date": "YYYY-MM-DDTHH:MM" or null,
@@ -6571,42 +6571,42 @@ Return ONE JSON object ONLY (no markdown, no prose):
   "confidence": { "title": 0-1, "priority": 0-1, "due_date": 0-1, "assignees": 0-1 }
 }
 
-DATE RULES (this is the most important part — be aggressive and accurate):
-- "ASAP" / "urgently" / "immediately" → 2 HOURS from now (rounded to nearest 15 min), priority Urgent
-- "today" alone → 5:00 PM today (business EOD)
-- Time-only (e.g. "12 PST", "3pm", "at 2:30", "by 12") → same day at that time (PST). If that time already passed today, use tomorrow.
-- "EOD" / "end of day" / "close of business" → 5:00 PM today
-- "EOM" / "end of month" → last day of current month at 5:00 PM
-- "tomorrow" alone → 12:00 PM tomorrow
-- "tomorrow morning" → 9:00 AM tomorrow
-- "tomorrow afternoon" → 2:00 PM tomorrow
-- "before standup" → 9:00 AM the next working day
-- Weekday names ("Monday", "this Friday", "next Tuesday") → next occurrence of that weekday at 5:00 PM. "next X" always means the following week's X.
-- "next week" → Monday of next week at 12:00 PM
-- "in N days/hours/weeks" → arithmetic from now
+DATE RULES (this is the most important part â be aggressive and accurate):
+- "ASAP" / "urgently" / "immediately" â 2 HOURS from now (rounded to nearest 15 min), priority Urgent
+- "today" alone â 5:00 PM today (business EOD)
+- Time-only (e.g. "12 PST", "3pm", "at 2:30", "by 12") â same day at that time (PST). If that time already passed today, use tomorrow.
+- "EOD" / "end of day" / "close of business" â 5:00 PM today
+- "EOM" / "end of month" â last day of current month at 5:00 PM
+- "tomorrow" alone â 12:00 PM tomorrow
+- "tomorrow morning" â 9:00 AM tomorrow
+- "tomorrow afternoon" â 2:00 PM tomorrow
+- "before standup" â 9:00 AM the next working day
+- Weekday names ("Monday", "this Friday", "next Tuesday") â next occurrence of that weekday at 5:00 PM. "next X" always means the following week's X.
+- "next week" â Monday of next week at 12:00 PM
+- "in N days/hours/weeks" â arithmetic from now
 - If NO date/time is present at all, set due_date=null and add a clarifying question about it.
 - Always output ISO YYYY-MM-DDTHH:MM (no seconds, no timezone).
 
 RECURRING RULES:
 - Detect phrases: "every day", "daily", "every weekday", "every Monday", "every M/W/F", "weekly", "every 2 weeks", "biweekly", "monthly", "yearly", "annually", "each morning", "each week", "from X to Y each day".
 - When recurring, set recurring.is_recurring=true and pick frequency:
-  - "every day" / "daily" / "each day" → daily
-  - "every weekday" / "every working day" → weekdays
-  - "every Monday" / "each Monday" → weekly with days_of_week=[0]
-  - "every Monday and Wednesday" → weekly with days_of_week=[0,2]
-  - "every 2 weeks" → biweekly
-  - "monthly" / "each month" → monthly
-  - "yearly" / "annually" → yearly
+  - "every day" / "daily" / "each day" â daily
+  - "every weekday" / "every working day" â weekdays
+  - "every Monday" / "each Monday" â weekly with days_of_week=[0]
+  - "every Monday and Wednesday" â weekly with days_of_week=[0,2]
+  - "every 2 weeks" â biweekly
+  - "monthly" / "each month" â monthly
+  - "yearly" / "annually" â yearly
 - When user says a time-range like "from 12 to 3pm PST", set time_of_day="12:00" and end_time_of_day="15:00".
 - If no explicit end phrase, end_type="never".
 - For recurring tasks, due_date should be the FIRST occurrence (today or the next matching weekday) at time_of_day (or end_time_of_day if that's the deadline).
 - If the user says "everyday is working day" or something confirming which days are counted, respect that hint.
 
 PRIORITY RULES:
-- "urgent", "ASAP", "immediately", "critical", "fire drill", "serious task" → Urgent
-- "important", "high priority", "please prioritize" → High
-- "when you can", "no rush", "eventually", "low priority" → Low
-- Default → Medium
+- "urgent", "ASAP", "immediately", "critical", "fire drill", "serious task" â Urgent
+- "important", "high priority", "please prioritize" â High
+- "when you can", "no rush", "eventually", "low priority" â Low
+- Default â Medium
 
 ASSIGNEE HINTS:
 - Extract explicit @mentions (strip @ prefix)
@@ -6657,12 +6657,12 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
     e = expr.lower().strip()
     now = now.replace(second=0, microsecond=0)
 
-    # ASAP / urgently → +2h
+    # ASAP / urgently â +2h
     if re.search(r"\b(asap|urgent(ly)?|immediately|right now|right away)\b", e):
         target = _round_to_quarter(now + timedelta(hours=2))
         return target.strftime("%Y-%m-%dT%H:%M")
 
-    # EOD / end of day / close of business → today 17:00
+    # EOD / end of day / close of business â today 17:00
     if re.search(r"\b(eod|end of day|end of the day|close of business|cob)\b", e):
         return now.replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
 
@@ -6686,7 +6686,7 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
             hour += 12
         if ampm == "am" and hour == 12:
             hour = 0
-        # Heuristic: if hour ≤ 7 and no am/pm → assume PM (business hours)
+        # Heuristic: if hour â¤ 7 and no am/pm â assume PM (business hours)
         if not ampm and hour <= 7:
             hour += 12
         target = now.replace(hour=hour, minute=minute)
@@ -6757,7 +6757,7 @@ def _fuzzy_name_score(haystack: str, needle: str) -> int:
 async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     """
     Match each raw hint against real users (same company_domain) and groups.
-    Also handles special tokens: 'my team' / 'the team' / 'our team' → the manager's direct reports.
+    Also handles special tokens: 'my team' / 'the team' / 'our team' â the manager's direct reports.
     Returns:
       { 'resolved': [ {kind, id, name, email, members?:[user_ids], member_count} ],
         'ambiguous': [ {hint, candidates: [{id,name,email}] } ],
@@ -6814,7 +6814,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                 seen_ids.add(current_user["id"])
             continue
 
-        # Special: my team / the team / our team → direct reports (if any) else all same-domain users
+        # Special: my team / the team / our team â direct reports (if any) else all same-domain users
         if low in ("my team", "the team", "our team", "team", "my reports", "my direct reports", "direct reports"):
             targets = my_reports or [u for u in users if u["id"] != current_user["id"]]
             member_ids = [u["id"] for u in targets]
@@ -6851,7 +6851,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                 })
             continue
 
-        # Special: everyone under me → transitive
+        # Special: everyone under me â transitive
         if low in ("everyone under me", "everyone reporting to me", "my whole team", "whole team", "all my reports"):
             if everyone_under_me:
                 resolved.append({
@@ -6873,7 +6873,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                     resolved.append({"kind": "user", "id": match["id"], "name": match["name"], "email": match["email"]})
                     seen_ids.add(match["id"])
             else:
-                # Unresolved email → keep as an email address for bulk-create
+                # Unresolved email â keep as an email address for bulk-create
                 resolved.append({"kind": "email", "id": None, "name": low.split("@")[0], "email": low})
             continue
 
@@ -6924,7 +6924,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                 resolved.append({"kind": "user", "id": u["id"], "name": u["name"], "email": u["email"]})
                 seen_ids.add(u["id"])
         else:
-            # Ambiguous — top score tied with next
+            # Ambiguous â top score tied with next
             top_score = user_candidates[0][0]
             top = [u for s, u in user_candidates if s == top_score][:5]
             ambiguous.append({"hint": h, "candidates": top})
@@ -7003,13 +7003,13 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     if not isinstance(parsed.get("clarifying_questions"), list):
         parsed["clarifying_questions"] = []
 
-    # Date fallback — if LLM didn't produce a date but the text clearly has one
+    # Date fallback â if LLM didn't produce a date but the text clearly has one
     if not parsed.get("due_date"):
         fb = _fallback_parse_date_expression(parsed.get("due_date_expression") or text, now)
         if fb:
             parsed["due_date"] = fb
 
-    # ASAP override — if the text is explicitly ASAP/urgent, force within-2h regardless of what LLM said
+    # ASAP override â if the text is explicitly ASAP/urgent, force within-2h regardless of what LLM said
     low_text = (text or "").lower()
     if re.search(r"\b(asap|urgent(ly)?|immediately|right now|right away|as soon as possible)\b", low_text):
         parsed["priority"] = "Urgent"
@@ -7047,7 +7047,7 @@ class QuickCreatePreviewRequest(BaseModel):
 
 @api_router.post("/ai/quick-create-preview")
 async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dict = Depends(get_current_user)):
-    """One-shot: parse + resolve → returns a ready-to-confirm task preview + clarifying questions."""
+    """One-shot: parse + resolve â returns a ready-to-confirm task preview + clarifying questions."""
     # If answers were provided, append them to the text so the LLM has more context
     text = req.text or ""
     if req.answers:
@@ -7064,32 +7064,32 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
 
 
 # ==========================================================================
-# VOICE ASSISTANT KNOWLEDGE BASE — answer product/how-to questions
+# VOICE ASSISTANT KNOWLEDGE BASE â answer product/how-to questions
 # ==========================================================================
 
 TSKFLOW_KB = """TskFlow is an Accountability Management Platform. Use these facts when answering how-to questions:
 
 CORE CONCEPTS
 - Purpose: help teams close the loop on commitments. Every task has a clear owner, due time, acceptance step, and completion proof.
-- Task lifecycle: Pending → Accepted → In Progress → Completed → Approved. Assignees can also Counter-Propose a new due date, or Decline with a reason.
+- Task lifecycle: Pending â Accepted â In Progress â Completed â Approved. Assignees can also Counter-Propose a new due date, or Decline with a reason.
 - Group tasks: assign one task to several people; each assignee gets their own subtask with its own status. A Group Task Leaderboard ranks them by speed & engagement.
 
 FEATURES
 - Drafts: as soon as you start typing in Create Task, TskFlow auto-saves a draft. Resume unfinished drafts from the yellow "Unfinished Drafts" strip on your dashboard, or delete them with the trash icon.
 - Recurring tasks: turn any task into a series (Daily, Weekdays, Weekly, Every 2 Weeks, Monthly, Yearly, or Custom). It stops when you set an end date, an end-after count, or never (you stop it manually). Edit a series with three scopes: This occurrence / This + future / Entire series.
-- Voice Mode: tap the microphone. It listens immediately (no popup), understands "what's outstanding", "create a task to call Alex tomorrow", "open analytics", and answers "how do I…" questions about TskFlow itself. Voice Mode keeps running as you navigate.
+- Voice Mode: tap the microphone. It listens immediately (no popup), understands "what's outstanding", "create a task to call Alex tomorrow", "open analytics", and answers "how do Iâ¦" questions about TskFlow itself. Voice Mode keeps running as you navigate.
 - Smart Task Creation: type a description (or dictate one). TskFlow infers title, due date, priority, category, and assignee hints, then pre-fills the form. You can always override.
 - Screen Recordings: attach a Loom-style recording to a task or share a standalone recording. The receiver plays it inline (no download).
 - Analytics: Overall Analytics (completion rate, overdue count, avg completion time, response time, trends, team + date filters) and a separate Team Leaderboard (fastest completions, highest completion rate, most completed, streaks, badges).
 - End-of-Day Report: daily Jarvis email summarizing today's completions and open items.
-- Smart Reminders: enable in Settings → Reminders. Choose triggers (time-before-due, no progress, no response, approaching deadline, overdue) and channels (in-app, email, Slack).
-- Help Center: /help — quick start, feature docs, walkthrough, FAQs, and "What's New".
+- Smart Reminders: enable in Settings â Reminders. Choose triggers (time-before-due, no progress, no response, approaching deadline, overdue) and channels (in-app, email, Slack).
+- Help Center: /help â quick start, feature docs, walkthrough, FAQs, and "What's New".
 
 NAVIGATION
 - Dashboard is /dashboard; Analytics /analytics; Team Leaderboard /analytics#leaderboard; Team & Reports /team; Settings /settings; Recordings /recordings; Help Center /help; Recurring series /recurring.
 
 BEST PRACTICES
-- Only mark a task Done when it's actually done — the reviewer must approve to close it.
+- Only mark a task Done when it's actually done â the reviewer must approve to close it.
 - Use Group tasks for "one thing, many people" (e.g. quarterly training) so accountability is visible.
 - Turn important routines into Recurring series so nothing slips.
 - Enable Smart Reminders for High/Urgent priorities so no important task goes cold.
@@ -7110,12 +7110,12 @@ Return ONE JSON object ONLY (no markdown), shape:
 }
 
 Rules:
-- If the user is asking HOW to do something, or WHERE a feature is, or WHAT something means, use action.type="assistant_answer" and put the guidance in reply. Ground your answer in the Knowledge Base below — never invent features.
+- If the user is asking HOW to do something, or WHERE a feature is, or WHAT something means, use action.type="assistant_answer" and put the guidance in reply. Ground your answer in the Knowledge Base below â never invent features.
 - Task commands use the existing action types (query_outstanding / create_task / assign_task / update_status / navigate).
 - If the user is confused or unclear, action.type="none" and ask a short clarifying question in reply.
 - Never contradict the application's task data provided in the context. If the user asks about outstanding tasks, use the provided list.
 - For assistant_answer, params can include {"topic": "<short label>"}.
-- Keep replies conversational and brief — max ~40 words.
+- Keep replies conversational and brief â max ~40 words.
 
 KNOWLEDGE BASE:
 """ + TSKFLOW_KB
@@ -7157,7 +7157,7 @@ async def set_reminder_rules(rule: ReminderRule, current_user: dict = Depends(ge
 
 
 async def _check_smart_reminders():
-    """Enhanced reminder job — respects user rules + multiple trigger types with rotating wording.
+    """Enhanced reminder job â respects user rules + multiple trigger types with rotating wording.
     Also auto-cleans orphan tasks (missing/deleted parent, missing user, invalid due date).
     """
     try:
@@ -7166,7 +7166,7 @@ async def _check_smart_reminders():
         rules_by_user = {}
         async for r in db.reminder_rules.find({"enabled": True}, {"_id": 0}):
             rules_by_user[r["user_id"]] = r
-        # Find candidate open tasks — MUST match the dashboard's "live task" definition
+        # Find candidate open tasks â MUST match the dashboard's "live task" definition
         tasks = await db.tasks.find({
             "status": {"$nin": ["Completed", "Declined", "Draft", "Cancelled", "Rejected"]},
             "deleted": {"$ne": True},
@@ -7194,7 +7194,7 @@ async def _check_smart_reminders():
             if not aid or str(aid).startswith("email_"):
                 continue
 
-            # 1) Orphan: parent gone/deleted → auto-mark this child deleted
+            # 1) Orphan: parent gone/deleted â auto-mark this child deleted
             if t.get("parent_id"):
                 parent = parents_by_id.get(t["parent_id"])
                 if not parent or parent.get("deleted"):
@@ -7205,7 +7205,7 @@ async def _check_smart_reminders():
                     orphans_marked += 1
                     continue
 
-            # 2) Orphan: assignee no longer exists / marked deleted → auto-mark task deleted
+            # 2) Orphan: assignee no longer exists / marked deleted â auto-mark task deleted
             u = users_by_id.get(aid)
             if not u or u.get("deleted"):
                 await db.tasks.update_one(
@@ -7215,7 +7215,7 @@ async def _check_smart_reminders():
                 orphans_marked += 1
                 continue
 
-            # 3) Invalid due_date → mark deleted (nothing to remind about)
+            # 3) Invalid due_date â mark deleted (nothing to remind about)
             if not t.get("due_date"):
                 await db.tasks.update_one(
                     {"id": t["id"]},
@@ -7239,7 +7239,7 @@ async def _check_smart_reminders():
                 if due.tzinfo is None:
                     due = due.replace(tzinfo=PST)
             except Exception:
-                # Corrupted due_date → treat as orphan
+                # Corrupted due_date â treat as orphan
                 await db.tasks.update_one(
                     {"id": t["id"]},
                     {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
@@ -7319,7 +7319,7 @@ async def _check_smart_reminders():
             if not fired_kind:
                 continue
 
-            # Rotating wording — never the exact same twice
+            # Rotating wording â never the exact same twice
             wording = _reminder_wording(fired_kind, t)
 
             # Fire notification (in-app always; email if channel selected)
@@ -7332,7 +7332,7 @@ async def _check_smart_reminders():
                 "user_id": aid,
                 "type": "reminder",
                 "title": wording["title"],
-                "body": f"{t['title']} — priority {t.get('priority')}",
+                "body": f"{t['title']} â priority {t.get('priority')}",
                 "task_id": t["id"],
                 "read": False,
                 "delivered": False,
@@ -7359,15 +7359,15 @@ async def _check_smart_reminders():
 
 
 # ==========================================================================
-# TASK CLEANUP — remove orphaned / garbage tasks from the database
+# TASK CLEANUP â remove orphaned / garbage tasks from the database
 # ==========================================================================
 
 @api_router.post("/tasks/cleanup-orphaned")
 async def cleanup_orphaned_tasks(current_user: dict = Depends(get_current_user)):
-    """Soft-delete tasks that are effectively dead — orphaned children, tasks with missing
+    """Soft-delete tasks that are effectively dead â orphaned children, tasks with missing
     assignees or invalid due_date. Scoped to what the current user can see:
-      • For Teams tier: all tasks in their company_domain.
-      • Otherwise: their own created_by tasks.
+      â¢ For Teams tier: all tasks in their company_domain.
+      â¢ Otherwise: their own created_by tasks.
     Returns a per-reason breakdown so managers can see exactly what got cleaned.
     """
     now = get_pst_now().isoformat()
@@ -7434,7 +7434,7 @@ async def cleanup_orphaned_tasks(current_user: dict = Depends(get_current_user))
             {"$set": {"deleted": True, "deleted_at": now, "deleted_by": current_user["id"], "cleanup_reason": "orphan"}}
         )
 
-    # Also cascade delete: any parent that has no live children left → mark it deleted
+    # Also cascade delete: any parent that has no live children left â mark it deleted
     parents_still_alive = await db.tasks.find({**scope, "is_parent": True, "deleted": {"$ne": True}}, {"_id": 0, "id": 1}).to_list(500)
     orphan_parents = []
     for p in parents_still_alive:
@@ -7459,24 +7459,24 @@ async def cleanup_orphaned_tasks(current_user: dict = Depends(get_current_user))
 
 _REMINDER_LINES = {
     "3h": [
-        {"title": "Reminder — due in ~3 hours", "line": "Heads up: this is due in about 3 hours. A quick win closes it out."},
-        {"title": "3 hours to go", "line": "Just a nudge — you've got about 3 hours before this is due."},
+        {"title": "Reminder â due in ~3 hours", "line": "Heads up: this is due in about 3 hours. A quick win closes it out."},
+        {"title": "3 hours to go", "line": "Just a nudge â you've got about 3 hours before this is due."},
         {"title": "Roughly 3 hours left", "line": "Keeping this on your radar: about 3 hours until the deadline."},
     ],
     "2h": [
-        {"title": "2 hours left", "line": "Two hours to the deadline. If you're close, keep going — you've got this."},
-        {"title": "Heads up — 2 hours to go", "line": "The deadline is in about 2 hours. Anything blocking you?"},
+        {"title": "2 hours left", "line": "Two hours to the deadline. If you're close, keep going â you've got this."},
+        {"title": "Heads up â 2 hours to go", "line": "The deadline is in about 2 hours. Anything blocking you?"},
         {"title": "T-2 hours", "line": "About 2 hours left. If you need more time, tap Counter-Propose on the task."},
     ],
     "30min": [
-        {"title": "You're almost out of time", "line": "Only 30 minutes left. Wrap it up if you can — or propose a new time."},
+        {"title": "You're almost out of time", "line": "Only 30 minutes left. Wrap it up if you can â or propose a new time."},
         {"title": "Final 30 minutes", "line": "Deadline is 30 minutes away. Now's the moment to close this out."},
         {"title": "Half an hour to go", "line": "30 minutes remaining. If it's done, mark complete; if not, let the requester know."},
     ],
     "overdue": [
         {"title": "This task is now overdue", "line": "The deadline has passed. Please close it out or update the requester with a new plan."},
-        {"title": "Still open — please close it out", "line": "This one's overdue. Even a quick status update helps."},
-        {"title": "Overdue — quick check-in", "line": "It's past due. If it's done, mark it complete. If not, propose a new deadline."},
+        {"title": "Still open â please close it out", "line": "This one's overdue. Even a quick status update helps."},
+        {"title": "Overdue â quick check-in", "line": "It's past due. If it's done, mark it complete. If not, propose a new deadline."},
         {"title": "This is overdue", "line": "The task blew past its due time. Please prioritize it or renegotiate."},
     ],
     "no_response": [
@@ -7484,7 +7484,7 @@ _REMINDER_LINES = {
         {"title": "Have you seen this task?", "line": "It's been assigned to you but not yet acted on. Please accept, decline, or counter-propose."},
     ],
     "no_progress": [
-        {"title": "No progress yet — need help?", "line": "You accepted this task but haven't updated it. Everything OK? Reply on the task or complete it."},
+        {"title": "No progress yet â need help?", "line": "You accepted this task but haven't updated it. Everything OK? Reply on the task or complete it."},
         {"title": "Quick check-in", "line": "The deadline's approaching and there's been no update. Is anything blocking you?"},
     ],
 }
@@ -7525,14 +7525,14 @@ def render_reminder_email(user_name: str, task: dict, wording: dict, app_url: st
                     <span style="color:#6B7280;font-size:13px;">Due: {due_display}</span>
                 </div>
                 <div style="text-align:center;margin:28px 0 8px 0;">
-                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task →</a>
+                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task â</a>
                 </div>
                 <p style="margin:16px 0 0 0;color:#6B7280;font-size:13px;text-align:center;">
                     Not the right time? <a href="{app_url}/task/{task_id}" style="color:{color};">Counter-propose a new deadline</a>.
                 </p>
             </div>
             <div style="padding:16px;text-align:center;background:#F9FAFB;color:#9CA3AF;font-size:11px;">
-                © 2025 Tskflow — accountability, simplified. <a href="{app_url}/settings" style="color:#9CA3AF;">Manage reminders</a>
+                Â© 2025 Tskflow â accountability, simplified. <a href="{app_url}/settings" style="color:#9CA3AF;">Manage reminders</a>
             </div>
         </div>
     </div></body></html>"""
@@ -7543,7 +7543,7 @@ def kind_is_overdue(title: str) -> bool:
 
 
 # ==========================================================================
-# NUDGE — send preset/custom urgency emails to specific assignees (used by
+# NUDGE â send preset/custom urgency emails to specific assignees (used by
 # managers on the group task leaderboard).
 # ==========================================================================
 
@@ -7558,7 +7558,7 @@ NUDGE_PRESETS = {
     "gentle_nudge": {
         "subject": "Quick check-in: {task_title}",
         "headline": "Just a gentle nudge",
-        "body": "We're still waiting on <strong>{task_title}</strong>. When you get a moment, please jump in and close it out — even a status update helps the whole team.",
+        "body": "We're still waiting on <strong>{task_title}</strong>. When you get a moment, please jump in and close it out â even a status update helps the whole team.",
         "color": "#4F46E5",
     },
     "urgent_reminder": {
@@ -7592,14 +7592,14 @@ def render_nudge_email(recipient_name: str, sender_name: str, task_title: str, t
                 <p style="margin:0 0 16px 0;color:#374151;font-size:15px;line-height:1.6;">{body_html}</p>
                 {extra}
                 <div style="text-align:center;margin:28px 0 8px 0;">
-                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task →</a>
+                    <a href="{app_url}/task/{task_id}" style="display:inline-block;background:{color};color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:600;font-size:15px;">Open task â</a>
                 </div>
                 <p style="margin:16px 0 0 0;color:#6B7280;font-size:13px;text-align:center;">
                     Stuck? Reply on the task with what's blocking you and we'll help.
                 </p>
             </div>
             <div style="padding:16px;text-align:center;background:#F9FAFB;color:#9CA3AF;font-size:11px;">
-                Sent via TskFlow · <a href="{app_url}/task/{task_id}" style="color:#9CA3AF;">Task link</a>
+                Sent via TskFlow Â· <a href="{app_url}/task/{task_id}" style="color:#9CA3AF;">Task link</a>
             </div>
         </div>
     </div></body></html>"""
@@ -7697,7 +7697,7 @@ async def _check_smart_reminders_deprecated():
 
 
 # ==========================================================================
-# BACKGROUND SCHEDULER — recurring occurrences + reminders (every 5 min)
+# BACKGROUND SCHEDULER â recurring occurrences + reminders (every 5 min)
 # ==========================================================================
 
 _scheduler_task = None
@@ -7732,6 +7732,101 @@ async def _startup_indexes():
     await _ensure_indexes()
     if _scheduler_task is None:
         _scheduler_task = asyncio.create_task(_scheduler_loop())
+
+
+class ContactRequest(BaseModel):
+    name: str
+    email: EmailStr
+    phone: str
+    message: str
+    sms_consent: bool
+
+    @validator('name')
+    def validate_name(cls, v):
+        v = (v or '').strip()
+        if not v:
+            raise ValueError('Name is required')
+        if len(v) > 200:
+            raise ValueError('Name is too long')
+        return v
+
+    @validator('phone')
+    def validate_phone(cls, v):
+        v = (v or '').strip()
+        if not v:
+            raise ValueError('Phone number is required')
+        digits = ''.join(c for c in v if c.isdigit())
+        if len(digits) < 7 or len(digits) > 15:
+            raise ValueError('Please enter a valid phone number')
+        return v
+
+    @validator('message')
+    def validate_message(cls, v):
+        v = (v or '').strip()
+        if not v:
+            raise ValueError('Message is required')
+        if len(v) > 5000:
+            raise ValueError('Message is too long')
+        return v
+
+    @validator('sms_consent')
+    def validate_sms_consent(cls, v):
+        if not v:
+            raise ValueError('SMS consent is required')
+        return v
+
+
+def _get_client_ip(request: HTTPRequest) -> str:
+    forwarded = request.headers.get('x-forwarded-for')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    real_ip = request.headers.get('x-real-ip')
+    if real_ip:
+        return real_ip.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return 'unknown'
+
+
+@api_router.post("/contact")
+async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, background_tasks: BackgroundTasks):
+    """Public contact form  stores inquiry + SMS consent proof (phone, consent, timestamp, IP)."""
+    now = get_pst_now().isoformat()
+    ip_address = _get_client_ip(http_request)
+
+    contact_doc = {
+        "id": str(uuid.uuid4()),
+        "name": contact.name,
+        "email": contact.email.lower(),
+        "phone": contact.phone,
+        "message": contact.message,
+        "sms_consent": True,
+        "sms_consent_text": "I agree to receive SMS messages from TskFlow. Message and data rates may apply.",
+        "timestamp": now,
+        "ip_address": ip_address,
+        "created_at": now,
+    }
+    await db.contact_messages.insert_one(contact_doc)
+
+    email_content = f"""
+        <h2>New Contact Form Submission</h2>
+        <p><strong>Name:</strong> {contact.name}</p>
+        <p><strong>Email:</strong> {contact.email}</p>
+        <p><strong>Phone:</strong> {contact.phone}</p>
+        <p><strong>SMS Consent:</strong> Yes</p>
+        <p><strong>IP:</strong> {ip_address}</p>
+        <p><strong>Timestamp:</strong> {now}</p>
+        <p><strong>Message:</strong></p>
+        <p>{contact.message}</p>
+    """
+    background_tasks.add_task(
+        send_email_notification,
+        "hashim@tskflow.com",
+        f"Contact form: {contact.name}",
+        email_content,
+    )
+
+    return {"message": "Thank you for contacting us. We'll get back to you soon."}
 
 
 app.include_router(api_router)
