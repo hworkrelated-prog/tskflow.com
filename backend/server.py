@@ -7790,7 +7790,7 @@ def _get_client_ip(request: HTTPRequest) -> str:
 
 @api_router.post("/contact")
 async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, background_tasks: BackgroundTasks):
-    """Public contact form  stores inquiry + SMS consent proof (phone, consent, timestamp, IP)."""
+    """Public contact form — stores inquiry + SMS consent proof (phone, consent, timestamp, IP)."""
     now = get_pst_now().isoformat()
     ip_address = _get_client_ip(http_request)
 
