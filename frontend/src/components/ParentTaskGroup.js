@@ -100,6 +100,14 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                             <div className="flex items-center gap-2 mb-1">
                                 <Users className="w-4 h-4 text-teal-600 shrink-0" />
                                 <h3 className="font-semibold text-base truncate">{group.title}</h3>
+                                {(group.is_sales_task || (group.children || []).some((c) => c.is_sales_task)) && (
+                                    <span
+                                        className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded shrink-0"
+                                        data-testid={`sales-badge-${group.id}`}
+                                    >
+                                        Sales
+                                    </span>
+                                )}
                             </div>
                             <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span>{group.completed}/{group.total} done</span>

@@ -911,7 +911,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         note=task.note,
         note_images=task.note_images,
         invite_token=invite_token,
-        is_sales_task=task.is_sales_task or False,
+        is_sales_task=bool(task_doc.get("is_sales_task")),
         requires_screen_recording=task.requires_screen_recording or False,
         success_criteria=(task.success_criteria or "").strip() or None,
     )
@@ -1043,7 +1043,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             category=task.category,
             created_at=task_doc["created_at"],
             accepted_at=accepted_at,
-            is_sales_task=task.is_sales_task or False,
+            is_sales_task=bool(task_doc.get("is_sales_task")),
             requires_screen_recording=task.requires_screen_recording or False,
             success_criteria=(task.success_criteria or "").strip() or None,
         ))
@@ -1060,7 +1060,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "due_date": task.due_date,
             "status": "Parent",
             "priority": task.priority,
-            "category": task.category,
+            "category": task_doc.get("category") or task.category,
+            "is_sales_task": bool(task_doc.get("is_sales_task")),
             "success_criteria": (task.success_criteria or "").strip() or None,
             "child_count": len(child_ids),
             "created_at": get_pst_now().isoformat()
@@ -1134,7 +1135,8 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user),
                 "status": c["status"],
                 "completed": c["status"] == "Completed",
                 "completed_by_name": c.get("completed_by_name"),
-                "is_consistent": is_consistent_performer
+                "is_consistent": is_consistent_performer,
+                "is_sales_task": bool(c.get("is_sales_task")) or str(c.get("category") or "").strip().lower() == "sales",
             })
         
         # Sort assignees: consistent performers at bottom, those needing attention at top
@@ -1167,7 +1169,13 @@ async def get_parent_task_groups(current_user: dict = Depends(get_current_user),
             "completed": len(done),
             "outstanding": total - len(done),
             "percent": percent,
-            "assignees": assignees
+            "assignees": assignees,
+            "children": assignees,
+            "is_sales_task": (
+                bool(p.get("is_sales_task"))
+                or str(p.get("category") or "").strip().lower() == "sales"
+                or any(a.get("is_sales_task") for a in assignees)
+            ),
         })
     return result
 
@@ -1444,7 +1452,14 @@ async def get_dashboard(
             completed_at=task.get("completed_at"),
             reason_for_decline=task.get("reason_for_decline"),
             counter_proposal_message=task.get("counter_proposal_message"),
-            proposed_due_date=task.get("proposed_due_date")
+            proposed_due_date=task.get("proposed_due_date"),
+            calendar_event_id=task.get("calendar_event_id"),
+            assigned_to_email=task.get("assigned_to_email"),
+            created_by_email=task.get("created_by_email"),
+            is_sales_task=bool(task.get("is_sales_task")) or str(task.get("category") or "").strip().lower() == "sales",
+            requires_screen_recording=bool(task.get("requires_screen_recording")),
+            parent_id=task.get("parent_id"),
+            success_criteria=task.get("success_criteria"),
         )
         
         # Categorize tasks

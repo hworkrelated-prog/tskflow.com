@@ -128,6 +128,14 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                         <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className={getPriorityClass(task.priority)}>{task.priority}</span>
+                                {task.is_sales_task && (
+                                    <span
+                                        className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded"
+                                        data-testid={`sales-badge-${task.id}`}
+                                    >
+                                        Sales
+                                    </span>
+                                )}
                                 {(() => {
                                     if (!task.due_date || task.status === 'Completed' || task.status === 'Declined') return null;
                                     const d = new Date(task.due_date);

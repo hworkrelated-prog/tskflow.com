@@ -891,9 +891,20 @@ const TaskHub = () => {
             filtered = filterTodayAndOverdue(filtered);
         }
         filtered = filtered.filter(matchesSearch);
-        if (salesOnly) filtered = filtered.filter((t) => t.is_sales_task === true);
+        if (salesOnly) {
+            filtered = filtered.filter(
+                (t) => !!t.is_sales_task || String(t.category || '').toLowerCase() === 'sales'
+            );
+        }
         return filtered;
     };
+
+    const isSalesGroup = (group) =>
+        !!group?.is_sales_task
+        || String(group?.category || '').toLowerCase() === 'sales'
+        || (group?.children || group?.assignees || []).some(
+            (c) => !!c.is_sales_task || String(c.category || '').toLowerCase() === 'sales'
+        );
 
     const matchesGroupSearch = (group) => {
         const q = (searchQuery || '').trim().toLowerCase();
@@ -1703,7 +1714,7 @@ const TaskHub = () => {
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
                                 {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No tasks assigned to you'}</p>
+                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No tasks assigned to you'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_to_me || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
@@ -1721,7 +1732,7 @@ const TaskHub = () => {
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
                                 {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No self-assigned tasks'}</p>
+                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No self-assigned tasks'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.self_assigned || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
@@ -1738,7 +1749,10 @@ const TaskHub = () => {
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
-                                {parentGroups.filter(matchesGroupSearch).map((group) => (
+                                {parentGroups
+                                    .filter(matchesGroupSearch)
+                                    .filter((g) => !salesOnly || isSalesGroup(g))
+                                    .map((group) => (
                                     <ParentTaskGroup
                                         key={group.id}
                                         group={group}
@@ -1748,8 +1762,9 @@ const TaskHub = () => {
                                         onToggleSelect={toggleTaskSelection}
                                     />
                                 ))}
-                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0 && parentGroups.filter(matchesGroupSearch).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : 'No delegated tasks'}</p>
+                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0
+                                    && parentGroups.filter(matchesGroupSearch).filter((g) => !salesOnly || isSalesGroup(g)).length === 0 ? (
+                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No delegated tasks'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />

@@ -786,7 +786,17 @@ const TaskDetail = () => {
                                         )}
                                     </CardDescription>
                                 </div>
-                                {getStatusBadge(task.status)}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {task.is_sales_task && (
+                                        <Badge
+                                            className="rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                            data-testid="sales-badge"
+                                        >
+                                            Sales
+                                        </Badge>
+                                    )}
+                                    {getStatusBadge(task.status)}
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6">
