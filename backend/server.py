@@ -5065,6 +5065,26 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
     if not transcript:
         raise HTTPException(status_code=400, detail="Empty transcript")
 
+    # Fast local answers for common capability intros — avoid LLM/Cloudflare timeouts
+    low = transcript.lower().strip()
+    if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
+        return {
+            "reply": (
+                "I'm Jarvis, your AI manager. I can create and assign tasks from plain English, "
+                "list what's outstanding, update status, open pages like analytics or settings, "
+                "and walk you through how TskFlow works. Say “guide me” and I'll step on screen — "
+                "or just tell me what needs doing."
+            ),
+            "action": {"type": "assistant_answer", "params": {}},
+            "executed": {"type": "assistant_answer"},
+        }
+    if re.search(r"\b(guide me|show yourself|come (out|here)|appear|walk me through|show up)\b", low) and len(low) < 80:
+        return {
+            "reply": "I'm right here. Ask me about a task, what's outstanding, or how something works — I'll keep guiding.",
+            "action": {"type": "show_manager", "params": {}},
+            "executed": {"type": "show_manager"},
+        }
+
     # Build lightweight context: user's active tasks + recent contacts
     active = await db.tasks.find({
         "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
@@ -5107,10 +5127,14 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         user_msg = UserMessage(
             text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
         )
-        raw = await chat.send_message(user_msg)
+        # Cap wait so Cloudflare/proxy never sees a hung origin (was causing incomplete responses)
+        raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=22.0)
+    except asyncio.TimeoutError:
+        logging.error("Voice LLM timed out")
+        raise HTTPException(status_code=504, detail="I took too long on that — try a shorter ask, or ask again in a moment.")
     except Exception as e:
         logging.error(f"Voice LLM error: {e}")
-        raise HTTPException(status_code=502, detail="Voice assistant is unavailable right now")
+        raise HTTPException(status_code=502, detail="Voice assistant is unavailable right now. Try again in a moment.")
 
     # Parse JSON out of the model response
     text = raw if isinstance(raw, str) else str(raw)

@@ -115,7 +115,12 @@ const VoiceMode = () => {
                 window.dispatchEvent(new CustomEvent('tskflow:voice-executed', { detail: executed }));
             }
         } catch (err) {
-            const msg = err?.response?.data?.detail || 'Sorry, I had trouble with that. Try again?';
+            const raw = err?.response?.data?.detail ?? err?.response?.data ?? err?.message;
+            const asText = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
+            const looksLikeProxy = /cloudflare|origin web server|bad gateway|gateway time|html|<!doctype/i.test(asText || '');
+            const msg = looksLikeProxy || !asText
+                ? 'I hit a connection issue reaching the server. Give it a moment and try again.'
+                : asText.slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
         }

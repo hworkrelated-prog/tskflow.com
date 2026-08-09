@@ -48,6 +48,20 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setTimeout(() => inputRef.current?.focus(), 30);
     }, []);
 
+    // Grow like a chat composer: start compact, expand with content, then scroll.
+    const resizePrompt = useCallback(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        const next = Math.min(Math.max(el.scrollHeight, 76), 220);
+        el.style.height = `${next}px`;
+        el.style.overflowY = el.scrollHeight > 220 ? 'auto' : 'hidden';
+    }, []);
+
+    useEffect(() => {
+        resizePrompt();
+    }, [text, resizePrompt]);
+
     useEffect(() => {
         const onKey = (e) => {
             if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
@@ -378,8 +392,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                 </button>
                             </div>
                         )}
-                        <div className="flex items-center gap-2">
-                            <Input
+                        <div
+                            className={`relative flex flex-col rounded-2xl border shadow-sm transition-[box-shadow,border-color] focus-within:border-teal-400/70 focus-within:shadow-md focus-within:ring-2 focus-within:ring-teal-200/50 ${
+                                embedded ? 'bg-white border-slate-200' : 'bg-slate-50/80 border-slate-200'
+                            }`}
+                            data-testid="ai-quick-composer"
+                        >
+                            <Textarea
                                 ref={inputRef}
                                 value={text}
                                 onChange={(e) => setText(e.target.value)}
@@ -390,20 +409,26 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                     }
                                 }}
                                 placeholder="What needs to get done?"
-                                className={`flex-1 rounded-xl text-sm h-11 focus-visible:ring-slate-400 ${embedded ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200'}`}
+                                rows={1}
+                                className="min-h-[76px] max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-12 text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
-                            <Button
-                                type="button"
-                                onClick={() => runPreview()}
-                                disabled={loading || sending || answerLoading || !text.trim()}
-                                className="rounded-xl bg-slate-900 hover:bg-slate-800 h-11 px-4 gap-2"
-                                data-testid="ai-quick-preview-btn"
-                            >
-                                {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                <span className="hidden sm:inline">{loading || answerLoading ? '…' : 'Go'}</span>
-                            </Button>
+                            <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                                <span className="hidden sm:inline text-[10px] text-slate-400 pr-1 select-none">
+                                    Enter to go · Shift+Enter for line
+                                </span>
+                                <Button
+                                    type="button"
+                                    onClick={() => runPreview()}
+                                    disabled={loading || sending || answerLoading || !text.trim()}
+                                    className="rounded-xl bg-slate-900 hover:bg-slate-800 h-9 px-3.5 gap-1.5"
+                                    data-testid="ai-quick-preview-btn"
+                                >
+                                    {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                    <span className="hidden sm:inline">{loading || answerLoading ? '…' : 'Go'}</span>
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
