@@ -20,6 +20,11 @@ import DateTimePicker from '@/components/DateTimePicker';
  *   3b) If ready → natural-language summary + one-tap Confirm
  *   4) "Edit details" reveals the full field editor as a fallback
  */
+
+const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quota|deals?|opportunit(?:y|ies)|demos?|discovery|pitch(?:es)?|proposals?|quotes?|crm|hubspot|salesforce|sdrs?|bdrs?|cold[-\s]?calls?|outbound|renewals?|\barr\b|\bmrr\b|poc|leads?|rfps?|(?:customer|client|prospect|buyer)s?\s+(?:call|meeting|demo|follow[-\s]?up)|(?:follow[-\s]?up|call|meet(?:ing)?)\s+(?:with\s+)?(?:a\s+)?(?:customer|client|prospect)s?)\b/i;
+
+const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
+
 const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(false);
@@ -91,7 +96,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     }, []);
 
     const applyPreview = (p) => {
-        setPreview(p);
+        const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
+        setPreview({ ...p, is_sales_task: sales, category: sales ? (p.category || 'Sales') : p.category });
         setEditTitle(p.title || '');
         setEditDesc(p.description || '');
         setEditDue(p.due_date || '');
@@ -281,19 +287,22 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                     end_date: rec.end_date || null,
                     end_count: rec.end_count || null,
                     start_date: editDue ? editDue.slice(0, 10) : undefined,
-                    is_sales_task: preview?.is_sales_task || false,
+                    is_sales_task: !!(preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc)),
+                    category: (preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc)) ? 'Sales' : undefined,
                     success_criteria: criteria,
                 }));
                 await Promise.all(payloads.map((p) => axios.post(`${API}/recurring`, p)));
                 toast.success(`Recurring series set up for ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
             } else {
+                const sales = !!(preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc));
                 const payload = {
                     title: editTitle.trim(),
                     description: editDesc || '',
                     assigned_to: unique,
                     due_date: editDue,
                     priority: editPriority,
-                    is_sales_task: preview?.is_sales_task || false,
+                    is_sales_task: sales,
+                    category: sales ? 'Sales' : undefined,
                     requires_screen_recording: preview?.requires_screen_recording || false,
                     success_criteria: criteria,
                 };

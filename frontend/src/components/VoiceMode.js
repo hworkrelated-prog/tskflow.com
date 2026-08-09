@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, API } from '@/App';
-import ManagerCharacter from '@/components/ManagerCharacter';
 
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -29,11 +28,30 @@ const routeFor = (target) => ({
     recurring: '/recurring',
 }[target]);
 
-const wantsStageOn = (text) =>
-    /\b(show yourself|come (out|here|on screen)|appear|guide me|walk me through|show up|come guide|be on (my )?screen|step in)\b/i.test(text || '');
+/** Prefer natural-sounding system voices over the default robotic one. */
+const pickNaturalVoice = () => {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    const rank = (v) => {
+        const n = `${v.name} ${v.lang}`.toLowerCase();
+        let score = 0;
+        if (/en(-|_)?(us|gb|au)/i.test(v.lang)) score += 10;
+        if (/google|microsoft|samantha|aria|jenny|guy|natural|neural|premium|enhanced/i.test(n)) score += 8;
+        if (/zira|david|mark|susan|female|male/i.test(n)) score += 2;
+        if (/compact|espeak|robot/i.test(n)) score -= 10;
+        return score;
+    };
+    return [...voices].sort((a, b) => rank(b) - rank(a))[0] || null;
+};
 
-const wantsStageOff = (text) =>
-    /\b(hide yourself|go away|dismiss|step back|leave the screen|stop guiding)\b/i.test(text || '');
+const forSpeech = (text) =>
+    (text || '')
+        .replace(/[•●▪︎]/g, '')
+        .replace(/\*\*?/g, '')
+        .replace(/[_#`]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
 /** Offline-safe answers when the API/proxy fails entirely */
 const localJarvisReply = (text) => {
@@ -41,18 +59,57 @@ const localJarvisReply = (text) => {
     if (/\b(what can you (do|help with)|who are you|what do you do|help me get started)\b/i.test(t)) {
         return {
             reply:
-                "I'm Jarvis, your AI manager. I can create and assign tasks from plain English, list what's outstanding, update status, open pages like analytics or settings, and guide you on screen. Say “guide me” or tell me what needs doing.",
+                "I'm Jarvis — think of me as your ops lead in the app. I can create and assign tasks from plain English, list what's still open, nudge status updates, and jump you to pages like analytics or settings. What do you want to tackle?",
             action: { type: 'assistant_answer' },
         };
     }
-    if (wantsStageOn(t) && t.length < 80) {
-        return { reply: "I'm right here — ask me anything about your tasks.", action: { type: 'show_manager' } };
-    }
-    if (wantsStageOff(t) && t.length < 80) {
-        return { reply: 'Stepping back. Tap me anytime.', action: { type: 'hide_manager' } };
+    if (/\b(guide me|show yourself|show me|help me|walk me through)\b/i.test(t) && t.length < 80) {
+        return {
+            reply: "Sure. Tell me what you're stuck on — a task, an assignee, a due date — and I'll walk you through it.",
+            action: { type: 'assistant_answer' },
+        };
     }
     return null;
 };
+
+const StatusDot = ({ phase }) => {
+    const color =
+        phase === 'listening' ? 'bg-red-500'
+            : phase === 'thinking' ? 'bg-amber-400'
+                : phase === 'speaking' ? 'bg-teal-500'
+                    : 'bg-emerald-400';
+    return (
+        <span className="relative flex h-2 w-2 shrink-0">
+            {(phase === 'listening' || phase === 'speaking') && (
+                <span className={`absolute inline-flex h-full w-full rounded-full ${color} opacity-60 animate-ping`} />
+            )}
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${color}`} />
+        </span>
+    );
+};
+
+const JarvisMark = ({ phase, size = 40, className = '' }) => (
+    <div
+        className={`relative rounded-full flex items-center justify-center text-white font-semibold shrink-0 ${className}`}
+        style={{
+            width: size,
+            height: size,
+            fontFamily: 'Outfit, sans-serif',
+            fontSize: size * 0.38,
+            background:
+                phase === 'listening'
+                    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
+                    : 'linear-gradient(145deg,#0f766e,#0f172a)',
+        }}
+        aria-hidden
+    >
+        {phase === 'thinking' ? (
+            <Loader2 className="animate-spin" style={{ width: size * 0.42, height: size * 0.42 }} />
+        ) : (
+            'J'
+        )}
+    </div>
+);
 
 const VoiceMode = () => {
     const { user } = useAuth();
@@ -65,12 +122,14 @@ const VoiceMode = () => {
     const [supported, setSupported] = useState(true);
     const [nudge, setNudge] = useState(false);
     const [wiggle, setWiggle] = useState(false);
-    const [stagePresence, setStagePresence] = useState(false);
+    const [voiceReady, setVoiceReady] = useState(false);
     const recRef = useRef(null);
     const listRef = useRef(null);
     const inputRef = useRef(null);
     const nudgeTimer = useRef(null);
     const messagesRef = useRef([]);
+    const voiceRef = useRef(null);
+    const speakQueueRef = useRef([]);
 
     useEffect(() => {
         messagesRef.current = messages;
@@ -81,40 +140,74 @@ const VoiceMode = () => {
     }, []);
 
     useEffect(() => {
+        if (!('speechSynthesis' in window)) return undefined;
+        const load = () => {
+            voiceRef.current = pickNaturalVoice();
+            setVoiceReady(true);
+        };
+        load();
+        window.speechSynthesis.addEventListener('voiceschanged', load);
+        return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+    }, []);
+
+    useEffect(() => {
         if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
     }, [messages, phase]);
 
     const speak = useCallback((text) => {
         if (!('speechSynthesis' in window) || !text) return;
         window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.02;
-        u.onstart = () => setPhase('speaking');
-        u.onend = () => setPhase('idle');
-        window.speechSynthesis.speak(u);
-    }, []);
+        speakQueueRef.current = [];
 
-    const applyPresenceFromText = useCallback((trimmed) => {
-        if (wantsStageOn(trimmed)) setStagePresence(true);
-        if (wantsStageOff(trimmed)) setStagePresence(false);
-    }, []);
+        const cleaned = forSpeech(text);
+        // Speak in short beats so it feels conversational, not one flat drone
+        const chunks = cleaned
+            .split(/(?<=[.!?])\s+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const parts = chunks.length ? chunks : [cleaned];
+
+        const voice = voiceRef.current || pickNaturalVoice();
+        let i = 0;
+        const next = () => {
+            if (i >= parts.length) {
+                setPhase('idle');
+                return;
+            }
+            const u = new SpeechSynthesisUtterance(parts[i]);
+            i += 1;
+            if (voice) u.voice = voice;
+            u.rate = 1.02;
+            u.pitch = 1.0;
+            u.volume = 1;
+            u.onstart = () => setPhase('speaking');
+            u.onend = () => {
+                // Tiny pause between sentences
+                setTimeout(next, 90);
+            };
+            u.onerror = () => setPhase('idle');
+            window.speechSynthesis.speak(u);
+        };
+        next();
+        // voiceschanged may fire late on some browsers
+        if (!voiceReady) setTimeout(() => {
+            if (!voiceRef.current) voiceRef.current = pickNaturalVoice();
+        }, 50);
+    }, [voiceReady]);
 
     const sendCommand = useCallback(async (text, { speakReply = true } = {}) => {
         const trimmed = (text || '').trim();
         if (!trimmed) return;
-        applyPresenceFromText(trimmed);
         const userMsg = { id: `${Date.now()}-u`, role: 'user', text: trimmed };
         const historyPayload = [...messagesRef.current, userMsg]
             .slice(-12)
             .map((m) => ({ role: m.role, text: m.text }));
         setMessages((prev) => [...prev, userMsg]);
         setPhase('thinking');
+        setOpen(true);
+
         const applyReply = (replyText, action, executed) => {
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: replyText }]);
-            const atype = action?.type;
-            if (atype === 'show_manager') setStagePresence(true);
-            if (atype === 'hide_manager') setStagePresence(false);
-            if (atype === 'assistant_answer' && wantsStageOn(trimmed)) setStagePresence(true);
             if (speakReply) speak(replyText);
             else setPhase('idle');
             if (action?.type === 'navigate') {
@@ -135,7 +228,6 @@ const VoiceMode = () => {
             const { reply: r, action, executed } = res.data || {};
             applyReply(r || 'Okay.', action, executed);
         } catch (err) {
-            // If the origin/proxy dies, still answer common asks locally
             const fallback = localJarvisReply(trimmed);
             if (fallback) {
                 applyReply(fallback.reply, fallback.action, { type: fallback.action?.type, offline: true });
@@ -148,12 +240,12 @@ const VoiceMode = () => {
                 : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
             const looksLikeProxy = !status || status >= 502 || /cloudflare|origin web server|bad gateway|gateway time|<!doctype|<html/i.test(asText || '');
             const msg = looksLikeProxy
-                ? 'The server didn’t finish answering (connection blip). Try “what’s outstanding” or “guide me”, or use New Task on the left.'
-                : (asText || 'Sorry, I had trouble with that. Try again?').slice(0, 280);
+                ? "The server didn't finish that one. Try “what's outstanding”, or use New Task on the left."
+                : (asText || 'Sorry — I had trouble with that. Try again?').slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
         }
-    }, [navigate, speak, applyPresenceFromText]);
+    }, [navigate, speak]);
 
     const startListening = useCallback(() => {
         if (!supported) {
@@ -228,10 +320,7 @@ const VoiceMode = () => {
                 setNudge(false);
             }, 6000);
         };
-        const onOpen = (e) => {
-            openPanel();
-            if (e?.detail?.stage) setStagePresence(true);
-        };
+        const onOpen = () => openPanel();
         window.addEventListener('tskflow:nudge-assistant', onNudge);
         window.addEventListener('tskflow:open-assistant', onOpen);
         return () => {
@@ -259,11 +348,11 @@ const VoiceMode = () => {
     if (hiddenPaths.includes(location.pathname)) return null;
 
     const busy = phase === 'thinking' || phase === 'listening' || phase === 'speaking';
-    const characterMood =
-        phase === 'listening' ? 'listening'
-            : phase === 'thinking' ? 'thinking'
-                : phase === 'speaking' ? 'speaking'
-                    : stagePresence ? 'guiding' : 'idle';
+    const statusLabel =
+        phase === 'listening' ? 'Listening'
+            : phase === 'thinking' ? 'Thinking'
+                : phase === 'speaking' ? 'Speaking'
+                    : 'Ready';
 
     const submitText = () => {
         const t = textInput.trim();
@@ -273,209 +362,146 @@ const VoiceMode = () => {
     };
 
     return (
-        <>
-            {/* On-screen stage presence — Jarvis steps into the workspace */}
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2" data-testid="voice-mode-widget">
             <AnimatePresence>
-                {stagePresence && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 40, scale: 0.9 }}
+                {nudge && !open && (
+                    <motion.button
+                        type="button"
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 24, scale: 0.95 }}
-                        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
-                        className="fixed bottom-28 right-6 z-[39] flex flex-col items-center pointer-events-none"
-                        data-testid="jarvis-stage"
+                        exit={{ opacity: 0, y: 6 }}
+                        onClick={openPanel}
+                        className="max-w-[240px] text-left text-xs bg-white border border-slate-200 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                        data-testid="voice-nudge-bubble"
                     >
-                        <div className="pointer-events-auto rounded-3xl bg-white/90 backdrop-blur border border-teal-200/80 shadow-xl px-5 py-4 flex flex-col items-center max-w-[200px]">
-                            <ManagerCharacter
-                                mood={characterMood}
-                                size={112}
-                                showName
-                                caption={
-                                    phase === 'listening' ? 'I\'m listening…'
-                                        : phase === 'thinking' ? 'One moment…'
-                                            : phase === 'speaking' ? 'Here to help'
-                                                : 'Ask me anything'
-                                }
+                        <JarvisMark phase="idle" size={28} />
+                        <span>{typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap to ask Jarvis.</span>
+                    </motion.button>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                        className="w-[360px] max-w-[94vw] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col"
+                        data-testid="voice-chat-panel"
+                    >
+                        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 bg-white">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <JarvisMark phase={phase} size={36} />
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-slate-800 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        Jarvis
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                                        <StatusDot phase={phase} />
+                                        {busy ? statusLabel : 'AI manager · type or talk'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={closePanel} className="text-slate-400 hover:text-slate-700 p-1" aria-label="Close">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div ref={listRef} className="h-64 overflow-y-auto px-3.5 py-3 space-y-2.5 bg-slate-50/40">
+                            {messages.length === 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-slate-500 leading-relaxed">
+                                        Ask about tasks, how something works, or what&apos;s still open.
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {["What's outstanding?", 'How do I assign a task?', 'What can you do?'].map((chip) => (
+                                            <button
+                                                key={chip}
+                                                type="button"
+                                                onClick={() => sendCommand(chip, { speakReply: false })}
+                                                className="text-[11px] px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-800 transition-colors"
+                                            >
+                                                {chip}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {messages.map((m) => (
+                                <div
+                                    key={m.id}
+                                    className={`text-sm px-3 py-2 rounded-2xl max-w-[90%] whitespace-pre-wrap ${
+                                        m.role === 'user'
+                                            ? 'ml-auto bg-slate-900 text-white rounded-br-md'
+                                            : 'mr-auto bg-white border border-slate-200 text-slate-800 rounded-bl-md'
+                                    }`}
+                                >
+                                    {m.text}
+                                </div>
+                            ))}
+                            {phase === 'thinking' && (
+                                <div className="mr-auto inline-flex items-center gap-1.5 text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" /> Thinking…
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-2.5 border-t border-slate-100 flex items-center gap-1.5 bg-white">
+                            <button
+                                type="button"
+                                onClick={phase === 'listening' ? stopListening : startListening}
+                                className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                                    phase === 'listening' ? 'bg-red-500 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
+                                }`}
+                                aria-label={phase === 'listening' ? 'Stop listening' : 'Talk'}
+                                title={phase === 'listening' ? 'Stop' : 'Talk'}
+                                data-testid="voice-mode-mic"
+                            >
+                                {phase === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                            </button>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                className="flex-1 min-w-0 border border-slate-200 rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300/60"
+                                placeholder="Ask Jarvis…"
+                                value={textInput}
+                                onChange={(e) => setTextInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        submitText();
+                                    }
+                                }}
+                                disabled={phase === 'thinking'}
+                                data-testid="voice-text-input"
                             />
                             <button
                                 type="button"
-                                onClick={() => setStagePresence(false)}
-                                className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 pointer-events-auto"
+                                onClick={submitText}
+                                disabled={!textInput.trim() || phase === 'thinking'}
+                                className="h-9 w-9 rounded-full bg-teal-800 text-white flex items-center justify-center disabled:opacity-40 hover:bg-teal-900"
+                                aria-label="Send"
                             >
-                                Dismiss
+                                <Send className="w-4 h-4" />
                             </button>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2" data-testid="voice-mode-widget">
-                <AnimatePresence>
-                    {nudge && !open && (
-                        <motion.button
-                            type="button"
-                            initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6 }}
-                            onClick={openPanel}
-                            className="max-w-[240px] text-left text-xs bg-white border border-teal-200 shadow-lg rounded-2xl px-3 py-2 text-slate-700 hover:bg-teal-50/50 flex items-start gap-2"
-                            data-testid="voice-nudge-bubble"
-                        >
-                            <ManagerCharacter mood="idle" size={36} className="shrink-0" />
-                            <span className="pt-1">
-                                {typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap to ask Jarvis.
-                            </span>
-                        </motion.button>
-                    )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                    {open && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 12, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 12, scale: 0.96 }}
-                            className="w-[360px] max-w-[94vw] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col"
-                            data-testid="voice-chat-panel"
-                        >
-                            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-teal-50/80 to-slate-50">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <ManagerCharacter mood={characterMood} size={40} />
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-slate-800 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            Jarvis
-                                        </p>
-                                        <p className="text-[10px] text-slate-500">
-                                            {busy
-                                                ? (phase === 'listening' ? 'Listening…' : phase === 'thinking' ? 'Thinking…' : 'Speaking…')
-                                                : 'Your AI manager · type or talk'}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setStagePresence((v) => !v)}
-                                        className={`text-[10px] font-medium px-2 py-1 rounded-full border transition-colors ${
-                                            stagePresence
-                                                ? 'bg-teal-800 text-white border-teal-800'
-                                                : 'bg-white text-teal-800 border-teal-200 hover:bg-teal-50'
-                                        }`}
-                                        title="Show Jarvis on screen"
-                                        data-testid="jarvis-stage-toggle"
-                                    >
-                                        {stagePresence ? 'On screen' : 'Show me'}
-                                    </button>
-                                    <button type="button" onClick={closePanel} className="text-slate-400 hover:text-slate-700 p-1" aria-label="Close">
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div ref={listRef} className="h-64 overflow-y-auto px-3.5 py-3 space-y-2.5 bg-slate-50/50">
-                                {messages.length === 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs text-slate-500 leading-relaxed">
-                                            Ask about tasks, how something works, or say
-                                            {' '}<span className="font-medium text-teal-800">&ldquo;guide me&rdquo;</span>
-                                            {' '}to bring me on screen.
-                                        </p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {['What\'s outstanding?', 'How do I assign a task?', 'Guide me'].map((chip) => (
-                                                <button
-                                                    key={chip}
-                                                    type="button"
-                                                    onClick={() => sendCommand(chip, { speakReply: false })}
-                                                    className="text-[11px] px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-800 transition-colors"
-                                                >
-                                                    {chip}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {messages.map((m) => (
-                                    <div
-                                        key={m.id}
-                                        className={`text-sm px-3 py-2 rounded-2xl max-w-[90%] whitespace-pre-wrap ${
-                                            m.role === 'user'
-                                                ? 'ml-auto bg-slate-900 text-white rounded-br-md'
-                                                : 'mr-auto bg-white border border-slate-200 text-slate-800 rounded-bl-md'
-                                        }`}
-                                    >
-                                        {m.text}
-                                    </div>
-                                ))}
-                                {phase === 'thinking' && (
-                                    <div className="mr-auto inline-flex items-center gap-1.5 text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-1">
-                                        <Loader2 className="w-3 h-3 animate-spin" /> Thinking…
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-2.5 border-t border-slate-100 flex items-center gap-1.5 bg-white">
-                                <button
-                                    type="button"
-                                    onClick={phase === 'listening' ? stopListening : startListening}
-                                    className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                                        phase === 'listening' ? 'bg-red-500 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100'
-                                    }`}
-                                    aria-label={phase === 'listening' ? 'Stop listening' : 'Talk'}
-                                    title={phase === 'listening' ? 'Stop' : 'Talk'}
-                                    data-testid="voice-mode-mic"
-                                >
-                                    {phase === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                                </button>
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    className="flex-1 min-w-0 border border-slate-200 rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300/60"
-                                    placeholder="Ask Jarvis…"
-                                    value={textInput}
-                                    onChange={(e) => setTextInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            submitText();
-                                        }
-                                    }}
-                                    disabled={phase === 'thinking'}
-                                    data-testid="voice-text-input"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={submitText}
-                                    disabled={!textInput.trim() || phase === 'thinking'}
-                                    className="h-9 w-9 rounded-full bg-teal-800 text-white flex items-center justify-center disabled:opacity-40 hover:bg-teal-900"
-                                    aria-label="Send"
-                                >
-                                    <Send className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                <motion.button
-                    type="button"
-                    data-testid="voice-mode-fab"
-                    onClick={() => (open ? closePanel() : openPanel())}
-                    animate={wiggle ? { rotate: [0, -12, 12, -8, 8, 0], scale: [1, 1.08, 1] } : { rotate: 0, scale: 1 }}
-                    transition={wiggle ? { duration: 0.7 } : { duration: 0.15 }}
-                    className={`h-14 w-14 rounded-full flex items-center justify-center overflow-hidden shadow-xl transition-colors ring-2 ring-white ${
-                        open ? 'bg-teal-900' : phase === 'listening' ? 'bg-red-500' : 'bg-gradient-to-br from-teal-800 to-slate-900'
-                    }`}
-                    title="Jarvis — AI manager"
-                    aria-label="Open Jarvis"
-                >
-                    {phase === 'thinking' ? (
-                        <Loader2 className="w-6 h-6 animate-spin text-white" />
-                    ) : (
-                        <ManagerCharacter mood={characterMood} size={52} />
-                    )}
-                </motion.button>
-            </div>
-        </>
+            <motion.button
+                type="button"
+                data-testid="voice-mode-fab"
+                onClick={() => (open ? closePanel() : openPanel())}
+                animate={wiggle ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
+                className="h-14 w-14 rounded-full flex items-center justify-center shadow-xl ring-2 ring-white overflow-hidden"
+                title="Jarvis — AI manager"
+                aria-label="Open Jarvis"
+            >
+                <JarvisMark phase={open && phase === 'idle' ? 'idle' : phase} size={56} />
+            </motion.button>
+        </div>
     );
 };
 

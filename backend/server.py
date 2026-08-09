@@ -835,10 +835,12 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "shareable_token": str(uuid.uuid4())[:12],
         "comments": [],
         "requires_screen_recording": task.requires_screen_recording or False,
-        "is_sales_task": task.is_sales_task or False,
+        "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{task.title or ''} {task.description or ''}"),
         "success_criteria": (task.success_criteria or "").strip() or None,
         "viewed_at": None
     }
+    if task_doc["is_sales_task"] and (not task_doc.get("category") or str(task_doc.get("category")).strip().lower() in ("", "general", "other", "none")):
+        task_doc["category"] = "Sales"
     
     await db.tasks.insert_one(task_doc)
     
@@ -974,10 +976,12 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "parent_id": parent_id,
             "assigned_to_email": assigned_to_email,
             "attachments": task.attachments or None,
-            "is_sales_task": task.is_sales_task or False,
+            "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{task.title or ''} {task.description or ''}"),
             "requires_screen_recording": task.requires_screen_recording or False,
             "success_criteria": (task.success_criteria or "").strip() or None,
         }
+        if task_doc["is_sales_task"] and (not task_doc.get("category") or str(task_doc.get("category")).strip().lower() in ("", "general", "other", "none")):
+            task_doc["category"] = "Sales"
         
         await db.tasks.insert_one(task_doc)
         child_ids.append(task_id)
@@ -5067,22 +5071,16 @@ def _jarvis_local_intent(transcript: str):
     if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
         return {
             "reply": (
-                "I'm Jarvis, your AI manager. I can create and assign tasks from plain English, "
-                "list what's outstanding, update status, open pages like analytics or settings, "
-                "and walk you through how TskFlow works. Say “guide me” and I'll step on screen — "
-                "or just tell me what needs doing."
+                "I'm Jarvis — your AI manager in TskFlow. I can create and assign tasks from plain English, "
+                "list what's still open, update status, open pages like analytics or settings, "
+                "and walk you through how things work. What do you want to tackle?"
             ),
             "action": {"type": "assistant_answer", "params": {}},
         }
-    if re.search(r"\b(guide me|show yourself|come (out|here)|appear|walk me through|show up)\b", low) and len(low) < 80:
+    if re.search(r"\b(guide me|show yourself|show me|come (out|here)|appear|walk me through|show up)\b", low) and len(low) < 80:
         return {
-            "reply": "I'm right here. Ask me about a task, what's outstanding, or how something works — I'll keep guiding.",
-            "action": {"type": "show_manager", "params": {}},
-        }
-    if re.search(r"\b(hide yourself|go away|dismiss|step back|leave the screen|stop guiding)\b", low) and len(low) < 80:
-        return {
-            "reply": "Stepping back. Tap me anytime if you need help.",
-            "action": {"type": "hide_manager", "params": {}},
+            "reply": "Sure. Tell me what you're stuck on — a task, an assignee, a due date — and I'll walk you through it.",
+            "action": {"type": "assistant_answer", "params": {}},
         }
     nav = None
     if re.search(r"\b(open |go to |show )?(the )?(analytics|dashboard|settings|team|help|recordings|recurring|leads)\b", low):
@@ -5235,16 +5233,20 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             assignee_email = current_user["email"]
             status0 = "Accepted"
             accepted0 = get_pst_now().isoformat()
+        sales = _text_looks_like_sales(f"{title} {transcript}")
         await db.tasks.insert_one({
             "id": tid, "title": title, "description": f"Created by voice: {transcript}",
             "assigned_to": assigned_to, "assigned_to_email": assignee_email,
             "created_by": current_user["id"], "due_date": due, "status": status0,
             "priority": priority, "created_at": get_pst_now().isoformat(),
-            "accepted_at": accepted0, "invite_token": str(uuid.uuid4())[:8]
+            "accepted_at": accepted0, "invite_token": str(uuid.uuid4())[:8],
+            "is_sales_task": sales,
+            "category": "Sales" if sales else None,
         })
         if assigned_to != current_user["id"]:
             background_tasks.add_task(send_web_push, assigned_to, f"New task from {current_user['name']}", title, f"/task/{tid}")
         executed["task_id"] = tid
+        executed["is_sales_task"] = sales
     elif atype == "update_status":
         tt = (params.get("task_title") or "").lower()
         new_status = params.get("status")
@@ -6838,9 +6840,54 @@ TITLE RULES:
 - No names, no dates, no priority words.
 - Keep between 4-8 words.
 
-is_sales_task=true when there's a customer/prospect/deal/demo/proposal/pipeline/CRM/quota reference.
-requires_screen_recording=true when the request explicitly asks for a walkthrough, demo, tutorial, or "record" something.
+is_sales_task=true when the text mentions sales work — e.g. sales, prospect, lead, pipeline, deal, opportunity,
+demo, discovery, pitch, proposal, quote, CRM, HubSpot, Salesforce, SDR/BDR/AE, cold call, outbound, renewal,
+quota, ARR/MRR, closed-won, POC, RFP, negotiation, pricing for a customer/client, follow up with a prospect.
+Also set category="Sales" in those cases.
+requires_screen_recording=true when the request explicitly asks for a walkthrough, demo recording, tutorial, or "record" something.
 """
+
+
+_SALES_TASK_RE = re.compile(
+    r"(?i)\b("
+    r"sales|selling|sells?|upsell(?:ing)?|cross[-\s]?sell(?:ing)?|"
+    r"prospect(?:s|ing)?|pipeline|quota|forecast|"
+    r"deals?|opportunit(?:y|ies)|closed[-\s]?won|closed[-\s]?lost|"
+    r"demos?|discovery(?:\s+call)?|pitch(?:es)?|proposals?|quotes?|quotations?|rfps?|rfqs?|"
+    r"crm|hubspot|salesforce|pipedrive|"
+    r"sdrs?|bdrs?|\baes?\b|account\s+exec(?:utive)?s?|"
+    r"cold[-\s]?calls?|outbound|inbound\s+leads?|"
+    r"renewals?|churn|upsells?|\barr\b|\bmrr\b|\bacv\b|"
+    r"poc|proof\s+of\s+concept|trial\s+for\s+(?:a\s+)?(?:customer|client|prospect)|"
+    r"leads?|"
+    r"(?:follow[-\s]?up|call|email|meet(?:ing)?)\s+(?:with\s+)?(?:a\s+)?(?:customer|client|prospect|buyer)s?|"
+    r"(?:customer|client|prospect|buyer)s?\s+(?:call|meeting|demo|follow[-\s]?up|outreach)|"
+    r"negotiat(?:e|ion|ing)|pricing\s+(?:call|discussion|proposal)|discount\s+for\s+(?:a\s+)?(?:customer|client)"
+    r")\b"
+)
+
+
+def _text_looks_like_sales(text: str) -> bool:
+    """Keyword detector — marks sales-related tasks even if the LLM misses the flag."""
+    if not text:
+        return False
+    return bool(_SALES_TASK_RE.search(text))
+
+
+def _apply_sales_detection(parsed: dict, source_text: str) -> dict:
+    """Force is_sales_task + Sales category when sales language is present."""
+    blob = " ".join([
+        source_text or "",
+        (parsed.get("title") or ""),
+        (parsed.get("description") or ""),
+        (parsed.get("category") or ""),
+    ])
+    if _text_looks_like_sales(blob) or (parsed.get("category") or "").strip().lower() == "sales":
+        parsed["is_sales_task"] = True
+        cat = (parsed.get("category") or "").strip()
+        if not cat or cat.lower() in ("general", "other", "none"):
+            parsed["category"] = "Sales"
+    return parsed
 
 
 # ---------------- helpers: post-LLM date + assignee resolution ----------------
@@ -7232,6 +7279,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             if not parsed.get("due_date_expression"):
                 parsed["due_date_expression"] = "ASAP"
 
+    # Sales language → always mark as a sales task (don't rely on the LLM alone)
+    _apply_sales_detection(parsed, text)
+
     # Optionally resolve assignees first so we can prioritize "who" over "when"
     if req.resolve:
         parsed["assignee_resolution"] = await _resolve_assignee_hints(parsed.get("assignee_hints", []), current_user)
@@ -7323,18 +7373,17 @@ BEST PRACTICES
 """
 
 
-VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Warm, clear, and concise — like a sharp ops lead, not a cartoon mascot.
+VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
 You help with anything the user asks while they work:
 1) EXECUTE task commands ("create a task to X", "what's outstanding", "open analytics", etc.)
 2) ANSWER questions — product how-tos, what a status means, who to assign, deadlines, best practices, and follow-ups on the recent conversation.
-3) GUIDE on screen — when the user asks you to show up, guide them, walk them through something, or appear on screen, use show_manager. When they ask you to hide/dismiss/go away, use hide_manager.
-4) Keep continuity: if Recent conversation is provided, treat it as the same chat and answer follow-ups naturally.
+3) Keep continuity: if Recent conversation is provided, treat it as the same chat and answer follow-ups naturally.
 
 Return ONE JSON object ONLY (no markdown), shape:
 {
-  "reply": "<short helpful reply, 1-4 sentences, warm and natural>",
+  "reply": "<short helpful reply, 1-3 sentences, conversational — contractions OK>",
   "action": {
-    "type": "query_outstanding | create_task | assign_task | update_status | navigate | assistant_answer | show_manager | hide_manager | none",
+    "type": "query_outstanding | create_task | assign_task | update_status | navigate | assistant_answer | none",
     "params": { ... }
   }
 }
@@ -7344,9 +7393,8 @@ Rules:
 - For TskFlow product questions, ground answers in the Knowledge Base — never invent features.
 - For questions about the user's own tasks/contacts, use the Context JSON.
 - Task commands use query_outstanding / create_task / assign_task / update_status / navigate.
-- show_manager / hide_manager: acknowledge briefly in reply ("I'm right here.") — the UI brings your avatar on screen.
 - If unclear, action.type="none" and ask one short clarifying question.
-- Keep replies concise (about 50 words max unless listing tasks). Speak like a calm professional manager.
+- Keep replies concise (about 40 words max unless listing tasks). Write for speaking aloud: short sentences, natural rhythm, no bullet theater unless listing tasks.
 
 KNOWLEDGE BASE:
 """ + TSKFLOW_KB

@@ -29,7 +29,6 @@ import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
 import RecurrenceEditor from '@/components/RecurrenceEditor';
 import AIQuickCreate from '@/components/AIQuickCreate';
-import GuidanceTip from '@/components/GuidanceTip';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
@@ -260,15 +259,21 @@ const TaskHub = () => {
                 setSmartParsing(true);
                 const res = await axios.post(`${API}/ai/parse-task`, { text: desc });
                 const p = res.data || {};
-                setTaskForm((f) => ({
-                    ...f,
-                    title: f.title || p.title || '',
-                    due_date: f.due_date || p.due_date || '',
-                    priority: f.priority && f.priority !== 'Medium' ? f.priority : (p.priority || 'Medium'),
-                    is_sales_task: f.is_sales_task || !!p.is_sales_task,
-                    requires_screen_recording: f.requires_screen_recording || !!p.requires_screen_recording,
-                    category: f.category || p.category || '',
-                }));
+                const salesHint = /\b(sales?|selling|prospect|pipeline|deal|demo|proposal|quote|crm|lead|sdr|bdr|outbound|renewal|customer|client)\b/i.test(
+                    `${desc} ${p.title || ''} ${p.description || ''} ${p.category || ''}`
+                );
+                setTaskForm((f) => {
+                    const sales = f.is_sales_task || !!p.is_sales_task || salesHint;
+                    return {
+                        ...f,
+                        title: f.title || p.title || '',
+                        due_date: f.due_date || p.due_date || '',
+                        priority: f.priority && f.priority !== 'Medium' ? f.priority : (p.priority || 'Medium'),
+                        is_sales_task: sales,
+                        requires_screen_recording: f.requires_screen_recording || !!p.requires_screen_recording,
+                        category: f.category || p.category || (sales ? 'Sales' : ''),
+                    };
+                });
             } catch (_) { /* silent */ }
             finally { setSmartParsing(false); }
         }, 1500);
@@ -1029,15 +1034,6 @@ const TaskHub = () => {
             </header>
 
             <main className="container mx-auto px-6 py-8">
-                <GuidanceTip
-                    tipId="dashboard-jarvis"
-                    className="mb-5"
-                    title="Jarvis is your AI manager"
-                    body="Tap New Task and describe the work in plain English — or open the Jarvis button (bottom right) and say “guide me” to bring him on screen."
-                    actionLabel="Ask Jarvis"
-                    onAction={() => window.dispatchEvent(new CustomEvent('tskflow:open-assistant', { detail: { stage: false } }))}
-                />
-
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>Welcome, {user?.name}</h2>
