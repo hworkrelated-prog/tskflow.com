@@ -29,6 +29,7 @@ import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
 import RecurrenceEditor from '@/components/RecurrenceEditor';
 import AIQuickCreate from '@/components/AIQuickCreate';
+import GuidanceTip from '@/components/GuidanceTip';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
@@ -981,7 +982,7 @@ const TaskHub = () => {
     const overdueCount = getOverdueCount();
 
     return (
-        <div data-testid="task-hub" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="task-hub" className="page-shell">
             <AnimatePresence>
                 {showOnboarding && (
                     <OnboardingPopup page="dashboard" onClose={closeOnboarding} />
@@ -991,9 +992,9 @@ const TaskHub = () => {
             <header className="sticky top-0 z-50 glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <h1 onClick={() => navigate('/')} className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity" style={{ fontFamily: 'Outfit' }}>Tskflow</h1>
+                        <h1 onClick={() => navigate('/')} className="brand-wordmark cursor-pointer hover:opacity-80 transition-opacity">Tskflow</h1>
                         {user?.subscription_tier === 'teams' ? (
-                            <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
+                            <Badge className="bg-teal-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 TEAMS
                             </Badge>
@@ -1010,7 +1011,7 @@ const TaskHub = () => {
                             <Repeat className="w-5 h-5" />
                         </Button>
                         {user?.subscription_tier === 'teams' && (
-                            <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-indigo-300 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" title="Manage Team">
+                            <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-teal-300 text-teal-600 hover:text-teal-700 hover:bg-teal-50" title="Manage Team">
                                 <Users className="w-5 h-5" />
                             </Button>
                         )}
@@ -1028,10 +1029,19 @@ const TaskHub = () => {
             </header>
 
             <main className="container mx-auto px-6 py-8">
+                <GuidanceTip
+                    tipId="dashboard-jarvis"
+                    className="mb-5"
+                    title="Jarvis is your AI manager"
+                    body="Tap New Task and describe the work in plain English — or open the Jarvis button (bottom right) and say “guide me” to bring him on screen."
+                    actionLabel="Ask Jarvis"
+                    onAction={() => window.dispatchEvent(new CustomEvent('tskflow:open-assistant', { detail: { stage: false } }))}
+                />
+
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>Welcome, {user?.name}</h2>
-                        <p className="text-muted-foreground">Manage your tasks and stay productive</p>
+                        <p className="text-muted-foreground">Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.</p>
                     </div>
                     <div className="flex items-center gap-2">
                         {/* AI Summary and Bulk Approve */}
@@ -1099,11 +1109,11 @@ const TaskHub = () => {
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
                                                     {draftInModal.status === 'saved' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
                                                     {draftInModal.status === 'error' && <span className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Save failed — will retry</span>}
-                                                    {smartParsing && <span className="text-[11px] text-indigo-600 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Analyzing…</span>}
+                                                    {smartParsing && <span className="text-[11px] text-teal-600 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Analyzing…</span>}
                                                     <button
                                                         type="button"
                                                         onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-indigo-200 text-indigo-700 text-xs font-medium hover:bg-indigo-50 hover:border-indigo-300 shadow-sm transition-colors"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-teal-200 text-teal-700 text-xs font-medium hover:bg-teal-50 hover:border-teal-300 shadow-sm transition-colors"
                                                         data-testid="from-transcript-btn"
                                                         title="Auto-draft tasks from a meeting transcript"
                                                     >
@@ -1142,7 +1152,7 @@ const TaskHub = () => {
                                                 <div className="flex items-center justify-between">
                                                     <Label className="flex items-center gap-2"><Users className="w-4 h-4" />Assign To</Label>
                                                     {!isFreeUser && (
-                                                        <button type="button" data-testid="manage-groups-button" onClick={() => setShowGroupModal(true)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                                        <button type="button" data-testid="manage-groups-button" onClick={() => setShowGroupModal(true)} className="text-xs font-medium text-teal-600 hover:text-teal-800 flex items-center gap-1">
                                                             <Users className="w-3.5 h-3.5" /> Manage groups
                                                         </button>
                                                     )}
@@ -1151,9 +1161,9 @@ const TaskHub = () => {
                                                     <div className="flex flex-wrap gap-2 mb-2">
                                                         <AnimatePresence>
                                                             {selectedAssignees.map((assignee, index) => (
-                                                                <motion.div key={`${assignee.type}-${assignee.id || assignee.email || 'self'}`} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-full text-sm">
+                                                                <motion.div key={`${assignee.type}-${assignee.id || assignee.email || 'self'}`} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="flex items-center gap-1 bg-teal-100 text-teal-800 px-3 py-1.5 rounded-full text-sm">
                                                                     {assignee.type === 'self' ? (<><User className="w-3 h-3" />Me (Self)</>) : assignee.type === 'user' ? (<span>{assignee.name}</span>) : (<span>{assignee.email}</span>)}
-                                                                    <button type="button" onClick={() => removeAssignee(index)} className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
+                                                                    <button type="button" onClick={() => removeAssignee(index)} className="ml-1 hover:bg-teal-200 rounded-full p-0.5"><X className="w-3 h-3" /></button>
                                                                 </motion.div>
                                                             ))}
                                                         </AnimatePresence>
@@ -1164,8 +1174,8 @@ const TaskHub = () => {
                                                     {showUserDropdown && (
                                                         <div className="absolute z-50 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-64 overflow-y-auto">
                                                             {!selectedAssignees.some(a => a.type === 'self') && (
-                                                                <div onClick={() => addAssignee({ type: 'self' })} className="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 cursor-pointer border-b">
-                                                                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-indigo-600" /></div>
+                                                                <div onClick={() => addAssignee({ type: 'self' })} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-b">
+                                                                    <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-teal-600" /></div>
                                                                     <div><p className="font-medium">Assign to Self</p><p className="text-xs text-muted-foreground">Auto-accept this task</p></div>
                                                                 </div>
                                                             )}
@@ -1173,10 +1183,10 @@ const TaskHub = () => {
                                                                 <>
                                                                     <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-gray-50">Your Groups</div>
                                                                     {groups.map((group) => (
-                                                                        <div key={group.id} data-testid={`group-option-${group.id}`} onClick={() => applyGroup(group)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer border-b">
-                                                                            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center"><Users className="w-4 h-4 text-purple-600" /></div>
+                                                                        <div key={group.id} data-testid={`group-option-${group.id}`} onClick={() => applyGroup(group)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50 cursor-pointer border-b">
+                                                                            <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center"><Users className="w-4 h-4 text-teal-700" /></div>
                                                                             <div className="flex-1 min-w-0"><p className="font-medium truncate">{group.name}</p><p className="text-xs text-muted-foreground truncate">{group.emails.length} member(s)</p></div>
-                                                                            <Plus className="w-4 h-4 text-indigo-500" />
+                                                                            <Plus className="w-4 h-4 text-teal-500" />
                                                                         </div>
                                                                     ))}
                                                                 </>
@@ -1185,7 +1195,7 @@ const TaskHub = () => {
                                                             {users.filter(u => u.id !== user?.id).filter(u => !emailInput || u.name.toLowerCase().includes(emailInput.toLowerCase()) || u.email.toLowerCase().includes(emailInput.toLowerCase())).map((u) => {
                                                                 const isSelected = selectedAssignees.some(a => a.type === 'user' && a.id === u.id);
                                                                 return (
-                                                                    <div key={u.id} onClick={() => toggleUserSelection(u)} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer ${isSelected ? 'bg-indigo-50' : ''}`}>
+                                                                    <div key={u.id} onClick={() => toggleUserSelection(u)} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50 cursor-pointer ${isSelected ? 'bg-teal-50' : ''}`}>
                                                                         <Checkbox checked={isSelected} className="pointer-events-none" />
                                                                         <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><span className="text-sm font-medium">{u.name.charAt(0)}</span></div>
                                                                         <div className="flex-1 min-w-0"><p className="font-medium truncate">{u.name}</p><p className="text-xs text-muted-foreground truncate">{u.email}</p></div>
@@ -1193,7 +1203,7 @@ const TaskHub = () => {
                                                                 );
                                                             })}
                                                             {emailInput && emailInput.includes('@') && (
-                                                                <div onClick={() => { const existingUser = users.find(u => u.email.toLowerCase() === emailInput.toLowerCase()); if (existingUser) { addAssignee({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email }); } else { addAssignee({ type: 'email', email: emailInput.trim() }); } }} className="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 cursor-pointer border-t">
+                                                                <div onClick={() => { const existingUser = users.find(u => u.email.toLowerCase() === emailInput.toLowerCase()); if (existingUser) { addAssignee({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email }); } else { addAssignee({ type: 'email', email: emailInput.trim() }); } }} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-t">
                                                                     <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center"><Plus className="w-4 h-4 text-green-600" /></div>
                                                                     <div><p className="font-medium">Invite "{emailInput}"</p><p className="text-xs text-muted-foreground">Send task via email</p></div>
                                                                 </div>
@@ -1244,7 +1254,7 @@ const TaskHub = () => {
                                             {/* Advanced options — collapsed by default so the form stays short */}
                                             <details className="rounded-xl border bg-gray-50/50 group" data-testid="advanced-options">
                                                 <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
-                                                    <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Advanced options</span>
+                                                    <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-teal-600" /> Advanced options</span>
                                                     <ChevronDown className="w-4 h-4 text-gray-500 group-open:rotate-180 transition-transform" />
                                                 </summary>
                                                 <div className="px-4 pb-4 pt-2 space-y-3">
@@ -1300,10 +1310,10 @@ const TaskHub = () => {
                                                                         <p className="font-semibold">{group.name}</p>
                                                                         <p className="text-xs text-muted-foreground mt-1">
                                                                             {displayEmails.join(', ')}
-                                                                            {!showAllEmails && <span className="text-indigo-600 ml-1">+{group.emails.length - 3} more</span>}
+                                                                            {!showAllEmails && <span className="text-teal-600 ml-1">+{group.emails.length - 3} more</span>}
                                                                         </p>
                                                                         {group.emails.length > 3 && (
-                                                                            <p className="text-xs text-indigo-600 mt-1">
+                                                                            <p className="text-xs text-teal-600 mt-1">
                                                                                 {isExpanded ? 'Click to collapse' : 'Click to see all'}
                                                                             </p>
                                                                         )}
@@ -1312,7 +1322,7 @@ const TaskHub = () => {
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => handleEditGroup(group)}
-                                                                            className="text-indigo-600 hover:bg-indigo-50 rounded-full p-2"
+                                                                            className="text-teal-600 hover:bg-teal-50 rounded-full p-2"
                                                                             title="Edit group"
                                                                         >
                                                                             <Pencil className="w-4 h-4" />
@@ -1358,7 +1368,7 @@ const TaskHub = () => {
                                                             (users || []).filter((u) => u.id !== user?.id).map((u) => {
                                                                 const already = groupForm.emails.includes(u.email);
                                                                 return (
-                                                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${already ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${already ? 'bg-teal-50/60' : 'hover:bg-gray-50'}`}>
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={already}
@@ -1369,10 +1379,10 @@ const TaskHub = () => {
                                                                                     setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== u.email) });
                                                                                 }
                                                                             }}
-                                                                            className="accent-indigo-600 w-4 h-4"
+                                                                            className="accent-teal-600 w-4 h-4"
                                                                             data-testid={`group-user-checkbox-${u.id}`}
                                                                         />
-                                                                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                                                                        <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold shrink-0">
                                                                             {(u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
                                                                         </div>
                                                                         <div className="min-w-0 flex-1">
@@ -1412,12 +1422,12 @@ const TaskHub = () => {
                                                     {groupForm.emails.length > 0 && (
                                                         <div className="flex flex-wrap gap-2 mt-2">
                                                             {groupForm.emails.map((email) => (
-                                                                <div key={email} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-full text-sm">
+                                                                <div key={email} className="flex items-center gap-1 bg-teal-100 text-teal-800 px-3 py-1.5 rounded-full text-sm">
                                                                     <span>{email}</span>
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== email) })}
-                                                                        className="ml-1 hover:bg-indigo-200 rounded-full p-0.5"
+                                                                        className="ml-1 hover:bg-teal-200 rounded-full p-0.5"
                                                                     >
                                                                         <X className="w-3 h-3" />
                                                                     </button>
@@ -1464,7 +1474,7 @@ const TaskHub = () => {
                     <motion.div 
                         initial={{ opacity: 0, y: -10 }} 
                         animate={{ opacity: 1, y: 0 }} 
-                        className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-2xl"
+                        className="mb-6 p-4 bg-gradient-to-r from-teal-50 to-slate-50 border-2 border-teal-200 rounded-2xl"
                     >
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex-1">
@@ -1476,15 +1486,15 @@ const TaskHub = () => {
                                     <div className="flex flex-wrap gap-2 mb-3">
                                         <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">🔴 {aiSummaryStats.urgent_high_count} high-urgent</span>
                                         <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-medium">⏰ {aiSummaryStats.due_in_hours_count} due in &lt;6h</span>
-                                        <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-medium">📅 {aiSummaryStats.due_today_count} due today</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-teal-100 text-teal-800 font-medium">📅 {aiSummaryStats.due_today_count} due today</span>
                                         <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800 font-medium">⚠️ {aiSummaryStats.overdue_count} overdue</span>
                                     </div>
                                 )}
-                                <p className="text-sm text-purple-800">{aiSummary}</p>
+                                <p className="text-sm text-teal-900">{aiSummary}</p>
                             </div>
                             <button
                                 onClick={() => { setAiSummary(null); setAiSummaryStats(null); }}
-                                className="text-purple-400 hover:text-purple-600 p-1"
+                                className="text-purple-400 hover:text-teal-700 p-1"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -1495,7 +1505,7 @@ const TaskHub = () => {
                 {/* Filter Bar */}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
                     <div className="flex items-center bg-gray-100 rounded-full p-1">
-                        <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-600 hover:text-gray-900'}`}>Active Tasks</button>
+                        <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-600 hover:text-gray-900'}`}>Active Tasks</button>
                         <button data-testid="view-completed-tasks" onClick={() => setViewMode('completed')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'completed' ? 'bg-white shadow-sm text-green-600' : 'text-gray-600 hover:text-gray-900'}`}><CheckCircle2 className="w-4 h-4" />Completed</button>
                         {/* Sales-only compact toggle: dollar sign that expands on hover / when active */}
                         <button
@@ -1535,10 +1545,10 @@ const TaskHub = () => {
                                 </button>
                             )}
                         </div>
-                        <button data-testid="date-filter-all" onClick={() => setDateFilter('all')} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${dateFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'}`}>All</button>
+                        <button data-testid="date-filter-all" onClick={() => setDateFilter('all')} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${dateFilter === 'all' ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>All</button>
                         
                         {primaryFilters.map((option) => (
-                            <button key={option.value} data-testid={`date-filter-${option.value}`} onClick={() => setDateFilter(option.value)} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${dateFilter === option.value ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'}`}>
+                            <button key={option.value} data-testid={`date-filter-${option.value}`} onClick={() => setDateFilter(option.value)} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${dateFilter === option.value ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
                                 {option.value === 'overdue' && <AlertCircle className="w-3.5 h-3.5" />}
                                 {option.label}
                                 {option.badge && overdueCount > 0 && viewMode === 'active' && (
@@ -1549,7 +1559,7 @@ const TaskHub = () => {
                         
                         <DropdownMenu open={showMoreFilters} onOpenChange={setShowMoreFilters}>
                             <DropdownMenuTrigger asChild>
-                                <button data-testid="more-filters-button" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${moreFilters.some(f => f.value === dateFilter) ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-indigo-300'}`}>
+                                <button data-testid="more-filters-button" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${moreFilters.some(f => f.value === dateFilter) ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
                                     <MoreHorizontal className="w-3.5 h-3.5" />
                                     More
                                     <ChevronDown className="w-3.5 h-3.5" />
@@ -1570,7 +1580,7 @@ const TaskHub = () => {
                                             </PopoverContent>
                                         </Popover>
                                     ) : (
-                                        <DropdownMenuItem key={option.value} onClick={() => { setDateFilter(option.value); setShowMoreFilters(false); }} className={`cursor-pointer ${dateFilter === option.value ? 'bg-indigo-50 text-indigo-600' : ''}`}>
+                                        <DropdownMenuItem key={option.value} onClick={() => { setDateFilter(option.value); setShowMoreFilters(false); }} className={`cursor-pointer ${dateFilter === option.value ? 'bg-teal-50 text-teal-600' : ''}`}>
                                             {option.label}
                                         </DropdownMenuItem>
                                     )
@@ -1582,8 +1592,8 @@ const TaskHub = () => {
 
                 {/* Upgrade Nudges */}
                 {showLightBanner && !showPersistentBanner && (
-                    <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between">
-                        <p className="text-sm text-indigo-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
+                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
+                        <p className="text-sm text-teal-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
                         <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
                     </div>
                 )}
@@ -1710,7 +1720,7 @@ const TaskHub = () => {
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-4">
-                                <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-500"></div>Self-Assigned</CardTitle>
+                                <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
                                 <CardDescription>Your personal tasks</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">

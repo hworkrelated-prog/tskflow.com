@@ -93,7 +93,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
             >
                 <Card
                     data-testid={`task-card-${task.id}`}
-                    className={`group relative overflow-hidden rounded-xl border bg-card p-6 transition-all cursor-pointer task-card ${selected ? 'ring-2 ring-indigo-500 bg-indigo-50/50' : ''}`}
+                    className={`group relative overflow-hidden rounded-xl border bg-card p-6 transition-all cursor-pointer task-card ${selected ? 'ring-2 ring-teal-500 bg-teal-50/50' : ''}`}
                     onClick={() => !selectionMode && navigate(`/task/${task.id}`)}
                 >
                     <CardContent className="p-0 space-y-3">

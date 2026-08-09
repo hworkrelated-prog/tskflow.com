@@ -149,7 +149,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                 className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
             >
                 {/* Header */}
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white relative">
+                <div className="bg-gradient-to-r from-teal-800 to-slate-800 p-6 text-white relative">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-full transition-colors"
@@ -189,7 +189,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                                 onClick={() => setCurrentStep(index)}
                                 className={`w-2 h-2 rounded-full transition-all ${
                                     index === currentStep 
-                                        ? 'bg-indigo-600 w-6' 
+                                        ? 'bg-teal-600 w-6' 
                                         : 'bg-gray-300 hover:bg-gray-400'
                                 }`}
                             />
@@ -211,7 +211,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                         </Button>
                         <Button
                             onClick={nextStep}
-                            className="rounded-full bg-gradient-to-r from-indigo-600 to-purple-600"
+                            className="rounded-full bg-gradient-to-r from-teal-800 to-slate-800"
                         >
                             {currentStep === steps.length - 1 ? "Get Started" : "Next"}
                             {currentStep < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
@@ -220,7 +220,7 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                     <div className="text-center">
                         <a 
                             href="mailto:hashim@unbiassly.com?subject=Tskflow Feedback" 
-                            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+                            className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
                         >
                             Report a Bug / Send Feedback
                         </a>

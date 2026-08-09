@@ -249,10 +249,10 @@ const LeadsPage = () => {
     // ----- Admin login gate -----
     if (!authed) {
         return (
-            <div data-testid="leads-login" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6">
+            <div data-testid="leads-login" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6">
                 <Card className="w-full max-w-md rounded-2xl border-white/10 bg-white/95 backdrop-blur">
                     <CardHeader className="text-center space-y-2">
-                        <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center">
+                        <div className="mx-auto w-14 h-14 rounded-2xl bg-teal-600 flex items-center justify-center">
                             <Lock className="w-7 h-7 text-white" />
                         </div>
                         <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Prospecting Access</CardTitle>
@@ -279,12 +279,12 @@ const LeadsPage = () => {
     const statuses = data.statuses?.length ? data.statuses : ['To Call', 'Called', 'Interested', 'Won', 'Lost'];
 
     return (
-        <div data-testid="leads-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="leads-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
             <header className="sticky top-0 z-40 glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                            <Target className="w-6 h-6 text-indigo-600" /> Prospecting
+                            <Target className="w-6 h-6 text-teal-600" /> Prospecting
                         </h1>
                         <p className="text-sm text-muted-foreground">Your private repository of people to sell Tskflow to</p>
                     </div>
@@ -309,9 +309,9 @@ const LeadsPage = () => {
                 <AnimatePresence>
                     {showApollo && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-6">
-                            <Card className="rounded-2xl border-2 border-indigo-200">
+                            <Card className="rounded-2xl border-2 border-teal-200">
                                 <CardHeader>
-                                    <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" /> Find real prospects via Apollo</CardTitle>
+                                    <CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-teal-600" /> Find real prospects via Apollo</CardTitle>
                                     <CardDescription>Search Apollo&apos;s database, then save + unlock email &amp; phone for the ones you want to call.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
@@ -365,23 +365,23 @@ const LeadsPage = () => {
 
                 {/* ICP Guide */}
                 {icp && (
-                    <Card className="mb-6 border-2 border-indigo-100 rounded-2xl overflow-hidden">
-                        <button data-testid="toggle-icp" onClick={() => setShowIcp(!showIcp)} className="w-full flex items-center justify-between p-5 bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 transition-colors">
+                    <Card className="mb-6 border-2 border-teal-100 rounded-2xl overflow-hidden">
+                        <button data-testid="toggle-icp" onClick={() => setShowIcp(!showIcp)} className="w-full flex items-center justify-between p-5 bg-gradient-to-r from-teal-50 to-teal-50 hover:from-teal-100 transition-colors">
                             <div className="flex items-center gap-2 text-left">
-                                <Target className="w-5 h-5 text-indigo-600" />
+                                <Target className="w-5 h-5 text-teal-600" />
                                 <div>
                                     <p className="font-semibold">Who to target (Ideal Customer Profile)</p>
                                     <p className="text-xs text-muted-foreground">Personas, industries & where to find them in the US & Canada</p>
                                 </div>
                             </div>
-                            {showIcp ? <ChevronUp className="w-5 h-5 text-indigo-600" /> : <ChevronDown className="w-5 h-5 text-indigo-600" />}
+                            {showIcp ? <ChevronUp className="w-5 h-5 text-teal-600" /> : <ChevronDown className="w-5 h-5 text-teal-600" />}
                         </button>
                         <AnimatePresence>
                             {showIcp && (
                                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                                     <CardContent className="grid md:grid-cols-2 gap-6 pt-5">
                                         <div>
-                                            <p className="text-sm font-semibold mb-2 text-indigo-700">Best-fit personas</p>
+                                            <p className="text-sm font-semibold mb-2 text-teal-700">Best-fit personas</p>
                                             <ul className="space-y-2">
                                                 {icp.personas.map((p) => (
                                                     <li key={p.title} className="text-sm"><span className="font-medium">{p.title}</span><span className="text-muted-foreground"> — {p.why}</span></li>
@@ -390,19 +390,19 @@ const LeadsPage = () => {
                                         </div>
                                         <div className="space-y-4">
                                             <div>
-                                                <p className="text-sm font-semibold mb-2 text-indigo-700">Industries</p>
+                                                <p className="text-sm font-semibold mb-2 text-teal-700">Industries</p>
                                                 <div className="flex flex-wrap gap-1.5">{icp.industries.map((i) => <Badge key={i} variant="outline" className="rounded-full font-normal">{i}</Badge>)}</div>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-semibold mb-2 text-indigo-700">Regions (US & Canada)</p>
+                                                <p className="text-sm font-semibold mb-2 text-teal-700">Regions (US & Canada)</p>
                                                 <div className="flex flex-wrap gap-1.5">{icp.regions.map((r) => <Badge key={r} variant="outline" className="rounded-full font-normal">{r}</Badge>)}</div>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-semibold mb-2 text-indigo-700">Search strings to copy</p>
+                                                <p className="text-sm font-semibold mb-2 text-teal-700">Search strings to copy</p>
                                                 <div className="space-y-1">{icp.search_queries.map((q) => <code key={q} className="block text-xs bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700">{q}</code>)}</div>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-semibold mb-2 text-indigo-700">Where to find them</p>
+                                                <p className="text-sm font-semibold mb-2 text-teal-700">Where to find them</p>
                                                 <ul className="list-disc list-inside text-sm text-muted-foreground space-y-0.5">{icp.where_to_find.map((w) => <li key={w}>{w}</li>)}</ul>
                                             </div>
                                         </div>
@@ -415,12 +415,12 @@ const LeadsPage = () => {
 
                 {/* Pipeline counts */}
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-                    <button onClick={() => setStatusFilter('all')} data-testid="filter-all" className={`p-3 rounded-xl border text-left transition-all ${statusFilter === 'all' ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200'}`}>
+                    <button onClick={() => setStatusFilter('all')} data-testid="filter-all" className={`p-3 rounded-xl border text-left transition-all ${statusFilter === 'all' ? 'border-teal-400 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:border-teal-200'}`}>
                         <p className="text-2xl font-bold">{data.total || 0}</p>
                         <p className="text-xs text-muted-foreground">All leads</p>
                     </button>
                     {statuses.map((s) => (
-                        <button key={s} onClick={() => setStatusFilter(s)} data-testid={`filter-${s.replace(/\s+/g, '-').toLowerCase()}`} className={`p-3 rounded-xl border text-left transition-all ${statusFilter === s ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-200'}`}>
+                        <button key={s} onClick={() => setStatusFilter(s)} data-testid={`filter-${s.replace(/\s+/g, '-').toLowerCase()}`} className={`p-3 rounded-xl border text-left transition-all ${statusFilter === s ? 'border-teal-400 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:border-teal-200'}`}>
                             <p className="text-2xl font-bold">{data.counts?.[s] || 0}</p>
                             <p className="text-xs text-muted-foreground">{s}</p>
                         </button>
@@ -439,7 +439,7 @@ const LeadsPage = () => {
                 ) : data.leads.length === 0 ? (
                     <Card className="rounded-2xl border-dashed border-2">
                         <CardContent className="py-16 text-center">
-                            <Target className="w-10 h-10 text-indigo-300 mx-auto mb-3" />
+                            <Target className="w-10 h-10 text-teal-300 mx-auto mb-3" />
                             <p className="font-semibold mb-1">No leads yet</p>
                             <p className="text-sm text-muted-foreground mb-4">Use &quot;Find Leads (Apollo)&quot;, import a CSV, or add a prospect manually to start your repository.</p>
                             <div className="flex items-center justify-center gap-2">
@@ -461,9 +461,9 @@ const LeadsPage = () => {
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 flex-wrap text-sm text-muted-foreground">
                                                 {lead.company && <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{lead.company}</span>}
-                                                {lead.phone ? <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-indigo-600 hover:underline"><Phone className="w-3.5 h-3.5" />{lead.phone}</a> : null}
+                                                {lead.phone ? <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-teal-600 hover:underline"><Phone className="w-3.5 h-3.5" />{lead.phone}</a> : null}
                                                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{lead.email}</span>}
-                                                {lead.linkedin && <a href={lead.linkedin} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-indigo-600 hover:underline"><Linkedin className="w-3.5 h-3.5" />Profile</a>}
+                                                {lead.linkedin && <a href={lead.linkedin} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-teal-600 hover:underline"><Linkedin className="w-3.5 h-3.5" />Profile</a>}
                                             </div>
                                             {(lead.region || lead.industry || lead.persona) && (
                                                 <div className="flex flex-wrap gap-1.5 mt-2">

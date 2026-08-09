@@ -145,9 +145,9 @@ const HelpCenter = () => {
                         </div>
                     </div>
                     <div className="hidden sm:flex items-center gap-2">
-                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'docs' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('docs')}>Docs</button>
-                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'walkthrough' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('walkthrough')}>Walkthrough</button>
-                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'whatsnew' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('whatsnew')}>What&rsquo;s New</button>
+                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'docs' ? 'bg-teal-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('docs')}>Docs</button>
+                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'walkthrough' ? 'bg-teal-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('walkthrough')}>Walkthrough</button>
+                        <button className={`px-3 py-1.5 rounded-full text-xs font-medium ${tab === 'whatsnew' ? 'bg-teal-600 text-white' : 'bg-slate-100'}`} onClick={() => setTab('whatsnew')}>What&rsquo;s New</button>
                     </div>
                 </div>
             </header>
@@ -165,7 +165,7 @@ const HelpCenter = () => {
                                     <Card className="h-full border-2 hover:shadow-md transition-shadow rounded-2xl">
                                         <CardHeader className="pb-3">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">{t.icon}</div>
+                                                <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center">{t.icon}</div>
                                                 <div>
                                                     <CardTitle className="text-base" style={{ fontFamily: 'Outfit' }}>{t.title}</CardTitle>
                                                     <Badge variant="secondary" className="text-[10px] mt-1">{t.category}</Badge>
@@ -196,7 +196,7 @@ const HelpCenter = () => {
                                 { step: '5', title: 'Turn on Smart Reminders', body: 'Settings → Reminders. Set triggers, frequency, and channels so nothing important goes cold.' },
                             ].map((s) => (
                                 <div key={s.step} className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">{s.step}</div>
+                                    <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold shrink-0">{s.step}</div>
                                     <div>
                                         <h3 className="font-semibold">{s.title}</h3>
                                         <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: s.body }} />
@@ -213,7 +213,7 @@ const HelpCenter = () => {
                             <Card key={u.id} className="rounded-2xl border">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-base flex items-center gap-2">
-                                        <Sparkles className="w-4 h-4 text-indigo-500" /> {u.area}
+                                        <Sparkles className="w-4 h-4 text-teal-500" /> {u.area}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
@@ -226,8 +226,8 @@ const HelpCenter = () => {
                     </div>
                 )}
 
-                <div className="mt-10 p-4 rounded-2xl bg-indigo-50 border border-indigo-100 text-sm text-indigo-900 flex items-center gap-3">
-                    <HelpCircle className="w-5 h-5 text-indigo-500" />
+                <div className="mt-10 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-sm text-teal-900 flex items-center gap-3">
+                    <HelpCircle className="w-5 h-5 text-teal-500" />
                     <div>Can’t find what you need? Tap the mic (bottom-right) and just ask Voice Mode — it knows every feature.</div>
                 </div>
             </main>

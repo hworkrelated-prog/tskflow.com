@@ -86,7 +86,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
             <DialogContent className="rounded-2xl max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Mail className="w-5 h-5 text-indigo-600" />
+                        <Mail className="w-5 h-5 text-teal-600" />
                         Send a nudge
                     </DialogTitle>
                     <DialogDescription>{`Give people a friendly (or firm) push. They'll get an in-app notification and an email with a direct link to the task.`}</DialogDescription>
@@ -104,7 +104,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
                                         key={id}
                                         type="button"
                                         onClick={() => toggle(id)}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? 'bg-teal-100 border-teal-300 text-teal-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                                         data-testid={`nudge-recipient-${id}`}
                                     >
                                         {active ? '✓ ' : '+ '}{a.name}
@@ -123,7 +123,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
                                     key={p.key}
                                     type="button"
                                     onClick={() => setPreset(p.key)}
-                                    className={`text-left p-3 rounded-xl border-2 text-xs ${preset === p.key ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                                    className={`text-left p-3 rounded-xl border-2 text-xs ${preset === p.key ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                                     data-testid={`nudge-preset-${p.key}`}
                                 >
                                     <p className="font-semibold text-sm mb-0.5">{p.label}</p>
@@ -156,7 +156,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
 
                     <div className="flex justify-end gap-2 pt-2 border-t">
                         <Button variant="outline" onClick={onClose} disabled={sending} className="rounded-full">Cancel</Button>
-                        <Button onClick={send} disabled={sending || selected.length === 0} className="rounded-full bg-indigo-600 hover:bg-indigo-700 gap-2" data-testid="nudge-send">
+                        <Button onClick={send} disabled={sending || selected.length === 0} className="rounded-full bg-teal-600 hover:bg-teal-700 gap-2" data-testid="nudge-send">
                             <Send className="w-4 h-4" />
                             {sending ? 'Sending…' : `Send to ${selected.length}`}
                         </Button>
@@ -213,7 +213,7 @@ const LeaderboardRow = ({ entry, rank, onNudge, showNudge, tone = 'default' }) =
                     {status}
                 </Badge>
                 {showNudge && !isCompleted && (
-                    <Button size="sm" variant="outline" onClick={() => onNudge(entry)} className="h-7 px-2 text-xs rounded-full border-indigo-200 text-indigo-700 hover:bg-indigo-50" data-testid={`nudge-btn-${entry.assignee_id}`}>
+                    <Button size="sm" variant="outline" onClick={() => onNudge(entry)} className="h-7 px-2 text-xs rounded-full border-teal-200 text-teal-700 hover:bg-teal-50" data-testid={`nudge-btn-${entry.assignee_id}`}>
                         <Zap className="w-3 h-3 mr-1" />
                         Nudge
                     </Button>
@@ -440,7 +440,7 @@ const GroupTaskDetail = () => {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => openNudge(activeOnly)}
-                                        className="rounded-full gap-1 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                        className="rounded-full gap-1 border-teal-200 text-teal-700 hover:bg-teal-50"
                                         data-testid="nudge-all-btn"
                                     >
                                         <Zap className="w-3.5 h-3.5" />
@@ -471,7 +471,7 @@ const GroupTaskDetail = () => {
                 <Card className="border-2 mb-6">
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 mb-4">
-                            <MessageSquare className="w-5 h-5 text-indigo-600" />
+                            <MessageSquare className="w-5 h-5 text-teal-600" />
                             <h2 className="text-xl font-semibold">Chatter</h2>
                         </div>
 
@@ -513,7 +513,7 @@ const GroupTaskDetail = () => {
                                             onMouseDown={(e) => { e.preventDefault(); selectUser(u); }}
                                             onMouseEnter={() => setHighlightIdx(idx)}
                                             className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between ${
-                                                idx === highlightIdx ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'
+                                                idx === highlightIdx ? 'bg-teal-50 text-teal-900' : 'hover:bg-gray-50'
                                             }`}
                                         >
                                             <span className="font-medium">{u.name}</span>

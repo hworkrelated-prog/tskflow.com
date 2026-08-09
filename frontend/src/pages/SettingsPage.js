@@ -215,7 +215,7 @@ const SettingsPage = () => {
     };
 
     return (
-        <div data-testid="settings-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="settings-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
             <AnimatePresence>
                 {showHowItWorks && <OnboardingPopup page="howItWorks" onClose={() => setShowHowItWorks(false)} />}
             </AnimatePresence>
@@ -307,7 +307,7 @@ const SettingsPage = () => {
                                 <p className="text-sm text-muted-foreground">Current Plan</p>
                                 <div className="flex items-center gap-2 mt-1">
                                     {user?.subscription_tier === 'teams' ? (
-                                        <Badge className="bg-indigo-600 text-white rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
+                                        <Badge className="bg-teal-600 text-white rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
                                             <Users className="w-4 h-4" />
                                             TEAMS
                                         </Badge>
@@ -355,7 +355,7 @@ const SettingsPage = () => {
                                     </div>
                                 )}
                                 {/* Google Calendar Connection */}
-                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-teal-50 border border-blue-200 rounded-xl">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="font-semibold text-blue-900">Google Calendar</h4>
@@ -667,7 +667,7 @@ const SettingsPage = () => {
                                                 // Handle paste directly to auto-connect on next tick with the pasted value
                                                 setTimeout(() => handleSlackInput(e.target.value), 0);
                                             }}
-                                            className="flex-1 px-3 py-2.5 border-2 rounded-xl text-sm bg-white focus:border-indigo-500 focus:outline-none font-mono"
+                                            className="flex-1 px-3 py-2.5 border-2 rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none font-mono"
                                             data-testid="slack-webhook-input"
                                         />
                                         {slackWebhook.trim() && !slackWebhook.startsWith('https://hooks.slack.com/') ? null : (
@@ -829,7 +829,7 @@ const SettingsPage = () => {
                             }`}>
                                 <CardHeader>
                                     <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                        <Users className="w-6 h-6 text-indigo-600" />
+                                        <Users className="w-6 h-6 text-teal-600" />
                                         Teams
                                     </CardTitle>
                                     <CardDescription>
@@ -848,7 +848,7 @@ const SettingsPage = () => {
                                     </ul>
                                     {user?.subscription_tier === 'teams' ? (
                                         <div className="space-y-2">
-                                            <Badge className="w-full justify-center py-2 rounded-full bg-indigo-600 text-white">
+                                            <Badge className="w-full justify-center py-2 rounded-full bg-teal-600 text-white">
                                                 Current Plan
                                             </Badge>
                                             <p className="text-xs text-center text-muted-foreground">
@@ -863,7 +863,7 @@ const SettingsPage = () => {
                                         <Button 
                                             onClick={() => handleUpgrade('teams')}
                                             disabled={upgrading !== null}
-                                            className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-indigo-600 hover:bg-indigo-700"
+                                            className="w-full rounded-full h-12 font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-teal-600 hover:bg-teal-700"
                                         >
                                             {upgrading === 'teams' ? 'Processing...' : 'Upgrade to Teams'}
                                         </Button>
@@ -1017,7 +1017,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     type="button"
                                     key={p}
                                     onClick={() => save({ priorities: toggleFrom(rule.priorities, p) })}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.priorities.includes(p) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'}`}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.priorities.includes(p) ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'}`}
                                     data-testid={`reminder-priority-${p}`}
                                 >
                                     {p}

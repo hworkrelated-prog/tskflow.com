@@ -84,7 +84,7 @@ export const NotificationBell = () => {
                     <div className="px-4 py-3 border-b flex items-center justify-between">
                         <h3 className="font-semibold">Notifications</h3>
                         {unread > 0 && (
-                            <button onClick={markAll} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                            <button onClick={markAll} className="text-xs text-teal-600 hover:underline flex items-center gap-1">
                                 <CheckCheck className="w-3.5 h-3.5" /> Mark all read
                             </button>
                         )}
@@ -92,12 +92,12 @@ export const NotificationBell = () => {
                     <button
                         type="button"
                         onClick={() => { setOpen(false); navigate('/updates'); }}
-                        className="w-full px-4 py-2.5 text-left border-b bg-indigo-50/50 hover:bg-indigo-50 text-sm text-indigo-800 flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left border-b bg-teal-50/50 hover:bg-teal-50 text-sm text-teal-800 flex items-center gap-2"
                         data-testid="whats-new-link"
                     >
                         <span className="text-base">✨</span>
                         <span className="font-medium">What&apos;s new in Tskflow</span>
-                        <span className="ml-auto text-xs text-indigo-500">See changelog →</span>
+                        <span className="ml-auto text-xs text-teal-500">See changelog →</span>
                     </button>
                     <div className="max-h-96 overflow-y-auto">
                         {items.length === 0 ? (
@@ -106,9 +106,9 @@ export const NotificationBell = () => {
                             <button
                                 key={n.id}
                                 onClick={() => openNotif(n)}
-                                className={`w-full text-left px-4 py-3 border-b last:border-0 hover:bg-gray-50 flex items-start gap-3 ${n.read ? 'bg-white' : 'bg-indigo-50/40'}`}
+                                className={`w-full text-left px-4 py-3 border-b last:border-0 hover:bg-gray-50 flex items-start gap-3 ${n.read ? 'bg-white' : 'bg-teal-50/40'}`}
                             >
-                                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-indigo-500'}`} />
+                                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-teal-500'}`} />
                                 <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium text-gray-900 truncate">{n.title}</div>
                                     <div className="text-xs text-gray-600 line-clamp-2">{n.body}</div>
@@ -117,7 +117,7 @@ export const NotificationBell = () => {
                                     </div>
                                 </div>
                                 {!n.read && (
-                                    <span className="text-[10px] text-indigo-600 flex items-center gap-1 shrink-0">
+                                    <span className="text-[10px] text-teal-600 flex items-center gap-1 shrink-0">
                                         <Check className="w-3 h-3" />
                                     </span>
                                 )}

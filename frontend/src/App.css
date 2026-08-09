@@ -28,7 +28,7 @@
 }
 
 .status-badge-completed {
-    background-color: hsl(230 60% 55%);
+    background-color: hsl(173 58% 32%);
     color: white;
 }
 
@@ -48,7 +48,7 @@
 }
 
 .gradient-mesh {
-    background: radial-gradient(ellipse at top right, hsl(230 60% 95%) 0%, hsl(210 20% 98%) 50%, white 100%);
+    background: radial-gradient(ellipse at top right, hsl(168 45% 94%) 0%, hsl(210 20% 98%) 50%, white 100%);
 }
 
 .glass-header {
@@ -63,7 +63,7 @@
 }
 
 .subscription-badge-pro {
-    background: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(230 60% 55%) 100%);
+    background: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(173 58% 32%) 100%);
     color: white;
 }
 
@@ -99,19 +99,19 @@
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 95%;
-    --primary: 239 84% 67%;
+    --primary: 173 50% 42%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 95%;
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 70%;
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 95%;
+    --accent: 173 30% 18%;
+    --accent-foreground: 168 40% 90%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 20%;
     --input: 0 0% 15%;
-    --ring: 239 84% 67%;
+    --ring: 173 50% 42%;
 }
 
 [data-theme="dark"] body,
@@ -173,11 +173,13 @@
 [data-theme="dark"] button.bg-white:hover,
 [data-theme="dark"] .bg-white.border:hover {
     background: #303030 !important;
-    border-color: #6366f1 !important;
+    border-color: #2dd4bf !important;
 }
 
-[data-theme="dark"] .bg-indigo-600 {
-    background: #6366f1 !important;
+[data-theme="dark"] .bg-teal-600,
+[data-theme="dark"] .bg-teal-700,
+[data-theme="dark"] .bg-teal-800 {
+    background: #0f766e !important;
     color: #ffffff !important;
 }
 
@@ -190,7 +192,7 @@
 
 [data-theme="dark"] button[class*="outline"]:hover {
     background: #252525 !important;
-    border-color: #6366f1 !important;
+    border-color: #2dd4bf !important;
     color: #ffffff !important;
 }
 
@@ -220,7 +222,7 @@
 }
 
 [data-theme="dark"] .task-card:hover {
-    border-color: #6366f1 !important;
+    border-color: #2dd4bf !important;
 }
 
 [data-theme="dark"] .task-card h3,
@@ -301,8 +303,7 @@
 }
 
 /* Toned bg pastels in dark mode become subtle dark tints (readable) */
-[data-theme="dark"] .bg-indigo-50,
-[data-theme="dark"] .bg-purple-50,
+[data-theme="dark"] .bg-teal-50,
 [data-theme="dark"] .bg-pink-50,
 [data-theme="dark"] .bg-blue-50,
 [data-theme="dark"] .bg-emerald-50,
@@ -312,8 +313,7 @@
 [data-theme="dark"] .bg-red-50 {
     background: #232323 !important;
 }
-[data-theme="dark"] .bg-indigo-100 { background: #1f1b3a !important; color: #c7d2fe !important; }
-[data-theme="dark"] .bg-purple-100 { background: #2a1e3a !important; color: #d8b4fe !important; }
+[data-theme="dark"] .bg-teal-100 { background: #12332f !important; color: #99f6e4 !important; }
 [data-theme="dark"] .bg-blue-100 { background: #16273f !important; color: #bfdbfe !important; }
 [data-theme="dark"] .bg-green-100 { background: #16301f !important; color: #86efac !important; }
 [data-theme="dark"] .bg-amber-100 { background: #33260c !important; color: #fcd34d !important; }
@@ -331,8 +331,9 @@
 }
 
 /* Deep colored text on dark mode gets a lighter variant */
-[data-theme="dark"] .text-indigo-700, [data-theme="dark"] .text-indigo-800, [data-theme="dark"] .text-indigo-900 { color: #a5b4fc !important; }
-[data-theme="dark"] .text-purple-700, [data-theme="dark"] .text-purple-800, [data-theme="dark"] .text-purple-900 { color: #d8b4fe !important; }
+[data-theme="dark"] .text-teal-700,
+[data-theme="dark"] .text-teal-800,
+[data-theme="dark"] .text-teal-900 { color: #5eead4 !important; }
 [data-theme="dark"] .text-blue-700, [data-theme="dark"] .text-blue-800, [data-theme="dark"] .text-blue-900 { color: #93c5fd !important; }
 [data-theme="dark"] .text-green-700, [data-theme="dark"] .text-green-800, [data-theme="dark"] .text-green-900 { color: #86efac !important; }
 [data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900 { color: #fcd34d !important; }
@@ -377,8 +378,8 @@
     color: #6b7280 !important;
 }
 /* Ensure primary buttons stay visible (dark button on white) */
-[data-theme="minimal"] .bg-indigo-600 { background: #0a0a0a !important; color: #ffffff !important; }
-[data-theme="minimal"] .bg-indigo-600:hover { background: #1a1a1a !important; }
+[data-theme="minimal"] .bg-teal-600 { background: #0a0a0a !important; color: #ffffff !important; }
+[data-theme="minimal"] .bg-teal-600:hover { background: #1a1a1a !important; }
 /* Clean, subtle scrollbars for long task columns */
 .clean-scroll {
     scrollbar-width: thin;

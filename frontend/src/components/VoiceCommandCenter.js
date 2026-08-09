@@ -111,7 +111,7 @@ export const VoiceCommandCenter = ({ onAction }) => {
             <button
                 data-testid="voice-command-button"
                 onClick={() => setOpen(true)}
-                className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30 flex items-center justify-center hover:scale-105 transition-transform"
+                className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-teal-800 to-slate-800 text-white shadow-lg shadow-teal-500/30 flex items-center justify-center hover:scale-105 transition-transform"
                 title="Voice assistant"
             >
                 <Mic className="w-6 h-6" />
@@ -130,7 +130,7 @@ export const VoiceCommandCenter = ({ onAction }) => {
                             disabled={!supported || phase === 'thinking'}
                             animate={phase === 'listening' ? { scale: [1, 1.12, 1] } : { scale: 1 }}
                             transition={phase === 'listening' ? { repeat: Infinity, duration: 1.2 } : {}}
-                            className={`w-24 h-24 rounded-full flex items-center justify-center text-white shadow-xl transition-colors ${phase === 'listening' ? 'bg-red-500' : phase === 'thinking' ? 'bg-slate-400' : 'bg-gradient-to-br from-indigo-600 to-purple-600'}`}
+                            className={`w-24 h-24 rounded-full flex items-center justify-center text-white shadow-xl transition-colors ${phase === 'listening' ? 'bg-red-500' : phase === 'thinking' ? 'bg-slate-400' : 'bg-gradient-to-br from-teal-800 to-slate-800'}`}
                         >
                             {phase === 'thinking' ? <Loader2 className="w-10 h-10 animate-spin" /> : phase === 'speaking' ? <Volume2 className="w-10 h-10" /> : phase === 'listening' ? <MicOff className="w-10 h-10" /> : <Mic className="w-10 h-10" />}
                         </motion.button>
@@ -143,9 +143,9 @@ export const VoiceCommandCenter = ({ onAction }) => {
                         </div>
                     )}
                     {reply && (
-                        <div className="text-left bg-indigo-50 rounded-xl p-3">
-                            <p className="text-xs text-indigo-500 mb-1">Assistant</p>
-                            <p className="text-sm text-indigo-900">{reply}</p>
+                        <div className="text-left bg-teal-50 rounded-xl p-3">
+                            <p className="text-xs text-teal-500 mb-1">Assistant</p>
+                            <p className="text-sm text-teal-900">{reply}</p>
                         </div>
                     )}
 

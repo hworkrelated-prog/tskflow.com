@@ -72,7 +72,7 @@ const RecordingLibraryPage = () => {
                     </Button>
                     <div className="flex-1">
                         <h1 className="text-xl font-semibold flex items-center gap-2">
-                            <Video className="w-5 h-5 text-indigo-600" /> Recordings
+                            <Video className="w-5 h-5 text-teal-600" /> Recordings
                         </h1>
                         <p className="text-xs text-muted-foreground">All your screen recordings — start a new one or browse past recordings.</p>
                     </div>
@@ -87,7 +87,7 @@ const RecordingLibraryPage = () => {
                 ) : recordings.length === 0 ? (
                     <Card className="border-2 border-dashed rounded-2xl">
                         <CardContent className="py-16 text-center">
-                            <Video className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
+                            <Video className="w-10 h-10 text-teal-400 mx-auto mb-3" />
                             <h3 className="text-lg font-semibold mb-1">No recordings yet</h3>
                             <p className="text-sm text-muted-foreground mb-4">Hit the &quot;Record Screen&quot; button above to create your first one.</p>
                         </CardContent>
@@ -99,7 +99,7 @@ const RecordingLibraryPage = () => {
                                 <button type="button" onClick={() => setPreview(r)} className="w-full aspect-video bg-gray-900 relative group">
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <Play className="w-6 h-6 text-indigo-600 ml-1" />
+                                            <Play className="w-6 h-6 text-teal-600 ml-1" />
                                         </div>
                                     </div>
                                     {r.duration_seconds && (

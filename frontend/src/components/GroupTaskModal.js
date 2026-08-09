@@ -57,15 +57,15 @@ export const GroupTaskModal = ({ open, onOpenChange, group }) => {
             <DialogContent className="max-w-3xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Users className="w-5 h-5 text-indigo-600" />
+                        <Users className="w-5 h-5 text-teal-600" />
                         {group?.title}
                     </DialogTitle>
                 </DialogHeader>
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100">
-                        <div className="text-xs text-indigo-700">Participants</div>
-                        <div className="text-2xl font-bold text-indigo-900">{rows.length}</div>
+                    <div className="p-3 rounded-xl bg-teal-50 border border-teal-100">
+                        <div className="text-xs text-teal-700">Participants</div>
+                        <div className="text-2xl font-bold text-teal-900">{rows.length}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100">
                         <div className="text-xs text-emerald-700">Completed</div>

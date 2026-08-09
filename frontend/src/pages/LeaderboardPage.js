@@ -37,17 +37,17 @@ const FilterBar = ({ presets, activeKey, onPreset, custom, setCustom }) => {
         <div className="flex flex-wrap items-center gap-2">
             {['thisMonth', 'lastMonth'].map((k) => (
                 <button key={k} type="button" onClick={() => onPreset(k)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border ${activeKey === k ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'}`}>
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium border ${activeKey === k ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'}`}>
                     {presets[k].label}
                 </button>
             ))}
             <div className="relative">
-                <button type="button" onClick={() => setMoreOpen((v) => !v)} className="px-3 py-1.5 rounded-full text-sm font-medium border bg-white border-gray-200 text-gray-700 hover:border-indigo-300">More \u25be</button>
+                <button type="button" onClick={() => setMoreOpen((v) => !v)} className="px-3 py-1.5 rounded-full text-sm font-medium border bg-white border-gray-200 text-gray-700 hover:border-teal-300">More \u25be</button>
                 {moreOpen && (
                     <div className="absolute z-20 mt-2 bg-white border rounded-xl shadow-lg p-2 w-56 space-y-1">
                         {['thisWeek', 'lastWeek'].map((k) => (
                             <button key={k} onClick={() => { onPreset(k); setMoreOpen(false); }}
-                                className={`w-full text-left px-3 py-1.5 rounded text-sm ${activeKey === k ? 'bg-indigo-50 text-indigo-800' : 'hover:bg-gray-50'}`}>
+                                className={`w-full text-left px-3 py-1.5 rounded text-sm ${activeKey === k ? 'bg-teal-50 text-teal-800' : 'hover:bg-gray-50'}`}>
                                 {presets[k].label}
                             </button>
                         ))}
@@ -56,7 +56,7 @@ const FilterBar = ({ presets, activeKey, onPreset, custom, setCustom }) => {
                             <input type="date" className="w-full border rounded px-2 py-1 text-sm" value={custom.start} onChange={(e) => setCustom({ ...custom, start: e.target.value })} />
                             <input type="date" className="w-full border rounded px-2 py-1 text-sm" value={custom.end} onChange={(e) => setCustom({ ...custom, end: e.target.value })} />
                             <button onClick={() => { onPreset('custom'); setMoreOpen(false); }}
-                                className="w-full mt-1 px-3 py-1.5 bg-indigo-600 text-white rounded text-sm">Apply</button>
+                                className="w-full mt-1 px-3 py-1.5 bg-teal-600 text-white rounded text-sm">Apply</button>
                         </div>
                     </div>
                 )}
@@ -90,7 +90,7 @@ const LeaderboardTable = ({ rows, orgMode }) => (
                         <td className="px-3 py-2">{r.completed}</td>
                         <td className="px-3 py-2">{r.avg_completion_hours != null ? `${r.avg_completion_hours}h` : '\u2014'}</td>
                         <td className="px-3 py-2">{r.avg_response_hours != null ? `${r.avg_response_hours}h` : '\u2014'}</td>
-                        {orgMode && <td className="px-3 py-2 font-semibold text-indigo-700">{r.performance_score}</td>}
+                        {orgMode && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
                     </tr>
                 ))}
             </tbody>
@@ -142,8 +142,8 @@ const LeaderboardPage = () => {
             </header>
             <main className="container mx-auto px-6 py-8 max-w-5xl">
                 <div className="flex items-center gap-2 mb-4">
-                    <button onClick={() => setTab('personal')} className={`px-4 py-2 rounded-full text-sm font-medium ${tab === 'personal' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200'}`}>Personal</button>
-                    <button onClick={() => setTab('org')} className={`px-4 py-2 rounded-full text-sm font-medium ${tab === 'org' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200'}`}><Users className="w-4 h-4 inline mr-1" /> Organization</button>
+                    <button onClick={() => setTab('personal')} className={`px-4 py-2 rounded-full text-sm font-medium ${tab === 'personal' ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200'}`}>Personal</button>
+                    <button onClick={() => setTab('org')} className={`px-4 py-2 rounded-full text-sm font-medium ${tab === 'org' ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200'}`}><Users className="w-4 h-4 inline mr-1" /> Organization</button>
                 </div>
                 <Card className="border-2 rounded-2xl">
                     <CardContent className="pt-6">

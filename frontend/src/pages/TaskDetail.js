@@ -593,7 +593,7 @@ const TaskDetail = () => {
     }
 
     return (
-        <div data-testid="task-detail-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="task-detail-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
             <header className="glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
@@ -669,9 +669,9 @@ const TaskDetail = () => {
                                                         data-testid="edit-task-button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="rounded-full hover:bg-indigo-100"
+                                                        className="rounded-full hover:bg-teal-100"
                                                     >
-                                                        <Pencil className="w-4 h-4 text-indigo-600" />
+                                                        <Pencil className="w-4 h-4 text-teal-600" />
                                                     </Button>
                                                 </DialogTrigger>
                                                 <DialogContent className="rounded-2xl max-w-lg">
@@ -792,21 +792,21 @@ const TaskDetail = () => {
                         <CardContent className="space-y-6">
                             {/* Screen recording requirement — shown prominently so the assignee sees it. */}
                             {task.requires_screen_recording && (
-                                <div className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl p-4 flex items-start gap-3" data-testid="requires-recording-banner">
-                                    <div className="w-9 h-9 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0">
+                                <div className="border-2 border-teal-200 bg-gradient-to-r from-teal-50 to-teal-50 rounded-2xl p-4 flex items-start gap-3" data-testid="requires-recording-banner">
+                                    <div className="w-9 h-9 rounded-full bg-teal-700 text-white flex items-center justify-center shrink-0">
                                         <Video className="w-4 h-4" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-semibold text-purple-900 flex items-center gap-2">
                                             {user?.id === task.assigned_to ? 'A screen recording is required for this task' : 'Assignee must attach a screen recording'}
                                         </h4>
-                                        <p className="text-sm text-purple-800 mt-0.5">
+                                        <p className="text-sm text-teal-900 mt-0.5">
                                             {user?.id === task.assigned_to
                                                 ? 'Please record a short Loom-style walkthrough of your work and attach it before marking this task complete.'
                                                 : 'The assignee is expected to attach a screen recording (Loom-style walkthrough) as proof-of-work when they complete this task.'}
                                         </p>
                                         {user?.id === task.assigned_to && (
-                                            <Button size="sm" onClick={() => navigate('/recordings')} className="rounded-full h-8 px-3 text-xs mt-2 bg-purple-600 hover:bg-purple-700 text-white" data-testid="open-recorder-btn">
+                                            <Button size="sm" onClick={() => navigate('/recordings')} className="rounded-full h-8 px-3 text-xs mt-2 bg-teal-700 hover:bg-teal-800 text-white" data-testid="open-recorder-btn">
                                                 <Video className="w-3.5 h-3.5 mr-1" /> Open recorder
                                             </Button>
                                         )}
@@ -906,10 +906,10 @@ const TaskDetail = () => {
 
                             {/* AI Summary */}
                             {aiSummary && (
-                                <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl">
+                                <div className="p-4 bg-gradient-to-r from-teal-50 to-slate-50 border border-teal-200 rounded-xl">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="text-lg">🤖</span>
-                                        <Label className="text-purple-700 font-semibold">AI Summary</Label>
+                                        <Label className="text-teal-800 font-semibold">AI Summary</Label>
                                     </div>
                                     <p className="text-sm text-purple-900">{aiSummary}</p>
                                 </div>
@@ -1307,7 +1307,7 @@ const TaskDetail = () => {
                     <Card className="border-2 rounded-2xl">
                         <CardContent className="pt-6">
                             <div className="flex items-center gap-2 mb-4">
-                                <MessageSquare className="w-5 h-5 text-indigo-600" />
+                                <MessageSquare className="w-5 h-5 text-teal-600" />
                                 <h3 className="font-semibold">Comments</h3>
                                 <span className="ml-auto text-xs text-muted-foreground">{comments.length} message{comments.length === 1 ? '' : 's'}</span>
                             </div>
@@ -1338,7 +1338,7 @@ const TaskDetail = () => {
                                             <button key={u.id} type="button"
                                                 onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
                                                 onMouseEnter={() => setMentionHighlight(idx)}
-                                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${idx === mentionHighlight ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-gray-50'}`}
+                                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${idx === mentionHighlight ? 'bg-teal-50 text-teal-900' : 'hover:bg-gray-50'}`}
                                             >
                                                 <span className="font-medium truncate">{u.name}</span>
                                                 <span className="text-xs text-gray-500 truncate ml-2">{u.email}</span>
@@ -1376,11 +1376,11 @@ const TaskDetail = () => {
                                     <Card className="border-2 rounded-2xl">
                                         <CardContent className="pt-5">
                                             <div className="flex items-center gap-2 mb-3">
-                                                <Users className="w-5 h-5 text-indigo-600" />
+                                                <Users className="w-5 h-5 text-teal-600" />
                                                 <h3 className="font-semibold">Assigned to</h3>
                                             </div>
                                             <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
-                                                <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold shrink-0 text-sm">
+                                                <div className="w-9 h-9 rounded-full bg-teal-500 text-white flex items-center justify-center font-semibold shrink-0 text-sm">
                                                     {(task.assigned_to_name || 'U').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -1391,7 +1391,7 @@ const TaskDetail = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => navigate(`/task/${task.parent_id}`)}
-                                                        className="text-xs text-indigo-700 hover:underline shrink-0"
+                                                        className="text-xs text-teal-700 hover:underline shrink-0"
                                                         data-testid="assignees-open-parent-btn"
                                                     >
                                                         View group →
@@ -1414,12 +1414,12 @@ const TaskDetail = () => {
                                                     const isMe = t.assigned_to === user?.id;
                                                     const done = t.status === 'Completed';
                                                     return (
-                                                        <li key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-indigo-50/50' : ''}`} data-testid={`peer-leaderboard-row-${t.id}`}>
+                                                        <li key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-teal-50/50' : ''}`} data-testid={`peer-leaderboard-row-${t.id}`}>
                                                             <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? 'bg-emerald-500 text-white' : i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-700'}`}>{done ? '✓' : i + 1}</span>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="text-sm font-medium truncate">
                                                                     {t.assigned_to_name || t.assigned_to_email || 'Unknown'}
-                                                                    {isMe && <span className="ml-2 text-[10px] text-indigo-700 font-semibold uppercase tracking-wide">You</span>}
+                                                                    {isMe && <span className="ml-2 text-[10px] text-teal-700 font-semibold uppercase tracking-wide">You</span>}
                                                                 </p>
                                                                 <p className="text-xs text-muted-foreground truncate">{t.status}</p>
                                                             </div>
@@ -1448,9 +1448,9 @@ const TaskDetail = () => {
                         {addAssigneesSelected.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                                 {addAssigneesSelected.map((a, i) => (
-                                    <span key={i} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-1 rounded-full text-xs">
+                                    <span key={i} className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 border border-teal-100 px-2 py-1 rounded-full text-xs">
                                         {a.type === 'user' ? `${a.name} <${a.email}>` : a.value}
-                                        <button type="button" onClick={() => setAddAssigneesSelected(addAssigneesSelected.filter((_, idx) => idx !== i))} className="ml-0.5 hover:text-indigo-950"><X className="w-3 h-3" /></button>
+                                        <button type="button" onClick={() => setAddAssigneesSelected(addAssigneesSelected.filter((_, idx) => idx !== i))} className="ml-0.5 hover:text-teal-950"><X className="w-3 h-3" /></button>
                                     </span>
                                 ))}
                             </div>
@@ -1485,7 +1485,7 @@ const TaskDetail = () => {
                             ) : mentionableUsers.filter((u) => !subtasks.some((s) => s.assigned_to === u.id)).map((u) => {
                                 const selected = addAssigneesSelected.some((a) => a.type === 'user' && a.id === u.id);
                                 return (
-                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${selected ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${selected ? 'bg-teal-50/60' : 'hover:bg-gray-50'}`}>
                                         <input
                                             type="checkbox"
                                             checked={selected}
@@ -1493,9 +1493,9 @@ const TaskDetail = () => {
                                                 if (selected) setAddAssigneesSelected(addAssigneesSelected.filter((a) => !(a.type === 'user' && a.id === u.id)));
                                                 else setAddAssigneesSelected([...addAssigneesSelected, { type: 'user', id: u.id, name: u.name, email: u.email }]);
                                             }}
-                                            className="accent-indigo-600 w-4 h-4"
+                                            className="accent-teal-600 w-4 h-4"
                                         />
-                                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                                        <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold shrink-0">
                                             {(u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
                                         </div>
                                         <div className="min-w-0 flex-1">
@@ -1509,7 +1509,7 @@ const TaskDetail = () => {
                     </div>
                     <div className="flex gap-2 justify-end pt-3">
                         <Button variant="outline" onClick={() => setShowAddAssignees(false)} className="rounded-full">Cancel</Button>
-                        <Button onClick={submitAddAssignees} disabled={addAssigneesLoading} className="rounded-full bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="submit-add-assignees-btn">
+                        <Button onClick={submitAddAssignees} disabled={addAssigneesLoading} className="rounded-full bg-teal-600 hover:bg-teal-700 text-white" data-testid="submit-add-assignees-btn">
                             {addAssigneesLoading ? 'Adding...' : 'Add to task'}
                         </Button>
                     </div>
@@ -1631,9 +1631,9 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
 
     return (
         <div className="border rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b flex items-center justify-between gap-3 flex-wrap">
+            <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-50 border-b flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
-                    <Users className="w-4 h-4 text-indigo-600" />
+                    <Users className="w-4 h-4 text-teal-600" />
                     <span className="font-semibold">Participants ({rows.length})</span>
                     <span className="text-xs text-muted-foreground">— pending first, completed at the bottom</span>
                 </div>
@@ -1655,7 +1655,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 {visible.map((r, i) => {
                     const canOpen = Boolean(r.subtaskId);
                     return (
-                        <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''} ${canOpen ? 'hover:bg-indigo-50/50 cursor-pointer' : ''}`}
+                        <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''} ${canOpen ? 'hover:bg-teal-50/50 cursor-pointer' : ''}`}
                             onClick={() => { if (canOpen) window.location.assign(`/task/${r.subtaskId}`); }}
                             data-testid={`participant-row-${r.subtaskId || i}`}
                         >
@@ -1663,8 +1663,8 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{r.name}</div>
                                 <div className="flex gap-1 mt-0.5 flex-wrap">
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
                                 </div>
@@ -1692,7 +1692,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                                 </button>
                             )}
                             {canOpen && (
-                                <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                <ArrowUpRight className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                             )}
                         </li>
                     );
@@ -1702,7 +1702,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 <button
                     type="button"
                     onClick={() => setShowAll(!showAll)}
-                    className="w-full py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50 border-t"
+                    className="w-full py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50 border-t"
                     data-testid="participants-show-more"
                 >
                     {showAll ? 'Show less' : `Show ${rows.length - 5} more`}

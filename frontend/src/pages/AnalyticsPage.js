@@ -126,7 +126,7 @@ const AnalyticsPage = () => {
     };
 
     return (
-        <div data-testid="analytics-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="analytics-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
             {/* Onboarding Popup */}
             <AnimatePresence>
                 {showOnboarding && (
@@ -181,7 +181,7 @@ const AnalyticsPage = () => {
                                 type="button"
                                 onClick={() => setSection(t.key)}
                                 data-testid={`analytics-section-${t.key}`}
-                                className={`px-4 py-2 rounded-full text-sm font-medium border ${section === t.key ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'}`}
+                                className={`px-4 py-2 rounded-full text-sm font-medium border ${section === t.key ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'}`}
                             >
                                 {t.label}
                             </button>
@@ -214,8 +214,8 @@ const AnalyticsPage = () => {
                                         onClick={() => applyPreset(p.key)}
                                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                                             activePreset === p.key
-                                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                                : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'
+                                                ? 'bg-teal-600 border-teal-600 text-white'
+                                                : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'
                                         }`}
                                         data-testid={`analytics-preset-${p.key}`}
                                     >
@@ -223,7 +223,7 @@ const AnalyticsPage = () => {
                                     </button>
                                 ))}
                                 <span className={`px-3 py-1.5 rounded-full text-sm font-medium border ${
-                                    activePreset === 'custom' ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500'
+                                    activePreset === 'custom' ? 'bg-teal-50 border-teal-300 text-teal-700' : 'bg-white border-gray-200 text-gray-500'
                                 }`}>
                                     Custom range ↓
                                 </span>
@@ -274,8 +274,8 @@ const AnalyticsPage = () => {
                                 <Card className="border-2 shadow-soft rounded-2xl">
                                     <CardContent className="p-6">
                                         <div className="flex items-center gap-4">
-                                            <div className="p-3 bg-indigo-100 rounded-xl">
-                                                <Users className="w-6 h-6 text-indigo-600" />
+                                            <div className="p-3 bg-teal-100 rounded-xl">
+                                                <Users className="w-6 h-6 text-teal-600" />
                                             </div>
                                             <div>
                                                 <p className="text-sm text-muted-foreground">Assigned to Others</p>
@@ -383,8 +383,8 @@ const AnalyticsPage = () => {
                                                             <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
                                                                 {/* Name & Email */}
                                                                 <div className="flex items-center gap-3 min-w-0">
-                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center shrink-0">
-                                                                        <span className="font-semibold text-indigo-700">
+                                                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
+                                                                        <span className="font-semibold text-teal-700">
                                                                             {assignee.name.charAt(0).toUpperCase()}
                                                                         </span>
                                                                     </div>
@@ -485,7 +485,7 @@ const AnalyticsPage = () => {
                             {(!analytics.assignee_breakdown || analytics.assignee_breakdown.length === 0) && analytics.assigned_to_others_count === 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl" data-testid="analytics-team-onboarding">
                                     <CardContent className="p-12 text-center">
-                                        <Users className="w-12 h-12 mx-auto text-indigo-400 mb-4" />
+                                        <Users className="w-12 h-12 mx-auto text-teal-400 mb-4" />
                                         {user?.subscription_tier === 'teams' ? (
                                             <>
                                                 <h3 className="text-lg font-semibold mb-2">Set up your team to unlock analytics</h3>
@@ -645,7 +645,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
                                                 ))}
                                             </div>
                                         </td>
-                                        {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-indigo-700">{r.performance_score}</td>}
+                                        {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
                                     </tr>
                                 ))}
                             </tbody>

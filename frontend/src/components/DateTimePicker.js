@@ -63,12 +63,12 @@ export const DateTimePicker = ({ value, onChange, testId = 'datetime-picker' }) 
                     data-testid={`${testId}-trigger`}
                     className={`w-full justify-start rounded-xl h-11 font-normal ${value ? 'text-foreground' : 'text-muted-foreground'}`}
                 >
-                    <CalendarDays className="w-4 h-4 mr-2 text-indigo-500 shrink-0" />
+                    <CalendarDays className="w-4 h-4 mr-2 text-teal-500 shrink-0" />
                     {displayLabel}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 rounded-2xl overflow-hidden" align="start">
-                <div className="p-3 border-b bg-gradient-to-r from-indigo-50 to-purple-50">
+                <div className="p-3 border-b bg-gradient-to-r from-teal-50 to-teal-50">
                     <div className="flex flex-wrap gap-1.5">
                         {QUICK_OPTIONS.map((opt) => (
                             <button
@@ -79,7 +79,7 @@ export const DateTimePicker = ({ value, onChange, testId = 'datetime-picker' }) 
                                     const { d, h, m, ap } = opt.getDate();
                                     update(d, h, m, ap);
                                 }}
-                                className="text-xs px-2.5 py-1 rounded-full bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white transition-colors"
+                                className="text-xs px-2.5 py-1 rounded-full bg-white border border-teal-200 text-teal-700 hover:bg-teal-600 hover:text-white transition-colors"
                             >
                                 {opt.label}
                             </button>
@@ -93,7 +93,7 @@ export const DateTimePicker = ({ value, onChange, testId = 'datetime-picker' }) 
                     initialFocus
                 />
                 <div className="flex items-center gap-2 p-3 border-t bg-slate-50">
-                    <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <Clock className="w-4 h-4 text-teal-500 shrink-0" />
                     <Select value={String(hour12)} onValueChange={(v) => update(date || new Date(), parseInt(v, 10), minute, ampm)}>
                         <SelectTrigger data-testid={`${testId}-hour`} className="rounded-lg h-9 w-[68px]"><SelectValue /></SelectTrigger>
                         <SelectContent className="max-h-56">
@@ -114,7 +114,7 @@ export const DateTimePicker = ({ value, onChange, testId = 'datetime-picker' }) 
                                 type="button"
                                 data-testid={`${testId}-${p.toLowerCase()}`}
                                 onClick={() => update(date || new Date(), hour12, minute, p)}
-                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${ampm === p ? 'bg-indigo-600 text-white' : 'bg-white text-muted-foreground hover:bg-slate-100'}`}
+                                className={`px-3 py-1.5 text-sm font-medium transition-colors ${ampm === p ? 'bg-teal-600 text-white' : 'bg-white text-muted-foreground hover:bg-slate-100'}`}
                             >
                                 {p}
                             </button>

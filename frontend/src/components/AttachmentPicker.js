@@ -6,9 +6,9 @@ import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Ima
 import { uploadBlob } from '@/lib/upload';
 
 const iconFor = (kind) => {
-    if (kind === 'video') return <VideoIcon className="w-4 h-4 text-indigo-500" />;
-    if (kind === 'image') return <ImageIcon className="w-4 h-4 text-indigo-500" />;
-    return <FileText className="w-4 h-4 text-indigo-500" />;
+    if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
+    if (kind === 'image') return <ImageIcon className="w-4 h-4 text-teal-500" />;
+    return <FileText className="w-4 h-4 text-teal-500" />;
 };
 
 const OptionToggle = ({ on, onClick, iconOn, iconOff, label, dataTestId }) => (
@@ -16,7 +16,7 @@ const OptionToggle = ({ on, onClick, iconOn, iconOff, label, dataTestId }) => (
         type="button"
         onClick={onClick}
         data-testid={dataTestId}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
     >
         {on ? iconOn : iconOff}
         {label}
@@ -449,7 +449,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             {attachments.length > 0 && (
                 <div className="space-y-2">
                     {attachments.map((att) => (
-                        <div key={att.id} className="flex items-center justify-between gap-2 bg-indigo-50 border border-indigo-200 p-2 rounded-xl text-sm">
+                        <div key={att.id} className="flex items-center justify-between gap-2 bg-teal-50 border border-teal-200 p-2 rounded-xl text-sm">
                             <div className="flex items-center gap-2 min-w-0">
                                 {iconFor(att.kind)}
                                 <span className="truncate">{att.filename}</span>

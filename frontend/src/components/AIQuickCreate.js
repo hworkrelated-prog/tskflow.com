@@ -350,9 +350,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     }[editPriority] || 'bg-slate-100 text-slate-700';
 
     const chipColor = (kind) => ({
-        user: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        user: 'bg-teal-100 text-teal-800 border-teal-200',
         email: 'bg-slate-100 text-slate-700 border-slate-200',
-        group: 'bg-purple-100 text-purple-800 border-purple-200',
+        group: 'bg-teal-100 text-teal-900 border-teal-200',
         team: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     }[kind] || 'bg-slate-100 text-slate-700');
 

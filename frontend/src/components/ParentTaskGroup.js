@@ -83,7 +83,7 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
             className="border-2 rounded-2xl overflow-hidden hover:shadow-md transition-shadow"
             data-testid={`parent-group-card-${group.id}`}
         >
-            <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 cursor-pointer" onClick={openTask}>
+            <div className="p-4 bg-gradient-to-r from-teal-50 to-teal-50 cursor-pointer" onClick={openTask}>
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                         {selectable && (
@@ -92,13 +92,13 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                 checked={selected}
                                 onChange={toggleSelect}
                                 onClick={(e) => e.stopPropagation()}
-                                className="mt-1 w-4 h-4 shrink-0 accent-indigo-600"
+                                className="mt-1 w-4 h-4 shrink-0 accent-teal-600"
                                 data-testid={`select-parent-group-${group.id}`}
                             />
                         )}
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                                <Users className="w-4 h-4 text-indigo-600 shrink-0" />
+                                <Users className="w-4 h-4 text-teal-600 shrink-0" />
                                 <h3 className="font-semibold text-base truncate">{group.title}</h3>
                             </div>
                             <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
@@ -122,8 +122,8 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                 </span>
                             );
                         })()}
-                        <Badge className={complete ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}>{group.percent}%</Badge>
-                        <Button size="sm" onClick={gotoTask} className="rounded-full h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid={`view-parent-group-${group.id}`}>
+                        <Badge className={complete ? 'bg-green-100 text-green-700' : 'bg-teal-100 text-teal-700'}>{group.percent}%</Badge>
+                        <Button size="sm" onClick={gotoTask} className="rounded-full h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white" data-testid={`view-parent-group-${group.id}`}>
                             View Task <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
                         </Button>
                         <button
@@ -165,7 +165,7 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                             {sorted.map((t) => (
                                 <li
                                     key={t.id}
-                                    className={`flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50/50 cursor-pointer ${t.status === 'Completed' ? 'opacity-70' : ''}`}
+                                    className={`flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50/50 cursor-pointer ${t.status === 'Completed' ? 'opacity-70' : ''}`}
                                     onClick={(e) => { e.stopPropagation(); navigate(`/task/${t.id}`); }}
                                     data-testid={`parent-group-subtask-${t.id}`}
                                 >
@@ -175,7 +175,7 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                         <div className="text-xs text-muted-foreground truncate">{t.status}{t.completed_at ? ` • ${format(new Date(t.completed_at), 'MMM d, h:mm a')}` : ''}</div>
                                     </div>
                                     <Badge variant="outline" className={t.status === 'Review Pending' ? 'text-amber-700 border-amber-200 bg-amber-50' : t.status === 'Completed' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : ''}>{t.status}</Badge>
-                                    <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                    <ArrowUpRight className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                                 </li>
                             ))}
                         </ul>

@@ -165,7 +165,7 @@ const TeamManagementPage = () => {
     }
 
     return (
-        <div data-testid="team-management-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+        <div data-testid="team-management-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
             <header className="glass-header border-b">
                 <div className="container mx-auto px-6 py-4">
                     <Button
@@ -410,8 +410,8 @@ const TeamManagementPage = () => {
                                                             <div className="grid grid-cols-12 gap-4 items-center">
                                                                 {/* Team Member */}
                                                                 <div className="col-span-4 flex items-center gap-3">
-                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                                                        <span className="font-semibold text-indigo-700">
+                                                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
+                                                                        <span className="font-semibold text-teal-700">
                                                                             {report.name.charAt(0).toUpperCase()}
                                                                         </span>
                                                                     </div>
@@ -507,8 +507,8 @@ const TeamManagementPage = () => {
                                         {myManager ? (
                                             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                                                        <span className="font-semibold text-indigo-700 text-lg">
+                                                    <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
+                                                        <span className="font-semibold text-teal-700 text-lg">
                                                             {myManager.name.charAt(0).toUpperCase()}
                                                         </span>
                                                     </div>
@@ -517,7 +517,7 @@ const TeamManagementPage = () => {
                                                         <p className="text-sm text-muted-foreground">{myManager.email}</p>
                                                     </div>
                                                 </div>
-                                                <Badge className="bg-indigo-100 text-indigo-700">Manager</Badge>
+                                                <Badge className="bg-teal-100 text-teal-700">Manager</Badge>
                                             </div>
                                         ) : (
                                             <div className="text-center py-8">
@@ -591,8 +591,8 @@ const TeamManagementPage = () => {
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 bg-indigo-50 rounded-xl text-center">
-                                                <p className="text-3xl font-bold text-indigo-700" style={{ fontFamily: 'Outfit' }}>
+                                            <div className="p-4 bg-teal-50 rounded-xl text-center">
+                                                <p className="text-3xl font-bold text-teal-700" style={{ fontFamily: 'Outfit' }}>
                                                     {directReports.length}
                                                 </p>
                                                 <p className="text-sm text-muted-foreground">Direct Reports</p>
@@ -629,7 +629,7 @@ const TeamManagementPage = () => {
                                     </CardHeader>
                                     <CardContent>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div className="p-4 bg-indigo-50 rounded-xl">
+                                            <div className="p-4 bg-teal-50 rounded-xl">
                                                 <p className="text-sm text-muted-foreground">Active Users</p>
                                                 <p className="text-4xl font-bold mt-1" style={{ fontFamily: 'Outfit' }}>{billing?.active_users || 0}</p>
                                             </div>
@@ -723,8 +723,8 @@ const TeamManagementPage = () => {
                                                         <Card className="border rounded-xl">
                                                             <CardContent className="p-4 flex items-center justify-between">
                                                                 <div className="flex items-center gap-4">
-                                                                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                                                        <span className="font-semibold text-indigo-700">
+                                                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
+                                                                        <span className="font-semibold text-teal-700">
                                                                             {member.name.charAt(0).toUpperCase()}
                                                                         </span>
                                                                     </div>

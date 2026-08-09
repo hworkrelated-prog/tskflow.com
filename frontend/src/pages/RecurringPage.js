@@ -104,7 +104,7 @@ const RecurringPage = () => {
                     <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="rounded-full"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
                     <div className="flex-1">
                         <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                            <Repeat className="w-6 h-6 text-indigo-600" /> Recurring Series
+                            <Repeat className="w-6 h-6 text-teal-600" /> Recurring Series
                         </h1>
                         <p className="text-xs text-muted-foreground">Automate recurring commitments — daily standups, weekly reports, monthly reviews.</p>
                     </div>
@@ -117,7 +117,7 @@ const RecurringPage = () => {
                 ) : series.length === 0 ? (
                     <Card className="rounded-2xl border-2 border-dashed">
                         <CardContent className="py-12 text-center">
-                            <Repeat className="w-12 h-12 mx-auto text-indigo-300 mb-4" />
+                            <Repeat className="w-12 h-12 mx-auto text-teal-300 mb-4" />
                             <h3 className="font-semibold text-lg mb-1">No recurring series yet</h3>
                             <p className="text-sm text-muted-foreground mb-4">Turn a task into a series to have it repeat automatically.</p>
                             <Button onClick={() => navigate('/dashboard?create=1')} className="rounded-full">Create a task</Button>
