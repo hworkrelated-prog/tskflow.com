@@ -18,7 +18,7 @@ const TermsOfService = () => {
 
             <main className="container mx-auto px-6 py-12 max-w-3xl">
                 <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Terms of Service</h1>
-                <p className="text-muted-foreground mb-8">Last updated: July 2, 2026</p>
+                <p className="text-muted-foreground mb-8">Last updated: August 8, 2026</p>
 
                 <div className="prose prose-slate max-w-none space-y-6 text-slate-700 leading-relaxed">
                     <section>
@@ -66,7 +66,12 @@ const TermsOfService = () => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-semibold text-slate-900">9. Contact Us</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">9. SMS Communications</h2>
+                        <p>By submitting our Contact Us form and opting in, you consent to receive SMS messages from Tskflow related to your inquiry. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for assistance. Consent to receive SMS is not required to use the Service.</p>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">10. Contact Us</h2>
                         <p>Questions about these Terms? Contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>

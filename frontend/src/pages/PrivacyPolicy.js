@@ -18,7 +18,7 @@ const PrivacyPolicy = () => {
 
             <main className="container mx-auto px-6 py-12 max-w-3xl">
                 <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Privacy Policy</h1>
-                <p className="text-muted-foreground mb-8">Last updated: July 2, 2026</p>
+                <p className="text-muted-foreground mb-8">Last updated: August 8, 2026</p>
 
                 <div className="prose prose-slate max-w-none space-y-6 text-slate-700 leading-relaxed">
                     <section>
@@ -31,7 +31,8 @@ const PrivacyPolicy = () => {
                             <li><strong>Account information:</strong> your name, email address, and password (stored encrypted).</li>
                             <li><strong>Task data:</strong> tasks you create, assign, accept, or complete, including titles, descriptions, due dates, and status.</li>
                             <li><strong>Usage data:</strong> basic activity needed to operate the Service (e.g., last active time).</li>
-                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar) — see Section 4.</li>
+                            <li><strong>Contact form data:</strong> if you submit our Contact Us form, we collect your name, email, phone number, and message, along with your consent to receive SMS messages if you opt in.</li>
+                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar) — see Section 5.</li>
                         </ul>
                     </section>
 
@@ -51,7 +52,12 @@ const PrivacyPolicy = () => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-semibold text-slate-900">4. Google User Data</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">4. SMS Communications</h2>
+                        <p>If you opt in via our Contact Us form, we may send you SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can opt out at any time by replying STOP, or get help by replying HELP. We do not share your phone number with third parties for their marketing purposes. Consent to receive SMS messages is not a condition of purchase.</p>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">5. Google User Data</h2>
                         <p>If you connect your Google account, Tskflow requests access to your Google Calendar (the <code>calendar.events</code> scope) solely to create and manage calendar events for tasks you accept in Tskflow.</p>
                         <p>Tskflow&apos;s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-indigo-600 underline">Google API Services User Data Policy</a>, including the Limited Use requirements. Specifically:</p>
                         <ul className="list-disc pl-6 space-y-1">
@@ -64,17 +70,17 @@ const PrivacyPolicy = () => {
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-semibold text-slate-900">5. Data Retention & Security</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">6. Data Retention & Security</h2>
                         <p>We retain your data for as long as your account is active. Deleted tasks are recoverable for a limited window and then permanently removed. You can delete your account at any time from Settings, which removes your personal data and cancels any active subscription. We use industry-standard measures to protect your data, including encryption of passwords and secure transmission over HTTPS.</p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-semibold text-slate-900">6. Your Rights</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">7. Your Rights</h2>
                         <p>You may access, update, or delete your personal information at any time through your account settings, or by contacting us. Depending on your location, you may have additional rights under laws such as GDPR or CCPA.</p>
                     </section>
 
                     <section>
-                        <h2 className="text-2xl font-semibold text-slate-900">7. Contact Us</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900">8. Contact Us</h2>
                         <p>If you have any questions about this Privacy Policy, contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>
