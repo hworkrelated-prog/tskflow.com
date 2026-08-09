@@ -534,7 +534,7 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
-                                <p className="text-xs text-muted-foreground">Get a daily digest of what you completed, what&apos;s still open, and what you missed.</p>
+                                <p className="text-xs text-muted-foreground">Your day plus a manager snapshot when you assigned work today — who accepted, who didn&apos;t, and who to follow up with.</p>
                             </div>
                             <label className="inline-flex items-center gap-2 cursor-pointer" data-testid="eod-enabled-toggle">
                                 <input
@@ -593,10 +593,9 @@ const SettingsPage = () => {
                                         <span className="text-xs text-muted-foreground">Expand</span>
                                     </summary>
                                     <ul className="px-5 pb-4 pt-1 text-xs text-gray-700 space-y-1 list-disc ml-4">
-                                        <li>Tasks you <strong>completed today</strong></li>
-                                        <li>Tasks that are <strong>still open</strong></li>
-                                        <li>Tasks that <strong>missed their due date</strong> (with a warning banner)</li>
-                                        <li>A link back to your dashboard so you can jump in and finish</li>
+                                        <li>Tasks you <strong>completed today</strong> and what is still open</li>
+                                        <li>If you assigned work today: accepted / not accepted, by whom</li>
+                                        <li>Suggested follow-ups, top performers, and people needing attention</li>
                                     </ul>
                                 </details>
                             </div>
@@ -890,7 +889,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
         hours_before_due: 4,
         frequency_hours: 12,
         channels: ['in_app', 'email'],
-        priorities: ['High', 'Urgent'],
+        priorities: ['Low', 'Medium', 'High', 'Urgent'],
     });
     const [saving, setSaving] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
@@ -933,7 +932,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Automated reminders for High and Urgent tasks — so nothing important goes cold.</p>
+                    <p className="text-xs text-muted-foreground">Follow-ups scale with priority — Urgent chases fast; Low stays quiet during off-hours.</p>
                 </div>
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={rule.enabled} onChange={(e) => save({ enabled: e.target.checked })} className="sr-only peer" data-testid="reminders-enable-toggle" />

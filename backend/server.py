@@ -27,6 +27,8 @@ from googleapiclient.discovery import build
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
+
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
 
@@ -211,6 +213,9 @@ class TaskResponse(BaseModel):
     viewed_at: Optional[str] = None
     parent_id: Optional[str] = None
     success_criteria: Optional[str] = None
+    blocked_reason: Optional[str] = None
+    blocked_at: Optional[str] = None
+    ai_review_summary: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -220,6 +225,9 @@ class TaskAction(BaseModel):
 class TaskComplete(BaseModel):
     completion_note: Optional[str] = None
     completion_note_images: Optional[List[str]] = None
+
+class BlockAction(BaseModel):
+    reason: str
 
 class ReviewAction(BaseModel):
     action: str  # "accept" or "send_back"
@@ -2399,6 +2407,9 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         parent_id=task.get("parent_id"),
         viewed_at=task.get("viewed_at"),
         success_criteria=task.get("success_criteria"),
+        blocked_reason=task.get("blocked_reason"),
+        blocked_at=task.get("blocked_at"),
+        ai_review_summary=task.get("ai_review_summary"),
     )
 
 @api_router.put("/tasks/{task_id}/accept")
@@ -2581,6 +2592,15 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
         # Set to Review Pending for non-self-assigned tasks
         update_data["status"] = "Review Pending"
         update_data["review_pending_at"] = get_pst_now().isoformat()
+        note = completion.completion_note if completion else None
+        imgs = completion.completion_note_images if completion else None
+        if task.get("success_criteria") or note:
+            try:
+                summary = await generate_ai_work_review(task, note, bool(imgs))
+                if summary:
+                    update_data["ai_review_summary"] = summary
+            except Exception as e:
+                logging.error(f"ai_work_review failed: {e}")
     
     await db.tasks.update_one(
         {"id": task_id},
@@ -2588,6 +2608,57 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
     )
     
     return {"message": "Task submitted for review" if not is_self_assigned else "Task completed"}
+
+
+@api_router.put("/tasks/{task_id}/block")
+async def block_task(task_id: str, body: BlockAction, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["assigned_to"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if task.get("status") not in ("Accepted", "Blocked"):
+        raise HTTPException(status_code=400, detail="Only accepted tasks can be blocked")
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Please say what is blocking you")
+    now_iso = get_pst_now().isoformat()
+    await db.tasks.update_one({"id": task_id}, {"$set": {
+        "status": "Blocked",
+        "blocked_reason": reason,
+        "blocked_at": now_iso,
+    }})
+    creator = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+    if creator and creator.get("email"):
+        html = (
+            f"<html><body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;'>"
+            f"<div style='padding:24px;'><h2>Blocked: {task.get('title','Task')}</h2>"
+            f"<p>{current_user.get('name','Assignee')} flagged a blocker:</p>"
+            f"<blockquote style='border-left:3px solid #f59e0b;padding:8px 12px;background:#fffbeb;'>{reason}</blockquote>"
+            f"<p><a href='{APP_BASE_URL}/task/{task_id}'>Open task</a></p></div></body></html>"
+        )
+        background_tasks.add_task(send_email_notification, creator["email"], f"Blocked: {task.get('title')}", html)
+        if not str(task["created_by"]).startswith("email_"):
+            background_tasks.add_task(send_web_push, task["created_by"], "Task blocked", f"{current_user.get('name')}: {reason[:80]}", f"/task/{task_id}")
+    return {"message": "Marked as blocked", "status": "Blocked"}
+
+
+@api_router.put("/tasks/{task_id}/unblock")
+async def unblock_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["assigned_to"] != current_user["id"] and task["created_by"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if task.get("status") != "Blocked":
+        raise HTTPException(status_code=400, detail="Task is not blocked")
+    await db.tasks.update_one({"id": task_id}, {"$set": {
+        "status": "Accepted",
+        "blocked_reason": None,
+        "blocked_at": None,
+    }})
+    return {"message": "Blocker cleared", "status": "Accepted"}
+
 
 @api_router.put("/tasks/{task_id}/review")
 async def review_task(task_id: str, review: ReviewAction, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
@@ -5846,30 +5917,34 @@ async def _build_eod_summary_for_user(u: dict, now):
                 missed.append(t)
         except Exception:
             pass
-    if not completed and not open_tasks_docs:
+    mgr_html, mgr_slack, mgr_counts = await build_manager_eod_section(db, u, now, PST, timedelta)
+    if not completed and not open_tasks_docs and not mgr_html:
         return None
 
-    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> Ã¢ÂÂ completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
-    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} Ã¢ÂÂ due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up Ã¢ÂÂ no open tasks.</li>"
-    missed_note = f"<p style='color:#b91c1c;'>Ã¢ÂÂ Ã¯Â¸Â {len(missed)} task(s) missed their due date.</p>" if missed else ""
-    inner = f"""
-    <h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {u.get('name','friend').split(' ')[0]}</h2>
-    <p style=\"color:#6b7280;margin:0 0 20px;\">{now.strftime('%A, %b %d, %Y')}</p>
-    <h3 style=\"font-size:15px;margin:16px 0 6px;\">Ã¢ÂÂ Completed today ({len(completed)})</h3>
-    <ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>
-    <h3 style=\"font-size:15px;margin:20px 0 6px;\">Ã°ÂÂÂ Still open ({len(open_tasks_docs)})</h3>
-    <ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>
-    {missed_note}
-    """
+    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> - completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
+    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} - due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up - no open tasks.</li>"
+    missed_note = f"<p style='color:#b91c1c;'>{len(missed)} task(s) missed their due date.</p>" if missed else ""
+    first = (u.get('name') or 'friend').split(' ')[0]
+    day = now.strftime('%A, %b %d, %Y')
+    inner = (
+        f"<h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {first}</h2>"
+        f"<p style=\"color:#6b7280;margin:0 0 20px;\">{day}</p>"
+        f"<h3 style=\"font-size:15px;margin:16px 0 6px;\">Completed today ({len(completed)})</h3>"
+        f"<ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>"
+        f"<h3 style=\"font-size:15px;margin:20px 0 6px;\">Still open ({len(open_tasks_docs)})</h3>"
+        f"<ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>"
+        f"{missed_note}{mgr_html}"
+    )
     html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
     slack_text = (
-        f":sunset: *EOD summary Ã¢ÂÂ {now.strftime('%b %d')}*\n"
-        f"\u2705 Completed today: {len(completed)}\n"
-        f":clipboard: Still open: {len(open_tasks_docs)}\n"
-        + (f":warning: {len(missed)} missed due date(s)\n" if missed else "")
+        f":sunset: *EOD summary - {now.strftime('%b %d')}*\n"
+        f"Completed today: {len(completed)}\n"
+        f"Still open: {len(open_tasks_docs)}\n"
+        + (f"Warning: {len(missed)} missed due date(s)\n" if missed else "")
+        + (f"\n{mgr_slack}\n" if mgr_slack else "")
         + f"<{APP_BASE_URL}/dashboard|Open Tskflow>"
     )
-    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed)}
+    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts}
 
 
 @api_router.post("/cron/eod-report")
@@ -7197,11 +7272,11 @@ KNOWLEDGE BASE:
 
 class ReminderRule(BaseModel):
     enabled: bool = True
-    triggers: List[str] = ["time_before_due", "no_response", "overdue"]  # possible: time_before_due, no_progress, no_response, approaching_deadline, overdue
+    triggers: List[str] = ["time_before_due", "no_response", "no_progress", "overdue"]
     hours_before_due: int = 4
-    frequency_hours: int = 12  # min gap between reminders
-    channels: List[str] = ["in_app", "email"]  # in_app, email, slack
-    priorities: List[str] = ["High", "Urgent"]
+    frequency_hours: int = 12  # base gap; scaled down by priority at runtime
+    channels: List[str] = ["in_app", "email"]
+    priorities: List[str] = ["Low", "Medium", "High", "Urgent"]
 
 
 @api_router.get("/reminders/rules")
@@ -7294,11 +7369,17 @@ async def _check_smart_reminders():
             r = rules_by_user.get(aid, default_rule)
             if not r.get("enabled", True):
                 continue
-            if t.get("priority") not in r.get("priorities", ["High", "Urgent"]):
+            allowed_prios = r.get("priorities") or ["Low", "Medium", "High", "Urgent"]
+            if t.get("priority") not in allowed_prios:
                 continue
-            # Frequency gate
+            if t.get("status") == "Blocked":
+                continue
+            pcfg = priority_followup_config(t.get("priority"))
+            # Quiet hours for low/medium: only nudge 9am-6pm PST
+            if pcfg.get("quiet") and not (9 <= now.hour < 18):
+                continue
             last = t.get("last_smart_reminder_sent")
-            gap_hours = int(r.get("frequency_hours", 12))
+            gap_hours = min(int(r.get("frequency_hours", 12)), int(pcfg["gap_hours"]))
 
             triggers = r.get("triggers", [])
             try:
@@ -7306,7 +7387,7 @@ async def _check_smart_reminders():
                 if due.tzinfo is None:
                     due = due.replace(tzinfo=PST)
             except Exception:
-                # Corrupted due_date Ã¢ÂÂ treat as orphan
+                # Corrupted due_date - treat as orphan
                 await db.tasks.update_one(
                     {"id": t["id"]},
                     {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
@@ -7316,18 +7397,20 @@ async def _check_smart_reminders():
 
             hours_to_due = (due - now).total_seconds() / 3600.0
 
-            # Determine which time-bucket this fire is (3h/2h/30m/overdue).
-            # We only fire once per bucket per task to avoid spam.
+            # Time buckets: aggressive for High/Urgent/Medium; Low only gets overdue + no_response
             fired_buckets = t.get("reminder_buckets_fired", []) or []
             bucket = None
-            if hours_to_due < 0:
+            if pcfg.get("buckets"):
+                if hours_to_due < 0:
+                    bucket = "overdue"
+                elif hours_to_due <= 0.5:
+                    bucket = "30min"
+                elif hours_to_due <= 2 and hours_to_due > 0.5:
+                    bucket = "2h"
+                elif hours_to_due <= 3 and hours_to_due > 2:
+                    bucket = "3h"
+            elif hours_to_due < 0:
                 bucket = "overdue"
-            elif hours_to_due <= 0.5:
-                bucket = "30min"
-            elif hours_to_due <= 2 and hours_to_due > 0.5:
-                bucket = "2h"
-            elif hours_to_due <= 3 and hours_to_due > 2:
-                bucket = "3h"
 
             # If bucket already fired, skip UNLESS overdue (overdue rotates every gap_hours)
             if bucket and bucket != "overdue" and bucket in fired_buckets:
@@ -7354,7 +7437,7 @@ async def _check_smart_reminders():
                         cdt = datetime.fromisoformat(created.replace("Z", "+00:00"))
                         if cdt.tzinfo is None:
                             cdt = cdt.replace(tzinfo=PST)
-                        if (now - cdt).total_seconds() >= 4 * 3600:
+                        if (now - cdt).total_seconds() >= float(pcfg["no_response_hours"]) * 3600:
                             # Respect frequency gap
                             if last:
                                 last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
@@ -7372,7 +7455,7 @@ async def _check_smart_reminders():
                         adt = datetime.fromisoformat(acc.replace("Z", "+00:00"))
                         if adt.tzinfo is None:
                             adt = adt.replace(tzinfo=PST)
-                        if (now - adt).total_seconds() >= 24 * 3600 and hours_to_due < 24:
+                        if (now - adt).total_seconds() >= float(pcfg["no_progress_hours"]) * 3600 and hours_to_due < 48:
                             if last:
                                 last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
                                 if last_dt.tzinfo is None:

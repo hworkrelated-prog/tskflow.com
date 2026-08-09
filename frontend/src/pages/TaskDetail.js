@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -35,6 +35,8 @@ const TaskDetail = () => {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showCompleteDialog, setShowCompleteDialog] = useState(false);
     const [showReviewDialog, setShowReviewDialog] = useState(false);
+    const [showBlockDialog, setShowBlockDialog] = useState(false);
+    const [blockReason, setBlockReason] = useState('');
     const [declineReason, setDeclineReason] = useState('');
     const [counterMessage, setCounterMessage] = useState('');
     const [proposedDate, setProposedDate] = useState('');
@@ -377,6 +379,38 @@ const TaskDetail = () => {
         }
     };
 
+    const handleBlock = async () => {
+        if (!blockReason.trim()) {
+            toast.error('What is blocking you?');
+            return;
+        }
+        setActionLoading(true);
+        try {
+            await axios.put(`${API}/tasks/${taskId}/block`, { reason: blockReason.trim() });
+            toast.success('Marked as blocked');
+            setShowBlockDialog(false);
+            setBlockReason('');
+            fetchTask();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to flag blocker'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnblock = async () => {
+        setActionLoading(true);
+        try {
+            await axios.put(`${API}/tasks/${taskId}/unblock`);
+            toast.success('Blocker cleared');
+            fetchTask();
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to clear blocker'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleReviewAction = async (action) => {
         setActionLoading(true);
         try {
@@ -535,7 +569,8 @@ const TaskDetail = () => {
             'Declined': { class: 'status-badge-declined', label: 'Declined' },
             'Counter-Proposed': { class: 'status-badge-counter', label: 'Counter-Proposed' },
             'Completed': { class: 'status-badge-completed', label: 'Completed' },
-            'Review Pending': { class: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Review Pending' }
+            'Review Pending': { class: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Review Pending' },
+            'Blocked': { class: 'bg-orange-100 text-orange-800 border-orange-300', label: 'Blocked' },
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
@@ -1000,7 +1035,13 @@ const TaskDetail = () => {
                                             </div>
                                         )}
                                     </div>
-                                    <p className="text-sm text-amber-700 mb-4">The assignee has submitted this task for your review. Please approve or send back with feedback.</p>
+                                    <p className="text-sm text-amber-700 mb-3">Submitted for your review.</p>
+                                    {task.ai_review_summary && (
+                                        <div className="mb-4 rounded-lg bg-white/80 border border-amber-200 px-3 py-2.5" data-testid="ai-review-summary">
+                                            <p className="text-xs font-semibold text-slate-700 mb-1">AI quality notes</p>
+                                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{task.ai_review_summary}</p>
+                                        </div>
+                                    )}
                                     <div className="flex gap-2">
                                         <Button onClick={() => handleReviewAction('accept')} disabled={actionLoading} className="rounded-full bg-green-600 hover:bg-green-700 text-white">
                                             <CheckCircle className="w-4 h-4 mr-2" />
@@ -1051,25 +1092,24 @@ const TaskDetail = () => {
                             )}
 
                             {user?.id === task.assigned_to && task.status === 'Pending' && (
-                                <div className="flex flex-wrap gap-3 pt-4 border-t">
+                                <div className="flex flex-wrap items-center gap-2 pt-4 border-t">
                                     <Button
                                         data-testid="accept-task-button"
                                         onClick={handleAccept}
                                         disabled={actionLoading}
-                                        className="rounded-full"
+                                        className="rounded-full h-11 px-6 text-base"
                                     >
                                         <CheckCircle className="w-4 h-4 mr-2" />
-                                        Accept Task
+                                        Accept
                                     </Button>
                                     
                                     <Dialog open={showDeclineDialog} onOpenChange={setShowDeclineDialog}>
                                         <DialogTrigger asChild>
                                             <Button
                                                 data-testid="decline-task-button"
-                                                variant="destructive"
-                                                className="rounded-full"
+                                                variant="ghost"
+                                                className="rounded-full text-slate-600"
                                             >
-                                                <XCircle className="w-4 h-4 mr-2" />
                                                 Decline
                                             </Button>
                                         </DialogTrigger>
@@ -1113,11 +1153,10 @@ const TaskDetail = () => {
                                         <DialogTrigger asChild>
                                             <Button
                                                 data-testid="counter-propose-button"
-                                                variant="outline"
-                                                className="rounded-full"
+                                                variant="ghost"
+                                                className="rounded-full text-slate-600"
                                             >
-                                                <Clock className="w-4 h-4 mr-2" />
-                                                Counter-Propose
+                                                Suggest new due date
                                             </Button>
                                         </DialogTrigger>
                                         <DialogContent className="rounded-2xl">
@@ -1170,31 +1209,50 @@ const TaskDetail = () => {
                                 </div>
                             )}
 
+                            {task.status === 'Blocked' && (
+                                <div className="pt-4 border-t space-y-3">
+                                    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                                        <p className="text-sm font-medium text-orange-900">Blocked</p>
+                                        <p className="text-sm text-orange-800 mt-1 whitespace-pre-wrap">{task.blocked_reason}</p>
+                                    </div>
+                                    {(user?.id === task.assigned_to || user?.id === task.created_by) && (
+                                        <Button onClick={handleUnblock} disabled={actionLoading} className="rounded-full" data-testid="unblock-task-button">
+                                            Clear blocker
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+
                             {user?.id === task.assigned_to && task.status === 'Accepted' && (
-                                <div className="pt-4 border-t">
+                                <div className="pt-4 border-t flex flex-wrap gap-2">
                                     <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
                                         <DialogTrigger asChild>
-                                            <Button data-testid="complete-task-button" className="rounded-full">
+                                            <Button data-testid="complete-task-button" className="rounded-full h-11 px-6">
                                                 <CheckCircle className="w-4 h-4 mr-2" />
-                                                Mark as Complete
+                                                Mark complete
                                             </Button>
                                         </DialogTrigger>
                                         <DialogContent className="rounded-2xl">
                                             <DialogHeader>
-                                                <DialogTitle>Complete Task</DialogTitle>
-                                                <DialogDescription>Add an optional completion note</DialogDescription>
+                                                <DialogTitle>Mark complete</DialogTitle>
+                                                <DialogDescription>Optional note for your manager</DialogDescription>
                                             </DialogHeader>
                                             <div className="space-y-4 pt-4">
-                                                <Textarea placeholder="Add notes about the completed work (optional)" value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} rows={4} className="rounded-xl" />
+                                                {task.success_criteria && (
+                                                    <div className="rounded-lg bg-slate-50 border px-3 py-2 text-sm text-slate-700">
+                                                        <span className="font-medium">Done well:</span> {task.success_criteria}
+                                                    </div>
+                                                )}
+                                                <Textarea placeholder="What did you deliver? (optional)" value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} rows={3} className="rounded-xl" />
                                                 {!isFreeUser && (
                                                     <>
                                                         <div className="flex items-center gap-2">
                                                             <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground">
                                                                 <Image className="w-4 h-4" />
-                                                                <span>Attach Screenshots</span>
+                                                                <span>Screenshots</span>
                                                                 <input type="file" accept="image/*" multiple onChange={handleCompletionImageUpload} className="hidden" />
                                                             </label>
-                                                            {completionImages.length > 0 && <span className="text-xs text-muted-foreground">{completionImages.length} image(s)</span>}
+                                                            {completionImages.length > 0 && <span className="text-xs text-muted-foreground">{completionImages.length}</span>}
                                                         </div>
                                                         {completionImages.length > 0 && (
                                                             <div className="flex flex-wrap gap-2">
@@ -1211,9 +1269,29 @@ const TaskDetail = () => {
                                                 <div className="flex gap-2 justify-end">
                                                     <Button variant="outline" onClick={() => setShowCompleteDialog(false)} className="rounded-full">Cancel</Button>
                                                     <Button onClick={handleComplete} disabled={actionLoading} className="rounded-full">
-                                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                                        {actionLoading ? 'Submitting...' : 'Submit'}
+                                                        {actionLoading ? 'Submitting…' : 'Submit'}
                                                     </Button>
+                                                </div>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                    <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
+                                        <DialogTrigger asChild>
+                                            <Button variant="outline" className="rounded-full" data-testid="block-task-button">
+                                                <Ban className="w-4 h-4 mr-2" />
+                                                Flag blocker
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="rounded-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle>What is blocking you?</DialogTitle>
+                                                <DialogDescription>Your manager will be notified</DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-2">
+                                                <Textarea value={blockReason} onChange={(e) => setBlockReason(e.target.value)} placeholder="e.g. Waiting on access to the CRM" rows={3} className="rounded-xl" data-testid="block-reason-input" />
+                                                <div className="flex justify-end gap-2">
+                                                    <Button variant="outline" onClick={() => setShowBlockDialog(false)} className="rounded-full">Cancel</Button>
+                                                    <Button onClick={handleBlock} disabled={actionLoading} className="rounded-full">Flag blocker</Button>
                                                 </div>
                                             </div>
                                         </DialogContent>

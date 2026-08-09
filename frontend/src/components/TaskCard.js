@@ -68,7 +68,8 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
             'Declined': { class: 'status-badge-declined', label: 'Declined' },
             'Counter-Proposed': { class: 'status-badge-counter', label: 'Counter-Proposed' },
             'Completed': { class: 'status-badge-completed', label: 'Completed' },
-            'Review Pending': { class: 'bg-amber-100 text-amber-800', label: 'Review Pending' }
+            'Review Pending': { class: 'bg-amber-100 text-amber-800', label: 'Review Pending' },
+            'Blocked': { class: 'bg-orange-100 text-orange-800', label: 'Blocked' },
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
