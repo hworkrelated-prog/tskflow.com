@@ -1,95 +1,37 @@
 import React, { useMemo } from 'react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
+import { Textarea } from '@/components/ui/textarea';
 
-const RichTextEditor = ({ value, onChange, placeholder = "Enter description...", className = "" }) => {
-    const modules = useMemo(() => ({
-        toolbar: [
-            ['bold', 'italic', 'underline'],
-            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-            ['link'],
-            ['clean']
-        ]
-    }), []);
+/** Strip HTML tags for plain-text editing (legacy Quill content still displays elsewhere). */
+function htmlToPlainText(html) {
+    if (!html) return '';
+    if (!/<[a-z][\s\S]*>/i.test(html)) return html;
+    try {
+        if (typeof document !== 'undefined') {
+            const el = document.createElement('div');
+            el.innerHTML = html;
+            return (el.textContent || el.innerText || '').trim();
+        }
+    } catch (_) { /* noop */ }
+    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
-    const formats = [
-        'bold', 'italic', 'underline',
-        'list', 'bullet',
-        'link'
-    ];
+/**
+ * Description editor — plain textarea (no react-quill dependency).
+ * Keeps the same value/onChange API used across TaskHub, TaskDetail, etc.
+ */
+const RichTextEditor = ({ value, onChange, placeholder = 'Enter description...', className = '' }) => {
+    const displayValue = useMemo(() => htmlToPlainText(value), [value]);
 
     return (
         <div className={`rich-text-editor ${className}`}>
-            <ReactQuill
-                theme="snow"
-                value={value || ''}
-                onChange={onChange}
-                modules={modules}
-                formats={formats}
+            <Textarea
+                value={displayValue}
+                onChange={(e) => onChange?.(e.target.value)}
                 placeholder={placeholder}
-                className="bg-white rounded-md"
+                className="min-h-[150px] rounded-xl bg-white text-sm"
+                rows={6}
+                data-testid="rich-text-editor"
             />
-            <style jsx global>{`
-                .rich-text-editor .ql-toolbar {
-                    background: #f9fafb;
-                    border: 1px solid #e5e7eb;
-                    border-top-left-radius: 0.375rem;
-                    border-top-right-radius: 0.375rem;
-                    padding: 8px;
-                }
-                .rich-text-editor .ql-container {
-                    border: 1px solid #e5e7eb;
-                    border-bottom-left-radius: 0.375rem;
-                    border-bottom-right-radius: 0.375rem;
-                    font-size: 14px;
-                    min-height: 150px;
-                }
-                .rich-text-editor .ql-editor {
-                    min-height: 150px;
-                    max-height: 400px;
-                    overflow-y: auto;
-                }
-                .rich-text-editor .ql-editor.ql-blank::before {
-                    color: #9ca3af;
-                    font-style: normal;
-                }
-                .rich-text-editor .ql-toolbar.ql-snow {
-                    border-bottom: 1px solid #e5e7eb;
-                }
-                .rich-text-editor .ql-snow .ql-stroke {
-                    stroke: #4b5563;
-                }
-                .rich-text-editor .ql-snow .ql-fill {
-                    fill: #4b5563;
-                }
-                .rich-text-editor .ql-snow .ql-picker-label {
-                    color: #4b5563;
-                }
-                .rich-text-editor .ql-toolbar button:hover,
-                .rich-text-editor .ql-toolbar button:focus {
-                    color: #4f46e5;
-                }
-                .rich-text-editor .ql-toolbar button:hover .ql-stroke,
-                .rich-text-editor .ql-toolbar button:focus .ql-stroke {
-                    stroke: #4f46e5;
-                }
-                .rich-text-editor .ql-toolbar button:hover .ql-fill,
-                .rich-text-editor .ql-toolbar button:focus .ql-fill {
-                    fill: #4f46e5;
-                }
-                .rich-text-editor .ql-snow.ql-toolbar button.ql-active,
-                .rich-text-editor .ql-snow.ql-toolbar .ql-picker-label.ql-active {
-                    color: #4f46e5;
-                }
-                .rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke,
-                .rich-text-editor .ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-stroke {
-                    stroke: #4f46e5;
-                }
-                .rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-fill,
-                .rich-text-editor .ql-snow.ql-toolbar .ql-picker-label.ql-active .ql-fill {
-                    fill: #4f46e5;
-                }
-            `}</style>
         </div>
     );
 };
