@@ -125,7 +125,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const mentionQuery = (mention?.query || '').trim().toLowerCase();
     const mentionPeople = [
         { id: 'self', name: 'Me', email: '', _kind: 'user' },
-        ...people.map((u) => ({ ...u, _kind: 'user' })),
+        ...people
+            .filter((u) => u && u.id !== 'self' && (u.name || '').toLowerCase() !== 'me' && (u.name || '').toLowerCase() !== 'me (self)')
+            .map((u) => ({ ...u, _kind: 'user' })),
     ].filter((u) => {
         if (!mentionQuery) return true;
         return (u.name || '').toLowerCase().includes(mentionQuery)

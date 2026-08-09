@@ -1081,12 +1081,16 @@ const TaskHub = () => {
             </header>
 
             <main className="container mx-auto px-4 sm:px-6 py-5 sm:py-8">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5 sm:mb-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5 sm:mb-6">
                     <div className="min-w-0">
-                        <h2 className="text-2xl sm:text-3xl font-bold truncate" style={{ fontFamily: 'Outfit' }}>Welcome, {user?.name}</h2>
-                        <p className="text-sm sm:text-base text-muted-foreground">Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.</p>
+                        <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
+                            Welcome, {user?.name}
+                        </h2>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-0.5">
+                            Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.
+                        </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                         {/* AI Summary and Bulk Approve */}
                         <Button
                             variant="outline"
@@ -1095,7 +1099,7 @@ const TaskHub = () => {
                             disabled={loadingAiSummary}
                             className="rounded-full"
                         >
-                            ✨ {loadingAiSummary ? 'Loading...' : 'AI Summary'}
+                            ✨ <span className="ml-1">{loadingAiSummary ? '…' : 'Summary'}</span>
                         </Button>
                         
                         {dashboard?.assigned_by_me?.some(t => t.status === 'Review Pending') && (
@@ -1105,9 +1109,10 @@ const TaskHub = () => {
                                 onClick={handleBulkApprove}
                                 disabled={bulkApproving}
                                 className="rounded-full bg-green-50 text-green-700 border-green-300"
+                                title="Bulk Approve"
                             >
-                                <CheckSquare className="w-4 h-4 mr-2" />
-                                {bulkApproving ? 'Approving...' : 'Bulk Approve'}
+                                <CheckSquare className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline">{bulkApproving ? 'Approving...' : 'Bulk Approve'}</span>
                             </Button>
                         )}
                         
@@ -1129,7 +1134,7 @@ const TaskHub = () => {
                                 </Button>
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
                                     <CheckSquare className="w-4 h-4" />
-                                    Select
+                                    <span className="hidden sm:inline">Select</span>
                                 </Button>
                                 <Button
                                     data-testid="create-task-button"
