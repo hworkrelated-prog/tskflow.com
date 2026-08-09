@@ -30,8 +30,12 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [answerMode, setAnswerMode] = useState(null);
     const [answerLoading, setAnswerLoading] = useState(false);
     const [clarifyAnswer, setClarifyAnswer] = useState('');
+    const [people, setPeople] = useState([]);
+    const [peopleSearch, setPeopleSearch] = useState('');
+    const [showPeopleDrop, setShowPeopleDrop] = useState(false);
     const inputRef = useRef(null);
     const clarifyRef = useRef(null);
+    const nudgeSentRef = useRef(false);
 
     const [editTitle, setEditTitle] = useState('');
     const [editDesc, setEditDesc] = useState('');
@@ -59,6 +63,19 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         if (embedded) focusInput();
     }, [embedded, focusInput]);
 
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await axios.get(`${API}/users`);
+                if (!cancelled) setPeople(Array.isArray(res.data) ? res.data : []);
+            } catch (_) {
+                if (!cancelled) setPeople([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
     const applyPreview = (p) => {
         setPreview(p);
         setEditTitle(p.title || '');
@@ -69,17 +86,30 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setEditCriteria(p.success_criteria || '');
         setShowDetails(false);
         setClarifyAnswer('');
-        // Focus clarify input when AI needs one answer
-        if ((p.clarifying_questions || []).length > 0) {
+        setPeopleSearch('');
+        const qs = p.clarifying_questions || [];
+        if (qs.length > 0) {
+            const isWho = /who|own|assign/i.test(qs[0] || '');
+            setShowPeopleDrop(isWho);
             setTimeout(() => clarifyRef.current?.focus(), 50);
+            if (!nudgeSentRef.current) {
+                nudgeSentRef.current = true;
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('tskflow:nudge-assistant', {
+                        detail: { reason: 'Stuck? Ask the assistant.' },
+                    }));
+                }, 2800);
+            }
+        } else {
+            setShowPeopleDrop(false);
         }
     };
 
     const runQA = async (question) => {
         setAnswerLoading(true);
         try {
-            const res = await axios.post(`${API}/voice/command`, { text: question });
-            const reply = res?.data?.reply || res?.data?.answer || 'I can help with tasks and how-to questions. Try again in a different way?';
+            const res = await axios.post(`${API}/voice/command`, { transcript: question, text: question });
+            const reply = res?.data?.reply || res?.data?.answer || 'I can help with that.';
             setAnswerMode({ question, reply });
         } catch (err) {
             setAnswerMode({ question, reply: err?.response?.data?.detail || 'Sorry, I could not answer that right now.' });
@@ -131,7 +161,40 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         const next = { ...answers, [question]: v };
         setAnswers(next);
         setClarifyAnswer('');
+        setPeopleSearch('');
         runPreview(text, next);
+    };
+
+    const pickPerson = (person) => {
+        const isSelf = person.id === 'self';
+        const isEmailOnly = !isSelf && (String(person.id || '').startsWith('email_') || person.is_invited);
+        const chip = isSelf
+            ? { kind: 'user', id: 'self', name: 'Me' }
+            : isEmailOnly
+                ? { kind: 'email', email: person.email, name: person.name || person.email }
+                : { kind: 'user', id: person.id, name: person.name, email: person.email };
+        setEditAssignees((prev) => {
+            const key = chip.id || chip.email;
+            if (prev.some((a) => (a.id && a.id === key) || (a.email && a.email === key))) return prev;
+            return [...prev, chip];
+        });
+        setPeopleSearch('');
+        setShowPeopleDrop(false);
+        setClarifyAnswer('');
+        setPreview((p) => {
+            if (!p) return p;
+            const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
+            const hasDue = Boolean(p.due_date || editDue);
+            if (!hasDue && !qs.some((q) => /when|due|deadline/i.test(q || ''))) {
+                qs.push('When should this be done by?');
+            }
+            return { ...p, clarifying_questions: qs };
+        });
+        const label = person.name || person.email;
+        if (label) {
+            const q = (preview?.clarifying_questions || [])[0] || 'Who should own this task?';
+            setAnswers((prev) => ({ ...prev, [q]: label }));
+        }
     };
 
     const reset = () => {
@@ -146,13 +209,16 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setEditCriteria('');
         setShowDetails(false);
         setClarifyAnswer('');
+        setPeopleSearch('');
+        setShowPeopleDrop(false);
+        nudgeSentRef.current = false;
         focusInput();
     };
 
     const flattenAssignees = () => {
         const targets = [];
         for (const a of editAssignees) {
-            if (a.kind === 'user') targets.push(a.id);
+            if (a.kind === 'user' || a.id === 'self') targets.push(a.id === 'self' ? 'self' : a.id);
             else if (a.kind === 'email' && a.email) targets.push(a.email);
             else if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
                 for (const m of a.members) targets.push(m);
@@ -241,12 +307,22 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const ambiguous = preview?.assignee_resolution?.ambiguous || [];
     const unresolved = preview?.assignee_resolution?.unresolved || [];
     const needsAmbiguousPick = ambiguous.length > 0 && editAssignees.length === 0;
+    const isWhoClarify = clarifying.length > 0 && /who|own|assign/i.test(clarifying[0] || '');
+    const isWhenClarify = clarifying.length > 0 && /when|due|deadline/i.test(clarifying[0] || '');
     const readyToConfirm =
         !!preview &&
         clarifying.length === 0 &&
         !!editDue &&
         editAssignees.length > 0 &&
         !needsAmbiguousPick;
+    const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
+    const filteredPeople = [
+        { id: 'self', name: 'Me', email: '' },
+        ...people,
+    ].filter((u) => {
+        if (!peopleQuery) return true;
+        return (u.name || '').toLowerCase().includes(peopleQuery) || (u.email || '').toLowerCase().includes(peopleQuery);
+    }).slice(0, 8);
 
     const formatDue = (iso) => {
         if (!iso) return null;
@@ -292,13 +368,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                     <div className="flex-1 min-w-0">
                         {!embedded && (
                             <div className="flex items-center justify-between gap-2 mb-1">
-                                <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Tell TskFlow what you need done</p>
+                                <p className="text-xs font-semibold text-slate-700">New task</p>
                                 <button
                                     onClick={() => onOpenAdvanced?.()}
-                                    className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                                    className="text-xs text-slate-500 hover:text-slate-800"
                                     data-testid="ai-advanced-btn"
                                 >
-                                    Advanced form
+                                    Advanced
                                 </button>
                             </div>
                         )}
@@ -313,7 +389,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                         runPreview();
                                     }
                                 }}
-                                placeholder='e.g. "Have Alex send the client proposal by Friday — I expect a clean PDF with pricing"'
+                                placeholder="What needs to get done?"
                                 className={`flex-1 rounded-xl text-sm h-11 focus-visible:ring-slate-400 ${embedded ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200'}`}
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
@@ -326,12 +402,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                 data-testid="ai-quick-preview-btn"
                             >
                                 {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                <span className="hidden sm:inline">{loading ? 'Reading…' : answerLoading ? 'Thinking…' : 'Go'}</span>
+                                <span className="hidden sm:inline">{loading || answerLoading ? '…' : 'Go'}</span>
                             </Button>
                         </div>
-                        <p className="text-[11px] mt-1.5 text-slate-500">
-                            Just type it like a text. Press <kbd className="px-1 py-0.5 bg-slate-100 rounded border border-slate-200 font-mono text-[10px]">/</kbd> anytime to focus.
-                        </p>
                     </div>
                 </div>
 
@@ -367,37 +440,89 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
 
                             {clarifying.length > 0 && (
                                 <div className="flex justify-start" data-testid="ai-clarifying">
-                                    <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
+                                    <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
                                         <div className="flex items-start gap-2">
                                             <MessageCircleQuestion className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
                                             <p className="text-sm font-medium text-amber-950">{clarifying[0]}</p>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                ref={clarifyRef}
-                                                value={clarifyAnswer}
-                                                onChange={(e) => setClarifyAnswer(e.target.value)}
-                                                placeholder="Type your answer…"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && clarifyAnswer.trim()) {
-                                                        e.preventDefault();
-                                                        answerClarify(clarifying[0], clarifyAnswer);
-                                                    }
-                                                }}
-                                                className="h-9 text-sm rounded-lg border-amber-300 bg-white"
-                                                data-testid="clarify-answer-0"
-                                                disabled={loading || sending}
-                                            />
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                onClick={() => answerClarify(clarifying[0], clarifyAnswer)}
-                                                disabled={loading || sending || !clarifyAnswer.trim()}
-                                                className="rounded-lg bg-amber-700 hover:bg-amber-800"
-                                            >
-                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reply'}
-                                            </Button>
-                                        </div>
+
+                                        {isWhoClarify ? (
+                                            <div className="relative ml-6">
+                                                <Input
+                                                    ref={clarifyRef}
+                                                    value={peopleSearch}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        setPeopleSearch(v);
+                                                        setShowPeopleDrop(true);
+                                                    }}
+                                                    onFocus={() => setShowPeopleDrop(true)}
+                                                    placeholder="Search people or type @name"
+                                                    className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                    data-testid="clarify-people-search"
+                                                    disabled={loading || sending}
+                                                    autoComplete="off"
+                                                />
+                                                {showPeopleDrop && (
+                                                    <div className="absolute z-40 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg py-1" data-testid="clarify-people-dropdown">
+                                                        {filteredPeople.length === 0 && (
+                                                            <p className="px-3 py-2 text-xs text-slate-500">No matches — try an email</p>
+                                                        )}
+                                                        {filteredPeople.map((u) => (
+                                                            <button
+                                                                key={u.id || u.email}
+                                                                type="button"
+                                                                onClick={() => pickPerson(u)}
+                                                                className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"
+                                                            >
+                                                                <UserIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                                                <span className="text-sm text-slate-800 truncate">{u.name}</span>
+                                                                {u.email ? <span className="text-xs text-slate-400 truncate ml-auto">{u.email}</span> : null}
+                                                            </button>
+                                                        ))}
+                                                        {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const email = peopleSearch.replace(/^@/, '').trim();
+                                                                    pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 border-t"
+                                                            >
+                                                                Assign to {peopleSearch.replace(/^@/, '').trim()}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-2 ml-6">
+                                                <Input
+                                                    ref={clarifyRef}
+                                                    value={clarifyAnswer}
+                                                    onChange={(e) => setClarifyAnswer(e.target.value)}
+                                                    placeholder={isWhenClarify ? 'e.g. Friday 5pm' : 'Your answer…'}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && clarifyAnswer.trim()) {
+                                                            e.preventDefault();
+                                                            answerClarify(clarifying[0], clarifyAnswer);
+                                                        }
+                                                    }}
+                                                    className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                    data-testid="clarify-answer-0"
+                                                    disabled={loading || sending}
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    onClick={() => answerClarify(clarifying[0], clarifyAnswer)}
+                                                    disabled={loading || sending || !clarifyAnswer.trim()}
+                                                    className="rounded-lg bg-amber-700 hover:bg-amber-800"
+                                                >
+                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reply'}
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -678,14 +803,14 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                 )}
 
                 {embedded && !preview && !answerMode && (
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-2 flex justify-end">
                         <button
                             type="button"
                             onClick={() => onOpenAdvanced?.()}
-                            className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                            className="text-xs text-slate-500 hover:text-slate-800"
                             data-testid="ai-advanced-btn-embedded"
                         >
-                            Prefer the advanced form?
+                            Advanced
                         </button>
                     </div>
                 )}

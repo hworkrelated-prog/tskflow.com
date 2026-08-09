@@ -4965,7 +4965,9 @@ async def send_web_push(user_id: str, title: str, body: str, url: str = "/dashbo
 # ---- Voice Command Center (Whisper handled client-side; GPT reasoning here) ----
 
 class VoiceCommandRequest(BaseModel):
-    transcript: str
+    transcript: Optional[str] = None
+    text: Optional[str] = None  # alias for typed chat
+    history: Optional[List[dict]] = None  # [{role, text}] prior turns while panel is open
 
 VOICE_SYSTEM_PROMPT = """You are Tskflow's voice assistant. You help a user manage tasks by voice.
 You will receive the user's spoken transcript plus JSON context (their outstanding tasks and known contacts).
@@ -4988,7 +4990,7 @@ Keep replies warm, brief and natural, like a helpful teammate."""
 
 @api_router.post("/voice/command")
 async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    transcript = (req.transcript or "").strip()
+    transcript = (req.transcript or req.text or "").strip()
     if not transcript:
         raise HTTPException(status_code=400, detail="Empty transcript")
 
@@ -5009,6 +5011,16 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts]
     }
 
+    history_lines = []
+    if req.history and isinstance(req.history, list):
+        for turn in req.history[-12:]:
+            if not isinstance(turn, dict):
+                continue
+            role = (turn.get("role") or "").strip().lower()
+            htext = (turn.get("text") or "").strip()
+            if role in ("user", "assistant") and htext:
+                history_lines.append(f"{role.upper()}: {htext[:500]}")
+
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
         raise HTTPException(status_code=500, detail="Voice assistant not configured")
@@ -5020,7 +5032,10 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             session_id=f"voice_{current_user['id']}",
             system_message=VOICE_ASSISTANT_SYSTEM
         ).with_model("openai", "gpt-4o")
-        user_msg = UserMessage(text=f"Transcript: {transcript}\n\nContext JSON: {_json.dumps(context)}")
+        hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
+        user_msg = UserMessage(
+            text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
+        )
         raw = await chat.send_message(user_msg)
     except Exception as e:
         logging.error(f"Voice LLM error: {e}")
@@ -7147,13 +7162,14 @@ BEST PRACTICES
 """
 
 
-VOICE_ASSISTANT_SYSTEM = """You are TskFlow's voice assistant AND in-app helper. You do two things:
+VOICE_ASSISTANT_SYSTEM = """You are TskFlow's in-app assistant (voice + chat). You help with anything the user asks while they work:
 1) EXECUTE task commands ("create a task to X", "what's outstanding", "open analytics", etc.)
-2) ANSWER questions about how to use TskFlow, its features, best practices, and navigation.
+2) ANSWER questions — product how-tos, what a status means, who to assign, deadlines, best practices, and follow-ups on the recent conversation.
+3) Keep continuity: if Recent conversation is provided, treat it as the same chat and answer follow-ups naturally.
 
 Return ONE JSON object ONLY (no markdown), shape:
 {
-  "reply": "<short spoken reply, 1-3 sentences, warm and natural>",
+  "reply": "<short helpful reply, 1-4 sentences, warm and natural>",
   "action": {
     "type": "query_outstanding | create_task | assign_task | update_status | navigate | assistant_answer | none",
     "params": { ... }
@@ -7161,12 +7177,12 @@ Return ONE JSON object ONLY (no markdown), shape:
 }
 
 Rules:
-- If the user is asking HOW to do something, or WHERE a feature is, or WHAT something means, use action.type="assistant_answer" and put the guidance in reply. Ground your answer in the Knowledge Base below Ã¢ÂÂ never invent features.
-- Task commands use the existing action types (query_outstanding / create_task / assign_task / update_status / navigate).
-- If the user is confused or unclear, action.type="none" and ask a short clarifying question in reply.
-- Never contradict the application's task data provided in the context. If the user asks about outstanding tasks, use the provided list.
-- For assistant_answer, params can include {"topic": "<short label>"}.
-- Keep replies conversational and brief Ã¢ÂÂ max ~40 words.
+- Prefer action.type="assistant_answer" for questions; put the answer in reply.
+- For TskFlow product questions, ground answers in the Knowledge Base — never invent features.
+- For questions about the user's own tasks/contacts, use the Context JSON.
+- Task commands use query_outstanding / create_task / assign_task / update_status / navigate.
+- If unclear, action.type="none" and ask one short clarifying question.
+- Keep replies concise (about 50 words max unless listing tasks).
 
 KNOWLEDGE BASE:
 """ + TSKFLOW_KB

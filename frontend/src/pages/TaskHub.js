@@ -1620,10 +1620,10 @@ const TaskHub = () => {
                             <DialogHeader className="mb-3">
                                 <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
                                     <Sparkles className="w-5 h-5 text-slate-800" />
-                                    Tell TskFlow what you need done
+                                    New task
                                 </DialogTitle>
-                                <DialogDescription className="text-sm">
-                                    Plain English is enough — I&apos;ll assign it, set the deadline, and follow up. Ask one clarifying question only if something critical is missing.
+                                <DialogDescription className="sr-only">
+                                    Describe what needs to get done
                                 </DialogDescription>
                             </DialogHeader>
                             <AIQuickCreate
