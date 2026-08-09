@@ -35,6 +35,25 @@ const wantsStageOn = (text) =>
 const wantsStageOff = (text) =>
     /\b(hide yourself|go away|dismiss|step back|leave the screen|stop guiding)\b/i.test(text || '');
 
+/** Offline-safe answers when the API/proxy fails entirely */
+const localJarvisReply = (text) => {
+    const t = (text || '').trim();
+    if (/\b(what can you (do|help with)|who are you|what do you do|help me get started)\b/i.test(t)) {
+        return {
+            reply:
+                "I'm Jarvis, your AI manager. I can create and assign tasks from plain English, list what's outstanding, update status, open pages like analytics or settings, and guide you on screen. Say “guide me” or tell me what needs doing.",
+            action: { type: 'assistant_answer' },
+        };
+    }
+    if (wantsStageOn(t) && t.length < 80) {
+        return { reply: "I'm right here — ask me anything about your tasks.", action: { type: 'show_manager' } };
+    }
+    if (wantsStageOff(t) && t.length < 80) {
+        return { reply: 'Stepping back. Tap me anytime.', action: { type: 'hide_manager' } };
+    }
+    return null;
+};
+
 const VoiceMode = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -90,21 +109,12 @@ const VoiceMode = () => {
             .map((m) => ({ role: m.role, text: m.text }));
         setMessages((prev) => [...prev, userMsg]);
         setPhase('thinking');
-        try {
-            const res = await axios.post(`${API}/voice/command`, {
-                transcript: trimmed,
-                history: historyPayload,
-            });
-            const { reply: r, action, executed } = res.data;
-            const replyText = r || 'Okay.';
+        const applyReply = (replyText, action, executed) => {
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: replyText }]);
-
             const atype = action?.type;
             if (atype === 'show_manager') setStagePresence(true);
             if (atype === 'hide_manager') setStagePresence(false);
-            // Guiding intents also bring Jarvis on stage
             if (atype === 'assistant_answer' && wantsStageOn(trimmed)) setStagePresence(true);
-
             if (speakReply) speak(replyText);
             else setPhase('idle');
             if (action?.type === 'navigate') {
@@ -114,13 +124,32 @@ const VoiceMode = () => {
             if (['create_task', 'assign_task', 'update_status'].includes(action?.type) && executed) {
                 window.dispatchEvent(new CustomEvent('tskflow:voice-executed', { detail: executed }));
             }
+        };
+
+        try {
+            const res = await axios.post(
+                `${API}/voice/command`,
+                { transcript: trimmed, history: historyPayload },
+                { timeout: 20000 },
+            );
+            const { reply: r, action, executed } = res.data || {};
+            applyReply(r || 'Okay.', action, executed);
         } catch (err) {
+            // If the origin/proxy dies, still answer common asks locally
+            const fallback = localJarvisReply(trimmed);
+            if (fallback) {
+                applyReply(fallback.reply, fallback.action, { type: fallback.action?.type, offline: true });
+                return;
+            }
+            const status = err?.response?.status;
             const raw = err?.response?.data?.detail ?? err?.response?.data ?? err?.message;
-            const asText = typeof raw === 'string' ? raw : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
-            const looksLikeProxy = /cloudflare|origin web server|bad gateway|gateway time|html|<!doctype/i.test(asText || '');
-            const msg = looksLikeProxy || !asText
-                ? 'I hit a connection issue reaching the server. Give it a moment and try again.'
-                : asText.slice(0, 280);
+            const asText = typeof raw === 'string'
+                ? raw
+                : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
+            const looksLikeProxy = !status || status >= 502 || /cloudflare|origin web server|bad gateway|gateway time|<!doctype|<html/i.test(asText || '');
+            const msg = looksLikeProxy
+                ? 'The server didn’t finish answering (connection blip). Try “what’s outstanding” or “guide me”, or use New Task on the left.'
+                : (asText || 'Sorry, I had trouble with that. Try again?').slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
         }

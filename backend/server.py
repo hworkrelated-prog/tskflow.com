@@ -5059,14 +5059,11 @@ Rules:
 - none: when unclear; ask for clarification in reply.
 Keep replies warm, brief and natural, like a helpful teammate."""
 
-@api_router.post("/voice/command")
-async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
-    transcript = (req.transcript or req.text or "").strip()
-    if not transcript:
-        raise HTTPException(status_code=400, detail="Empty transcript")
-
-    # Fast local answers for common capability intros — avoid LLM/Cloudflare timeouts
-    low = transcript.lower().strip()
+def _jarvis_local_intent(transcript: str):
+    """Deterministic replies/actions that never need the LLM (keeps Cloudflare happy)."""
+    low = (transcript or "").lower().strip()
+    if not low:
+        return None
     if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
         return {
             "reply": (
@@ -5076,31 +5073,82 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
                 "or just tell me what needs doing."
             ),
             "action": {"type": "assistant_answer", "params": {}},
-            "executed": {"type": "assistant_answer"},
         }
     if re.search(r"\b(guide me|show yourself|come (out|here)|appear|walk me through|show up)\b", low) and len(low) < 80:
         return {
             "reply": "I'm right here. Ask me about a task, what's outstanding, or how something works — I'll keep guiding.",
             "action": {"type": "show_manager", "params": {}},
-            "executed": {"type": "show_manager"},
         }
+    if re.search(r"\b(hide yourself|go away|dismiss|step back|leave the screen|stop guiding)\b", low) and len(low) < 80:
+        return {
+            "reply": "Stepping back. Tap me anytime if you need help.",
+            "action": {"type": "hide_manager", "params": {}},
+        }
+    nav = None
+    if re.search(r"\b(open |go to |show )?(the )?(analytics|dashboard|settings|team|help|recordings|recurring|leads)\b", low):
+        for key in ("analytics", "dashboard", "settings", "team", "help", "recordings", "recurring", "leads"):
+            if re.search(rf"\b{key}\b", low):
+                nav = key
+                break
+    if nav:
+        return {
+            "reply": f"Opening {nav}.",
+            "action": {"type": "navigate", "params": {"target": nav}},
+        }
+    return None
 
-    # Build lightweight context: user's active tasks + recent contacts
-    active = await db.tasks.find({
-        "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
-        "status": {"$nin": ["Completed", "Declined"]},
-        "deleted": {"$ne": True},
-        "is_parent": {"$ne": True}
-    }, {"_id": 0, "id": 1, "title": 1, "status": 1, "due_date": 1, "priority": 1, "assigned_to": 1}).to_list(100)
-    outstanding = [{"title": t["title"], "status": t["status"], "due_date": t.get("due_date"), "priority": t.get("priority")} for t in active]
 
-    contacts = await db.user_contacts.find({"user_id": current_user["id"]}, {"_id": 0, "contact_name": 1, "contact_email": 1}).to_list(50)
-    context = {
-        "my_name": current_user["name"],
-        "outstanding_count": len(outstanding),
-        "outstanding_tasks": outstanding[:25],
-        "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts]
-    }
+@api_router.post("/voice/command")
+async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    transcript = (req.transcript or req.text or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Empty transcript")
+
+    # Fast local intents first — never depends on LLM / never hangs the origin
+    local = _jarvis_local_intent(transcript)
+    if local:
+        return {**local, "executed": {"type": local["action"]["type"]}}
+
+    outstanding = []
+    context = {"my_name": current_user.get("name"), "outstanding_count": 0, "outstanding_tasks": [], "contacts": []}
+    db_ok = True
+    try:
+        active = await db.tasks.find({
+            "$or": [{"assigned_to": current_user["id"]}, {"created_by": current_user["id"]}],
+            "status": {"$nin": ["Completed", "Declined", "Cancelled", "Rejected"]},
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True}
+        }, {"_id": 0, "id": 1, "title": 1, "status": 1, "due_date": 1, "priority": 1, "assigned_to": 1}).to_list(100)
+        outstanding = [{"title": t["title"], "status": t["status"], "due_date": t.get("due_date"), "priority": t.get("priority")} for t in active]
+        contacts = await db.user_contacts.find({"user_id": current_user["id"]}, {"_id": 0, "contact_name": 1, "contact_email": 1}).to_list(50)
+        context = {
+            "my_name": current_user["name"],
+            "outstanding_count": len(outstanding),
+            "outstanding_tasks": outstanding[:25],
+            "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts]
+        }
+    except Exception as e:
+        db_ok = False
+        logging.error(f"Voice context load error: {e}")
+
+    low = transcript.lower()
+    if re.search(r"\b(what's outstanding|whats outstanding|what is outstanding|outstanding tasks|what's left|whats left|my open tasks|what do i have)\b", low):
+        if not db_ok:
+            reply = "I couldn't load your tasks just now. Check the dashboard, or try again in a moment."
+        elif not outstanding:
+            reply = "You're clear — nothing outstanding right now."
+        else:
+            lines = []
+            for t in outstanding[:8]:
+                due = (t.get("due_date") or "")[:10]
+                lines.append(f"• {t['title']} ({t.get('status')}" + (f", due {due}" if due else "") + ")")
+            more = f"\n…and {len(outstanding) - 8} more." if len(outstanding) > 8 else ""
+            reply = f"You have {len(outstanding)} open task{'s' if len(outstanding) != 1 else ''}:\n" + "\n".join(lines) + more
+        return {
+            "reply": reply,
+            "action": {"type": "query_outstanding", "params": {}},
+            "executed": {"type": "query_outstanding", "count": len(outstanding)},
+        }
 
     history_lines = []
     if req.history and isinstance(req.history, list):
@@ -5113,28 +5161,42 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
                 history_lines.append(f"{role.upper()}: {htext[:500]}")
 
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
-        raise HTTPException(status_code=500, detail="Voice assistant not configured")
+    raw = None
+    if emergent_key:
+        try:
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            # gpt-4o-mini matches other working AI routes; shorter timeout for Cloudflare
+            chat = LlmChat(
+                api_key=emergent_key,
+                session_id=f"voice_{current_user['id']}",
+                system_message=VOICE_ASSISTANT_SYSTEM
+            ).with_model("openai", "gpt-4o-mini")
+            hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
+            user_msg = UserMessage(
+                text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
+            )
+            raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=14.0)
+        except asyncio.TimeoutError:
+            logging.error("Voice LLM timed out")
+            raw = None
+        except Exception as e:
+            logging.error(f"Voice LLM error: {e}")
+            raw = None
 
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"voice_{current_user['id']}",
-            system_message=VOICE_ASSISTANT_SYSTEM
-        ).with_model("openai", "gpt-4o")
-        hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
-        user_msg = UserMessage(
-            text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
-        )
-        # Cap wait so Cloudflare/proxy never sees a hung origin (was causing incomplete responses)
-        raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=22.0)
-    except asyncio.TimeoutError:
-        logging.error("Voice LLM timed out")
-        raise HTTPException(status_code=504, detail="I took too long on that — try a shorter ask, or ask again in a moment.")
-    except Exception as e:
-        logging.error(f"Voice LLM error: {e}")
-        raise HTTPException(status_code=502, detail="Voice assistant is unavailable right now. Try again in a moment.")
+    if raw is None:
+        # Never return 5xx/hang — Cloudflare was turning those into incomplete responses
+        hint = ""
+        if outstanding:
+            hint = f" You currently have {len(outstanding)} open task{'s' if len(outstanding) != 1 else ''}."
+        return {
+            "reply": (
+                "I couldn't reach my full brain just now, but I'm still here."
+                f"{hint} Try “what's outstanding”, “open analytics”, “guide me”, "
+                "or create a task with New Task on the left."
+            ),
+            "action": {"type": "assistant_answer", "params": {}},
+            "executed": {"type": "assistant_answer", "degraded": True},
+        }
 
     # Parse JSON out of the model response
     text = raw if isinstance(raw, str) else str(raw)
