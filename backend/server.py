@@ -3256,12 +3256,45 @@ class UserPreferences(BaseModel):
     eod_enabled: Optional[bool] = None       # true = user wants an EOD email/Slack summary
     eod_hour: Optional[int] = None           # 0-23, PST (defaults to 17 = 5pm)
     eod_channel: Optional[str] = None        # 'email' | 'slack' | 'both'
+    # Which sections to include in the EOD report (all default on when omitted).
+    # Keys: completed | open | missed | manager_snapshot | suggested_plan
+    eod_sections: Optional[Dict[str, bool]] = None
+
+
+DEFAULT_EOD_SECTIONS = {
+    "completed": True,
+    "open": True,
+    "missed": True,
+    "manager_snapshot": True,
+    "suggested_plan": True,
+}
+
+
+def _eod_sections_for(user: dict) -> Dict[str, bool]:
+    prefs = (user or {}).get("preferences") or {}
+    raw = prefs.get("eod_sections") if isinstance(prefs.get("eod_sections"), dict) else {}
+    out = dict(DEFAULT_EOD_SECTIONS)
+    for k in DEFAULT_EOD_SECTIONS:
+        if k in raw:
+            out[k] = bool(raw[k])
+    return out
 
 @api_router.put("/auth/preferences")
 async def update_preferences(prefs: UserPreferences, current_user: dict = Depends(get_current_user)):
     # Merge with existing preferences instead of overwriting
     current_prefs = current_user.get("preferences") or {}
     update = {k: v for k, v in prefs.dict(exclude_none=True).items()}
+    # Slack webhook is Teams-admin only — ignore/reject attempts from others
+    if "slack_webhook_url" in update:
+        if not _can_manage_slack_webhook(current_user):
+            raise HTTPException(
+                status_code=403,
+                detail="Only the Teams admin can connect or change the Slack webhook.",
+            )
+        url = (update.get("slack_webhook_url") or "").strip()
+        if url and not url.startswith("https://hooks.slack.com/"):
+            raise HTTPException(status_code=400, detail="Invalid Slack webhook URL.")
+        update["slack_webhook_url"] = url
     merged = {**current_prefs, **update}
     await db.users.update_one(
         {"id": current_user["id"]},
@@ -3271,9 +3304,17 @@ async def update_preferences(prefs: UserPreferences, current_user: dict = Depend
 
 @api_router.get("/auth/preferences")
 async def get_preferences(current_user: dict = Depends(get_current_user)):
-    prefs = current_user.get("preferences") or {"theme": "light"}
+    prefs = dict(current_user.get("preferences") or {"theme": "light"})
     if "theme" not in prefs:
         prefs["theme"] = "light"
+    can_manage = _can_manage_slack_webhook(current_user)
+    team_webhook = await _resolve_slack_webhook(current_user)
+    prefs["can_manage_slack"] = can_manage
+    prefs["slack_team_connected"] = bool(team_webhook)
+    prefs["eod_sections"] = _eod_sections_for(current_user)
+    # Never expose the webhook URL to non-admins
+    if not can_manage:
+        prefs.pop("slack_webhook_url", None)
     return prefs
 
 # Stripe Payment Routes
@@ -5517,6 +5558,35 @@ async def websocket_endpoint(ws: WebSocket, token: str = None):
 # --- Notification helper (in-app center + optional email) ---
 IMPORTANT_EMAIL_EVENTS = {"task_assigned", "status_change", "task_completed", "important_response"}
 
+def _can_manage_slack_webhook(user: dict) -> bool:
+    """Slack Incoming Webhook may only be configured by Teams package admins (team owners)."""
+    return (user or {}).get("subscription_tier") == "teams" and bool((user or {}).get("is_team_owner"))
+
+
+async def _resolve_slack_webhook(user: dict) -> Optional[str]:
+    """Return the Teams admin webhook for this user's org (members inherit the owner's URL)."""
+    if not user or (user.get("subscription_tier") != "teams"):
+        return None
+    if user.get("is_team_owner"):
+        url = ((user.get("preferences") or {}).get("slack_webhook_url") or "").strip()
+        return url if url.startswith("https://hooks.slack.com/") else None
+    owner_email = user.get("team_owner_email")
+    if not owner_email:
+        # Fallback: same company domain owner
+        domain = user.get("company_domain") or ((user.get("email") or "").split("@")[-1] if user.get("email") else None)
+        if domain:
+            owner = await db.users.find_one(
+                {"company_domain": domain, "subscription_tier": "teams", "is_team_owner": True},
+                {"_id": 0, "preferences": 1},
+            )
+        else:
+            owner = None
+    else:
+        owner = await db.users.find_one({"email": owner_email}, {"_id": 0, "preferences": 1})
+    url = (((owner or {}).get("preferences") or {}).get("slack_webhook_url") or "").strip()
+    return url if url.startswith("https://hooks.slack.com/") else None
+
+
 async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict]] = None) -> bool:
     """Best-effort Slack post. Returns True on success."""
     if not webhook_url or not webhook_url.startswith("https://hooks.slack.com/"):
@@ -5562,10 +5632,13 @@ async def create_notification(
         await ws_manager.send(user_id, {"event": "notification", "notification": {k: v for k, v in doc.items() if k != "_id"}})
     except Exception:
         pass
-    # Slack bridge Ã¢ÂÂ cross-post to user's linked Slack channel (mentions only)
+    # Slack bridge — Teams admin webhook (org-wide), mentions & key events only
     try:
-        u = await db.users.find_one({"id": user_id}, {"_id": 0, "preferences": 1})
-        webhook = ((u or {}).get("preferences") or {}).get("slack_webhook_url")
+        u = await db.users.find_one(
+            {"id": user_id},
+            {"_id": 0, "preferences": 1, "subscription_tier": 1, "is_team_owner": 1, "team_owner_email": 1, "company_domain": 1, "email": 1},
+        )
+        webhook = await _resolve_slack_webhook(u or {})
         if webhook and n_type in ("mention", "task_assigned", "status_change", "task_completed"):
             link = f"{APP_BASE_URL}/task/{task_id}" if task_id else APP_BASE_URL
             slack_text = f":bell: *{title}*\n{body}\n<{link}|Open in Tskflow>"
@@ -5983,55 +6056,88 @@ async def sales_only_count(current_user: dict = Depends(get_current_user)):
 # --- End-of-day report (cron-able) ---
 async def _build_eod_summary_for_user(u: dict, now):
     """Build the HTML email + Slack text for one user. Returns (html, slack_text, counts) or None if nothing to send."""
+    sections = _eod_sections_for(u)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     completed = await db.tasks.find({
         "assigned_to": u["id"],
         "status": "Completed",
         "completed_at": {"$gte": today_start},
         "deleted": {"$ne": True},
-    }, {"_id": 0}).to_list(200)
+    }, {"_id": 0}).to_list(200) if sections.get("completed") else []
     open_tasks_docs = await db.tasks.find({
         "assigned_to": u["id"],
-        "status": {"$nin": ["Completed", "Declined"]},
+        "status": {"$nin": ["Completed", "Declined", "Cancelled", "Rejected"]},
         "deleted": {"$ne": True},
-    }, {"_id": 0}).to_list(500)
+        "is_parent": {"$ne": True},
+    }, {"_id": 0}).to_list(500) if (sections.get("open") or sections.get("missed")) else []
     missed = []
-    for t in open_tasks_docs:
-        try:
-            due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
-            if due.tzinfo is None:
-                due = PST.localize(due)
-            if due < now and not t.get("due_date_rescheduled_and_accepted"):
-                missed.append(t)
-        except Exception:
-            pass
-    mgr_html, mgr_slack, mgr_counts = await build_manager_eod_section(db, u, now, PST, timedelta)
-    if not completed and not open_tasks_docs and not mgr_html:
+    if sections.get("missed"):
+        for t in open_tasks_docs:
+            try:
+                due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
+                if due.tzinfo is None:
+                    due = PST.localize(due)
+                if due < now and not t.get("due_date_rescheduled_and_accepted"):
+                    missed.append(t)
+            except Exception:
+                pass
+    want_mgr = sections.get("manager_snapshot") or sections.get("suggested_plan")
+    mgr_html, mgr_slack, mgr_counts = ("", "", {})
+    if want_mgr:
+        mgr_html, mgr_slack, mgr_counts = await build_manager_eod_section(
+            db, u, now, PST, timedelta,
+            include_snapshot=bool(sections.get("manager_snapshot")),
+            include_plan=bool(sections.get("suggested_plan")),
+        )
+    # Nothing selected / nothing to report
+    if not any([
+        sections.get("completed") and completed,
+        sections.get("open") and open_tasks_docs,
+        sections.get("missed") and missed,
+        mgr_html,
+    ]) and not any(sections.values()):
         return None
+    if not completed and not (sections.get("open") and open_tasks_docs) and not missed and not mgr_html:
+        # Still send a short "quiet day" if they opted into at least one personal section
+        if not any(sections.get(k) for k in ("completed", "open", "missed", "manager_snapshot", "suggested_plan")):
+            return None
 
-    rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> - completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
-    rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} - due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up - no open tasks.</li>"
-    missed_note = f"<p style='color:#b91c1c;'>{len(missed)} task(s) missed their due date.</p>" if missed else ""
     first = (u.get('name') or 'friend').split(' ')[0]
     day = now.strftime('%A, %b %d, %Y')
-    inner = (
-        f"<h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {first}</h2>"
-        f"<p style=\"color:#6b7280;margin:0 0 20px;\">{day}</p>"
-        f"<h3 style=\"font-size:15px;margin:16px 0 6px;\">Completed today ({len(completed)})</h3>"
-        f"<ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>"
-        f"<h3 style=\"font-size:15px;margin:20px 0 6px;\">Still open ({len(open_tasks_docs)})</h3>"
-        f"<ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>"
-        f"{missed_note}{mgr_html}"
-    )
-    html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
-    slack_text = (
-        f":sunset: *EOD summary - {now.strftime('%b %d')}*\n"
-        f"Completed today: {len(completed)}\n"
-        f"Still open: {len(open_tasks_docs)}\n"
-        + (f"Warning: {len(missed)} missed due date(s)\n" if missed else "")
-        + (f"\n{mgr_slack}\n" if mgr_slack else "")
-        + f"<{APP_BASE_URL}/dashboard|Open Tskflow>"
-    )
+    parts_html = [
+        f"<h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {first}</h2>",
+        f"<p style=\"color:#6b7280;margin:0 0 20px;\">{day}</p>",
+    ]
+    slack_bits = [f":sunset: *EOD summary - {now.strftime('%b %d')}*"]
+
+    if sections.get("completed"):
+        rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> - completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
+        parts_html.append(f"<h3 style=\"font-size:15px;margin:16px 0 6px;\">Completed today ({len(completed)})</h3>")
+        parts_html.append(f"<ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>")
+        slack_bits.append(f"Completed today: {len(completed)}")
+
+    if sections.get("open"):
+        rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} - due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up - no open tasks.</li>"
+        parts_html.append(f"<h3 style=\"font-size:15px;margin:20px 0 6px;\">Still open ({len(open_tasks_docs)})</h3>")
+        parts_html.append(f"<ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>")
+        slack_bits.append(f"Still open: {len(open_tasks_docs)}")
+
+    if sections.get("missed") and missed:
+        parts_html.append(f"<p style='color:#b91c1c;'>{len(missed)} task(s) missed their due date.</p>")
+        slack_bits.append(f"Warning: {len(missed)} missed due date(s)")
+
+    if mgr_html:
+        parts_html.append(mgr_html)
+    if mgr_slack:
+        slack_bits.append("")
+        slack_bits.append(mgr_slack)
+
+    if len(parts_html) <= 2 and not mgr_html:
+        parts_html.append("<p style=\"color:#6b7280;\">Quiet day — nothing matched the sections you selected.</p>")
+        slack_bits.append("Quiet day — nothing to report for your selected sections.")
+
+    html = _jarvis_email_shell("".join(parts_html), cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
+    slack_text = "\n".join(slack_bits) + f"\n<{APP_BASE_URL}/dashboard|Open Tskflow>"
     return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts}
 
 
@@ -6046,7 +6152,10 @@ async def cron_eod_report(secret: Optional[str] = None):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     now = get_pst_now()
-    users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1}).to_list(10000)
+    users = await db.users.find({}, {
+        "_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1,
+        "subscription_tier": 1, "is_team_owner": 1, "team_owner_email": 1, "company_domain": 1,
+    }).to_list(10000)
     sent = 0
     for u in users:
         prefs = u.get("preferences") or {}
@@ -6077,7 +6186,7 @@ async def cron_eod_report(secret: Optional[str] = None):
             except Exception:
                 pass
         if channel in ("slack", "both"):
-            webhook = prefs.get("slack_webhook_url")
+            webhook = await _resolve_slack_webhook(u)
             if webhook:
                 try:
                     await _post_to_slack(webhook, slack_text)
@@ -6091,7 +6200,11 @@ async def cron_eod_report(secret: Optional[str] = None):
 async def eod_preview_now(current_user: dict = Depends(get_current_user)):
     """Trigger an EOD digest immediately for the calling user, regardless of schedule.
     Used by the "Send me a preview" button in Settings."""
-    u = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1})
+    u = await db.users.find_one(
+        {"id": current_user["id"]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1,
+         "subscription_tier": 1, "is_team_owner": 1, "team_owner_email": 1, "company_domain": 1},
+    )
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
     now = get_pst_now()
@@ -6109,7 +6222,7 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
         except Exception:
             pass
     if channel in ("slack", "both"):
-        webhook = prefs.get("slack_webhook_url")
+        webhook = await _resolve_slack_webhook(u)
         if webhook:
             try:
                 await _post_to_slack(webhook, slack_text)
@@ -6276,11 +6389,13 @@ async def publish_task_draft(draft_id: str, body: PublishDraftRequest, current_u
 # --- Product updates feed (surface what changed in this batch to users) ---
 @api_router.post("/integrations/slack/test")
 async def test_slack_webhook(body: dict, current_user: dict = Depends(get_current_user)):
-    """Verify a Slack Incoming Webhook by posting a test message."""
-    webhook = (body or {}).get("webhook_url") or ""
+    """Verify a Slack Incoming Webhook by posting a test message. Teams admin only."""
+    if not _can_manage_slack_webhook(current_user):
+        raise HTTPException(status_code=403, detail="Only the Teams admin can test the Slack webhook.")
+    webhook = (body or {}).get("webhook_url") or ((current_user.get("preferences") or {}).get("slack_webhook_url") or "")
     if not webhook.startswith("https://hooks.slack.com/"):
         raise HTTPException(status_code=400, detail="Please provide a valid Slack Incoming Webhook URL (must start with https://hooks.slack.com/).")
-    ok = await _post_to_slack(webhook, f":wave: Hello from Tskflow Ã¢ÂÂ this is a test from {current_user.get('name', 'a teammate')}. If you can read this, your Slack bridge is working!")
+    ok = await _post_to_slack(webhook, f":wave: Hello from Tskflow — this is a test from {current_user.get('name', 'a teammate')}. If you can read this, your Slack bridge is working!")
     if not ok:
         raise HTTPException(status_code=502, detail="Slack rejected the webhook. Double-check the URL.")
     return {"ok": True}

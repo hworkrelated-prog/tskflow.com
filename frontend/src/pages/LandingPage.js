@@ -236,25 +236,53 @@ const LandingPage = () => {
                 </div>
             </section>
 
-            {/* Pricing — minimal */}
+            {/* Pricing */}
             <section id="pricing" className="relative py-20 border-t border-slate-900/5">
-                <div className="max-w-4xl mx-auto px-6">
-                    <h2 className="text-3xl font-bold text-center mb-10" style={{ fontFamily: 'Outfit, sans-serif' }}>Simple pricing</h2>
+                <div className="max-w-5xl mx-auto px-6">
+                    <h2 className="text-3xl font-bold text-center mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Simple pricing</h2>
+                    <p className="text-center text-slate-600 mb-10 text-sm">Start free. Upgrade when you need Jarvis, reminders, or a company workspace.</p>
                     <div className="grid md:grid-cols-3 gap-6">
                         {[
-                            { name: 'Free', price: '$0', blurb: 'Personal accountability' },
-                            { name: 'Pro', price: '$12', blurb: 'Voice, reminders, richer reports', highlight: true },
-                            { name: 'Teams', price: '$29', blurb: 'Company domain + hierarchy' },
+                            {
+                                name: 'Free',
+                                price: '$0',
+                                period: '/mo',
+                                blurb: 'Personal accountability',
+                                features: ['Unlimited tasks', 'Email assignment', 'Basic analytics', 'Jarvis chat (core)'],
+                            },
+                            {
+                                name: 'Pro',
+                                price: '$9',
+                                period: '/mo',
+                                blurb: 'For people who close more loops',
+                                highlight: true,
+                                features: ['Everything in Free', 'Smart reminders', 'EOD summaries', 'Attachments & recordings', 'Sales task tagging'],
+                            },
+                            {
+                                name: 'Teams',
+                                price: '$12',
+                                period: '/user/mo',
+                                blurb: 'Company workspace + admin controls',
+                                features: ['Everything in Pro', 'Domain team workspace', 'Hierarchy & leaderboards', 'Admin Slack webhook', 'Team analytics'],
+                            },
                         ].map((plan) => (
                             <div
                                 key={plan.name}
-                                className={`rounded-2xl p-6 ${plan.highlight ? 'bg-slate-900 text-white' : 'bg-white/60 border border-slate-200'}`}
+                                className={`rounded-2xl p-6 flex flex-col ${plan.highlight ? 'bg-slate-900 text-white shadow-xl ring-2 ring-teal-500/40' : 'bg-white/70 border border-slate-200'}`}
                             >
                                 <p className="text-sm font-medium opacity-70">{plan.name}</p>
                                 <p className="text-3xl font-bold mt-2 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    {plan.price}<span className="text-base font-normal opacity-60">/mo</span>
+                                    {plan.price}<span className="text-base font-normal opacity-60">{plan.period}</span>
                                 </p>
-                                <p className={`text-sm mb-6 ${plan.highlight ? 'text-white/70' : 'text-slate-600'}`}>{plan.blurb}</p>
+                                <p className={`text-sm mb-5 ${plan.highlight ? 'text-white/70' : 'text-slate-600'}`}>{plan.blurb}</p>
+                                <ul className={`text-sm space-y-2 mb-6 flex-1 ${plan.highlight ? 'text-white/85' : 'text-slate-700'}`}>
+                                    {plan.features.map((f) => (
+                                        <li key={f} className="flex items-start gap-2">
+                                            <span className={`mt-0.5 ${plan.highlight ? 'text-teal-300' : 'text-teal-700'}`}>✓</span>
+                                            <span>{f}</span>
+                                        </li>
+                                    ))}
+                                </ul>
                                 <Button
                                     className={`w-full rounded-full ${plan.highlight ? 'bg-teal-500 hover:bg-teal-400 text-slate-900' : 'bg-slate-900 hover:bg-slate-800'}`}
                                     onClick={() => navigate('/register')}

@@ -23,6 +23,8 @@ const SettingsPage = () => {
     const [changingPassword, setChangingPassword] = React.useState(false);
     const [theme, setTheme] = React.useState('light');
     const [slackWebhook, setSlackWebhook] = React.useState('');
+    const [canManageSlack, setCanManageSlack] = React.useState(false);
+    const [slackTeamConnected, setSlackTeamConnected] = React.useState(false);
     const [savingSlack, setSavingSlack] = React.useState(false);
     const [testingSlack, setTestingSlack] = React.useState(false);
     const [displayName, setDisplayName] = React.useState('');
@@ -32,6 +34,13 @@ const SettingsPage = () => {
     const [eodEnabled, setEodEnabled] = React.useState(false);
     const [eodHour, setEodHour] = React.useState(17);
     const [eodChannel, setEodChannel] = React.useState('email');
+    const [eodSections, setEodSections] = React.useState({
+        completed: true,
+        open: true,
+        missed: true,
+        manager_snapshot: true,
+        suggested_plan: true,
+    });
     const [eodSaving, setEodSaving] = React.useState(false);
     const [eodPreviewing, setEodPreviewing] = React.useState(false);
 
@@ -45,9 +54,19 @@ const SettingsPage = () => {
             const response = await axios.get(`${API}/auth/preferences`);
             setTheme(response.data.theme || 'light');
             setSlackWebhook(response.data.slack_webhook_url || '');
+            setCanManageSlack(Boolean(response.data.can_manage_slack));
+            setSlackTeamConnected(Boolean(response.data.slack_team_connected));
             setEodEnabled(Boolean(response.data.eod_enabled));
             setEodHour(response.data.eod_hour ?? 17);
             setEodChannel(response.data.eod_channel || 'email');
+            setEodSections({
+                completed: true,
+                open: true,
+                missed: true,
+                manager_snapshot: true,
+                suggested_plan: true,
+                ...(response.data.eod_sections || {}),
+            });
             document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
         } catch (error) {
             console.error('Failed to fetch preferences');
@@ -57,14 +76,27 @@ const SettingsPage = () => {
     const saveEod = async (patch = {}) => {
         setEodSaving(true);
         try {
-            const body = { eod_enabled: eodEnabled, eod_hour: eodHour, eod_channel: eodChannel, ...patch };
+            const body = {
+                eod_enabled: eodEnabled,
+                eod_hour: eodHour,
+                eod_channel: eodChannel,
+                eod_sections: eodSections,
+                ...patch,
+            };
             await axios.put(`${API}/auth/preferences`, body);
             if (patch.eod_enabled !== undefined) setEodEnabled(patch.eod_enabled);
             if (patch.eod_hour !== undefined) setEodHour(patch.eod_hour);
             if (patch.eod_channel !== undefined) setEodChannel(patch.eod_channel);
+            if (patch.eod_sections !== undefined) setEodSections(patch.eod_sections);
             toast.success('EOD settings saved');
         } catch { toast.error('Failed to save EOD settings'); }
         finally { setEodSaving(false); }
+    };
+
+    const toggleEodSection = (key) => {
+        const next = { ...eodSections, [key]: !eodSections[key] };
+        setEodSections(next);
+        saveEod({ eod_sections: next });
     };
 
     const previewEod = async () => {
@@ -93,11 +125,14 @@ const SettingsPage = () => {
         setSavingSlack(true);
         try {
             await axios.put(`${API}/auth/preferences`, { slack_webhook_url: raw });
+            setSlackTeamConnected(Boolean(raw));
             if (opts.silent) return true;
             toast.success(raw ? 'Slack connected 🎉' : 'Slack disconnected');
             return true;
-        } catch { toast.error('Failed to save'); return false; }
-        finally { setSavingSlack(false); }
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || 'Failed to save');
+            return false;
+        } finally { setSavingSlack(false); }
     };
 
     // Auto-connect if the user pastes a valid Slack webhook URL
@@ -188,29 +223,27 @@ const SettingsPage = () => {
     const features = {
         free: [
             'Unlimited tasks',
-            'Basic task management',
+            'Assign to anyone by email',
+            'Basic analytics',
+            'Jarvis chat (core)',
             'Email notifications',
-            'Task analytics',
-            'Assign to anyone'
         ],
         pro: [
-            'Unlimited tasks',
-            'Priority support',
+            'Everything in Free',
+            'Smart reminders',
+            'End-of-day summaries',
+            'Attachments & screen recordings',
+            'Sales task tagging',
             'Advanced analytics',
-            'Custom categories',
-            'File & image attachments',
-            'Assign to anyone'
         ],
         teams: [
             'Everything in Pro',
-            'Team workspace (domain-based)',
-            'Collaborate within company only',
+            'Company domain workspace',
+            'Org hierarchy & leaderboards',
             'Team analytics dashboard',
-            'Shared task visibility',
+            'Admin Slack webhook',
             'Admin controls',
-            'Dedicated account manager',
-            'Export reports (Coming Soon)',
-            'API integrations (Coming Soon)'
+            'Shared task visibility',
         ]
     };
 
@@ -573,45 +606,74 @@ const SettingsPage = () => {
                                             data-testid="eod-channel-select"
                                         >
                                             <option value="email">📧 Email</option>
-                                            <option value="slack">💬 Slack {slackWebhook ? '' : '(connect Slack first)'}</option>
-                                            <option value="both">📧 + 💬 Both</option>
+                                            {(canManageSlack || slackTeamConnected) && (
+                                                <option value="slack">💬 Slack {slackTeamConnected ? '' : '(connect Slack first)'}</option>
+                                            )}
+                                            {(canManageSlack || slackTeamConnected) && (
+                                                <option value="both">📧 + 💬 Both</option>
+                                            )}
                                         </select>
-                                        {(eodChannel === 'slack' || eodChannel === 'both') && !slackWebhook && (
-                                            <p className="text-xs text-amber-700 mt-1">⚠️ Slack channel selected but no webhook connected. Connect Slack below to receive there.</p>
+                                        {(eodChannel === 'slack' || eodChannel === 'both') && !slackTeamConnected && canManageSlack && (
+                                            <p className="text-xs text-amber-700 mt-1">⚠️ Slack selected but no webhook connected. Connect Slack below.</p>
                                         )}
+                                        {(eodChannel === 'slack' || eodChannel === 'both') && !slackTeamConnected && !canManageSlack && (
+                                            <p className="text-xs text-amber-700 mt-1">⚠️ Ask your Teams admin to connect Slack in Settings.</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">Include in your report</Label>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 mb-2">Check what you want. Uncheck anything you don&apos;t need.</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" data-testid="eod-sections">
+                                        {[
+                                            { key: 'completed', label: 'Tasks I completed today', help: 'What you finished.' },
+                                            { key: 'open', label: 'Tasks still open', help: 'What you still own.' },
+                                            { key: 'missed', label: 'Missed due dates', help: 'Anything past due.' },
+                                            { key: 'manager_snapshot', label: 'Manager snapshot', help: 'Who accepted work you assigned today.' },
+                                            { key: 'suggested_plan', label: 'Suggested follow-ups', help: 'Who to check in with tomorrow.' },
+                                        ].map((s) => (
+                                            <label
+                                                key={s.key}
+                                                className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
+                                                    eodSections[s.key] ? 'bg-amber-50/80 border-amber-200' : 'bg-white border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                                data-testid={`eod-section-${s.key}`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!eodSections[s.key]}
+                                                    onChange={() => toggleEodSection(s.key)}
+                                                    className="mt-0.5 accent-amber-600"
+                                                />
+                                                <span className="min-w-0">
+                                                    <span className="text-sm font-medium text-slate-800 block">{s.label}</span>
+                                                    <span className="text-[11px] text-slate-500">{s.help}</span>
+                                                </span>
+                                            </label>
+                                        ))}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <Button size="sm" variant="outline" onClick={previewEod} disabled={eodPreviewing || eodSaving} className="rounded-lg" data-testid="eod-preview-btn">
-                                        {eodPreviewing ? 'Sending...' : '📨 Send me a preview now'}
+                                        {eodPreviewing ? 'Sending...' : 'Send me a preview now'}
                                     </Button>
-                                    <p className="text-xs text-muted-foreground">You can override the schedule any time by hitting preview.</p>
+                                    <p className="text-xs text-muted-foreground">Sends immediately with your current section choices.</p>
                                 </div>
-                                <details className="rounded-xl border bg-gray-50/60 group">
-                                    <summary className="cursor-pointer select-none px-4 py-2.5 text-xs font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
-                                        <span>What&apos;s inside the EOD report?</span>
-                                        <span className="text-xs text-muted-foreground">Expand</span>
-                                    </summary>
-                                    <ul className="px-5 pb-4 pt-1 text-xs text-gray-700 space-y-1 list-disc ml-4">
-                                        <li>Tasks you <strong>completed today</strong> and what is still open</li>
-                                        <li>If you assigned work today: accepted / not accepted, by whom</li>
-                                        <li>Suggested follow-ups, top performers, and people needing attention</li>
-                                    </ul>
-                                </details>
                             </div>
                         )}
                     </div>
 
                     {/* Smart Reminders */}
-                    <SmartRemindersCard slackConnected={!!slackWebhook} />
+                    <SmartRemindersCard slackConnected={slackTeamConnected} />
 
-                    {/* Slack Bridge — Simple 1-click setup */}
+                    {/* Slack Bridge — Teams admin only */}
+                    {canManageSlack ? (
                     <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div className="flex-1">
                                 <h3 className="font-semibold text-base">Slack notifications</h3>
-                                <p className="text-xs text-muted-foreground">Get @mentions, EOD summaries and reminders in Slack.</p>
+                                <p className="text-xs text-muted-foreground">Teams admin: connect one webhook for your org. Mentions, EOD summaries, and reminders post here.</p>
                             </div>
                             {slackWebhook && (
                                 <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
@@ -703,13 +765,43 @@ const SettingsPage = () => {
                                     <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack} data-testid="slack-test-btn" className="rounded-lg">
                                         {testingSlack ? 'Sending test...' : '📨 Send test message'}
                                     </Button>
-                                    <Button variant="outline" size="sm" onClick={async () => { const ok = await saveSlack({ value: '', silent: true }); if (ok) { setSlackWebhook(''); toast.success('Slack disconnected'); } }} className="text-red-600 border-red-200 hover:bg-red-50 rounded-lg">
+                                    <Button variant="outline" size="sm" onClick={async () => { const ok = await saveSlack({ value: '', silent: true }); if (ok) { setSlackWebhook(''); setSlackTeamConnected(false); toast.success('Slack disconnected'); } }} className="text-red-600 border-red-200 hover:bg-red-50 rounded-lg">
                                         Disconnect
                                     </Button>
                                 </div>
                             </div>
                         )}
                     </div>
+                    ) : user?.subscription_tier === 'teams' ? (
+                    <div className="bg-white/70 border-2 rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
+                            <div>
+                                <h3 className="font-semibold text-base">Slack notifications</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {slackTeamConnected
+                                        ? 'Your team admin has connected Slack. Mentions and summaries can go there.'
+                                        : 'Only your Teams admin can connect the Slack webhook. Ask them to set it up in Settings.'}
+                                </p>
+                            </div>
+                            {slackTeamConnected && (
+                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected by admin</span>
+                            )}
+                        </div>
+                    </div>
+                    ) : (
+                    <div className="bg-white/70 border-2 rounded-2xl p-5" data-testid="slack-settings-upgrade">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-[#4A154B]/80 text-white flex items-center justify-center font-bold text-lg">S</span>
+                            <div>
+                                <h3 className="font-semibold text-base">Slack notifications</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Slack webhooks are available on the <strong>Teams</strong> plan — your team admin connects one webhook for the org.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    )}
 
                     {/* Feedback Link */}
                     <div className="text-center">
@@ -889,19 +981,19 @@ const SmartRemindersCard = ({ slackConnected }) => {
         hours_before_due: 4,
         frequency_hours: 12,
         channels: ['in_app', 'email'],
-        priorities: ['Low', 'Medium', 'High', 'Urgent'],
+        priorities: ['Medium', 'High', 'Urgent'],
     });
     const [saving, setSaving] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
+    const [showTiming, setShowTiming] = React.useState(false);
 
     React.useEffect(() => {
         (async () => {
             try {
                 const r = await axios.get(`${API}/reminders/rules`);
-                setRule({ ...rule, ...(r.data?.rules || {}) });
+                setRule((prev) => ({ ...prev, ...(r.data?.rules || {}) }));
             } catch (_) { /* noop */ } finally { setLoading(false); }
         })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const save = async (patch) => {
@@ -914,117 +1006,169 @@ const SmartRemindersCard = ({ slackConnected }) => {
         finally { setSaving(false); }
     };
 
-    const toggleFrom = (list, item) => list.includes(item) ? list.filter(x => x !== item) : [...list, item];
+    const toggleFrom = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 
-    if (loading) return <div className="bg-white/70 border-2 rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
+    if (loading) {
+        return <div className="bg-white/70 border-2 rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
+    }
 
-    const triggerOpts = [
-        { key: 'time_before_due', label: 'Time before due', help: 'Ping X hours before a task is due.' },
-        { key: 'approaching_deadline', label: 'Approaching deadline', help: 'Extra nudge as the deadline gets very close.' },
-        { key: 'no_response', label: 'No response after assignment', help: 'Fire when a Pending task hasn\u2019t been accepted for a while.' },
-        { key: 'no_progress', label: 'No progress', help: 'Fire when an Accepted task has been idle before the deadline.' },
-        { key: 'overdue', label: 'Overdue', help: 'Keep reminding when the task has passed its due date.' },
+    const nudgeWhen = [
+        { key: 'time_before_due', label: 'Before a due date', help: 'Heads-up while there\'s still time.' },
+        { key: 'no_response', label: 'Nobody accepted yet', help: 'When an assigned task is still pending.' },
+        { key: 'no_progress', label: 'Work isn\'t moving', help: 'Accepted, but no activity for a while.' },
+        { key: 'overdue', label: 'Past due', help: 'Keep following up after the deadline.' },
+    ];
+
+    const channels = [
+        { key: 'in_app', label: 'In the app', help: 'Bell + browser notification' },
+        { key: 'email', label: 'Email', help: 'From Jarvis' },
+        { key: 'slack', label: 'Slack', help: slackConnected ? 'Your team channel' : 'Ask admin to connect Slack', disabled: !slackConnected },
     ];
 
     return (
         <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
             <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Follow-ups scale with priority — Urgent chases fast; Low stays quiet during off-hours.</p>
+                    <p className="text-xs text-muted-foreground">
+                        Turn on the situations you care about. Urgent tasks get chased sooner; Low stays quieter.
+                    </p>
                 </div>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={rule.enabled} onChange={(e) => save({ enabled: e.target.checked })} className="sr-only peer" data-testid="reminders-enable-toggle" />
+                <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
+                    <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={(e) => save({ enabled: e.target.checked })}
+                        className="sr-only peer"
+                        data-testid="reminders-enable-toggle"
+                    />
                     <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-rose-500 transition-colors">
-                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`}></span>
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`} />
                     </span>
                 </label>
             </div>
+
             {rule.enabled && (
-                <div className="space-y-4 pt-2 border-t">
+                <div className="space-y-5 pt-2 border-t">
                     <div>
-                        <Label className="text-xs text-muted-foreground">Triggers</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
-                            {triggerOpts.map((t) => (
-                                <label key={t.key} className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer ${rule.triggers.includes(t.key) ? 'bg-rose-50 border-rose-200' : 'bg-white hover:bg-slate-50'}`} data-testid={`reminder-trigger-${t.key}`}>
+                        <p className="text-sm font-medium text-slate-800">1. When should we nudge?</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Check what you want. Uncheck the rest.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {nudgeWhen.map((t) => (
+                                <label
+                                    key={t.key}
+                                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer ${
+                                        rule.triggers.includes(t.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                    data-testid={`reminder-trigger-${t.key}`}
+                                >
                                     <input
                                         type="checkbox"
                                         checked={rule.triggers.includes(t.key)}
                                         onChange={() => save({ triggers: toggleFrom(rule.triggers, t.key) })}
-                                        className="mt-0.5"
+                                        className="mt-0.5 accent-rose-600"
                                     />
-                                    <div className="text-sm">
-                                        <div className="font-medium">{t.label}</div>
-                                        <div className="text-[11px] text-muted-foreground">{t.help}</div>
-                                    </div>
+                                    <span>
+                                        <span className="text-sm font-medium text-slate-800 block">{t.label}</span>
+                                        <span className="text-[11px] text-slate-500">{t.help}</span>
+                                    </span>
                                 </label>
                             ))}
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                            <Label className="text-xs text-muted-foreground">Hours before due (time-before trigger)</Label>
-                            <Input
-                                type="number"
-                                min={1}
-                                max={72}
-                                value={rule.hours_before_due}
-                                onChange={(e) => save({ hours_before_due: parseInt(e.target.value || '1', 10) })}
-                                className="rounded-xl mt-1"
-                                data-testid="reminder-hours-before"
-                            />
-                        </div>
-                        <div>
-                            <Label className="text-xs text-muted-foreground">Minimum hours between reminders</Label>
-                            <Input
-                                type="number"
-                                min={1}
-                                max={72}
-                                value={rule.frequency_hours}
-                                onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '1', 10) })}
-                                className="rounded-xl mt-1"
-                                data-testid="reminder-frequency"
-                            />
-                        </div>
-                    </div>
+
                     <div>
-                        <Label className="text-xs text-muted-foreground">Deliver via</Label>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                            {[
-                                { key: 'in_app', label: '🔔 In-app + browser' },
-                                { key: 'email', label: '📧 Email' },
-                                { key: 'slack', label: '💬 Slack' + (slackConnected ? '' : ' (connect Slack first)') },
-                            ].map((c) => (
-                                <button
-                                    type="button"
-                                    key={c.key}
-                                    onClick={() => save({ channels: toggleFrom(rule.channels, c.key) })}
-                                    disabled={c.key === 'slack' && !slackConnected}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.channels.includes(c.key) ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-rose-300'} disabled:opacity-40`}
-                                    data-testid={`reminder-channel-${c.key}`}
-                                >
-                                    {c.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                    <div>
-                        <Label className="text-xs text-muted-foreground">Apply to priorities</Label>
-                        <div className="flex flex-wrap gap-2 mt-1">
+                        <p className="text-sm font-medium text-slate-800">2. Which priorities?</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Reminders only apply to the priorities you check.</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {['Low', 'Medium', 'High', 'Urgent'].map((p) => (
-                                <button
-                                    type="button"
+                                <label
                                     key={p}
-                                    onClick={() => save({ priorities: toggleFrom(rule.priorities, p) })}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium border ${rule.priorities.includes(p) ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'}`}
+                                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer text-sm ${
+                                        rule.priorities.includes(p) ? 'bg-teal-50 border-teal-200 font-medium' : 'bg-white border-slate-200'
+                                    }`}
                                     data-testid={`reminder-priority-${p}`}
                                 >
+                                    <input
+                                        type="checkbox"
+                                        checked={rule.priorities.includes(p)}
+                                        onChange={() => save({ priorities: toggleFrom(rule.priorities, p) })}
+                                        className="accent-teal-700"
+                                    />
                                     {p}
-                                </button>
+                                </label>
                             ))}
                         </div>
                     </div>
+
+                    <div>
+                        <p className="text-sm font-medium text-slate-800">3. Where should we send them?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                            {channels.map((c) => (
+                                <label
+                                    key={c.key}
+                                    className={`flex items-start gap-2.5 p-3 rounded-xl border ${
+                                        c.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                                    } ${rule.channels.includes(c.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}
+                                    data-testid={`reminder-channel-${c.key}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        disabled={c.disabled}
+                                        checked={rule.channels.includes(c.key)}
+                                        onChange={() => !c.disabled && save({ channels: toggleFrom(rule.channels, c.key) })}
+                                        className="mt-0.5 accent-rose-600"
+                                    />
+                                    <span>
+                                        <span className="text-sm font-medium text-slate-800 block">{c.label}</span>
+                                        <span className="text-[11px] text-slate-500">{c.help}</span>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60">
+                        <button
+                            type="button"
+                            onClick={() => setShowTiming((v) => !v)}
+                            className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-slate-700"
+                        >
+                            <span>Timing (optional)</span>
+                            <span className="text-xs text-slate-500">{showTiming ? 'Hide' : 'Show'}</span>
+                        </button>
+                        {showTiming && (
+                            <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-slate-200/80 pt-3">
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">Warn me this many hours before due</Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={72}
+                                        value={rule.hours_before_due}
+                                        onChange={(e) => save({ hours_before_due: parseInt(e.target.value || '1', 10) })}
+                                        className="rounded-xl mt-1 bg-white"
+                                        data-testid="reminder-hours-before"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">Wait at least this many hours between nudges</Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={72}
+                                        value={rule.frequency_hours}
+                                        onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '1', 10) })}
+                                        className="rounded-xl mt-1 bg-white"
+                                        data-testid="reminder-frequency"
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">Urgent/High may still come sooner than Low/Medium.</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {saving && <p className="text-xs text-muted-foreground">Saving…</p>}
                 </div>
             )}

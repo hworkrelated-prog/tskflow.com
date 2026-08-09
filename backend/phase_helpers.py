@@ -48,7 +48,17 @@ async def generate_ai_work_review(task: dict, completion_note: Optional[str], ha
         return None
 
 
-async def build_manager_eod_section(db, u: dict, now, PST, timedelta_cls=timedelta) -> Tuple[str, str, dict]:
+async def build_manager_eod_section(
+    db,
+    u: dict,
+    now,
+    PST,
+    timedelta_cls=timedelta,
+    include_snapshot: bool = True,
+    include_plan: bool = True,
+) -> Tuple[str, str, dict]:
+    if not include_snapshot and not include_plan:
+        return "", "", {}
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     created_today = await db.tasks.find({
         "created_by": u["id"],
@@ -128,7 +138,10 @@ async def build_manager_eod_section(db, u: dict, now, PST, timedelta_cls=timedel
     trouble_list = ", ".join(trouble_names) or "-"
     plan_html = "".join([f"<li>{b}</li>" for b in plan_bits])
 
-    html = f"""
+    html_parts = []
+    slack_parts = []
+    if include_snapshot:
+        html_parts.append(f"""
     <h3 style="font-size:16px;margin:24px 0 8px;">Manager snapshot (tasks you assigned today)</h3>
     <ul style="padding-left:20px;margin:0;">
       <li><strong>{len(created_today)}</strong> assigned today</li>
@@ -138,15 +151,20 @@ async def build_manager_eod_section(db, u: dict, now, PST, timedelta_cls=timedel
       <li>Top performers (7d): {top_list}</li>
       <li>Needs attention (7d): {trouble_list}</li>
     </ul>
+    """)
+        slack_parts.append(
+            f"*Manager snapshot*\n"
+            f"Assigned today: {len(created_today)} | Accepted: {len(accepted)} | Not accepted: {len(pending)} | Completed: {len(completed)}\n"
+            f"Top: {top_list}\nNeeds attention: {trouble_list}"
+        )
+    if include_plan:
+        html_parts.append(f"""
     <h4 style="font-size:14px;margin:16px 0 6px;">Suggested plan</h4>
     <ul style="padding-left:20px;margin:0;">{plan_html}</ul>
-    """
-    slack = (
-        f"*Manager snapshot*\n"
-        f"Assigned today: {len(created_today)} | Accepted: {len(accepted)} | Not accepted: {len(pending)} | Completed: {len(completed)}\n"
-        f"Top: {top_list}\nNeeds attention: {trouble_list}\n"
-        + "\n".join(f"- {b}" for b in plan_bits)
-    )
+    """)
+        slack_parts.append("\n".join(f"- {b}" for b in plan_bits))
+    html = "".join(html_parts)
+    slack = "\n".join(slack_parts)
     counts = {
         "assigned_today": len(created_today),
         "accepted_today": len(accepted),
