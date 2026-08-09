@@ -192,6 +192,12 @@ const AuthProvider = ({ children }) => {
         setPendingRedirect(null);
     };
 
+    // Let CSS clear space for the global FABs / home-indicator on every authenticated page
+    useEffect(() => {
+        document.body.classList.toggle('app-authenticated', Boolean(user));
+        return () => document.body.classList.remove('app-authenticated');
+    }, [user]);
+
     return (
         <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser: fetchCurrentUser, pendingRedirect, setPendingTaskRedirect, clearPendingRedirect }}>
             {children}

@@ -362,7 +362,7 @@ const VoiceMode = () => {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2" data-testid="voice-mode-widget">
+        <div className="fixed safe-fab-br z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)]" data-testid="voice-mode-widget">
             <AnimatePresence>
                 {nudge && !open && (
                     <motion.button
@@ -371,7 +371,7 @@ const VoiceMode = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6 }}
                         onClick={openPanel}
-                        className="max-w-[240px] text-left text-xs bg-white border border-slate-200 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                        className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white border border-slate-200 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
                         data-testid="voice-nudge-bubble"
                     >
                         <JarvisMark phase="idle" size={28} />

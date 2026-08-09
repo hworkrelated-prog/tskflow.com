@@ -125,7 +125,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const mentionQuery = (mention?.query || '').trim().toLowerCase();
     const mentionPeople = [
         { id: 'self', name: 'Me', email: '', _kind: 'user' },
-        ...people.map((u) => ({ ...u, _kind: 'user' })),
+        ...people
+            .filter((u) => u && u.id !== 'self' && (u.name || '').toLowerCase() !== 'me' && (u.name || '').toLowerCase() !== 'me (self)')
+            .map((u) => ({ ...u, _kind: 'user' })),
     ].filter((u) => {
         if (!mentionQuery) return true;
         return (u.name || '').toLowerCase().includes(mentionQuery)
@@ -161,16 +163,37 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
             return;
         }
         const r = el.getBoundingClientRect();
+        const vv = window.visualViewport;
+        const viewTop = vv?.offsetTop ?? 0;
+        const viewHeight = vv?.height ?? window.innerHeight;
+        const viewWidth = vv?.width ?? window.innerWidth;
         const pad = 8;
-        const spaceAbove = r.top - pad;
-        const spaceBelow = window.innerHeight - r.bottom - pad;
+        const narrow = viewWidth < 640;
+        // On phones (esp. with the keyboard up), dock the picker as a bottom sheet
+        // inside the visual viewport so it never sits under the soft keyboard.
+        if (narrow) {
+            const maxHeight = Math.max(160, Math.min(280, viewHeight * 0.42));
+            setMentionPos({
+                left: 8,
+                width: Math.max(0, viewWidth - 16),
+                maxHeight,
+                openUp: true,
+                mobileSheet: true,
+                top: undefined,
+                bottom: Math.max(8, window.innerHeight - (viewTop + viewHeight) + 8),
+            });
+            return;
+        }
+        const spaceAbove = r.top - viewTop - pad;
+        const spaceBelow = (viewTop + viewHeight) - r.bottom - pad;
         const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
         const maxHeight = Math.max(140, Math.min(260, openUp ? spaceAbove - 4 : spaceBelow - 4));
         setMentionPos({
             left: Math.max(12, r.left),
-            width: Math.min(r.width, window.innerWidth - 24),
+            width: Math.min(r.width, viewWidth - 24),
             maxHeight,
             openUp,
+            mobileSheet: false,
             top: openUp ? undefined : r.bottom + 6,
             bottom: openUp ? Math.max(12, window.innerHeight - r.top + 6) : undefined,
         });
@@ -189,9 +212,14 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         const onMove = () => updateMentionPos();
         window.addEventListener('resize', onMove);
         window.addEventListener('scroll', onMove, true);
+        const vv = window.visualViewport;
+        vv?.addEventListener('resize', onMove);
+        vv?.addEventListener('scroll', onMove);
         return () => {
             window.removeEventListener('resize', onMove);
             window.removeEventListener('scroll', onMove, true);
+            vv?.removeEventListener('resize', onMove);
+            vv?.removeEventListener('scroll', onMove);
         };
     }, [mention, text, editAssignees.length, showNewPersonEmail, updateMentionPos]);
 
@@ -706,7 +734,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                 }}
                                 placeholder="What needs to get done? Type @ to assign someone"
                                 rows={1}
-                                className="min-h-[76px] max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-12 text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
@@ -721,8 +749,11 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                         top: mentionPos.openUp ? undefined : mentionPos.top,
                                         bottom: mentionPos.openUp ? mentionPos.bottom : undefined,
                                         zIndex: 200,
+                                        maxHeight: mentionPos.mobileSheet ? mentionPos.maxHeight : undefined,
                                     }}
-                                    className="rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10"
+                                    className={`border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10 flex flex-col ${
+                                        mentionPos.mobileSheet ? 'rounded-2xl' : 'rounded-2xl'
+                                    }`}
                                     data-testid="mention-dropdown"
                                     role="listbox"
                                     aria-label="Assign to"
@@ -741,8 +772,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                         )}
                                         {mentionOptions.map((opt, idx) => {
                                             const active = idx === mentionIndex;
-                                            const rowClass = `w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left text-sm transition-colors ${
-                                                active ? 'bg-teal-50 text-teal-950' : 'text-slate-800 hover:bg-slate-50'
+                                            const rowClass = `w-full flex items-center gap-2.5 px-2.5 py-2.5 sm:py-2 rounded-xl text-left text-sm transition-colors touch-manipulation ${
+                                                active ? 'bg-teal-50 text-teal-950' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-50'
                                             }`;
                                             if (opt.type === 'user') {
                                                 const u = opt.data;
@@ -909,11 +940,11 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                     type="button"
                                     onClick={() => runPreview()}
                                     disabled={loading || sending || answerLoading || !text.trim()}
-                                    className="rounded-xl bg-slate-900 hover:bg-slate-800 h-9 px-3.5 gap-1.5"
+                                    className="rounded-xl bg-slate-900 hover:bg-slate-800 h-10 sm:h-9 px-3.5 gap-1.5"
                                     data-testid="ai-quick-preview-btn"
                                 >
                                     {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                    <span className="hidden sm:inline">{loading || answerLoading ? '…' : 'Go'}</span>
+                                    <span>{loading || answerLoading ? '…' : 'Go'}</span>
                                 </Button>
                             </div>
                         </div>

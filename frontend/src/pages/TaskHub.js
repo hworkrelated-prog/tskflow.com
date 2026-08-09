@@ -1005,52 +1005,92 @@ const TaskHub = () => {
                 )}
             </AnimatePresence>
 
-            <header className="sticky top-0 z-50 glass-header border-b">
-                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <h1 onClick={() => navigate('/')} className="brand-wordmark cursor-pointer hover:opacity-80 transition-opacity">Tskflow</h1>
+            <header className="sticky top-0 z-50 glass-header border-b pt-[env(safe-area-inset-top,0px)]">
+                <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                        <h1 onClick={() => navigate('/')} className="brand-wordmark cursor-pointer hover:opacity-80 transition-opacity text-xl sm:text-2xl shrink-0">Tskflow</h1>
                         {user?.subscription_tier === 'teams' ? (
-                            <Badge className="bg-teal-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
+                            <Badge className="hidden sm:flex bg-teal-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 TEAMS
                             </Badge>
                         ) : user?.subscription_tier === 'pro' ? (
-                            <Badge className="bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1">
+                            <Badge className="hidden sm:flex bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 PRO
                             </Badge>
                         ) : null}
                     </div>
-                    <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                         <NotificationBell />
-                        <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
-                            <Repeat className="w-5 h-5" />
-                        </Button>
-                        {user?.subscription_tier === 'teams' && (
-                            <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-teal-300 text-teal-600 hover:text-teal-700 hover:bg-teal-50" title="Manage Team">
-                                <Users className="w-5 h-5" />
+                        {/* Desktop icon strip */}
+                        <div className="hidden md:flex items-center gap-2">
+                            <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
+                                <Repeat className="w-5 h-5" />
                             </Button>
-                        )}
-                        <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
-                            <BarChart3 className="w-5 h-5" />
-                        </Button>
-                        <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
-                            <Settings className="w-5 h-5" />
-                        </Button>
-                        <Button data-testid="logout-button" variant="outline" size="icon" onClick={logout} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
-                            <LogOut className="w-5 h-5" />
-                        </Button>
+                            {user?.subscription_tier === 'teams' && (
+                                <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-teal-300 text-teal-600 hover:text-teal-700 hover:bg-teal-50" title="Manage Team">
+                                    <Users className="w-5 h-5" />
+                                </Button>
+                            )}
+                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
+                                <BarChart3 className="w-5 h-5" />
+                            </Button>
+                            <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                                <Settings className="w-5 h-5" />
+                            </Button>
+                            <Button data-testid="logout-button" variant="outline" size="icon" onClick={logout} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                                <LogOut className="w-5 h-5" />
+                            </Button>
+                        </div>
+                        {/* Mobile overflow menu — keeps the header one-handed */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="md:hidden rounded-full border-gray-300 text-gray-600" data-testid="mobile-nav-menu" aria-label="More">
+                                    <MoreHorizontal className="w-5 h-5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem onClick={() => navigate('/recurring')}>
+                                    <Repeat className="w-4 h-4 mr-2" /> Recurring
+                                </DropdownMenuItem>
+                                {user?.subscription_tier === 'teams' && (
+                                    <DropdownMenuItem onClick={() => navigate('/team')}>
+                                        <Users className="w-4 h-4 mr-2" /> Team
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => navigate('/analytics')}>
+                                    <BarChart3 className="w-4 h-4 mr-2" /> Analytics
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate('/recordings')} data-testid="recording-library-button-mobile">
+                                    <Library className="w-4 h-4 mr-2" /> Recordings
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                                    <Settings className="w-4 h-4 mr-2" /> Settings
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate('/help')}>
+                                    <HelpCircle className="w-4 h-4 mr-2" /> Help
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600">
+                                    <LogOut className="w-4 h-4 mr-2" /> Log out
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
             </header>
 
-            <main className="container mx-auto px-6 py-8">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>Welcome, {user?.name}</h2>
-                        <p className="text-muted-foreground">Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.</p>
+            <main className="container mx-auto px-4 sm:px-6 py-5 sm:py-8">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5 sm:mb-6">
+                    <div className="min-w-0">
+                        <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
+                            Welcome, {user?.name}
+                        </h2>
+                        <p className="text-sm sm:text-base text-muted-foreground mt-0.5">
+                            Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.
+                        </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                         {/* AI Summary and Bulk Approve */}
                         <Button
                             variant="outline"
@@ -1059,7 +1099,7 @@ const TaskHub = () => {
                             disabled={loadingAiSummary}
                             className="rounded-full"
                         >
-                            ✨ {loadingAiSummary ? 'Loading...' : 'AI Summary'}
+                            ✨ <span className="ml-1">{loadingAiSummary ? '…' : 'Summary'}</span>
                         </Button>
                         
                         {dashboard?.assigned_by_me?.some(t => t.status === 'Review Pending') && (
@@ -1069,9 +1109,10 @@ const TaskHub = () => {
                                 onClick={handleBulkApprove}
                                 disabled={bulkApproving}
                                 className="rounded-full bg-green-50 text-green-700 border-green-300"
+                                title="Bulk Approve"
                             >
-                                <CheckSquare className="w-4 h-4 mr-2" />
-                                {bulkApproving ? 'Approving...' : 'Bulk Approve'}
+                                <CheckSquare className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline">{bulkApproving ? 'Approving...' : 'Bulk Approve'}</span>
                             </Button>
                         )}
                         
@@ -1087,13 +1128,13 @@ const TaskHub = () => {
                         ) : (
                             <>
                                 {/* Single "Recordings" button — merges Record + Library. Takes user to the library where they can start a new recording or browse past ones. */}
-                                <Button variant="outline" onClick={() => navigate('/recordings')} className="rounded-full gap-2" data-testid="recording-library-button" title="Screen recordings">
+                                <Button variant="outline" onClick={() => navigate('/recordings')} className="hidden sm:inline-flex rounded-full gap-2" data-testid="recording-library-button" title="Screen recordings">
                                     <Library className="w-4 h-4" />
                                     Recordings
                                 </Button>
                                 <Button variant="outline" onClick={() => setSelectionMode(true)} className="rounded-full gap-2" data-testid="select-tasks-button">
                                     <CheckSquare className="w-4 h-4" />
-                                    Select
+                                    <span className="hidden sm:inline">Select</span>
                                 </Button>
                                 <Button
                                     data-testid="create-task-button"
@@ -1510,107 +1551,131 @@ const TaskHub = () => {
                 )}
 
                 {/* Filter Bar */}
-                <div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="flex items-center bg-gray-100 rounded-full p-1">
-                        <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-600 hover:text-gray-900'}`}>Active Tasks</button>
-                        <button data-testid="view-completed-tasks" onClick={() => setViewMode('completed')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'completed' ? 'bg-white shadow-sm text-green-600' : 'text-gray-600 hover:text-gray-900'}`}><CheckCircle2 className="w-4 h-4" />Completed</button>
-                        {/* Sales-only compact toggle: dollar sign that expands on hover / when active */}
-                        <button
-                            type="button"
-                            data-testid="toggle-sales-only"
-                            onClick={() => setSalesOnly((v) => !v)}
-                            title={salesOnly ? 'Showing only sales tasks — click to disable' : 'Show only sales tasks'}
-                            className={`group ml-1 flex items-center gap-1.5 h-9 px-2.5 rounded-full text-sm font-medium transition-all ${salesOnly ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-emerald-600'}`}
-                        >
-                            <DollarSign className="w-4 h-4" />
-                            <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${salesOnly ? 'max-w-[120px]' : 'max-w-0 group-hover:max-w-[120px]'}`}>
-                                Sales only
-                            </span>
-                        </button>
+                <div className="flex flex-col gap-3 mb-5 sm:mb-6">
+                    <div className="relative w-full sm:hidden">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                        <Input
+                            data-testid="task-search-input-mobile"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search tasks…"
+                            className="pl-9 pr-8 h-10 rounded-full bg-white border-gray-200 text-sm"
+                        />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                                aria-label="Clear search"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap flex-1 justify-end">
-                        {/* Compact search bar — sits right before the date filters */}
-                        <div className="relative min-w-[180px] max-w-[240px] hidden sm:block">
-                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                            <Input
-                                ref={searchInputRef}
-                                data-testid="task-search-input"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search tasks…"
-                                className="pl-9 pr-8 h-8 rounded-full bg-white border-gray-200 text-sm"
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    aria-label="Clear search"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </div>
-                        <button data-testid="date-filter-all" onClick={() => setDateFilter('all')} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${dateFilter === 'all' ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>All</button>
-                        
-                        {primaryFilters.map((option) => (
-                            <button key={option.value} data-testid={`date-filter-${option.value}`} onClick={() => setDateFilter(option.value)} className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${dateFilter === option.value ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
-                                {option.value === 'overdue' && <AlertCircle className="w-3.5 h-3.5" />}
-                                {option.label}
-                                {option.badge && overdueCount > 0 && viewMode === 'active' && (
-                                    <span className={`px-1.5 py-0.5 text-xs rounded-full ${dateFilter === 'overdue' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{overdueCount}</span>
-                                )}
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4">
+                        <div className="mobile-h-scroll sm:overflow-visible items-center gap-1 bg-gray-100 rounded-full p-1 w-full sm:w-auto shrink-0">
+                            <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-600 hover:text-gray-900'}`}>Active</button>
+                            <button data-testid="view-completed-tasks" onClick={() => setViewMode('completed')} className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${viewMode === 'completed' ? 'bg-white shadow-sm text-green-600' : 'text-gray-600 hover:text-gray-900'}`}><CheckCircle2 className="w-4 h-4" />Done</button>
+                            <button
+                                type="button"
+                                data-testid="toggle-sales-only"
+                                onClick={() => setSalesOnly((v) => !v)}
+                                title={salesOnly ? 'Showing only sales tasks — click to disable' : 'Show only sales tasks'}
+                                className={`group shrink-0 ml-0.5 flex items-center gap-1.5 h-9 px-2.5 rounded-full text-sm font-medium transition-all ${salesOnly ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-emerald-600'}`}
+                            >
+                                <DollarSign className="w-4 h-4" />
+                                <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${salesOnly ? 'max-w-[120px]' : 'max-w-0 sm:group-hover:max-w-[120px]'}`}>
+                                    Sales only
+                                </span>
                             </button>
-                        ))}
-                        
-                        <DropdownMenu open={showMoreFilters} onOpenChange={setShowMoreFilters}>
-                            <DropdownMenuTrigger asChild>
-                                <button data-testid="more-filters-button" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${moreFilters.some(f => f.value === dateFilter) ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
-                                    <MoreHorizontal className="w-3.5 h-3.5" />
-                                    More
-                                    <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-48">
-                                {moreFilters.map((option) => (
-                                    option.value === 'custom' ? (
-                                        <Popover key={option.value} open={showDatePicker} onOpenChange={setShowDatePicker}>
-                                            <PopoverTrigger asChild>
-                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setDateFilter('custom'); setShowDatePicker(true); }} className="cursor-pointer">
-                                                    <Calendar className="w-4 h-4 mr-2" />
-                                                    {dateFilter === 'custom' && customDateRange.from && customDateRange.to ? `${format(customDateRange.from, 'MMM d')} - ${format(customDateRange.to, 'MMM d')}` : 'Custom Range'}
-                                                </DropdownMenuItem>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start" side="right">
-                                                <CalendarComponent mode="range" selected={{ from: customDateRange.from, to: customDateRange.to }} onSelect={(range) => { setCustomDateRange({ from: range?.from || null, to: range?.to || null }); if (range?.from && range?.to) { setShowDatePicker(false); setShowMoreFilters(false); } }} numberOfMonths={2} className="rounded-xl" />
-                                            </PopoverContent>
-                                        </Popover>
-                                    ) : (
-                                        <DropdownMenuItem key={option.value} onClick={() => { setDateFilter(option.value); setShowMoreFilters(false); }} className={`cursor-pointer ${dateFilter === option.value ? 'bg-teal-50 text-teal-600' : ''}`}>
-                                            {option.label}
-                                        </DropdownMenuItem>
-                                    )
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-1 min-w-0 sm:justify-end">
+                            {/* Compact search bar — desktop */}
+                            <div className="relative min-w-[180px] max-w-[240px] hidden sm:block">
+                                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                <Input
+                                    ref={searchInputRef}
+                                    data-testid="task-search-input"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search tasks…"
+                                    className="pl-9 pr-8 h-8 rounded-full bg-white border-gray-200 text-sm"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        aria-label="Clear search"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="mobile-h-scroll sm:overflow-visible sm:flex-wrap items-center gap-2 flex-1 sm:flex-initial pb-0.5">
+                                <button data-testid="date-filter-all" onClick={() => setDateFilter('all')} className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${dateFilter === 'all' ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>All</button>
+                                
+                                {primaryFilters.map((option) => (
+                                    <button key={option.value} data-testid={`date-filter-${option.value}`} onClick={() => setDateFilter(option.value)} className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${dateFilter === option.value ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
+                                        {option.value === 'overdue' && <AlertCircle className="w-3.5 h-3.5" />}
+                                        {option.label}
+                                        {option.badge && overdueCount > 0 && viewMode === 'active' && (
+                                            <span className={`px-1.5 py-0.5 text-xs rounded-full ${dateFilter === 'overdue' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>{overdueCount}</span>
+                                        )}
+                                    </button>
                                 ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                
+                                <DropdownMenu open={showMoreFilters} onOpenChange={setShowMoreFilters}>
+                                    <DropdownMenuTrigger asChild>
+                                        <button data-testid="more-filters-button" className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${moreFilters.some(f => f.value === dateFilter) ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:border-teal-300'}`}>
+                                            <MoreHorizontal className="w-3.5 h-3.5" />
+                                            More
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="w-48">
+                                        {moreFilters.map((option) => (
+                                            option.value === 'custom' ? (
+                                                <Popover key={option.value} open={showDatePicker} onOpenChange={setShowDatePicker}>
+                                                    <PopoverTrigger asChild>
+                                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setDateFilter('custom'); setShowDatePicker(true); }} className="cursor-pointer">
+                                                            <Calendar className="w-4 h-4 mr-2" />
+                                                            {dateFilter === 'custom' && customDateRange.from && customDateRange.to ? `${format(customDateRange.from, 'MMM d')} - ${format(customDateRange.to, 'MMM d')}` : 'Custom Range'}
+                                                        </DropdownMenuItem>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-auto p-0" align="start" side="bottom">
+                                                        <CalendarComponent mode="range" selected={{ from: customDateRange.from, to: customDateRange.to }} onSelect={(range) => { setCustomDateRange({ from: range?.from || null, to: range?.to || null }); if (range?.from && range?.to) { setShowDatePicker(false); setShowMoreFilters(false); } }} numberOfMonths={1} className="rounded-xl" />
+                                                    </PopoverContent>
+                                                </Popover>
+                                            ) : (
+                                                <DropdownMenuItem key={option.value} onClick={() => { setDateFilter(option.value); setShowMoreFilters(false); }} className={`cursor-pointer ${dateFilter === option.value ? 'bg-teal-50 text-teal-600' : ''}`}>
+                                                    {option.label}
+                                                </DropdownMenuItem>
+                                            )
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* Upgrade Nudges */}
                 {showLightBanner && !showPersistentBanner && (
-                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
+                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <p className="text-sm text-teal-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
-                        <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
+                        <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs shrink-0 self-start sm:self-auto"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
                     </div>
                 )}
 
                 {showPersistentBanner && (
                     <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
                         <CardContent className="py-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3"><Crown className="w-5 h-5 text-amber-600" /><p className="text-amber-800">You're managing {activeTaskCount} tasks! Upgrade to Pro or Teams for priority support and team features.</p></div>
-                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-start sm:items-center gap-3"><Crown className="w-5 h-5 text-amber-600 shrink-0" /><p className="text-amber-800 text-sm sm:text-base">You're managing {activeTaskCount} tasks! Upgrade to Pro or Teams for priority support and team features.</p></div>
+                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 shrink-0 self-start sm:self-auto"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -1632,8 +1697,8 @@ const TaskHub = () => {
 
                 {/* AI Command Center Dialog — primary flow for new tasks + Q&A + help */}
                 <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
-                    <DialogContent className="rounded-2xl max-w-2xl w-[96vw] sm:w-full max-h-[92vh] overflow-y-auto p-0">
-                        <div className="p-5 sm:p-6">
+                    <DialogContent className="max-w-2xl w-full sm:w-full max-h-[92dvh] overflow-y-auto p-0 pb-[env(safe-area-inset-bottom,0px)]">
+                        <div className="p-4 sm:p-6">
                             <DialogHeader className="mb-3">
                                 <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
                                     <Sparkles className="w-5 h-5 text-slate-800" />
@@ -1705,14 +1770,14 @@ const TaskHub = () => {
                     </details>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-start">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
+                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
                                 <CardDescription>Tasks from others</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No tasks assigned to you'}</p>
                                 ) : (
@@ -1726,11 +1791,11 @@ const TaskHub = () => {
 
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
+                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
                                 <CardDescription>Your personal tasks</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No self-assigned tasks'}</p>
                                 ) : (
@@ -1744,11 +1809,11 @@ const TaskHub = () => {
 
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
+                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1 clean-scroll">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
                                 {parentGroups
                                     .filter(matchesGroupSearch)
                                     .filter((g) => !salesOnly || isSalesGroup(g))

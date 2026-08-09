@@ -28,7 +28,7 @@ const GlobalFAB = () => {
             data-testid="global-fab-new-task"
             aria-label="Tell TskFlow what you need done"
             onClick={onClick}
-            className="fixed bottom-6 left-6 z-40 h-14 pl-4 pr-5 rounded-full bg-teal-800 text-white shadow-xl shadow-teal-900/20 flex items-center gap-2 hover:bg-teal-900 hover:scale-105 active:scale-95 transition-transform"
+            className="fixed safe-fab-bl z-40 h-14 w-14 sm:w-auto sm:pl-4 sm:pr-5 rounded-full bg-teal-800 text-white shadow-xl shadow-teal-900/20 flex items-center justify-center gap-2 hover:bg-teal-900 hover:scale-105 active:scale-95 transition-transform"
             title="Tell TskFlow what you need done"
         >
             <Plus className="w-5 h-5" />
