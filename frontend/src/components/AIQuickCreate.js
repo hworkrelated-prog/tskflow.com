@@ -25,6 +25,18 @@ const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quot
 
 const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
 
+/** Detect an @mention token just before the caret. */
+const getMentionState = (value, caret) => {
+    const before = (value || '').slice(0, caret ?? (value || '').length);
+    const m = before.match(/(^|[\s([{])@([^\s@]*)$/);
+    if (!m) return null;
+    const query = m[2] || '';
+    const start = before.length - query.length - 1;
+    return { start, end: caret ?? before.length, query };
+};
+
+const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
+
 const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(false);
@@ -36,11 +48,17 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [answerLoading, setAnswerLoading] = useState(false);
     const [clarifyAnswer, setClarifyAnswer] = useState('');
     const [people, setPeople] = useState([]);
+    const [groups, setGroups] = useState([]);
     const [peopleSearch, setPeopleSearch] = useState('');
     const [showPeopleDrop, setShowPeopleDrop] = useState(false);
+    const [mention, setMention] = useState(null); // { start, end, query }
+    const [mentionIndex, setMentionIndex] = useState(0);
+    const [newPersonEmail, setNewPersonEmail] = useState('');
+    const [showNewPersonEmail, setShowNewPersonEmail] = useState(false);
     const inputRef = useRef(null);
     const clarifyRef = useRef(null);
     const nudgeSentRef = useRef(false);
+    const mentionListRef = useRef(null);
 
     const [editTitle, setEditTitle] = useState('');
     const [editDesc, setEditDesc] = useState('');
@@ -91,25 +109,207 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
             } catch (_) {
                 if (!cancelled) setPeople([]);
             }
+            try {
+                const g = await axios.get(`${API}/groups`);
+                if (!cancelled) setGroups(Array.isArray(g.data) ? g.data : []);
+            } catch (_) {
+                if (!cancelled) setGroups([]);
+            }
         })();
         return () => { cancelled = true; };
     }, []);
 
+    const mentionQuery = (mention?.query || '').trim().toLowerCase();
+    const mentionPeople = [
+        { id: 'self', name: 'Me', email: '', _kind: 'user' },
+        ...people.map((u) => ({ ...u, _kind: 'user' })),
+    ].filter((u) => {
+        if (!mentionQuery) return true;
+        return (u.name || '').toLowerCase().includes(mentionQuery)
+            || (u.email || '').toLowerCase().includes(mentionQuery);
+    }).slice(0, 6);
+
+    const mentionGroups = groups.filter((g) => {
+        if (!mentionQuery) return true;
+        return (g.name || '').toLowerCase().includes(mentionQuery);
+    }).slice(0, 4).map((g) => ({ ...g, _kind: 'group' }));
+
+    const mentionHasExactPerson = mentionPeople.some((u) =>
+        (u.name || '').toLowerCase() === mentionQuery || (u.email || '').toLowerCase() === mentionQuery
+    );
+    const mentionHasExactGroup = mentionGroups.some((g) => (g.name || '').toLowerCase() === mentionQuery);
+    const showAddPerson = Boolean(mention) && mentionQuery.length > 0 && !mentionHasExactPerson;
+    const showAddGroup = Boolean(mention) && mentionQuery.length > 0 && !mentionHasExactGroup;
+
+    const mentionOptions = (() => {
+        const opts = [
+            ...mentionPeople.map((u) => ({ type: 'user', data: u })),
+            ...mentionGroups.map((g) => ({ type: 'group', data: g })),
+        ];
+        if (showAddPerson) opts.push({ type: 'add_person', data: { query: mention?.query || '' } });
+        if (showAddGroup) opts.push({ type: 'add_group', data: { query: mention?.query || '' } });
+        return opts;
+    })();
+
+    useEffect(() => {
+        setMentionIndex(0);
+    }, [mention?.query, mention?.start]);
+
+    const replaceMention = useCallback((insertText, caretExtra = 0) => {
+        if (!mention) return;
+        const before = text.slice(0, mention.start);
+        const after = text.slice(mention.end);
+        const next = `${before}${insertText}${after}`;
+        const caret = before.length + insertText.length + caretExtra;
+        setText(next);
+        setMention(null);
+        setShowNewPersonEmail(false);
+        setNewPersonEmail('');
+        setTimeout(() => {
+            const el = inputRef.current;
+            if (!el) return;
+            el.focus();
+            try { el.setSelectionRange(caret, caret); } catch (_) { /* noop */ }
+            resizePrompt();
+        }, 0);
+    }, [mention, text, resizePrompt]);
+
+    const addAssigneeChip = useCallback((chip) => {
+        setEditAssignees((prev) => {
+            const key = chip.id || chip.email || chip.name;
+            if (prev.some((a) => (a.id && a.id === key) || (a.email && a.email === chip.email) || (a.name && a.name === chip.name && a.kind === chip.kind))) {
+                return prev;
+            }
+            return [...prev, chip];
+        });
+    }, []);
+
+    const applyMentionOption = useCallback(async (opt) => {
+        if (!opt || !mention) return;
+        if (opt.type === 'user') {
+            const u = opt.data;
+            const label = u.id === 'self' ? 'Me' : (u.name || u.email);
+            replaceMention(`@${label} `);
+            addAssigneeChip(
+                u.id === 'self'
+                    ? { kind: 'user', id: 'self', name: 'Me' }
+                    : { kind: 'user', id: u.id, name: u.name, email: u.email }
+            );
+            return;
+        }
+        if (opt.type === 'group') {
+            const g = opt.data;
+            replaceMention(`@${g.name} `);
+            addAssigneeChip({
+                kind: 'group',
+                id: g.id,
+                name: g.name,
+                emails: g.emails || [],
+                members: g.emails || [],
+                member_count: (g.emails || []).length,
+            });
+            return;
+        }
+        if (opt.type === 'add_person') {
+            const q = (opt.data.query || '').trim();
+            if (isEmailLike(q)) {
+                replaceMention(`@${q} `);
+                addAssigneeChip({ kind: 'email', email: q, name: q.split('@')[0] });
+                return;
+            }
+            setShowNewPersonEmail(true);
+            setNewPersonEmail('');
+            return;
+        }
+        if (opt.type === 'add_group') {
+            const name = (opt.data.query || '').trim();
+            if (!name) return;
+            try {
+                const res = await axios.post(`${API}/groups`, { name, emails: [] });
+                const g = res.data;
+                setGroups((prev) => [g, ...prev]);
+                replaceMention(`@${g.name} `);
+                addAssigneeChip({
+                    kind: 'group',
+                    id: g.id,
+                    name: g.name,
+                    emails: [],
+                    members: [],
+                    member_count: 0,
+                });
+                toast.success(`Group “${g.name}” created — add members anytime in Advanced`);
+            } catch (err) {
+                // Free tier / errors: still put the @mention in the prompt for the parser
+                replaceMention(`@${name} `);
+                toast.message(`Mentioned “${name}” — create the group in Advanced if needed`);
+            }
+        }
+    }, [mention, replaceMention, addAssigneeChip]);
+
+    const confirmNewPerson = () => {
+        const email = newPersonEmail.trim();
+        const name = (mention?.query || '').trim() || email.split('@')[0];
+        if (!isEmailLike(email)) {
+            toast.error('Enter a valid email for the new person');
+            return;
+        }
+        replaceMention(`@${name} `);
+        addAssigneeChip({ kind: 'email', email, name });
+        toast.success(`Will assign to ${email}`);
+    };
+
+    const syncMentionFromCaret = (value, caret) => {
+        const state = getMentionState(value, caret);
+        setMention(state);
+        if (!state) {
+            setShowNewPersonEmail(false);
+            setNewPersonEmail('');
+        }
+    };
+
     const applyPreview = (p) => {
         const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
-        setPreview({ ...p, is_sales_task: sales, category: sales ? (p.category || 'Sales') : p.category });
         setEditTitle(p.title || '');
         setEditDesc(p.description || '');
         setEditDue(p.due_date || '');
         setEditPriority(p.priority || 'Medium');
-        setEditAssignees(p.assignee_resolution?.resolved || []);
+        // Keep @mentions the user already picked; merge in any newly resolved assignees
+        let mergedCount = 0;
+        setEditAssignees((prev) => {
+            const fromParse = p.assignee_resolution?.resolved || [];
+            if (prev.length === 0) {
+                mergedCount = fromParse.length;
+                return fromParse;
+            }
+            const merged = [...prev];
+            for (const a of fromParse) {
+                const key = a.id || a.email || a.name;
+                if (!merged.some((x) => (x.id && x.id === key) || (x.email && x.email === a.email) || (x.name && x.name === a.name))) {
+                    merged.push(a);
+                }
+            }
+            mergedCount = merged.length;
+            return merged;
+        });
         setEditCriteria(p.success_criteria || '');
         setShowDetails(false);
         setClarifyAnswer('');
         setPeopleSearch('');
+        setMention(null);
         const qs = p.clarifying_questions || [];
-        if (qs.length > 0) {
-            const isWho = /who|own|assign/i.test(qs[0] || '');
+        // Skip "who" clarify if @mention already picked someone (or parse resolved them)
+        const filteredQs = mergedCount > 0 || (p.assignee_resolution?.resolved || []).length > 0 || /@/.test(text)
+            ? qs.filter((q) => !/who|own|assign/i.test(q || ''))
+            : qs;
+        const nextPreview = {
+            ...p,
+            is_sales_task: sales,
+            category: sales ? (p.category || 'Sales') : p.category,
+            clarifying_questions: filteredQs,
+        };
+        setPreview(nextPreview);
+        if (filteredQs.length > 0) {
+            const isWho = /who|own|assign/i.test(filteredQs[0] || '');
             setShowPeopleDrop(isWho);
             setTimeout(() => clarifyRef.current?.focus(), 50);
             if (!nudgeSentRef.current) {
@@ -231,6 +431,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setClarifyAnswer('');
         setPeopleSearch('');
         setShowPeopleDrop(false);
+        setMention(null);
+        setShowNewPersonEmail(false);
+        setNewPersonEmail('');
         nudgeSentRef.current = false;
         focusInput();
     };
@@ -410,22 +613,208 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                             <Textarea
                                 ref={inputRef}
                                 value={text}
-                                onChange={(e) => setText(e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    const caret = e.target.selectionStart ?? val.length;
+                                    setText(val);
+                                    syncMentionFromCaret(val, caret);
+                                }}
+                                onClick={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
+                                onKeyUp={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
                                 onKeyDown={(e) => {
+                                    if (mention && mentionOptions.length > 0) {
+                                        if (e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            setMentionIndex((i) => (i + 1) % mentionOptions.length);
+                                            return;
+                                        }
+                                        if (e.key === 'ArrowUp') {
+                                            e.preventDefault();
+                                            setMentionIndex((i) => (i - 1 + mentionOptions.length) % mentionOptions.length);
+                                            return;
+                                        }
+                                        if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            setMention(null);
+                                            setShowNewPersonEmail(false);
+                                            return;
+                                        }
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            const opt = mentionOptions[mentionIndex];
+                                            if (opt) applyMentionOption(opt);
+                                            return;
+                                        }
+                                        if (e.key === 'Tab' && !showNewPersonEmail) {
+                                            e.preventDefault();
+                                            const opt = mentionOptions[mentionIndex];
+                                            if (opt) applyMentionOption(opt);
+                                            return;
+                                        }
+                                    }
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
                                         runPreview();
                                     }
                                 }}
-                                placeholder="What needs to get done?"
+                                placeholder="What needs to get done? Type @ to assign someone"
                                 rows={1}
                                 className="min-h-[76px] max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-12 text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
+
+                            {mention && (
+                                <div
+                                    ref={mentionListRef}
+                                    className="absolute left-2 right-2 top-full mt-1 z-50 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl py-1"
+                                    data-testid="mention-dropdown"
+                                >
+                                    {mentionOptions.length === 0 && (
+                                        <p className="px-3 py-2 text-xs text-slate-500">Keep typing a name, email, or group…</p>
+                                    )}
+                                    {mentionOptions.map((opt, idx) => {
+                                        const active = idx === mentionIndex;
+                                        if (opt.type === 'user') {
+                                            const u = opt.data;
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={`u-${u.id || u.email}`}
+                                                    onMouseDown={(e) => { e.preventDefault(); applyMentionOption(opt); }}
+                                                    onMouseEnter={() => setMentionIndex(idx)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm ${active ? 'bg-teal-50' : 'hover:bg-slate-50'}`}
+                                                >
+                                                    <span className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                                                        <UserIcon className="w-3.5 h-3.5 text-slate-600" />
+                                                    </span>
+                                                    <span className="min-w-0">
+                                                        <span className="font-medium text-slate-800 block truncate">{u.name || u.email}</span>
+                                                        {u.email ? <span className="text-[11px] text-slate-500 truncate block">{u.email}</span> : null}
+                                                    </span>
+                                                </button>
+                                            );
+                                        }
+                                        if (opt.type === 'group') {
+                                            const g = opt.data;
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={`g-${g.id}`}
+                                                    onMouseDown={(e) => { e.preventDefault(); applyMentionOption(opt); }}
+                                                    onMouseEnter={() => setMentionIndex(idx)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm ${active ? 'bg-teal-50' : 'hover:bg-slate-50'}`}
+                                                >
+                                                    <span className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
+                                                        <Users className="w-3.5 h-3.5 text-teal-800" />
+                                                    </span>
+                                                    <span className="min-w-0">
+                                                        <span className="font-medium text-slate-800 block truncate">{g.name}</span>
+                                                        <span className="text-[11px] text-slate-500">Group · {(g.emails || []).length} people</span>
+                                                    </span>
+                                                </button>
+                                            );
+                                        }
+                                        if (opt.type === 'add_person') {
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key="add-person"
+                                                    onMouseDown={(e) => { e.preventDefault(); applyMentionOption(opt); }}
+                                                    onMouseEnter={() => setMentionIndex(idx)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm border-t border-slate-100 ${active ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
+                                                    data-testid="mention-add-person"
+                                                >
+                                                    <span className="w-7 h-7 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-lg leading-none shrink-0">+</span>
+                                                    <span className="min-w-0">
+                                                        <span className="font-medium text-slate-800 block">
+                                                            {isEmailLike(opt.data.query)
+                                                                ? `Assign to ${opt.data.query}`
+                                                                : `Add new person “${opt.data.query}”`}
+                                                        </span>
+                                                        <span className="text-[11px] text-slate-500">
+                                                            {isEmailLike(opt.data.query) ? 'Invite by email' : 'We’ll ask for their email'}
+                                                        </span>
+                                                    </span>
+                                                </button>
+                                            );
+                                        }
+                                        return (
+                                            <button
+                                                type="button"
+                                                key="add-group"
+                                                onMouseDown={(e) => { e.preventDefault(); applyMentionOption(opt); }}
+                                                onMouseEnter={() => setMentionIndex(idx)}
+                                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm border-t border-slate-100 ${active ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
+                                                data-testid="mention-add-group"
+                                            >
+                                                <span className="w-7 h-7 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                                                    <Users className="w-3.5 h-3.5" />
+                                                </span>
+                                                <span className="min-w-0">
+                                                    <span className="font-medium text-slate-800 block">Create group “{opt.data.query}”</span>
+                                                    <span className="text-[11px] text-slate-500">Assign this task to a new group</span>
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+
+                                    {showNewPersonEmail && (
+                                        <div className="border-t border-slate-100 p-2.5 space-y-2 bg-amber-50/50" data-testid="mention-new-person-email">
+                                            <p className="text-xs text-slate-600">
+                                                Email for <span className="font-semibold">{mention.query}</span>
+                                            </p>
+                                            <div className="flex gap-1.5">
+                                                <Input
+                                                    type="email"
+                                                    autoFocus
+                                                    value={newPersonEmail}
+                                                    onChange={(e) => setNewPersonEmail(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            confirmNewPerson();
+                                                        }
+                                                        e.stopPropagation();
+                                                    }}
+                                                    placeholder="name@company.com"
+                                                    className="h-8 text-sm rounded-lg"
+                                                />
+                                                <Button type="button" size="sm" className="h-8 rounded-lg bg-slate-900" onClick={confirmNewPerson}>
+                                                    Add
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {editAssignees.length > 0 && !preview && (
+                                <div className="flex flex-wrap gap-1.5 px-3 pb-11">
+                                    {editAssignees.map((a, i) => (
+                                        <span
+                                            key={`${a.id || a.email || a.name}-${i}`}
+                                            className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
+                                                a.kind === 'group'
+                                                    ? 'bg-teal-100 text-teal-900 border-teal-200'
+                                                    : a.kind === 'email'
+                                                        ? 'bg-slate-100 text-slate-700 border-slate-200'
+                                                        : 'bg-teal-100 text-teal-800 border-teal-200'
+                                            }`}
+                                        >
+                                            {a.kind === 'group' ? <Users className="w-3 h-3" /> : <UserIcon className="w-3 h-3" />}
+                                            {a.name || a.email}
+                                            <button type="button" onClick={() => removeAssignee(i)} className="opacity-60 hover:opacity-100" aria-label="Remove">
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
                             <div className="absolute bottom-2 right-2 flex items-center gap-2">
                                 <span className="hidden sm:inline text-[10px] text-slate-400 pr-1 select-none">
-                                    Enter to go · Shift+Enter for line
+                                    @ to assign · Enter to go
                                 </span>
                                 <Button
                                     type="button"
@@ -606,7 +995,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                     </Badge>
                                                 )}
                                                 {preview.is_sales_task && (
-                                                    <Badge className="bg-emerald-100 text-emerald-800">Sales task</Badge>
+                                                    <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase text-[10px] tracking-wide">Sales</Badge>
                                                 )}
                                                 {preview.requires_screen_recording && (
                                                     <Badge className="bg-violet-100 text-violet-800">Screen recording required</Badge>
