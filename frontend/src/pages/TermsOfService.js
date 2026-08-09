@@ -67,7 +67,7 @@ const TermsOfService = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">9. SMS Communications</h2>
-                        <p>By submitting our Contact Us form and opting in, you consent to receive SMS messages from Tskflow related to your inquiry. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for assistance. Consent to receive SMS is not required to use the Service.</p>
+                        <p>Tskflow SMS Program: If you opt in via our Contact Us form, you will receive informational SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can cancel at any time by texting STOP. For help, text HELP or contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>. Carriers are not liable for delayed or undelivered messages. See our <Link to="/privacy" className="text-indigo-600 underline">Privacy Policy</Link> for details on how we handle your information.</p>
                     </section>
 
                     <section>

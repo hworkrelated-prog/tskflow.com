@@ -53,7 +53,7 @@ const PrivacyPolicy = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">4. SMS Communications</h2>
-                        <p>If you opt in via our Contact Us form, we may send you SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can opt out at any time by replying STOP, or get help by replying HELP. We do not share your phone number with third parties for their marketing purposes. Consent to receive SMS messages is not a condition of purchase.</p>
+                        <p>If you opt in via our Contact Us form, we may send you informational SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can opt out at any time by replying STOP, or get help by replying HELP. No mobile information, including text messaging originator opt-in data and consent, will be shared with third parties or affiliates for marketing or promotional purposes. This information is only shared with subcontractors that support service delivery (e.g., SMS aggregators and providers of text messaging services). Consent to receive SMS messages is not a condition of purchase.</p>
                     </section>
 
                     <section>
