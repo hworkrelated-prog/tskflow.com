@@ -93,7 +93,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
             >
                 <Card
                     data-testid={`task-card-${task.id}`}
-                    className={`group relative overflow-hidden rounded-xl border bg-card p-6 transition-all cursor-pointer task-card ${selected ? 'ring-2 ring-teal-500 bg-teal-50/50' : ''}`}
+                    className={`group relative overflow-hidden rounded-xl border bg-card p-4 sm:p-6 transition-all cursor-pointer task-card active:scale-[0.99] ${selected ? 'ring-2 ring-teal-500 bg-teal-50/50' : ''}`}
                     onClick={() => !selectionMode && navigate(`/task/${task.id}`)}
                 >
                     <CardContent className="p-0 space-y-3">
@@ -117,7 +117,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                                         data-testid={`quick-complete-${task.id}`}
                                     />
                                 )}
-                                <h3 className="font-semibold text-lg line-clamp-2 flex-1 text-foreground">{task.title}</h3>
+                                <h3 className="font-semibold text-base sm:text-lg line-clamp-2 flex-1 text-foreground">{task.title}</h3>
                             </div>
                             {getStatusBadge(task.status)}
                         </div>

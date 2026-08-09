@@ -4,12 +4,30 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 body {
     margin: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+}
+
+/* Clear floating New Task + Voice controls across authenticated pages */
+body.app-authenticated {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Tap targets feel snappier on mobile without 300ms delay leftovers */
+button,
+[role="button"],
+a {
+    touch-action: manipulation;
 }
 
 code {
@@ -125,6 +143,22 @@ h1, h2, h3, h4, h5, h6 {
     .brand-wordmark {
         @apply text-2xl font-bold bg-gradient-to-r from-teal-800 to-slate-800 bg-clip-text text-transparent;
         font-family: 'Outfit', sans-serif;
+    }
+    .safe-fab-bl {
+        bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+        left: calc(1.25rem + env(safe-area-inset-left, 0px));
+    }
+    .safe-fab-br {
+        bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+        right: calc(1.25rem + env(safe-area-inset-right, 0px));
+    }
+    .mobile-h-scroll {
+        @apply flex overflow-x-auto overscroll-x-contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .mobile-h-scroll::-webkit-scrollbar {
+        display: none;
     }
 }
 

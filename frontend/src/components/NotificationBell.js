@@ -80,7 +80,7 @@ export const NotificationBell = () => {
                 )}
             </button>
             {open && (
-                <div className="absolute right-0 top-12 w-96 max-w-[92vw] bg-white border border-gray-200 rounded-xl shadow-xl z-50">
+                <div className="fixed sm:absolute inset-x-3 sm:inset-x-auto sm:right-0 top-[calc(3.75rem+env(safe-area-inset-top,0px))] sm:top-12 w-auto sm:w-96 max-w-none sm:max-w-[92vw] bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-[min(70dvh,28rem)] flex flex-col overflow-hidden">
                     <div className="px-4 py-3 border-b flex items-center justify-between">
                         <h3 className="font-semibold">Notifications</h3>
                         {unread > 0 && (
@@ -99,7 +99,7 @@ export const NotificationBell = () => {
                         <span className="font-medium">What&apos;s new in Tskflow</span>
                         <span className="ml-auto text-xs text-teal-500">See changelog →</span>
                     </button>
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                         {items.length === 0 ? (
                             <div className="px-6 py-10 text-center text-sm text-gray-500">You&apos;re all caught up.</div>
                         ) : items.map((n) => (
