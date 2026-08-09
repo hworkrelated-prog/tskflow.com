@@ -59,7 +59,7 @@ const walkthroughs = {
             },
             {
                 title: "Create New Tasks",
-                description: "Click 'New Task' to create tasks. You can assign to yourself, team members, or anyone via email.",
+                description: "Click New Task and tell TskFlow what you need done in plain English. It figures out who, when, and priority — use the advanced form only if you want attachments or extras.",
                 icon: <Plus className="w-8 h-8" />
             }
         ]

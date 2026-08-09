@@ -17,9 +17,9 @@ const topics = [
             <ol className="list-decimal ml-5 space-y-2 text-sm">
                 <li>Sign in and open your dashboard. You’ll see three columns: <strong>Assigned to Me</strong>, <strong>Self-Assigned</strong>, and <strong>Delegated</strong>.</li>
                 <li>Click the floating <strong>New Task</strong> button at the bottom-left (available on every page).</li>
-                <li>Just start typing — TskFlow auto-saves your work as a draft.</li>
-                <li>Type a description like &ldquo;email Sarah about Q3 tomorrow at 3pm&rdquo; and Smart Task Creation pre-fills the title, due date, priority, and category.</li>
-                <li>Assign to one or more teammates and hit <strong>Create Task</strong>.</li>
+                <li>Tell TskFlow what you need done in plain English — e.g. &ldquo;Have Sarah email the Q3 update by tomorrow 3pm.&rdquo;</li>
+                <li>Confirm the summary (or answer one clarifying question if something critical is missing), then send.</li>
+                <li>Use <strong>Advanced create</strong> only when you need attachments, groups, or recurrence extras.</li>
                 <li>Ready for more? Try <strong>Voice Mode</strong> (the mic at bottom-right) — tap and say &ldquo;What’s outstanding?&rdquo;</li>
             </ol>
         )
@@ -189,7 +189,7 @@ const HelpCenter = () => {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {[
-                                { step: '1', title: 'Create your first task', body: 'Use the floating New Task button at bottom-left. Just start typing — auto-save handles the rest.' },
+                                { step: '1', title: 'Create your first task', body: 'Use the floating New Task button and describe what you need in plain English. Confirm and send.' },
                                 { step: '2', title: 'Turn a routine into recurring', body: 'Open Advanced Options in Create Task. Pick a frequency, set an end (or never). TskFlow keeps future occurrences pre-filled.' },
                                 { step: '3', title: 'Delegate to your team', body: 'Type an email or search a teammate. Assign to multiple people to create a group task with a live leaderboard.' },
                                 { step: '4', title: 'Ask Voice Mode', body: 'Tap the mic bottom-right. Say &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; — it does both.' },

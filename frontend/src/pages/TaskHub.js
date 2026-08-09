@@ -47,6 +47,7 @@ const TaskHub = () => {
         due_date: '',
         priority: 'Medium',
         is_sales_task: false,
+        success_criteria: '',
     });
     const [recurrence, setRecurrence] = useState({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
     const [smartParsing, setSmartParsing] = useState(false);
@@ -163,16 +164,24 @@ const TaskHub = () => {
         registerPush();
     }, []);
 
-    // Listen for the Global FAB to open the create modal from anywhere
+    // Listen for the Global FAB / deep-link to open AI create (advanced form is fallback only)
     useEffect(() => {
-        const openHandler = () => setShowCreateModal(true);
-        window.addEventListener('tskflow:open-create-task', openHandler);
-        // Query-string trigger from other pages: /dashboard?create=1
+        const openAI = () => setShowAIDialog(true);
+        const openAdvanced = () => setShowCreateModal(true);
+        window.addEventListener('tskflow:open-ai-create', openAI);
+        // Backward-compat: old event name now opens AI create too
+        window.addEventListener('tskflow:open-create-task', openAI);
+        window.addEventListener('tskflow:open-advanced-create', openAdvanced);
         try {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('create') === '1') setShowCreateModal(true);
+            if (params.get('create') === '1') setShowAIDialog(true);
+            if (params.get('create') === 'advanced') setShowCreateModal(true);
         } catch (_) { /* noop */ }
-        return () => window.removeEventListener('tskflow:open-create-task', openHandler);
+        return () => {
+            window.removeEventListener('tskflow:open-ai-create', openAI);
+            window.removeEventListener('tskflow:open-create-task', openAI);
+            window.removeEventListener('tskflow:open-advanced-create', openAdvanced);
+        };
     }, []);
 
     // Flush offline draft queue when we come back online
@@ -211,6 +220,7 @@ const TaskHub = () => {
                 priority: taskForm.priority || 'Medium',
                 attachments: attachments || null,
                 auto_reminder: taskForm.auto_reminder || false,
+                success_criteria: taskForm.success_criteria || '',
             };
             try {
                 if (!navigator.onLine) {
@@ -295,6 +305,7 @@ const TaskHub = () => {
             priority: draft.priority || 'Medium',
             is_sales_task: draft.is_sales_task || false,
             requires_screen_recording: draft.requires_screen_recording || false,
+            success_criteria: draft.success_criteria || '',
         });
         setAttachments(draft.attachments || []);
         // Best-effort restore of assignee
@@ -749,6 +760,7 @@ const TaskHub = () => {
                         assigned_to: assigneeList[0],
                         due_date: taskForm.due_date,
                         priority: taskForm.priority,
+                        success_criteria: taskForm.success_criteria || '',
                     });
                     await axios.post(`${API}/tasks/drafts/${draftInModal.id}/complete`);
                     toast.success('Task created from draft');
@@ -782,6 +794,7 @@ const TaskHub = () => {
                 due_date: '',
                 priority: 'Medium',
                 is_sales_task: false,
+                success_criteria: '',
             });
             setRecurrence({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
             setDraftInModal({ id: null, status: '' });
@@ -813,6 +826,7 @@ const TaskHub = () => {
                 due_date: '',
                 priority: 'Medium',
                 is_sales_task: false,
+                success_criteria: '',
             });
             setRecurrence({ enabled: false, frequency: 'weekly', interval: 1, end_type: 'never', end_date: '', end_count: 5 });
             setDraftInModal({ id: null, status: '' });
@@ -1078,8 +1092,8 @@ const TaskHub = () => {
                                         <DialogHeader>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Create Task</DialogTitle>
-                                                    <DialogDescription>Assign to one or multiple people at once</DialogDescription>
+                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Advanced create</DialogTitle>
+                                                    <DialogDescription>Full form for attachments, groups, and recurrence — or use New Task for the AI assistant</DialogDescription>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
@@ -1110,6 +1124,18 @@ const TaskHub = () => {
                                                     value={taskForm.description}
                                                     onChange={(value) => setTaskForm({ ...taskForm, description: value })}
                                                     placeholder="Describe the task with formatting..."
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="success_criteria">Done well looks like <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                                                <Textarea
+                                                    id="success_criteria"
+                                                    data-testid="task-success-criteria"
+                                                    value={taskForm.success_criteria || ''}
+                                                    onChange={(e) => setTaskForm({ ...taskForm, success_criteria: e.target.value })}
+                                                    placeholder="What does a good completion look like?"
+                                                    className="rounded-xl min-h-[64px]"
+                                                    rows={2}
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -1592,12 +1618,12 @@ const TaskHub = () => {
                     <DialogContent className="rounded-2xl max-w-2xl w-[96vw] sm:w-full max-h-[92vh] overflow-y-auto p-0">
                         <div className="p-5 sm:p-6">
                             <DialogHeader className="mb-3">
-                                <DialogTitle className="flex items-center gap-2 text-xl">
-                                    <Sparkles className="w-5 h-5 text-indigo-600" />
-                                    What do you need?
+                                <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
+                                    <Sparkles className="w-5 h-5 text-slate-800" />
+                                    Tell TskFlow what you need done
                                 </DialogTitle>
                                 <DialogDescription className="text-sm">
-                                    Describe a task in one sentence, ask a &quot;how do I…&quot; question, or paste a recurring instruction. I&apos;ll figure the rest out.
+                                    Plain English is enough — I&apos;ll assign it, set the deadline, and follow up. Ask one clarifying question only if something critical is missing.
                                 </DialogDescription>
                             </DialogHeader>
                             <AIQuickCreate
@@ -1612,6 +1638,7 @@ const TaskHub = () => {
                                             due_date: prefill.due_date || f.due_date,
                                             priority: prefill.priority || f.priority,
                                             is_sales_task: prefill.is_sales_task || f.is_sales_task,
+                                            success_criteria: prefill.success_criteria || f.success_criteria || '',
                                         }));
                                     }
                                     setShowAIDialog(false);

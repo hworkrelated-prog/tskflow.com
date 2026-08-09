@@ -46,7 +46,8 @@ const TaskDetail = () => {
         description: '',
         due_date: '',
         priority: '',
-        category: ''
+        category: '',
+        success_criteria: '',
     });
     const [editLoading, setEditLoading] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
@@ -186,7 +187,8 @@ const TaskDetail = () => {
                 description: response.data.description || '',
                 due_date: response.data.due_date ? response.data.due_date.slice(0, 16) : '',
                 priority: response.data.priority,
-                category: response.data.category || ''
+                category: response.data.category || '',
+                success_criteria: response.data.success_criteria || '',
             });
             // If this is a parent task, load participants + leaderboard for the collapsible section
             if (response.data.is_parent) {
@@ -663,6 +665,18 @@ const TaskDetail = () => {
                                                                 placeholder="Enter task description..."
                                                             />
                                                         </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="edit-success-criteria">Done well looks like</Label>
+                                                            <Textarea
+                                                                id="edit-success-criteria"
+                                                                data-testid="edit-success-criteria"
+                                                                value={editForm.success_criteria || ''}
+                                                                onChange={(e) => setEditForm({ ...editForm, success_criteria: e.target.value })}
+                                                                placeholder="Optional expectations for a good completion"
+                                                                className="rounded-xl min-h-[64px]"
+                                                                rows={2}
+                                                            />
+                                                        </div>
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="space-y-2">
                                                                 <Label htmlFor="edit-due-date">Due Date</Label>
@@ -790,6 +804,15 @@ const TaskDetail = () => {
                                     dangerouslySetInnerHTML={{ __html: task.description || '' }}
                                 />
                             </div>
+
+                            {task.success_criteria && (
+                                <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="task-success-criteria">
+                                    <Label className="text-muted-foreground">Done well looks like</Label>
+                                    <p className="mt-1.5 text-base leading-relaxed text-slate-800 whitespace-pre-wrap">
+                                        {task.success_criteria}
+                                    </p>
+                                </div>
+                            )}
 
                             {task.attachments && task.attachments.length > 0 && (
                                 <div>
