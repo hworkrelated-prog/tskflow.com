@@ -7737,9 +7737,9 @@ async def _startup_indexes():
 class ContactRequest(BaseModel):
     name: str
     email: EmailStr
-    phone: str
+    phone: Optional[str] = None
     message: str
-    sms_consent: bool
+    sms_consent: bool = False
 
     @validator('name')
     def validate_name(cls, v):
@@ -7754,7 +7754,7 @@ class ContactRequest(BaseModel):
     def validate_phone(cls, v):
         v = (v or '').strip()
         if not v:
-            raise ValueError('Phone number is required')
+            return ''
         digits = ''.join(c for c in v if c.isdigit())
         if len(digits) < 7 or len(digits) > 15:
             raise ValueError('Please enter a valid phone number')
@@ -7769,11 +7769,9 @@ class ContactRequest(BaseModel):
             raise ValueError('Message is too long')
         return v
 
-    @validator('sms_consent')
+    @validator('sms_consent', pre=True)
     def validate_sms_consent(cls, v):
-        if not v:
-            raise ValueError('SMS consent is required')
-        return v
+        return bool(v)
 
 
 def _get_client_ip(request: HTTPRequest) -> str:
@@ -7793,15 +7791,21 @@ async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, bac
     """Public contact form — stores inquiry + SMS consent proof (phone, consent, timestamp, IP)."""
     now = get_pst_now().isoformat()
     ip_address = _get_client_ip(http_request)
+    sms_consent = bool(contact.sms_consent)
+    sms_consent_text = (
+        "By checking, you agree to receive transactional/informational SMS communications regarding your inquiry from TskFlow. "
+        "Message frequency varies. Message and data rates may apply. Reply HELP for help or STOP to opt-out."
+        if sms_consent else None
+    )
 
     contact_doc = {
         "id": str(uuid.uuid4()),
         "name": contact.name,
         "email": contact.email.lower(),
-        "phone": contact.phone,
+        "phone": contact.phone or '',
         "message": contact.message,
-        "sms_consent": True,
-        "sms_consent_text": "I agree to receive SMS messages from TskFlow. Message and data rates may apply.",
+        "sms_consent": sms_consent,
+        "sms_consent_text": sms_consent_text,
         "timestamp": now,
         "ip_address": ip_address,
         "created_at": now,
@@ -7812,8 +7816,8 @@ async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, bac
         <h2>New Contact Form Submission</h2>
         <p><strong>Name:</strong> {contact.name}</p>
         <p><strong>Email:</strong> {contact.email}</p>
-        <p><strong>Phone:</strong> {contact.phone}</p>
-        <p><strong>SMS Consent:</strong> Yes</p>
+        <p><strong>Phone:</strong> {contact.phone or '-'}</p>
+        <p><strong>SMS Consent:</strong> {'Yes' if sms_consent else 'No'}</p>
         <p><strong>IP:</strong> {ip_address}</p>
         <p><strong>Timestamp:</strong> {now}</p>
         <p><strong>Message:</strong></p>

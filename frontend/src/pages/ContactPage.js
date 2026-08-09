@@ -26,12 +26,6 @@ const ContactPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
-        if (!formData.smsConsent) {
-            toast.error('Please agree to receive SMS messages to continue');
-            return;
-        }
-
         setLoading(true);
         try {
             await axios.post(`${API}/contact`, {
@@ -132,7 +126,7 @@ const ContactPage = () => {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="phone">Phone</Label>
+                                        <Label htmlFor="phone">Phone <span className="text-muted-foreground font-normal">(optional)</span></Label>
                                         <Input
                                             id="phone"
                                             data-testid="contact-phone-input"
@@ -140,7 +134,6 @@ const ContactPage = () => {
                                             placeholder="+1 (555) 123-4567"
                                             value={formData.phone}
                                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                            required
                                             className="rounded-md"
                                         />
                                     </div>
@@ -166,14 +159,14 @@ const ContactPage = () => {
                                             className="mt-0.5"
                                         />
                                         <Label htmlFor="smsConsent" className="text-sm font-normal leading-snug cursor-pointer text-slate-700">
-                                            I agree to receive SMS messages from TskFlow. Message and data rates may apply.
+                                            By checking, you agree to receive <strong>transactional/informational SMS communications</strong> regarding your inquiry from <strong>TskFlow</strong>. Message frequency varies. <strong>Message and data rates may apply</strong>. Reply <strong>HELP</strong> for help or <strong>STOP</strong> to opt-out.
                                         </Label>
                                     </div>
                                     <Button
                                         data-testid="contact-submit-button"
                                         type="submit"
                                         className="w-full rounded-md font-medium"
-                                        disabled={loading || !formData.smsConsent}
+                                        disabled={loading}
                                     >
                                         {loading ? 'Sending...' : 'Send Message'}
                                     </Button>
