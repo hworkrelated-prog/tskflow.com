@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { ArrowLeft, Copy, Check, ListPlus, Download, Video, Library, X, Plus } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
-import { loadRecordingBlob, clearRecordingBlob } from '@/lib/recordingStore';
+import { loadRecordingBlob, clearRecordingBlob, finalizeLiveRecording, loadLiveRecording } from '@/lib/recordingStore';
+import { extForMime } from '@/lib/mediaRecorder';
 import RichTextEditor from '@/components/RichTextEditor';
 
 const defaultTitle = () => {
@@ -74,6 +75,14 @@ const RecordingEditorPage = () => {
                 const entry = await loadRecordingBlob();
                 if (!cancelled && entry?.blob && entry.blob.size > 0) { setFromBlob(entry.blob); return; }
             } catch { /* silent */ }
+            // Crash-recovery path: assemble any live chunks left behind mid-recording.
+            try {
+                const live = await loadLiveRecording();
+                if (!cancelled && live?.chunks?.length) {
+                    const recovered = await finalizeLiveRecording(live.meta?.mimeType);
+                    if (recovered && recovered.size > 0) { setFromBlob(recovered); return; }
+                }
+            } catch { /* silent */ }
             if (tryOpenerBlob()) return;
             const url = sessionStorage.getItem('tsk_last_recording_url');
             if (url && !cancelled) setVideoUrl(url);
@@ -116,7 +125,8 @@ const RecordingEditorPage = () => {
     const ensureUploaded = async () => {
         if (uploadRef) return uploadRef;
         if (!blob) throw new Error('No recording data available');
-        const filename = `recording-${Date.now()}.webm`;
+        const ext = extForMime(blob.type);
+        const filename = `recording-${Date.now()}.${ext}`;
         const ref = await uploadBlob(blob, filename, blob.type || 'video/webm', (p) => setUploadProgress(p));
         setUploadRef(ref);
         return ref;
@@ -221,7 +231,7 @@ const RecordingEditorPage = () => {
         if (!videoUrl) return;
         const a = document.createElement('a');
         a.href = videoUrl;
-        a.download = `recording-${Date.now()}.webm`;
+        a.download = `recording-${Date.now()}.${extForMime(blob?.type)}`;
         a.click();
     };
 

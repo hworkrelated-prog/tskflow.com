@@ -8,6 +8,7 @@ import { ArrowLeft, Video, Copy, Trash2, Share2, ExternalLink, Clock, Play } fro
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import ScreenRecorder from '@/components/ScreenRecorder';
+import { fileUrl, publicRecordingStreamUrl } from '@/lib/upload';
 
 const fmtDuration = (secs) => {
     if (!secs || Number.isNaN(secs)) return null;
@@ -144,8 +145,17 @@ const RecordingLibraryPage = () => {
                             <Button size="sm" variant="ghost" onClick={() => setPreview(null)} className="rounded-full">Close</Button>
                         </div>
                         <div className="bg-black">
-                            {preview.shareable_link ? (
-                                <iframe title="Recording preview" src={preview.shareable_link} className="w-full aspect-video" />
+                            {(preview.shareable_token || preview.recording_url) ? (
+                                <video
+                                    key={preview.id}
+                                    src={preview.shareable_token
+                                        ? publicRecordingStreamUrl(preview.shareable_token)
+                                        : fileUrl(preview.recording_url)}
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                    className="w-full aspect-video bg-black"
+                                />
                             ) : (
                                 <div className="w-full aspect-video flex items-center justify-center text-white text-sm">No preview available</div>
                             )}
