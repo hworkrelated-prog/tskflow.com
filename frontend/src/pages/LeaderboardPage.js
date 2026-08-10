@@ -65,38 +65,89 @@ const FilterBar = ({ presets, activeKey, onPreset, custom, setCustom }) => {
     );
 };
 
-const LeaderboardTable = ({ rows, orgMode }) => (
-    <div className="border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                    <th className="text-left px-3 py-2 font-medium">#</th>
-                    <th className="text-left px-3 py-2 font-medium">Person</th>
-                    <th className="text-left px-3 py-2 font-medium">Completed</th>
-                    <th className="text-left px-3 py-2 font-medium">Avg completion</th>
-                    <th className="text-left px-3 py-2 font-medium">Avg response</th>
-                    {orgMode && <th className="text-left px-3 py-2 font-medium">Performance</th>}
-                </tr>
-            </thead>
-            <tbody>
-                {rows.length === 0 && (<tr><td colSpan="6" className="px-3 py-8 text-center text-gray-500">No data yet for this range.</td></tr>)}
+const rankBadgeClass = (rank) =>
+    rank === 1 ? 'bg-amber-500 text-white'
+        : rank === 2 ? 'bg-gray-400 text-white'
+            : rank === 3 ? 'bg-orange-400 text-white'
+                : 'bg-gray-200 text-gray-600';
+
+const LeaderboardTable = ({ rows, orgMode }) => {
+    if (!rows || rows.length === 0) {
+        return <div className="border rounded-xl px-3 py-8 text-center text-gray-500 text-sm">No data yet for this range.</div>;
+    }
+    const fmt = (v) => (v != null ? `${v}h` : '\u2014');
+    return (
+        <>
+            {/* Mobile: ranked cards */}
+            <div className="space-y-2 md:hidden">
                 {rows.map((r) => (
-                    <tr key={r.user_id} className="border-t">
-                        <td className="px-3 py-2 font-mono">{r.rank}</td>
-                        <td className="px-3 py-2">
-                            <div className="font-medium">{r.name}</div>
-                            <div className="text-xs text-gray-500">{r.email}</div>
-                        </td>
-                        <td className="px-3 py-2">{r.completed}</td>
-                        <td className="px-3 py-2">{r.avg_completion_hours != null ? `${r.avg_completion_hours}h` : '\u2014'}</td>
-                        <td className="px-3 py-2">{r.avg_response_hours != null ? `${r.avg_response_hours}h` : '\u2014'}</td>
-                        {orgMode && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
-                    </tr>
+                    <div key={r.user_id} className="border rounded-xl p-3">
+                        <div className="flex items-center gap-3">
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${rankBadgeClass(r.rank)}`}>{r.rank}</span>
+                            <div className="min-w-0 flex-1">
+                                <div className="font-medium truncate">{r.name}</div>
+                                <div className="text-xs text-gray-500 truncate">{r.email}</div>
+                            </div>
+                            {orgMode && (
+                                <div className="text-right shrink-0">
+                                    <div className="font-bold text-teal-700 leading-tight">{r.performance_score}</div>
+                                    <div className="text-[11px] uppercase tracking-wide text-gray-500">Score</div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                            <div className="rounded-lg bg-gray-50 p-2">
+                                <div className="text-[11px] uppercase tracking-wide text-gray-500">Completed</div>
+                                <div className="font-semibold">{r.completed}</div>
+                            </div>
+                            <div className="rounded-lg bg-gray-50 p-2">
+                                <div className="text-[11px] uppercase tracking-wide text-gray-500">Avg compl.</div>
+                                <div className="font-semibold">{fmt(r.avg_completion_hours)}</div>
+                            </div>
+                            <div className="rounded-lg bg-gray-50 p-2">
+                                <div className="text-[11px] uppercase tracking-wide text-gray-500">Avg resp.</div>
+                                <div className="font-semibold">{fmt(r.avg_response_hours)}</div>
+                            </div>
+                        </div>
+                    </div>
                 ))}
-            </tbody>
-        </table>
-    </div>
-);
+            </div>
+
+            {/* Desktop: table */}
+            <div className="border rounded-xl overflow-hidden hidden md:block">
+                <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-600">
+                        <tr>
+                            <th className="text-left px-3 py-2 font-medium">#</th>
+                            <th className="text-left px-3 py-2 font-medium">Person</th>
+                            <th className="text-left px-3 py-2 font-medium">Completed</th>
+                            <th className="text-left px-3 py-2 font-medium">Avg completion</th>
+                            <th className="text-left px-3 py-2 font-medium">Avg response</th>
+                            {orgMode && <th className="text-left px-3 py-2 font-medium">Performance</th>}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((r) => (
+                            <tr key={r.user_id} className="border-t">
+                                <td className="px-3 py-2">
+                                    <span className={`inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold ${rankBadgeClass(r.rank)}`}>{r.rank}</span>
+                                </td>
+                                <td className="px-3 py-2">
+                                    <div className="font-medium">{r.name}</div>
+                                    <div className="text-xs text-gray-500">{r.email}</div>
+                                </td>
+                                <td className="px-3 py-2">{r.completed}</td>
+                                <td className="px-3 py-2">{fmt(r.avg_completion_hours)}</td>
+                                <td className="px-3 py-2">{fmt(r.avg_response_hours)}</td>
+                                {orgMode && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </>
+    );
+};
 
 const LeaderboardPage = () => {
     const navigate = useNavigate();

@@ -358,8 +358,8 @@ const AnalyticsPage = () => {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        {/* Table Header — sticky when scrolling. Offset by page header height so it never gets hidden. */}
-                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-white rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-[68px] z-20 border shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }} data-testid="analytics-table-header">
+                                        {/* Table Header — desktop only, sticky when scrolling. Offset by page header height so it never gets hidden. */}
+                                        <div className="hidden md:grid gap-3 px-3 py-3 bg-white rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-[68px] z-20 border shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }} data-testid="analytics-table-header">
                                             <div>Team Member</div>
                                             <div className="text-center">Assigned</div>
                                             <div className="text-center">Completed</div>
@@ -380,7 +380,7 @@ const AnalyticsPage = () => {
                                                 >
                                                     <Card className="border rounded-xl hover:shadow-md transition-shadow">
                                                         <CardContent className="p-4">
-                                                            <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
+                                                            <div className="md:grid md:gap-3 md:items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
                                                                 {/* Name & Email */}
                                                                 <div className="flex items-center gap-3 min-w-0">
                                                                     <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
@@ -394,38 +394,43 @@ const AnalyticsPage = () => {
                                                                     </div>
                                                                 </div>
 
-                                                                {/* Tasks Assigned */}
-                                                                <div className="text-center">
-                                                                    <Badge variant="secondary" className="px-2.5 py-1">
-                                                                        {assignee.tasks_assigned}
-                                                                    </Badge>
-                                                                </div>
-
-                                                                {/* Tasks Completed */}
-                                                                <div className="text-center">
-                                                                    <Badge className="bg-green-100 text-green-700 px-2.5 py-1">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                                                        {assignee.tasks_completed}
-                                                                    </Badge>
-                                                                </div>
-
-                                                                {/* Tasks Pending */}
-                                                                <div className="text-center">
-                                                                    {assignee.tasks_pending > 0 ? (
-                                                                        <Badge className="bg-amber-100 text-amber-700 px-2.5 py-1">
-                                                                            <Clock className="w-3.5 h-3.5 mr-1" />
-                                                                            {assignee.tasks_pending}
+                                                                {/* Metrics — 3-up on mobile, individual columns on desktop */}
+                                                                <div className="grid grid-cols-3 gap-2 mt-3 md:mt-0 md:contents">
+                                                                    {/* Tasks Assigned */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Assigned</span>
+                                                                        <Badge variant="secondary" className="px-2.5 py-1">
+                                                                            {assignee.tasks_assigned}
                                                                         </Badge>
-                                                                    ) : (
-                                                                        <Badge className="bg-gray-100 text-gray-500 px-2.5 py-1">
-                                                                            0
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
+                                                                    </div>
 
-                                                                {/* Completion Rate */}
-                                                                <div>
-                                                                    <div className="flex flex-col items-center">
+                                                                    {/* Tasks Completed */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Completed</span>
+                                                                        <Badge className="bg-green-100 text-green-700 px-2.5 py-1">
+                                                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                                                            {assignee.tasks_completed}
+                                                                        </Badge>
+                                                                    </div>
+
+                                                                    {/* Tasks Pending */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Pending</span>
+                                                                        {assignee.tasks_pending > 0 ? (
+                                                                            <Badge className="bg-amber-100 text-amber-700 px-2.5 py-1">
+                                                                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                                                                {assignee.tasks_pending}
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Badge className="bg-gray-100 text-gray-500 px-2.5 py-1">
+                                                                                0
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Completion Rate */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0 col-span-3 md:col-auto">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Completion</span>
                                                                         <span className={`text-base font-bold ${
                                                                             assignee.completion_rate >= 80 ? 'text-green-600' :
                                                                             assignee.completion_rate >= 50 ? 'text-amber-600' :
@@ -433,16 +438,15 @@ const AnalyticsPage = () => {
                                                                         }`}>
                                                                             {assignee.completion_rate}%
                                                                         </span>
-                                                                        <Progress 
-                                                                            value={assignee.completion_rate} 
+                                                                        <Progress
+                                                                            value={assignee.completion_rate}
                                                                             className="h-2 w-full mt-1"
                                                                         />
                                                                     </div>
-                                                                </div>
 
-                                                                {/* Response Rate */}
-                                                                <div>
-                                                                    <div className="flex flex-col items-center">
+                                                                    {/* Response Rate */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0 col-span-2 md:col-auto">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Response Rate</span>
                                                                         <span className={`text-base font-bold ${
                                                                             (assignee.response_rate || 0) >= 80 ? 'text-green-600' :
                                                                             (assignee.response_rate || 0) >= 50 ? 'text-amber-600' :
@@ -450,26 +454,27 @@ const AnalyticsPage = () => {
                                                                         }`}>
                                                                             {assignee.response_rate || 0}%
                                                                         </span>
-                                                                        <Progress 
-                                                                            value={assignee.response_rate || 0} 
+                                                                        <Progress
+                                                                            value={assignee.response_rate || 0}
                                                                             className="h-2 w-full mt-1"
                                                                         />
                                                                     </div>
-                                                                </div>
 
-                                                                {/* Avg Response Hours */}
-                                                                <div className="text-center">
-                                                                    {assignee.avg_response_hours !== null && assignee.avg_response_hours !== undefined ? (
-                                                                        <span className="text-sm font-medium">
-                                                                            {assignee.avg_response_hours < 1
-                                                                                ? `${Math.round(assignee.avg_response_hours * 60)}m`
-                                                                                : assignee.avg_response_hours < 24
-                                                                                    ? `${assignee.avg_response_hours}h`
-                                                                                    : `${(assignee.avg_response_hours / 24).toFixed(1)}d`}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-sm text-muted-foreground">—</span>
-                                                                    )}
+                                                                    {/* Avg Response Hours */}
+                                                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Avg Response</span>
+                                                                        {assignee.avg_response_hours !== null && assignee.avg_response_hours !== undefined ? (
+                                                                            <span className="text-sm font-medium">
+                                                                                {assignee.avg_response_hours < 1
+                                                                                    ? `${Math.round(assignee.avg_response_hours * 60)}m`
+                                                                                    : assignee.avg_response_hours < 24
+                                                                                        ? `${assignee.avg_response_hours}h`
+                                                                                        : `${(assignee.avg_response_hours / 24).toFixed(1)}d`}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-sm text-muted-foreground">—</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </CardContent>
@@ -518,6 +523,24 @@ const AnalyticsPage = () => {
             </main>
         </div>
     );
+};
+
+// Medal colors for leaderboard ranks (static classes so Tailwind keeps them)
+const lbRankBadgeClass = (rank) =>
+    rank === 1 ? 'bg-amber-500 text-white'
+        : rank === 2 ? 'bg-gray-400 text-white'
+            : rank === 3 ? 'bg-orange-400 text-white'
+                : 'bg-gray-200 text-gray-600';
+
+// Full static class strings per badge tone (dynamic `bg-${tone}-50` gets purged by Tailwind)
+const lbBadgeToneClass = (tone) => {
+    switch (tone) {
+        case 'amber': return 'border-amber-200 bg-amber-50 text-amber-700';
+        case 'indigo': return 'border-indigo-200 bg-indigo-50 text-indigo-700';
+        case 'emerald': return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        case 'purple': return 'border-purple-200 bg-purple-50 text-purple-700';
+        default: return 'border-gray-200 bg-gray-50 text-gray-700';
+    }
 };
 
 // Simple leaderboard tab embedded inside Analytics
@@ -613,44 +636,94 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
                     </div>
                 </div>
                 {loading && <div className="text-sm text-muted-foreground py-4">Loading...</div>}
-                {!loading && (
-                    <div className="border rounded-xl overflow-x-auto">
-                        <table className="w-full text-sm" data-testid="leaderboard-table">
-                            <thead className="bg-gray-50 text-gray-600">
-                                <tr>
-                                    <Th label="#" k="rank" />
-                                    <Th label="Person" k="name" />
-                                    <Th label="Completed" k="completed" />
-                                    <Th label="Avg completion" k="avg_completion_hours" />
-                                    <Th label="Avg response" k="avg_response_hours" />
-                                    <Th label="Streak" k="streak" />
-                                    <th className="text-left px-3 py-2 font-medium">Badges</th>
-                                    {section === 'org_lb' && <Th label="Performance" k="performance_score" />}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sorted.length === 0 && (<tr><td colSpan={section === 'org_lb' ? 8 : 7} className="px-3 py-8 text-center text-gray-500">No data yet for this range.</td></tr>)}
-                                {sorted.map((r) => (
-                                    <tr key={r.user_id} className="border-t hover:bg-slate-50">
-                                        <td className="px-3 py-2 font-mono">{r.rank}</td>
-                                        <td className="px-3 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-gray-500">{r.email}</div></td>
-                                        <td className="px-3 py-2 font-semibold">{r.completed}</td>
-                                        <td className="px-3 py-2">{fmtHours(r.avg_completion_hours)}</td>
-                                        <td className="px-3 py-2">{fmtHours(r.avg_response_hours)}</td>
-                                        <td className="px-3 py-2">{r.streak > 0 ? <span className="inline-flex items-center gap-1 text-orange-600">🔥 {r.streak}</span> : '—'}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="flex flex-wrap gap-1">
-                                                {r.badges.map((b, i) => (
-                                                    <Badge key={i} variant="outline" className={`text-[10px] border-${b.tone}-200 bg-${b.tone}-50 text-${b.tone}-700`}>{b.label}</Badge>
-                                                ))}
+                {!loading && sorted.length === 0 && (
+                    <div className="border rounded-xl px-3 py-8 text-center text-gray-500 text-sm">No data yet for this range.</div>
+                )}
+                {!loading && sorted.length > 0 && (
+                    <>
+                        {/* Mobile: ranked cards */}
+                        <div className="space-y-2 md:hidden">
+                            {sorted.map((r) => (
+                                <div key={r.user_id} className="border rounded-xl p-3">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${lbRankBadgeClass(r.rank)}`}>{r.rank}</span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="font-medium truncate">{r.name}</div>
+                                            <div className="text-xs text-gray-500 truncate">{r.email}</div>
+                                        </div>
+                                        {section === 'org_lb' && (
+                                            <div className="text-right shrink-0">
+                                                <div className="font-bold text-teal-700 leading-tight">{r.performance_score}</div>
+                                                <div className="text-[11px] uppercase tracking-wide text-gray-500">Score</div>
                                             </div>
-                                        </td>
-                                        {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                                        <div className="rounded-lg bg-gray-50 p-2">
+                                            <div className="text-[11px] uppercase tracking-wide text-gray-500">Completed</div>
+                                            <div className="font-semibold">{r.completed}</div>
+                                        </div>
+                                        <div className="rounded-lg bg-gray-50 p-2">
+                                            <div className="text-[11px] uppercase tracking-wide text-gray-500">Avg compl.</div>
+                                            <div className="font-semibold">{fmtHours(r.avg_completion_hours)}</div>
+                                        </div>
+                                        <div className="rounded-lg bg-gray-50 p-2">
+                                            <div className="text-[11px] uppercase tracking-wide text-gray-500">Avg resp.</div>
+                                            <div className="font-semibold">{fmtHours(r.avg_response_hours)}</div>
+                                        </div>
+                                    </div>
+                                    {(r.streak > 0 || r.badges.length > 0) && (
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                                            {r.streak > 0 && <span className="inline-flex items-center gap-1 text-orange-600 text-xs font-medium">🔥 {r.streak}</span>}
+                                            {r.badges.map((b, i) => (
+                                                <Badge key={i} variant="outline" className={`text-[10px] ${lbBadgeToneClass(b.tone)}`}>{b.label}</Badge>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop: table */}
+                        <div className="border rounded-xl overflow-x-auto hidden md:block">
+                            <table className="w-full text-sm" data-testid="leaderboard-table">
+                                <thead className="bg-gray-50 text-gray-600">
+                                    <tr>
+                                        <Th label="#" k="rank" />
+                                        <Th label="Person" k="name" />
+                                        <Th label="Completed" k="completed" />
+                                        <Th label="Avg completion" k="avg_completion_hours" />
+                                        <Th label="Avg response" k="avg_response_hours" />
+                                        <Th label="Streak" k="streak" />
+                                        <th className="text-left px-3 py-2 font-medium">Badges</th>
+                                        {section === 'org_lb' && <Th label="Performance" k="performance_score" />}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    {sorted.map((r) => (
+                                        <tr key={r.user_id} className="border-t hover:bg-slate-50">
+                                            <td className="px-3 py-2">
+                                                <span className={`inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold ${lbRankBadgeClass(r.rank)}`}>{r.rank}</span>
+                                            </td>
+                                            <td className="px-3 py-2"><div className="font-medium">{r.name}</div><div className="text-xs text-gray-500">{r.email}</div></td>
+                                            <td className="px-3 py-2 font-semibold">{r.completed}</td>
+                                            <td className="px-3 py-2">{fmtHours(r.avg_completion_hours)}</td>
+                                            <td className="px-3 py-2">{fmtHours(r.avg_response_hours)}</td>
+                                            <td className="px-3 py-2">{r.streak > 0 ? <span className="inline-flex items-center gap-1 text-orange-600">🔥 {r.streak}</span> : '—'}</td>
+                                            <td className="px-3 py-2">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {r.badges.map((b, i) => (
+                                                        <Badge key={i} variant="outline" className={`text-[10px] ${lbBadgeToneClass(b.tone)}`}>{b.label}</Badge>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
                 )}
             </CardContent>
         </Card>

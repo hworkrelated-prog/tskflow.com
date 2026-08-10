@@ -193,22 +193,22 @@ const TeamManagementPage = () => {
                     </div>
 
                     <Tabs defaultValue="direct-reports" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-8">
-                            <TabsTrigger value="direct-reports" className="rounded-full">
-                                <GitBranch className="w-4 h-4 mr-2" />
+                        <TabsList className={`grid w-full grid-cols-2 ${user?.is_team_owner ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} h-auto gap-1 mb-8`}>
+                            <TabsTrigger value="direct-reports" className="rounded-full py-2 text-xs sm:text-sm">
+                                <GitBranch className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 Direct Reports
                             </TabsTrigger>
-                            <TabsTrigger value="performance" className="rounded-full">
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="performance" className="rounded-full py-2 text-xs sm:text-sm">
+                                <CheckCircle2 className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 Performance
                             </TabsTrigger>
-                            <TabsTrigger value="my-hierarchy" className="rounded-full">
-                                <UserCheck className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="my-hierarchy" className="rounded-full py-2 text-xs sm:text-sm">
+                                <UserCheck className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 My Hierarchy
                             </TabsTrigger>
                             {user?.is_team_owner && (
-                                <TabsTrigger value="team-admin" className="rounded-full">
-                                    <UsersIcon className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="team-admin" className="rounded-full py-2 text-xs sm:text-sm">
+                                    <UsersIcon className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                     Team Admin
                                 </TabsTrigger>
                             )}
@@ -251,43 +251,49 @@ const TeamManagementPage = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Detailed Stats Table */}
+                                            {/* Detailed Stats — responsive (table on desktop, stacked cards on mobile) */}
                                             <div>
                                                 <h3 className="font-semibold mb-3 text-foreground">Detailed Statistics</h3>
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full text-sm">
-                                                        <thead>
-                                                            <tr className="border-b">
-                                                                <th className="text-left py-2 px-3 text-foreground">Name</th>
-                                                                <th className="text-center py-2 px-3 text-foreground">Assigned</th>
-                                                                <th className="text-center py-2 px-3 text-foreground">Completed</th>
-                                                                <th className="text-center py-2 px-3 text-foreground">Rate</th>
-                                                                <th className="text-center py-2 px-3 text-foreground">Avg Time</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {performance.direct_reports?.map((person) => (
-                                                                <tr key={person.user_id} className="border-b last:border-0">
-                                                                    <td className="py-3 px-3">
-                                                                        <div>
-                                                                            <p className="font-medium text-foreground">{person.name}</p>
-                                                                            <p className="text-xs text-muted-foreground">{person.email}</p>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="text-center py-3 px-3 text-foreground">{person.tasks_assigned}</td>
-                                                                    <td className="text-center py-3 px-3 text-foreground">{person.tasks_completed}</td>
-                                                                    <td className="text-center py-3 px-3">
-                                                                        <Badge className={`${person.completion_rate >= 80 ? 'bg-green-100 text-green-800' : person.completion_rate >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
-                                                                            {person.completion_rate}%
-                                                                        </Badge>
-                                                                    </td>
-                                                                    <td className="text-center py-3 px-3 text-foreground">
-                                                                        {person.avg_completion_time ? `${person.avg_completion_time} days` : '-'}
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                                <div className="space-y-3">
+                                                    {/* Header — desktop only */}
+                                                    <div className="hidden md:grid grid-cols-12 gap-4 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                                                        <div className="col-span-4">Name</div>
+                                                        <div className="col-span-2 text-center">Assigned</div>
+                                                        <div className="col-span-2 text-center">Completed</div>
+                                                        <div className="col-span-2 text-center">Rate</div>
+                                                        <div className="col-span-2 text-center">Avg Time</div>
+                                                    </div>
+                                                    {performance.direct_reports?.map((person) => (
+                                                        <div
+                                                            key={person.user_id}
+                                                            className="rounded-xl border p-3 md:border-0 md:border-b md:last:border-0 md:rounded-none md:p-0 md:px-3 md:py-3 md:grid md:grid-cols-12 md:gap-4 md:items-center"
+                                                        >
+                                                            <div className="col-span-4 mb-3 md:mb-0">
+                                                                <p className="font-medium text-foreground">{person.name}</p>
+                                                                <p className="text-xs text-muted-foreground truncate">{person.email}</p>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-2 md:contents">
+                                                                <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Assigned</span>
+                                                                    <span className="font-medium text-foreground">{person.tasks_assigned}</span>
+                                                                </div>
+                                                                <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Completed</span>
+                                                                    <span className="font-medium text-foreground">{person.tasks_completed}</span>
+                                                                </div>
+                                                                <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Rate</span>
+                                                                    <Badge className={`${person.completion_rate >= 80 ? 'bg-green-100 text-green-800' : person.completion_rate >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                                                                        {person.completion_rate}%
+                                                                    </Badge>
+                                                                </div>
+                                                                <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Avg Time</span>
+                                                                    <span className="text-foreground">{person.avg_completion_time ? `${person.avg_completion_time} days` : '-'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         </div>
@@ -388,16 +394,16 @@ const TeamManagementPage = () => {
                                             </p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-4">
-                                            {/* Header Row */}
-                                            <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 rounded-xl text-sm font-medium text-muted-foreground">
+                                        <div className="space-y-3">
+                                            {/* Header Row — desktop only */}
+                                            <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 rounded-xl text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                                 <div className="col-span-4">Team Member</div>
                                                 <div className="col-span-2 text-center">Pending Tasks</div>
                                                 <div className="col-span-2 text-center">Completed</div>
                                                 <div className="col-span-2 text-center">Avg. Time</div>
                                                 <div className="col-span-2 text-center">Actions</div>
                                             </div>
-                                            
+
                                             {directReports.map((report, index) => (
                                                 <motion.div
                                                     key={report.user_id}
@@ -407,23 +413,36 @@ const TeamManagementPage = () => {
                                                 >
                                                     <Card className="border rounded-xl hover:shadow-md transition-shadow">
                                                         <CardContent className="p-4">
-                                                            <div className="grid grid-cols-12 gap-4 items-center">
-                                                                {/* Team Member */}
-                                                                <div className="col-span-4 flex items-center gap-3">
-                                                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
-                                                                        <span className="font-semibold text-teal-700">
-                                                                            {report.name.charAt(0).toUpperCase()}
-                                                                        </span>
+                                                            <div className="md:grid md:grid-cols-12 md:gap-4 md:items-center">
+                                                                {/* Team Member (+ inline delete on mobile) */}
+                                                                <div className="col-span-4 flex items-center justify-between gap-3">
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
+                                                                            <span className="font-semibold text-teal-700">
+                                                                                {report.name.charAt(0).toUpperCase()}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="font-semibold truncate">{report.name}</p>
+                                                                            <p className="text-xs text-muted-foreground truncate">{report.email}</p>
+                                                                        </div>
                                                                     </div>
-                                                                    <div>
-                                                                        <p className="font-semibold">{report.name}</p>
-                                                                        <p className="text-xs text-muted-foreground">{report.email}</p>
-                                                                    </div>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => handleRemoveDirectReport(report.user_id, report.name)}
+                                                                        className="md:hidden rounded-full text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
+                                                                        aria-label={`Remove ${report.name}`}
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </Button>
                                                                 </div>
-                                                                
-                                                                {/* Pending Tasks */}
-                                                                <div className="col-span-2 text-center">
-                                                                    <div className="flex items-center justify-center gap-2">
+
+                                                                {/* Metrics — 3-up on mobile, individual columns on desktop */}
+                                                                <div className="grid grid-cols-3 gap-2 mt-3 md:mt-0 md:contents">
+                                                                    {/* Pending Tasks */}
+                                                                    <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Pending</span>
                                                                         {report.tasks_from_you_pending > 0 ? (
                                                                             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
                                                                                 <AlertCircle className="w-3 h-3 mr-1" />
@@ -436,35 +455,38 @@ const TeamManagementPage = () => {
                                                                             </Badge>
                                                                         )}
                                                                     </div>
-                                                                </div>
-                                                                
-                                                                {/* Completed */}
-                                                                <div className="col-span-2 text-center">
-                                                                    <Badge variant="secondary" className="rounded-md">
-                                                                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                        {report.tasks_from_you_completed}
-                                                                    </Badge>
-                                                                </div>
-                                                                
-                                                                {/* Avg Completion Time */}
-                                                                <div className="col-span-2 text-center">
-                                                                    {report.avg_completion_days !== null ? (
-                                                                        <Badge variant="outline" className="rounded-md">
-                                                                            <Clock className="w-3 h-3 mr-1" />
-                                                                            {report.avg_completion_days}d
+
+                                                                    {/* Completed */}
+                                                                    <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Completed</span>
+                                                                        <Badge variant="secondary" className="rounded-md">
+                                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                            {report.tasks_from_you_completed}
                                                                         </Badge>
-                                                                    ) : (
-                                                                        <span className="text-xs text-muted-foreground">—</span>
-                                                                    )}
+                                                                    </div>
+
+                                                                    {/* Avg Completion Time */}
+                                                                    <div className="md:col-span-2 flex flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 md:bg-transparent p-2 md:p-0">
+                                                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">Avg. Time</span>
+                                                                        {report.avg_completion_days !== null ? (
+                                                                            <Badge variant="outline" className="rounded-md">
+                                                                                <Clock className="w-3 h-3 mr-1" />
+                                                                                {report.avg_completion_days}d
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <span className="text-xs text-muted-foreground">—</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                                
-                                                                {/* Actions */}
-                                                                <div className="col-span-2 text-center">
+
+                                                                {/* Actions — desktop only */}
+                                                                <div className="hidden md:flex col-span-2 justify-center">
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         onClick={() => handleRemoveDirectReport(report.user_id, report.name)}
                                                                         className="rounded-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                                        aria-label={`Remove ${report.name}`}
                                                                     >
                                                                         <Trash2 className="w-4 h-4" />
                                                                     </Button>
