@@ -92,7 +92,9 @@ SECRET_KEY=          # JWT signing key
 RESEND_API_KEY=      # Email service API key
 SENDER_EMAIL=        # From address for emails
 STRIPE_SECRET_KEY=   # Stripe API key
-APP_URL=             # Public app URL for email links
+APP_URL=             # Public app URL for email links / Emergent X-App-ID
+FRONTEND_URL=        # Frontend origin (also used as Emergent X-App-ID fallback)
+EMERGENT_LLM_KEY=    # Emergent LLM proxy key (sk-emergent-…) for Jarvis + AI parse
 ```
 
 ### Frontend (`/app/frontend/.env`)

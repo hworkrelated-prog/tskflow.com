@@ -27,7 +27,15 @@ from googleapiclient.discovery import build
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Emergent LLM proxy keys X-App-ID off APP_URL / REACT_APP_BACKEND_URL.
+# Backend envs usually only set FRONTEND_URL — mirror it so the proxy can auth.
+if not os.getenv("APP_URL"):
+    _app_id = os.getenv("FRONTEND_URL") or os.getenv("REACT_APP_BACKEND_URL")
+    if _app_id:
+        os.environ["APP_URL"] = _app_id
+
 from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
+from llm_client import emergent_chat as _emergent_chat
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -2210,33 +2218,25 @@ async def get_task_ai_summary(task_id: str, current_user: dict = Depends(get_cur
     if task["created_by"] != current_user["id"] and task["assigned_to"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    if not os.getenv("EMERGENT_LLM_KEY"):
         # Provide a quick heuristic summary if AI is unavailable
         return {"summary": f"{task['title']} Ã¢ÂÂ {task.get('priority', 'Medium')} priority, due {task['due_date']}. Status: {task['status']}."}
-    
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        prompt = f"""Summarize this task in 1-2 concise sentences:
+
+    prompt = f"""Summarize this task in 1-2 concise sentences:
 Title: {task['title']}
 Description: {(task.get('description') or 'No description')[:400]}
 Priority: {task.get('priority', 'Medium')}
 Due: {task['due_date']}
 Status: {task['status']}"""
-
-        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        response = await asyncio.wait_for(
-            chat.aask([UserMessage(content=prompt)]),
-            timeout=10.0
-        )
-        
-        return {"summary": response.content.strip()}
-    except asyncio.TimeoutError:
-        return {"summary": f"{task['title']} Ã¢ÂÂ {task.get('priority', 'Medium')} priority, due {task['due_date']}. (Summary timed out.)"}
-    except Exception as e:
-        logging.error(f"AI summary error: {e}")
-        return {"summary": f"{task['title']} Ã¢ÂÂ {task.get('priority', 'Medium')} priority. Status: {task['status']}."}
+    summary = await _emergent_chat(
+        "You summarize tasks briefly and clearly.",
+        prompt,
+        model="gpt-4o-mini",
+        timeout=10.0,
+    )
+    if summary:
+        return {"summary": summary}
+    return {"summary": f"{task['title']} Ã¢ÂÂ {task.get('priority', 'Medium')} priority. Status: {task['status']}."}
 
 @api_router.post("/dashboard/ai-summary")
 async def get_dashboard_ai_summary(
@@ -2291,35 +2291,26 @@ async def get_dashboard_ai_summary(
                 pass
         return {"summary": f"You have {total} {view_mode} tasks. {overdue} are overdue. Priorities Ã¢ÂÂ High: {priorities.get('High',0)}, Medium: {priorities.get('Medium',0)}, Low: {priorities.get('Low',0)}."}
     
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        
-        # Build compact task list summary (fewer tasks, shorter fields for speed)
-        task_list = []
-        for t in tasks[:12]:  # Limit to 12 for speed
-            title = (t.get('title') or '')[:60]
-            task_list.append(f"- {title} [{t.get('priority', 'M')}/{t.get('status', '')}]")
-        
-        prompt = (
-            f"Summarize {view_mode} tasks in 2 short sentences. "
-            f"Highlight top priorities and urgent items.\n\n"
-            + "\n".join(task_list)
-        )
+    # Build compact task list summary (fewer tasks, shorter fields for speed)
+    task_list = []
+    for t in tasks[:12]:
+        title = (t.get('title') or '')[:60]
+        task_list.append(f"- {title} [{t.get('priority', 'M')}/{t.get('status', '')}]")
 
-        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        # Add a timeout so slow LLM does not block the UI
-        response = await asyncio.wait_for(
-            chat.aask([UserMessage(content=prompt)]),
-            timeout=12.0
-        )
-        
-        return {"summary": response.content.strip()}
-    except asyncio.TimeoutError:
-        return {"summary": f"You have {len(tasks)} {view_mode} tasks. (AI summary timed out Ã¢ÂÂ showing quick stats.)"}
-    except Exception as e:
-        logging.error(f"Dashboard AI summary error: {e}")
-        # Fall back to heuristic instead of failing
-        return {"summary": f"You have {len(tasks)} {view_mode} tasks. Focus on High priority items first."}
+    prompt = (
+        f"Summarize {view_mode} tasks in 2 short sentences. "
+        f"Highlight top priorities and urgent items.\n\n"
+        + "\n".join(task_list)
+    )
+    summary = await _emergent_chat(
+        "You summarize a manager's task list briefly and clearly.",
+        prompt,
+        model="gpt-4o-mini",
+        timeout=12.0,
+    )
+    if summary:
+        return {"summary": summary}
+    return {"summary": f"You have {len(tasks)} {view_mode} tasks. Focus on High priority items first."}
 
 # ===== BULK APPROVE =====
 @api_router.post("/tasks/bulk-approve")
@@ -5267,28 +5258,21 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             if role in ("user", "assistant") and htext:
                 history_lines.append(f"{role.upper()}: {htext[:500]}")
 
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    raw = None
-    if emergent_key:
-        try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-            # gpt-4o-mini matches other working AI routes; shorter timeout for Cloudflare
-            chat = LlmChat(
-                api_key=emergent_key,
-                session_id=f"voice_{current_user['id']}",
-                system_message=VOICE_ASSISTANT_SYSTEM
-            ).with_model("openai", "gpt-4o-mini")
-            hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
-            user_msg = UserMessage(
-                text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
-            )
-            raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=14.0)
-        except asyncio.TimeoutError:
-            logging.error("Voice LLM timed out")
-            raw = None
-        except Exception as e:
-            logging.error(f"Voice LLM error: {e}")
-            raw = None
+    # Keep context lean — large outstanding lists make the proxy slow / Cloudflare-prone.
+    lean_context = {
+        "my_name": context.get("my_name"),
+        "outstanding_count": context.get("outstanding_count", 0),
+        "outstanding_tasks": (context.get("outstanding_tasks") or [])[:10],
+        "contacts": (context.get("contacts") or [])[:20],
+    }
+    hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines[-8:]) + "\n") if history_lines else ""
+    raw = await _emergent_chat(
+        VOICE_ASSISTANT_SYSTEM,
+        f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(lean_context)}",
+        model="gpt-4o-mini",
+        timeout=12.0,
+        temperature=0.3,
+    )
 
     if raw is None:
         # LLM unavailable — still try to create tasks locally so chat stays useful.
@@ -6152,21 +6136,23 @@ async def dashboard_ai_summary_v2(
             recs.append("You're on top of things Ã¢ÂÂ no urgent items.")
         return {"stats": stats, "summary": " ".join(recs)}
 
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
-        lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
-        prompt = (
-            f"You are Jarvis. Given these urgent counts Ã¢ÂÂ overdue={stats['overdue_count']}, "
-            f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} Ã¢ÂÂ "
-            f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
-            f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
-        )
-        chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
-        resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=8.0)
-        return {"stats": stats, "summary": resp.content.strip()}
-    except Exception:
-        return {"stats": stats, "summary": f"{stats['overdue_count']} overdue, {stats['urgent_high_count']} high-priority urgent, {stats['due_in_hours_count']} due in <6h. Tackle overdue first."}
+    top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
+    lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
+    prompt = (
+        f"You are Jarvis. Given these urgent counts Ã¢ÂÂ overdue={stats['overdue_count']}, "
+        f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} Ã¢ÂÂ "
+        f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
+        f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
+    )
+    summary = await _emergent_chat(
+        "You are Jarvis, a concise AI manager.",
+        prompt,
+        model="gpt-4o-mini",
+        timeout=8.0,
+    )
+    if summary:
+        return {"stats": stats, "summary": summary}
+    return {"stats": stats, "summary": f"{stats['overdue_count']} overdue, {stats['urgent_high_count']} high-priority urgent, {stats['due_in_hours_count']} due in <6h. Tackle overdue first."}
 
 
 # --- Sales-task filter helper (in-place on task fetches) ---
@@ -6399,28 +6385,29 @@ async def create_drafts_from_transcript(
     if len(text) > 60000:
         text = text[:60000]
 
-    key = os.getenv("EMERGENT_LLM_KEY")
     drafts_data: List[dict] = []
-    if key:
+    if os.getenv("EMERGENT_LLM_KEY"):
         try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-            import json as _json
             prompt = (
-                "You are Jarvis, a meeting-notes Ã¢ÂÂ action-items assistant. Extract concrete tasks from the transcript below. "
+                "Extract concrete tasks from the transcript below. "
                 "For each task, return JSON with fields: title (short), description (one paragraph), "
                 "assignee_hint (name or role as mentioned, or null), due_date_hint (natural-language or null), "
                 "priority (High/Medium/Low), ambiguities (array of clarification questions if anything is unclear Ã¢ÂÂ assignee, deadline, scope).\n"
                 "Reply ONLY with a JSON object like {\"tasks\": [ ... ]}. No prose.\n\n"
                 "TRANSCRIPT:\n" + text
             )
-            chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
-            resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=25.0)
-            raw = resp.content.strip()
-            # Strip markdown fences if any
-            raw = re.sub(r"^```(json)?", "", raw).strip()
-            raw = re.sub(r"```$", "", raw).strip()
-            parsed = _json.loads(raw)
-            drafts_data = parsed.get("tasks", []) if isinstance(parsed, dict) else []
+            raw = await _emergent_chat(
+                "You are Jarvis, a meeting-notes → action-items assistant.",
+                prompt,
+                model="gpt-4o-mini",
+                timeout=25.0,
+                temperature=0.1,
+            )
+            if raw:
+                raw = re.sub(r"^```(json)?", "", raw).strip()
+                raw = re.sub(r"```$", "", raw).strip()
+                parsed = _json.loads(raw)
+                drafts_data = parsed.get("tasks", []) if isinstance(parsed, dict) else []
         except Exception as e:
             logging.warning(f"Transcript parse failed: {e}")
 
@@ -7585,27 +7572,22 @@ def _title_looks_like_prompt(title: str, source_text: str) -> bool:
 
 
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    if not os.getenv("EMERGENT_LLM_KEY"):
         return None
     now = get_pst_now()
     context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}, org: {current_user.get('company_domain', 'personal')}."
     if context_hint:
         context += f" Hint: {context_hint}"
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
-            system_message=SMART_PARSE_SYSTEM + "\n\n" + context
-        ).with_model("openai", "gpt-4o")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=12.0)
-    except Exception as e:
-        logging.warning(f"smart_parse LLM error: {e}")
+    # gpt-4o-mini is faster/cheaper via the Emergent proxy and plenty for structured parse.
+    text_out = await _emergent_chat(
+        SMART_PARSE_SYSTEM + "\n\n" + context,
+        text,
+        model="gpt-4o-mini",
+        timeout=12.0,
+        temperature=0.1,
+    )
+    if not text_out:
         return None
-
-    text_out = raw if isinstance(raw, str) else str(raw)
-    text_out = text_out.strip()
     if text_out.startswith("```"):
         text_out = text_out.strip("`")
         if text_out.lower().startswith("json"):
@@ -7615,6 +7597,7 @@ async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] 
         end = text_out.rindex("}") + 1
         return _json.loads(text_out[start:end])
     except Exception:
+        logging.warning("smart_parse: LLM returned non-JSON")
         return None
 
 
