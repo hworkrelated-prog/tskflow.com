@@ -928,12 +928,17 @@ const TaskDetail = () => {
 
                             {/* AI Summary */}
                             {aiSummary && (
-                                <div className="p-4 bg-gradient-to-r from-teal-50 to-slate-50 border border-teal-200 rounded-xl">
+                                <div className="p-4 bg-gradient-to-r from-teal-50 to-slate-50 border border-teal-200 rounded-xl" data-testid="ai-summary-card">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-lg">🤖</span>
+                                        <span className="text-lg" aria-hidden>✨</span>
                                         <Label className="text-teal-800 font-semibold">AI Summary</Label>
                                     </div>
-                                    <p className="text-sm text-purple-900">{aiSummary}</p>
+                                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                        {String(aiSummary)
+                                            .replace(/\u00c3\u00a2\u00c2\u0080\u00c2\u0094/g, '\u2014')
+                                            .replace(/\u00e2\u0080\u0094/g, '\u2014')
+                                            .replace(/\u00e2\u20ac\u201d/g, '\u2014')}
+                                    </p>
                                 </div>
                             )}
                             {/* Note: Comments live in the right-side "Comments" panel (or on mobile, at the bottom of this card). */}
