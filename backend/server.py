@@ -225,6 +225,9 @@ class TaskAction(BaseModel):
 class TaskComplete(BaseModel):
     completion_note: Optional[str] = None
     completion_note_images: Optional[List[str]] = None
+    # Optional video/file attachments submitted as proof-of-work on complete
+    # (used to enforce requires_screen_recording).
+    attachments: Optional[List[dict]] = None
 
 class BlockAction(BaseModel):
     reason: str
@@ -1974,6 +1977,8 @@ async def create_standalone_recording(
         mime_type = body.mime_type
     if not rec_url and recording_url:
         rec_url = recording_url
+    if not rec_url or not str(rec_url).strip():
+        raise HTTPException(status_code=400, detail="recording_url is required")
 
     recording_id = str(uuid.uuid4())
     recording_doc = {
@@ -2041,18 +2046,80 @@ async def list_my_recordings(current_user: dict = Depends(get_current_user)):
 
 @api_router.delete("/recordings/{recording_id}")
 async def delete_my_recording(recording_id: str, current_user: dict = Depends(get_current_user)):
-    """Delete a recording that belongs to the current user."""
+    """Delete a recording that belongs to the current user (Mongo + object storage)."""
     rec = await db.recordings.find_one({"id": recording_id}, {"_id": 0})
     if not rec:
         raise HTTPException(status_code=404, detail="Recording not found")
     if rec.get("created_by") != current_user["id"]:
         raise HTTPException(status_code=403, detail="You can only delete your own recordings")
-    await db.recordings.delete_one({"id": recording_id})
+    await _purge_recording_doc(rec)
     return {"ok": True}
+
+@api_router.get("/recordings/{token}/stream")
+async def stream_recording_by_token(token: str, request: HTTPRequest):
+    """Public video stream for a shareable recording token (no JWT required).
+
+    Powers the /recording/:token share page and library preview. Supports Range
+    requests so browsers can seek smoothly.
+    """
+    recording = await db.recordings.find_one({"shareable_token": token}, {"_id": 0})
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    if recording.get("auto_delete_at"):
+        try:
+            delete_time = datetime.fromisoformat(recording["auto_delete_at"].replace('Z', '+00:00'))
+            if get_pst_now() > delete_time:
+                raise HTTPException(status_code=410, detail="This recording has expired")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    path = recording.get("recording_url")
+    if not path:
+        raise HTTPException(status_code=404, detail="Recording has no video")
+    # Absolute external URLs (legacy) — redirect the client.
+    if str(path).startswith("http://") or str(path).startswith("https://"):
+        return RedirectResponse(url=path)
+
+    # Prefer attachment metadata for content-type / filename; fall back to recording doc.
+    record = await db.attachments.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    try:
+        data, content_type = await storage_get(path)
+    except Exception as e:
+        logging.error(f"Public recording stream failed for {token}: {e}")
+        raise HTTPException(status_code=502, detail="Could not fetch recording")
+
+    content_type = (record or {}).get("content_type") or recording.get("mime_type") or content_type or "video/webm"
+    total = len(data)
+    filename = (record or {}).get("original_filename") or f"recording.{(content_type.split('/')[-1] or 'webm')}"
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Cache-Control": "public, max-age=300",
+        # Allow embedding from the app origin (library preview / share page).
+        "Access-Control-Allow-Origin": "*",
+    }
+    range_header = request.headers.get("range")
+    if range_header and range_header.startswith("bytes="):
+        try:
+            rng = range_header.replace("bytes=", "").split("-")
+            start = int(rng[0]) if rng[0] else 0
+            end = int(rng[1]) if len(rng) > 1 and rng[1] else total - 1
+            end = min(end, total - 1)
+            start = max(0, min(start, end))
+            chunk = data[start:end + 1]
+            headers = {**common_headers, "Content-Range": f"bytes {start}-{end}/{total}", "Content-Length": str(len(chunk))}
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+        except Exception:
+            pass
+    return Response(content=data, media_type=content_type, headers={**common_headers, "Content-Length": str(total)})
+
 
 @api_router.get("/recordings/{token}")
 async def get_recording_by_token(token: str):
-    """Get recording by shareable token"""
+    """Get recording metadata by shareable token (public)."""
     recording = await db.recordings.find_one({"shareable_token": token}, {"_id": 0})
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
@@ -2066,21 +2133,53 @@ async def get_recording_by_token(token: str):
                     "expired": True,
                     "message": "This recording has been automatically deleted 24h after task completion"
                 }
-        except:
+        except Exception:
             pass
-    
-    return recording
+
+    # Public shape for the share page. recording_url is included for legacy clients /
+    # external https URLs; new clients should stream via /recordings/{token}/stream.
+    return {
+        "id": recording.get("id"),
+        "title": recording.get("title") or "Untitled recording",
+        "description": recording.get("description"),
+        "duration_seconds": recording.get("duration_seconds"),
+        "size_bytes": recording.get("size_bytes"),
+        "mime_type": recording.get("mime_type"),
+        "created_at": recording.get("created_at"),
+        "shareable_token": recording.get("shareable_token"),
+        "recording_url": recording.get("recording_url"),
+        "has_video": bool(recording.get("recording_url")),
+        "expired": False,
+    }
 
 # Section 5: Auto-delete recordings 24h after task completion
 async def schedule_recording_deletion(task_id: str):
-    """Schedule deletion of task recordings 24h after completion"""
-    # Assumption: attachments with kind='video' are recordings that should be deleted
+    """Schedule deletion of task-linked recordings 24h after completion.
+
+    Sets both:
+      - tasks.recordings_delete_at (for attachment purge)
+      - recordings.auto_delete_at for any standalone recording whose storage path
+        appears on the task's attachments (so share links expire too)
+    """
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    if task and task.get("attachments"):
-        delete_at = (get_pst_now() + timedelta(hours=24)).isoformat()
-        await db.tasks.update_one(
-            {"id": task_id},
-            {"$set": {"recordings_delete_at": delete_at}}
+    if not task:
+        return
+    delete_at = (get_pst_now() + timedelta(hours=24)).isoformat()
+    video_paths = []
+    for att in (task.get("attachments") or []):
+        kind = (att or {}).get("kind")
+        ct = str((att or {}).get("content_type") or "")
+        path = (att or {}).get("storage_path") or (att or {}).get("path")
+        if path and (kind == "video" or ct.startswith("video/")):
+            video_paths.append(path)
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {"recordings_delete_at": delete_at}}
+    )
+    if video_paths:
+        await db.recordings.update_many(
+            {"recording_url": {"$in": video_paths}},
+            {"$set": {"auto_delete_at": delete_at, "linked_task_id": task_id}}
         )
 
 # ===== GROUP TASK ANALYTICS & LEADERBOARD =====
@@ -2583,6 +2682,14 @@ async def accept_counter_proposal(task_id: str, background_tasks: BackgroundTask
     
     return {"message": "Counter-proposal accepted", "new_due_date": task["proposed_due_date"]}
 
+def _is_video_attachment(att: dict) -> bool:
+    if not att:
+        return False
+    kind = att.get("kind")
+    ct = str(att.get("content_type") or "")
+    return kind == "video" or ct.startswith("video/")
+
+
 @api_router.put("/tasks/{task_id}/complete")
 async def complete_task(task_id: str, completion: Optional[TaskComplete] = None, current_user: dict = Depends(get_current_user)):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
@@ -2591,6 +2698,17 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
     
     if task["assigned_to"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    completion_attachments = list((completion.attachments if completion else None) or [])
+    # Enforce screen-recording proof when the creator required it.
+    if task.get("requires_screen_recording"):
+        existing_videos = [a for a in (task.get("attachments") or []) if _is_video_attachment(a)]
+        new_videos = [a for a in completion_attachments if _is_video_attachment(a)]
+        if not existing_videos and not new_videos:
+            raise HTTPException(
+                status_code=400,
+                detail="A screen recording is required before completing this task. Record a short walkthrough and attach it, then try again."
+            )
     
     # If self-assigned, mark as completed directly
     is_self_assigned = task["assigned_to"] == task["created_by"]
@@ -2601,12 +2719,25 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
         "completed_by": current_user["id"],
         "completed_by_name": current_user["name"],
     }
+    # Merge any proof-of-work attachments onto the task so reviewers can play them back.
+    if completion_attachments:
+        merged = list(task.get("attachments") or [])
+        existing_ids = {a.get("id") for a in merged if a.get("id")}
+        for att in completion_attachments:
+            if att and att.get("id") and att["id"] not in existing_ids:
+                merged.append(att)
+                existing_ids.add(att["id"])
+            elif att and not att.get("id"):
+                merged.append(att)
+        update_data["attachments"] = merged
     
     if is_self_assigned:
         update_data["status"] = "Completed"
         update_data["completed_at"] = get_pst_now().isoformat()
-        # Section 5: Schedule recording deletion 24h after completion
+        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
+        # Section 5: Schedule recording deletion 24h after completion (after attachments are saved)
         await schedule_recording_deletion(task_id)
+        return {"message": "Task completed"}
     else:
         # Set to Review Pending for non-self-assigned tasks
         update_data["status"] = "Review Pending"
@@ -5373,6 +5504,98 @@ async def storage_get(path: str) -> tuple:
         r.raise_for_status()
         return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
+async def storage_delete(path: str) -> bool:
+    """Best-effort delete of an object-store blob. Returns True on success."""
+    if not path or str(path).startswith("http://") or str(path).startswith("https://"):
+        return False
+    try:
+        key = await _get_storage_key()
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.delete(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+            if r.status_code == 403:
+                key = await _get_storage_key(force=True)
+                r = await c.delete(f"{OBJ_STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+            # 404 = already gone — treat as success
+            if r.status_code in (200, 204, 404):
+                return True
+            r.raise_for_status()
+            return True
+    except Exception as e:
+        logging.warning(f"storage_delete failed for {path}: {e}")
+        return False
+
+async def _purge_recording_doc(rec: dict):
+    """Delete a recordings document and its underlying object-store blob + attachment row."""
+    path = (rec or {}).get("recording_url")
+    if path:
+        await storage_delete(path)
+        try:
+            await db.attachments.update_one(
+                {"storage_path": path},
+                {"$set": {"is_deleted": True, "deleted_at": get_pst_now().isoformat()}}
+            )
+        except Exception as e:
+            logging.warning(f"Failed to mark attachment deleted for {path}: {e}")
+    await db.recordings.delete_one({"id": rec["id"]})
+
+async def _purge_expired_recordings():
+    """Delete recordings past auto_delete_at and task attachments past recordings_delete_at."""
+    now = get_pst_now()
+    # 1) Standalone / linked recordings with auto_delete_at in the past
+    try:
+        cursor = db.recordings.find({"auto_delete_at": {"$ne": None}}, {"_id": 0})
+        items = await cursor.to_list(1000)
+        for rec in items:
+            try:
+                delete_time = datetime.fromisoformat(str(rec["auto_delete_at"]).replace('Z', '+00:00'))
+                # Normalize timezone-aware comparison
+                if delete_time.tzinfo is None:
+                    delete_time = PST.localize(delete_time)
+                if now > delete_time:
+                    await _purge_recording_doc(rec)
+            except Exception as e:
+                logging.warning(f"purge recording {rec.get('id')} failed: {e}")
+    except Exception as e:
+        logging.error(f"purge recordings scan failed: {e}")
+
+    # 2) Task-level recording attachments past recordings_delete_at
+    try:
+        tasks = await db.tasks.find(
+            {"recordings_delete_at": {"$ne": None}},
+            {"_id": 0, "id": 1, "attachments": 1, "recordings_delete_at": 1}
+        ).to_list(500)
+        for task in tasks:
+            try:
+                delete_time = datetime.fromisoformat(str(task["recordings_delete_at"]).replace('Z', '+00:00'))
+                if delete_time.tzinfo is None:
+                    delete_time = PST.localize(delete_time)
+                if now <= delete_time:
+                    continue
+                kept = []
+                for att in (task.get("attachments") or []):
+                    kind = (att or {}).get("kind")
+                    ct = str((att or {}).get("content_type") or "")
+                    path = (att or {}).get("storage_path") or (att or {}).get("path")
+                    if path and (kind == "video" or ct.startswith("video/")):
+                        await storage_delete(path)
+                        try:
+                            await db.attachments.update_one(
+                                {"storage_path": path},
+                                {"$set": {"is_deleted": True, "deleted_at": get_pst_now().isoformat()}}
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        kept.append(att)
+                await db.tasks.update_one(
+                    {"id": task["id"]},
+                    {"$set": {"attachments": kept}, "$unset": {"recordings_delete_at": ""}}
+                )
+            except Exception as e:
+                logging.warning(f"purge task recordings {task.get('id')} failed: {e}")
+    except Exception as e:
+        logging.error(f"purge task recordings scan failed: {e}")
+
 def _kind_for(content_type: str) -> str:
     ct = (content_type or "").lower()
     if ct.startswith("video/"):
@@ -8126,6 +8349,7 @@ async def _scheduler_loop():
         try:
             await _background_generate_all_recurring()
             await _check_smart_reminders()
+            await _purge_expired_recordings()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
         await asyncio.sleep(300)  # every 5 min

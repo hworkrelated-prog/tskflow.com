@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import AttachmentViewer from '@/components/AttachmentViewer';
+import AttachmentPicker from '@/components/AttachmentPicker';
 import RichTextEditor from '@/components/RichTextEditor';
 
 const TaskDetail = () => {
@@ -42,6 +43,7 @@ const TaskDetail = () => {
     const [proposedDate, setProposedDate] = useState('');
     const [completionNote, setCompletionNote] = useState('');
     const [completionImages, setCompletionImages] = useState([]);
+    const [completionAttachments, setCompletionAttachments] = useState([]);
     const [reviewFeedback, setReviewFeedback] = useState('');
     const [editForm, setEditForm] = useState({
         title: '',
@@ -361,16 +363,27 @@ const TaskDetail = () => {
     };
 
     const handleComplete = async () => {
+        if (task?.requires_screen_recording) {
+            const hasVideo =
+                completionAttachments.some((a) => a?.kind === 'video' || String(a?.content_type || '').startsWith('video/')) ||
+                (task.attachments || []).some((a) => a?.kind === 'video' || String(a?.content_type || '').startsWith('video/'));
+            if (!hasVideo) {
+                toast.error('A screen recording is required. Record a short walkthrough below, then mark complete.');
+                return;
+            }
+        }
         setActionLoading(true);
         try {
             await axios.put(`${API}/tasks/${taskId}/complete`, {
                 completion_note: completionNote || null,
-                completion_note_images: completionImages.length > 0 ? completionImages : null
+                completion_note_images: completionImages.length > 0 ? completionImages : null,
+                attachments: completionAttachments.length > 0 ? completionAttachments : null,
             });
             toast.success(task?.assigned_to === task?.created_by ? 'Task completed!' : 'Task submitted for review');
             setShowCompleteDialog(false);
             setCompletionNote('');
             setCompletionImages([]);
+            setCompletionAttachments([]);
             fetchTask();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to complete task'));
@@ -815,9 +828,14 @@ const TaskDetail = () => {
                                                 ? 'Please record a short Loom-style walkthrough of your work and attach it before marking this task complete.'
                                                 : 'The assignee is expected to attach a screen recording (Loom-style walkthrough) as proof-of-work when they complete this task.'}
                                         </p>
-                                        {user?.id === task.assigned_to && (
-                                            <Button size="sm" onClick={() => navigate('/recordings')} className="rounded-full h-8 px-3 text-xs mt-2 bg-teal-700 hover:bg-teal-800 text-white" data-testid="open-recorder-btn">
-                                                <Video className="w-3.5 h-3.5 mr-1" /> Open recorder
+                                        {user?.id === task.assigned_to && task.status === 'Accepted' && (
+                                            <Button
+                                                size="sm"
+                                                onClick={() => setShowCompleteDialog(true)}
+                                                className="rounded-full h-8 px-3 text-xs mt-2 bg-teal-700 hover:bg-teal-800 text-white"
+                                                data-testid="open-recorder-btn"
+                                            >
+                                                <Video className="w-3.5 h-3.5 mr-1" /> Record &amp; complete
                                             </Button>
                                         )}
                                     </div>
@@ -1242,15 +1260,43 @@ const TaskDetail = () => {
                                                 Mark complete
                                             </Button>
                                         </DialogTrigger>
-                                        <DialogContent className="rounded-2xl">
+                                        <DialogContent className="rounded-2xl max-h-[90vh] overflow-y-auto">
                                             <DialogHeader>
                                                 <DialogTitle>Mark complete</DialogTitle>
-                                                <DialogDescription>Optional note for your manager</DialogDescription>
+                                                <DialogDescription>
+                                                    {task.requires_screen_recording
+                                                        ? 'Attach a screen recording of your work, then submit.'
+                                                        : 'Optional note for your manager'}
+                                                </DialogDescription>
                                             </DialogHeader>
                                             <div className="space-y-4 pt-4">
                                                 {task.success_criteria && (
                                                     <div className="rounded-lg bg-slate-50 border px-3 py-2 text-sm text-slate-700">
                                                         <span className="font-medium">Done well:</span> {task.success_criteria}
+                                                    </div>
+                                                )}
+                                                {task.requires_screen_recording && (
+                                                    <div className="rounded-xl border-2 border-teal-200 bg-teal-50/60 p-3 space-y-2" data-testid="complete-recording-picker">
+                                                        <p className="text-sm font-medium text-teal-900 flex items-center gap-2">
+                                                            <Video className="w-4 h-4" /> Screen recording required
+                                                        </p>
+                                                        <p className="text-xs text-teal-800">
+                                                            Record a short Loom-style walkthrough (or attach a video file) before submitting.
+                                                        </p>
+                                                        <AttachmentPicker
+                                                            attachments={completionAttachments}
+                                                            setAttachments={setCompletionAttachments}
+                                                            requiresScreenRecording
+                                                        />
+                                                    </div>
+                                                )}
+                                                {!task.requires_screen_recording && (
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground text-xs">Optional attachment / recording</Label>
+                                                        <AttachmentPicker
+                                                            attachments={completionAttachments}
+                                                            setAttachments={setCompletionAttachments}
+                                                        />
                                                     </div>
                                                 )}
                                                 <Textarea placeholder="What did you deliver? (optional)" value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} rows={3} className="rounded-xl" />

@@ -159,8 +159,8 @@ def test_standalone_recording():
     
     print_result(True, "Recording is not expired")
     
-    # Step 6: Test with null recording_url (optional parameter)
-    print("\n--- Step 6: Testing with null recording_url ---")
+    # Step 6: Empty recording_url must be rejected (prevents broken share links)
+    print("\n--- Step 6: Testing empty recording_url is rejected ---")
     
     response = requests.post(
         f"{API_BASE}/recordings/standalone",
@@ -171,20 +171,20 @@ def test_standalone_recording():
     print(f"POST /api/recordings/standalone (no recording_url)")
     print(f"Status Code: {response.status_code}")
     
-    if response.status_code != 200:
-        print_result(False, f"Failed to create recording with null URL: {response.status_code} - {response.text}")
+    if response.status_code != 400:
+        print_result(False, f"Expected 400 for empty recording_url, got {response.status_code} - {response.text}")
         return False
     
-    null_url_response = response.json()
-    print_result(True, f"Created recording with null URL: {null_url_response['recording_id']}")
-    
-    # Verify we can retrieve it
-    response = requests.get(f"{API_BASE}/recordings/{null_url_response['shareable_token']}")
-    if response.status_code != 200:
-        print_result(False, f"Failed to retrieve recording with null URL: {response.status_code}")
+    print_result(True, "Empty recording_url correctly rejected with 400")
+
+    # Step 6b: Public stream endpoint for external https URLs redirects
+    print("\n--- Step 6b: Testing public stream endpoint ---")
+    stream_resp = requests.get(f"{API_BASE}/recordings/{shareable_token}/stream", allow_redirects=False)
+    print(f"GET /api/recordings/{shareable_token}/stream → {stream_resp.status_code}")
+    if stream_resp.status_code not in (200, 206, 302, 307):
+        print_result(False, f"Unexpected stream status: {stream_resp.status_code} - {stream_resp.text[:200]}")
         return False
-    
-    print_result(True, "Successfully retrieved recording with null URL")
+    print_result(True, f"Public stream endpoint responds ({stream_resp.status_code})")
     
     # Step 7: Test invalid token (should return 404)
     print("\n--- Step 7: Testing invalid token (should return 404) ---")

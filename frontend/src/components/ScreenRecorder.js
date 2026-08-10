@@ -2,7 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move } from 'lucide-react';
 import { toast } from 'sonner';
-import { saveRecordingBlob } from '@/lib/recordingStore';
+import {
+    saveRecordingBlob,
+    beginLiveRecording,
+    appendLiveChunk,
+    clearLiveRecording,
+    finalizeLiveRecording,
+    loadLiveRecording,
+} from '@/lib/recordingStore';
+import { pickRecorderMimeType, mediaErrorMessage, canRecordScreen } from '@/lib/mediaRecorder';
 
 // Draggable floating control bar rendered as a fixed overlay (top-most z-index).
 const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
@@ -247,7 +255,69 @@ export const ScreenRecorder = ({ onSaved }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [recording, paused, seconds, micOn, camOn]);
 
+    // Warn before unloading while a recording is in progress; flush live chunks so a crash is recoverable.
+    useEffect(() => {
+        const onBeforeUnload = (e) => {
+            if (!recorderRef.current || recorderRef.current.state === 'inactive') return;
+            try { recorderRef.current.requestData?.(); } catch { /* noop */ }
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    }, []);
+
+    // Offer to recover a mid-session recording left behind by a crash / closed tab.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const live = await loadLiveRecording();
+                if (cancelled || !live?.chunks?.length) return;
+                // Ignore stale sessions older than 6 hours.
+                if (live.updatedAt && Date.now() - live.updatedAt > 6 * 60 * 60 * 1000) {
+                    await clearLiveRecording();
+                    return;
+                }
+                const recover = window.confirm(
+                    'We found an unfinished screen recording from a previous session. Recover it?',
+                );
+                if (!recover) { await clearLiveRecording(); return; }
+                const blob = await finalizeLiveRecording(live.meta?.mimeType);
+                if (!blob || blob.size === 0) {
+                    toast.error('Could not recover the previous recording.');
+                    return;
+                }
+                try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
+                toast.success('Recovered unfinished recording — opening preview...');
+                window.location.href = '/recording/edit?pending=1&recovered=1';
+            } catch { /* noop */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const handOffToEditor = async (blob) => {
+        try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
+        try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
+        const localUrl = URL.createObjectURL(blob);
+        try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
+        try { sessionStorage.setItem('tsk_last_recording_type', blob.type || ''); } catch { /* noop */ }
+        try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
+        if (onSaved) onSaved(blob, localUrl);
+        toast.success('Recording ready — opening preview...');
+        let editorWin = null;
+        try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
+        if (!editorWin) {
+            toast.info('Popup blocked — opening editor in this tab');
+            window.location.href = '/recording/edit?pending=1';
+        }
+    };
+
     const start = async () => {
+        if (!canRecordScreen()) {
+            toast.error('Screen recording is not supported in this browser. Please use Chrome, Edge, or Firefox.');
+            return;
+        }
         setStarting(true);
         let micErr = null;
         let camErr = null;
@@ -268,14 +338,21 @@ export const ScreenRecorder = ({ onSaved }) => {
             }
 
             // 2) Screen picker (native dialog offers Screen / Window / Chrome Tab tabs)
-            const display = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: 30, cursor: 'always' },
-                audio: true,
-                // Do NOT set preferCurrentTab — that forces the picker to only offer current tab in some browsers.
-                selfBrowserSurface: 'include',
-                surfaceSwitching: 'include',
-                systemAudio: 'include',
-            });
+            let display;
+            try {
+                display = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: 30, cursor: 'always' },
+                    audio: true,
+                    // Do NOT set preferCurrentTab — that forces the picker to only offer current tab in some browsers.
+                    selfBrowserSurface: 'include',
+                    surfaceSwitching: 'include',
+                    systemAudio: 'include',
+                });
+            } catch (e) {
+                toast.error(mediaErrorMessage(e, 'screen'));
+                stopAllTracks();
+                return;
+            }
             displayStreamRef.current = display;
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
@@ -297,47 +374,68 @@ export const ScreenRecorder = ({ onSaved }) => {
             ];
             // Prefer the canvas composite (screen + webcam) but fall back to the raw screen tracks if the composite failed.
             const videoTracks = compositeStream?.getVideoTracks?.() || display.getVideoTracks();
+            if (!videoTracks.length) {
+                toast.error('No video track available from the screen share. Please try again.');
+                stopAllTracks();
+                return;
+            }
             const mixed = new MediaStream([...videoTracks, ...audioTracks]);
             mixedStreamRef.current = mixed;
 
-            const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-            const mimeType = preferred.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || '';
+            const mimeType = pickRecorderMimeType();
             mimeTypeRef.current = mimeType || 'video/webm';
-            const rec = new MediaRecorder(mixed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 1_200_000 });
+            let rec;
+            try {
+                rec = new MediaRecorder(mixed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 1_200_000 });
+            } catch (err) {
+                // Some browsers reject the options bag — try with zero options as last resort.
+                try {
+                    rec = new MediaRecorder(mixed);
+                    mimeTypeRef.current = rec.mimeType || mimeTypeRef.current;
+                } catch (err2) {
+                    toast.error('This browser cannot record the selected screen. Try Chrome or Edge.');
+                    stopAllTracks();
+                    return;
+                }
+            }
             chunksRef.current = [];
-            rec.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
+            await beginLiveRecording({ mimeType: mimeTypeRef.current });
+            rec.ondataavailable = (e) => {
+                if (e.data?.size > 0) {
+                    chunksRef.current.push(e.data);
+                    // Fire-and-forget persistence so a crash mid-recording is recoverable.
+                    appendLiveChunk(e.data);
+                }
+            };
+            rec.onerror = (ev) => {
+                console.error('MediaRecorder error', ev?.error || ev);
+                toast.error(ev?.error?.message || 'Recording failed unexpectedly. Trying to save what we have...');
+                try { if (rec.state !== 'inactive') rec.stop(); } catch { /* noop */ }
+            };
             rec.onstop = async () => {
                 if (timerRef.current) clearInterval(timerRef.current);
                 setRecording(false);
                 setPaused(false);
                 setSeconds(0);
-                const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
-                stopAllTracks();
-                if (blob.size === 0) { toast.error('Recording was empty'); return; }
-                // Persist the blob in IndexedDB so the editor can reliably retrieve it
-                // even when opened in a new tab (window.opener is unreliable with COOP).
-                try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
-                // Also stash on window and sessionStorage as best-effort fallbacks
-                try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
-                const localUrl = URL.createObjectURL(blob);
-                try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
-                try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
-                try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
-                if (onSaved) onSaved(blob, localUrl);
-                toast.success('Recording ready — opening preview...');
-                // Open the editor. Pass empty features string so window.opener stays accessible
-                // as an additional fallback (IndexedDB is the primary channel now).
-                let editorWin = null;
-                try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
-                if (!editorWin) {
-                    // Popup blocked — same-tab fallback
-                    toast.info('Popup blocked — opening editor in this tab');
-                    window.location.href = '/recording/edit?pending=1';
+                // Prefer in-memory chunks; fall back to IndexedDB live buffer if memory was lost.
+                let blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
+                if (!blob.size) {
+                    const recovered = await finalizeLiveRecording(mimeTypeRef.current);
+                    if (recovered) blob = recovered;
+                } else {
+                    try { await clearLiveRecording(); } catch { /* noop */ }
                 }
+                stopAllTracks();
+                if (!blob.size) { toast.error('Recording was empty — nothing was captured. Please try again.'); return; }
+                await handOffToEditor(blob);
             };
             recorderRef.current = rec;
             display.getVideoTracks()[0].addEventListener('ended', () => {
-                if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop();
+                // User clicked the browser "Stop sharing" button — finalize cleanly.
+                if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+                    try { recorderRef.current.requestData?.(); } catch { /* noop */ }
+                    try { recorderRef.current.stop(); } catch { /* noop */ }
+                }
             });
             rec.start(1000);
             setRecording(true);
@@ -353,17 +451,23 @@ export const ScreenRecorder = ({ onSaved }) => {
             else if (surf === 'browser') toast.info('Recording this browser tab.');
             else if (surf === 'window') toast.info('Recording a window — controls opened in a separate mini window.');
 
-            if (camErr) toast.warning('Webcam not available — continuing without it.');
-            if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
+            if (camErr) toast.warning(mediaErrorMessage(camErr, 'camera'));
+            if (micErr) toast.warning(mediaErrorMessage(micErr, 'mic'));
         } catch (e) {
-            if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
+            toast.error(mediaErrorMessage(e, 'screen'));
             stopAllTracks();
+            try { await clearLiveRecording(); } catch { /* noop */ }
         } finally { setStarting(false); }
     };
 
     const stop = () => {
-        try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); }
-        catch { stopAllTracks(); }
+        try {
+            if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+                // Flush the latest timeslice before stopping so the last second isn't lost.
+                try { recorderRef.current.requestData?.(); } catch { /* noop */ }
+                recorderRef.current.stop();
+            }
+        } catch { stopAllTracks(); }
         try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
         setPopupOpen(false);
     };
@@ -400,9 +504,20 @@ export const ScreenRecorder = ({ onSaved }) => {
         else if (rec.state === 'paused') { rec.resume(); setPaused(false); }
     };
 
-    const restart = () => {
-        try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); } catch { /* noop */ }
+    const restart = async () => {
+        // Discard the current take — clear live buffer so crash-recovery doesn't revive it.
+        try { await clearLiveRecording(); } catch { /* noop */ }
         chunksRef.current = [];
+        // Temporarily null out onstop so stopping doesn't open the editor for a discarded take.
+        const rec = recorderRef.current;
+        if (rec) {
+            try { rec.onstop = null; } catch { /* noop */ }
+            try { if (rec.state !== 'inactive') rec.stop(); } catch { /* noop */ }
+        }
+        stopAllTracks();
+        setRecording(false);
+        setPaused(false);
+        setSeconds(0);
         setTimeout(() => { start(); }, 400);
     };
 
