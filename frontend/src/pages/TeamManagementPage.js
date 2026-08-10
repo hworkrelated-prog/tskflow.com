@@ -193,22 +193,22 @@ const TeamManagementPage = () => {
                     </div>
 
                     <Tabs defaultValue="direct-reports" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-8">
-                            <TabsTrigger value="direct-reports" className="rounded-full">
-                                <GitBranch className="w-4 h-4 mr-2" />
+                        <TabsList className={`grid w-full grid-cols-2 ${user?.is_team_owner ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} h-auto gap-1 mb-8`}>
+                            <TabsTrigger value="direct-reports" className="rounded-full py-2 text-xs sm:text-sm">
+                                <GitBranch className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 Direct Reports
                             </TabsTrigger>
-                            <TabsTrigger value="performance" className="rounded-full">
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="performance" className="rounded-full py-2 text-xs sm:text-sm">
+                                <CheckCircle2 className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 Performance
                             </TabsTrigger>
-                            <TabsTrigger value="my-hierarchy" className="rounded-full">
-                                <UserCheck className="w-4 h-4 mr-2" />
+                            <TabsTrigger value="my-hierarchy" className="rounded-full py-2 text-xs sm:text-sm">
+                                <UserCheck className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                 My Hierarchy
                             </TabsTrigger>
                             {user?.is_team_owner && (
-                                <TabsTrigger value="team-admin" className="rounded-full">
-                                    <UsersIcon className="w-4 h-4 mr-2" />
+                                <TabsTrigger value="team-admin" className="rounded-full py-2 text-xs sm:text-sm">
+                                    <UsersIcon className="w-4 h-4 mr-1.5 sm:mr-2 shrink-0" />
                                     Team Admin
                                 </TabsTrigger>
                             )}
