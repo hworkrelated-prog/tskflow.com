@@ -34,14 +34,13 @@ async def generate_ai_work_review(task: dict, completion_note: Optional[str], ha
         "Keep under 120 words. Use bullets starting with - "
     )
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"review_{task.get('id')}",
-            system_message="You write concise advisory work-review checklists for managers. No pass/fail grades.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await chat.send_message(UserMessage(text=prompt))
-        out = (raw if isinstance(raw, str) else str(raw)).strip()
+        from llm_client import emergent_chat
+        out = await emergent_chat(
+            "You write concise advisory work-review checklists for managers. No pass/fail grades.",
+            prompt,
+            model="gpt-4o-mini",
+            timeout=12.0,
+        )
         return out[:2000] if out else None
     except Exception as e:
         logging.error(f"generate_ai_work_review: {e}")
