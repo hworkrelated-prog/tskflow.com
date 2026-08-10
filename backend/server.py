@@ -5124,6 +5124,23 @@ def _jarvis_local_intent(transcript: str):
     low = (transcript or "").lower().strip()
     if not low:
         return None
+    # Greetings / small talk — never need the LLM
+    if re.fullmatch(r"(hi|hello|hey|yo|hiya|howdy)( there| jarvis| jamie)?[!?.]*", low) or \
+       re.fullmatch(r"(good\s+)?(morning|afternoon|evening)( jarvis)?[!?.]*", low):
+        return {
+            "reply": "Hey — I'm here. Want me to list what's open, create a task, or open a page?",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
+    if re.search(r"\b(how are you|how's it going|you (there|around|up))\b", low) and len(low) < 60:
+        return {
+            "reply": "All good on my side. What do you need — outstanding tasks, a new task, or a quick how-to?",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
+    if re.fullmatch(r"(thanks|thank you|thx|ty|appreciate it)[!?.]*", low):
+        return {
+            "reply": "Anytime. Ping me when the next thing comes up.",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
     if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
         return {
             "reply": (
@@ -5138,6 +5155,22 @@ def _jarvis_local_intent(transcript: str):
             "reply": "Sure. Tell me what you're stuck on — a task, an assignee, a due date — and I'll walk you through it.",
             "action": {"type": "assistant_answer", "params": {}},
         }
+    # Lightweight product FAQ that shouldn't depend on the LLM
+    if re.search(r"\bhow (do i|to)\b.*(creat|add|make).*(task|todo)", low):
+        return {
+            "reply": "Hit New Task on the left, or just tell me in plain English — e.g. “Remind Alice to send the Q3 deck by Friday.”",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
+    if re.search(r"\bhow (do i|to)\b.*(assign|delegate)", low):
+        return {
+            "reply": "When creating a task, type @ and pick a teammate, or say “assign to Alice” and I'll set it up.",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
+    if re.search(r"\b(what('s| is)|explain)\b.*(pending|accepted|review pending|status)", low):
+        return {
+            "reply": "Pending = waiting on the assignee to accept. Accepted = they're on it. Review Pending = they submitted and the creator still needs to approve.",
+            "action": {"type": "assistant_answer", "params": {}},
+        }
     nav = None
     if re.search(r"\b(open |go to |show )?(the )?(analytics|dashboard|settings|team|help|recordings|recurring|leads)\b", low):
         for key in ("analytics", "dashboard", "settings", "team", "help", "recordings", "recurring", "leads"):
@@ -5150,6 +5183,26 @@ def _jarvis_local_intent(transcript: str):
             "action": {"type": "navigate", "params": {"target": nav}},
         }
     return None
+
+
+def _looks_like_create_task(transcript: str) -> bool:
+    """Heuristic: user is asking Jarvis to create/assign a task (usable offline)."""
+    low = (transcript or "").lower().strip()
+    if not low or len(low) < 8:
+        return False
+    if re.search(r"\b(create|add|make|set up|setup)\b.*\b(task|todo|reminder)\b", low):
+        return True
+    if re.search(r"\b(remind|ask|tell|have|assign)\b.+\bto\b", low):
+        return True
+    if re.search(r"\bi\s+(need|want)\s+(you\s+)?to\b", low):
+        return True
+    if re.search(r"\b(follow up|follow-up|check in|check-in)\b.+\b(with|on)\b", low):
+        return True
+    # Imperative starting with a verb + object, with a due/priority cue
+    if re.match(r"^(send|call|email|review|write|draft|prepare|schedule|update|finish|complete|ship)\b", low) and \
+       re.search(r"\b(by|before|tomorrow|today|friday|monday|asap|urgent|eod)\b", low):
+        return True
+    return False
 
 
 @api_router.post("/voice/command")
@@ -5238,15 +5291,72 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             raw = None
 
     if raw is None:
+        # LLM unavailable — still try to create tasks locally so chat stays useful.
+        if _looks_like_create_task(transcript):
+            title = _fallback_title(transcript)
+            priority = "Urgent" if re.search(r"\b(asap|urgent(ly)?|immediately)\b", transcript, re.I) else "Medium"
+            due = _fallback_parse_date_expression(transcript, get_pst_now())
+            # Resolve a single obvious assignee if present
+            assignee_email = None
+            assignee_id = "self"
+            hints = _extract_assignee_hints(transcript)
+            if hints:
+                try:
+                    ar = await _resolve_assignee_hints([hints[0]], current_user)
+                    resolved = (ar or {}).get("resolved") or []
+                    if resolved and resolved[0].get("kind") == "user":
+                        assignee_id = resolved[0]["id"]
+                        assignee_email = resolved[0].get("email")
+                except Exception as e:
+                    logging.warning(f"offline assignee resolve failed: {e}")
+            tid = str(uuid.uuid4())
+            due_date = due or (get_pst_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
+            is_self = assignee_id == "self" or assignee_id == current_user["id"]
+            task_doc = {
+                "id": tid,
+                "title": title,
+                "description": transcript.strip(),
+                "assigned_to": current_user["id"] if is_self else assignee_id,
+                "assigned_to_email": current_user["email"] if is_self else (assignee_email or ""),
+                "created_by": current_user["id"],
+                "due_date": due_date,
+                "priority": priority,
+                "status": "Accepted" if is_self else "Pending",
+                "created_at": get_pst_now().isoformat(),
+                "accepted_at": get_pst_now().isoformat() if is_self else None,
+                "invite_token": str(uuid.uuid4())[:8],
+                "deleted": False,
+                "is_parent": False,
+                "is_sales_task": _text_looks_like_sales(transcript),
+            }
+            try:
+                await db.tasks.insert_one(task_doc)
+                who = "you" if is_self else (hints[0] if hints else "the assignee")
+                return {
+                    "reply": f"Got it — created “{title}” for {who}" + (f", due {due_date[:10]}." if due_date else "."),
+                    "action": {
+                        "type": "create_task",
+                        "params": {
+                            "title": title,
+                            "assignee_email": assignee_email,
+                            "priority": priority,
+                            "due_date": due_date,
+                        },
+                    },
+                    "executed": {"type": "create_task", "task_id": tid, "degraded": True},
+                }
+            except Exception as e:
+                logging.error(f"offline create_task failed: {e}")
+
         # Never return 5xx/hang — Cloudflare was turning those into incomplete responses
         hint = ""
         if outstanding:
             hint = f" You currently have {len(outstanding)} open task{'s' if len(outstanding) != 1 else ''}."
         return {
             "reply": (
-                "I couldn't reach my full brain just now, but I'm still here."
-                f"{hint} Try “what's outstanding”, “open analytics”, “guide me”, "
-                "or create a task with New Task on the left."
+                "I'm in quick mode right now (full AI is briefly unavailable)."
+                f"{hint} I can still list what's outstanding, open pages, "
+                "or create a task if you say something like “Remind Alice to send the deck by Friday.”"
             ),
             "action": {"type": "assistant_answer", "params": {}},
             "executed": {"type": "assistant_answer", "degraded": True},
@@ -5274,7 +5384,9 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
     executed = {"type": atype}
     # Execute server-side actions where safe
     if atype in ("create_task", "assign_task"):
-        title = (params.get("title") or transcript)[:200]
+        raw_title = (params.get("title") or "").strip()
+        title = raw_title if raw_title and not _title_looks_like_prompt(raw_title, transcript) else _fallback_title(transcript)
+        title = title[:200]
         assignee_email = params.get("assignee_email")
         priority = params.get("priority") if params.get("priority") in ["Low", "Medium", "High", "Urgent"] else "Medium"
         due = params.get("due_date") or (get_pst_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
@@ -6965,10 +7077,14 @@ SUCCESS CRITERIA (expectations):
 - Keep it as a short plain sentence the assignee can aim for. Empty string if not stated.
 - Do NOT invent success criteria.
 
-TITLE RULES:
-- Imperative mood: "Submit MEA report", "Call Alex about Q3", "Review Alice's PR".
-- No names, no dates, no priority words.
-- Keep between 4-8 words.
+TITLE RULES (critical — never paste the user's prompt as the title):
+- Write a short imperative title an assignee understands in under 2 seconds.
+- Good: "Send Q3 board deck", "Call Alex about renewal", "Review Alice's PR".
+- Bad: "can you please remind Alice to send the Q3 board deck by Friday EOD" (that's the prompt, not a title).
+- Strip conversational fluff ("can you", "please", "remind X to", "I need you to", "create a task to").
+- Do NOT include assignee names, due dates/times, or priority words (urgent/ASAP) in the title.
+- Prefer 3–7 words. Hard max 60 characters. Capitalize like a sentence headline (first word capital).
+- Put leftover context in description, not the title.
 
 is_sales_task=true when the text mentions sales work — e.g. sales, prospect, lead, pipeline, deal, opportunity,
 demo, discovery, pitch, proposal, quote, CRM, HubSpot, Salesforce, SDR/BDR/AE, cold call, outbound, renewal,
@@ -7313,6 +7429,161 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     return {"resolved": resolved, "ambiguous": ambiguous, "unresolved": unresolved}
 
 
+_TITLE_FLUFF_RES = [
+    re.compile(r"^(hey\s+)?(jarvis|ai|tskflow)[,:]?\s+", re.I),
+    re.compile(r"^(can you|could you|would you|will you|please|pls)[, ]+", re.I),
+    re.compile(r"^(i\s+(?:need|want|would like|'d like)\s+you\s+to)\s+", re.I),
+    re.compile(
+        r"^(please\s+)?(create|make|add|set\s*up|open)\s+(a\s+)?(new\s+)?"
+        r"(task(?:\s+|:\s*)?)?((to|for)\s+[@\w.'-]{1,40}\s*[:\-–—]?\s*)?",
+        re.I,
+    ),
+    re.compile(r"^(please\s+)?(remind|ask|tell|have|get)\s+[@\w.'\s-]{1,40}?\s+to\s+", re.I),
+    re.compile(r"^(please\s+)?assign\s+[@\w.'-]{1,40}\s+to\s+", re.I),
+    re.compile(r"^(please\s+)?send\s+(this\s+)?(task|todo|reminder)\s+to\s+", re.I),
+    re.compile(r"^task[:\s-]+", re.I),
+    re.compile(r"^@[\w.'-]{1,40}\s+", re.I),
+]
+
+_TITLE_TRAILING_RES = [
+    # Dates / times / relative deadlines
+    re.compile(
+        r"\b(by|before|after|on|due|until|for)\s+"
+        r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"tomorrow|today|tonight|eod|eom|cob|asap|"
+        r"next\s+\w+|"
+        r"\d{1,2}(:\d{2})?\s*(am|pm|pst|pt|pdt|est|et|utc)?|"
+        r"\d{4}-\d{2}-\d{2}"
+        r")\b.*$",
+        re.I,
+    ),
+    # Bare trailing day/relative words: "call the client tomorrow"
+    re.compile(
+        r"\s+\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"tomorrow|today|tonight|eod|eom|cob)\b.*$",
+        re.I,
+    ),
+    re.compile(r"\b(asap|urgently|immediately|right away|as soon as possible)\b.*$", re.I),
+    re.compile(r"\b(this is|it's|its)\s+(urgent|important|critical|high priority)\b.*$", re.I),
+    re.compile(r"\b(high|low|medium|urgent)\s+priority\b.*$", re.I),
+    re.compile(r"[.?!]+$"),
+]
+
+_ASSIGNEE_HINT_STOP = {
+    "me", "myself", "my", "the", "a", "an", "this", "that", "our", "your",
+    "team", "task", "please", "someone", "anybody", "everyone", "to", "do",
+    "send", "call", "email", "finish", "complete", "review", "write", "draft",
+    "prepare", "schedule", "update", "fix", "check", "follow", "submit",
+}
+
+
+def _extract_assignee_hints(text: str) -> list:
+    """Pull obvious person names from remind/ask/assign phrasing (offline-safe)."""
+    hints = []
+    patterns = [
+        r"\b(?:remind|ask|tell|have)\s+([A-Za-z][\w.'-]{1,30}(?:\s+[A-Za-z][\w.'-]{1,30})?)\s+to\b",
+        r"\b(?:assign(?:ed)?(?:\s+\w+)?\s+to|for)\s+([A-Za-z][\w.'-]{1,30}(?:\s+[A-Za-z][\w.'-]{1,30})?)\b",
+        r"@([A-Za-z][\w.'-]{1,30})",
+    ]
+    for pat in patterns:
+        for h in re.findall(pat, text or "", flags=re.I):
+            parts = [p for p in (h or "").strip().lstrip("@").split() if p]
+            while parts and parts[-1].lower() in _ASSIGNEE_HINT_STOP:
+                parts.pop()
+            clean = " ".join(parts).strip()
+            if not clean or clean.lower() in _ASSIGNEE_HINT_STOP:
+                continue
+            if clean.lower() not in {x.lower() for x in hints}:
+                hints.append(clean)
+    return hints
+
+
+def _fallback_title(text: str) -> str:
+    """Turn a natural-language prompt into a short, imperative task title without an LLM.
+
+    Used when EMERGENT_LLM_KEY is missing/unreachable AND to rewrite LLM titles that
+    clearly just echoed the user's prompt.
+    """
+    t = (text or "").strip().strip('"\'')
+    if not t:
+        return "New task"
+
+    # Keep first sentence / clause — titles shouldn't carry the whole brief.
+    t = re.split(r"[\n;]|\s+[-–—]\s+", t, maxsplit=1)[0]
+    t = re.split(r"(?<=[.!?])\s+", t, maxsplit=1)[0]
+
+    # Peel wrappers a few times (please → create a task for X → …)
+    for _ in range(4):
+        changed = False
+        for rx in _TITLE_FLUFF_RES:
+            nxt = rx.sub("", t).strip(" \t:-–—")
+            if nxt != t:
+                t = nxt
+                changed = True
+        if not changed:
+            break
+
+    # "for Alice: send the deck" / "to Bob - call the client" / "Alice: review the PR"
+    t = re.sub(r"^(for|to)\s+[@\w.'-]{1,40}\s*[:\-–—]\s*", "", t, flags=re.I).strip()
+    t = re.sub(
+        r"^(?:[A-Z][a-z][\w.']{0,28}(?:\s+[A-Z][a-z][\w.']{0,28})?)\s*[:\-–—]\s+",
+        "",
+        t,
+    ).strip()
+
+    for rx in _TITLE_TRAILING_RES:
+        t = rx.sub("", t).strip()
+
+    # Drop leftover leading conjunctions / infinitive markers
+    t = re.sub(r"^(to|and|then|also)\s+", "", t, flags=re.I).strip()
+
+    # Collapse whitespace / dangling punctuation
+    t = re.sub(r"\s+", " ", t).strip(" ,;:-")
+
+    if not t:
+        # Last resort: first ~6 words of the original, cleaned
+        words = re.findall(r"[\w']+", text or "")
+        t = " ".join(words[:6]) or "New task"
+
+    # Imperative-ish: capitalize first letter, keep acronyms
+    t = t[0].upper() + t[1:] if len(t) > 1 else t.upper()
+
+    # Hard length cap — prefer word boundary under 60 chars
+    if len(t) > 60:
+        cut = t[:60]
+        if " " in cut:
+            cut = cut.rsplit(" ", 1)[0]
+        t = cut.rstrip(" ,;:-")
+
+    # Prefer 3–8 words; if still a long run-on, take first 7 words
+    words = t.split()
+    if len(words) > 8:
+        t = " ".join(words[:7])
+
+    return t or "New task"
+
+
+def _title_looks_like_prompt(title: str, source_text: str) -> bool:
+    """True when the title is basically the raw user prompt (or equally conversational)."""
+    if not title:
+        return True
+    t = title.strip()
+    src = (source_text or "").strip()
+    if len(t) > 70:
+        return True
+    if src and t.lower()[:40] == src.lower()[:40] and len(t) > 40:
+        return True
+    if re.match(
+        r"^(can you|could you|would you|please|pls|i need|i want|remind |ask |hey |jarvis\b|create a task\b)",
+        t,
+        re.I,
+    ):
+        return True
+    if len(t.split()) > 12:
+        return True
+    return False
+
+
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
@@ -7354,9 +7625,11 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         raise HTTPException(status_code=400, detail="Text too short")
 
     now = get_pst_now()
+    local_title = _fallback_title(text)
+    # Put the original prompt in description when we're offline (no LLM) so context isn't lost.
     fallback = {
-        "title": text[:60],
-        "description": "",
+        "title": local_title,
+        "description": text.strip() if text.strip().lower() != local_title.lower() else "",
         "priority": "Medium",
         "category": "General",
         "due_date": None,
@@ -7369,7 +7642,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "recurring": {"is_recurring": False, "frequency": None, "days_of_week": None, "time_of_day": None, "end_time_of_day": None, "end_type": None, "end_date": None, "end_count": None, "raw_phrase": ""},
         "intent": "task",
         "clarifying_questions": [],
-        "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
+        "confidence": {"title": 0.55, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
 
     parsed = await _llm_parse(text, current_user, req.context_hint) or fallback
@@ -7380,8 +7653,20 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             parsed[k] = v
     if parsed.get("priority") not in ["Low", "Medium", "High", "Urgent"]:
         parsed["priority"] = "Medium"
+    # Never ship a title that is just the user's prompt — rewrite locally.
+    if _title_looks_like_prompt(parsed.get("title") or "", text):
+        parsed["title"] = local_title
+        if not (parsed.get("description") or "").strip():
+            parsed["description"] = text.strip()
+        conf = parsed.get("confidence") or {}
+        if isinstance(conf, dict):
+            conf["title"] = min(float(conf.get("title") or 0.5), 0.6)
+            parsed["confidence"] = conf
     if not isinstance(parsed.get("assignee_hints"), list):
         parsed["assignee_hints"] = []
+    # Offline / thin LLM responses: pull obvious assignee mentions from the prompt.
+    if not parsed["assignee_hints"]:
+        parsed["assignee_hints"] = _extract_assignee_hints(text)
     if not isinstance(parsed.get("clarifying_questions"), list):
         parsed["clarifying_questions"] = []
     if parsed.get("success_criteria") is None:
