@@ -7,10 +7,10 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Users, Clock, ArrowUpRight, ChevronDown, ChevronRight, Mail, Circle, CheckCircle2 } from 'lucide-react';
+import { Users, Clock, ChevronDown, ChevronRight, Mail, Trophy } from 'lucide-react';
 import { format } from 'date-fns';
 
-const statusRank = (s) => {
+const pendingFirstRank = (s) => {
     if (s === 'Pending') return 0;
     if (s === 'Accepted' || s === 'In Progress') return 1;
     if (s === 'Review Pending') return 2;
@@ -20,11 +20,9 @@ const statusRank = (s) => {
 
 /**
  * Compact group card:
- *  - Whole card is a click target → /task/{id} (unified detail view)
- *  - Chevron expands an inline list of assignees (pending on top)
- *  - "Nudge unfinished" button emails everyone who hasn't submitted yet
- *  - No trash icon (moved into the task view itself per user request)
- *  - Selection checkbox is bubbled up via `selectable` + onToggleSelect (parent handles it)
+ *  - Click title/header → /task/{id}
+ *  - Chevron expands inline leaderboard
+ *  - Nudge unfinished emails everyone still open
  */
 export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected = false, onToggleSelect }) => {
     const navigate = useNavigate();
@@ -47,20 +45,25 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
     }, [open, group.id]);
 
     const sorted = useMemo(() => [...subs].sort((a, b) => {
-        const ra = statusRank(a.status), rb = statusRank(b.status);
+        const doneA = a.status === 'Completed';
+        const doneB = b.status === 'Completed';
+        if (doneA !== doneB) return doneA ? -1 : 1;
+        if (doneA && doneB) {
+            return (a.completed_at || '').localeCompare(b.completed_at || '');
+        }
+        const ra = pendingFirstRank(a.status), rb = pendingFirstRank(b.status);
         if (ra !== rb) return ra - rb;
         return (a.due_date || '').localeCompare(b.due_date || '');
     }), [subs]);
 
     const unfinishedCount = useMemo(() => sorted.filter((s) => s.status !== 'Completed').length, [sorted]);
+    const completedCount = useMemo(() => sorted.filter((s) => s.status === 'Completed').length, [sorted]);
 
     const openTask = (e) => {
         if (e) e.stopPropagation();
-        // In multi-select mode, clicking the card body toggles selection instead of navigating.
         if (selectable) { if (onToggleSelect) onToggleSelect(group.id); return; }
         navigate(`/task/${group.id}`);
     };
-    const gotoTask = (e) => { if (e) e.stopPropagation(); navigate(`/task/${group.id}`); };
 
     const nudgeUnfinished = async (e) => {
         e.stopPropagation();
@@ -77,13 +80,14 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
     const toggleOpen = (e) => { e.stopPropagation(); setOpen((v) => !v); };
 
     const complete = group.percent === 100;
+    const descPreview = (group.description || '').trim();
 
     return (
         <Card
             className="border-2 rounded-2xl overflow-hidden hover:shadow-md transition-shadow"
             data-testid={`parent-group-card-${group.id}`}
         >
-            <div className="p-4 bg-gradient-to-r from-teal-50 to-teal-50 cursor-pointer" onClick={openTask}>
+            <div className="p-4 bg-gradient-to-r from-teal-50 to-teal-50">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                         {selectable && (
@@ -96,7 +100,12 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                 data-testid={`select-parent-group-${group.id}`}
                             />
                         )}
-                        <div className="flex-1 min-w-0">
+                        <button
+                            type="button"
+                            onClick={openTask}
+                            className="flex-1 min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-white/50 transition-colors"
+                            data-testid={`open-parent-group-${group.id}`}
+                        >
                             <div className="flex items-center gap-2 mb-1">
                                 <Users className="w-4 h-4 text-teal-600 shrink-0" />
                                 <h3 className="font-semibold text-base truncate">{group.title}</h3>
@@ -109,6 +118,9 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                     </span>
                                 )}
                             </div>
+                            {descPreview ? (
+                                <p className="text-xs text-slate-600 line-clamp-2 mb-1">{descPreview}</p>
+                            ) : null}
                             <p className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span>{group.completed}/{group.total} done</span>
                                 <span>·</span>
@@ -117,9 +129,9 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                     ? format(new Date(group.due_date), 'MMM dd')
                                     : 'No date'}
                             </p>
-                        </div>
+                        </button>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {(() => {
                             if (!group.due_date || complete) return null;
                             const d = new Date(group.due_date);
@@ -131,14 +143,12 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                             );
                         })()}
                         <Badge className={complete ? 'bg-green-100 text-green-700' : 'bg-teal-100 text-teal-700'}>{group.percent}%</Badge>
-                        <Button size="sm" onClick={gotoTask} className="rounded-full h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white" data-testid={`view-parent-group-${group.id}`}>
-                            View Task <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-                        </Button>
                         <button
                             type="button"
                             onClick={toggleOpen}
-                            className="p-1.5 rounded-full text-gray-600 hover:bg-white/70 transition-transform"
-                            title={open ? 'Collapse assignees' : 'Show assignees'}
+                            className="p-1.5 rounded-full text-gray-600 hover:bg-white/70 transition-colors"
+                            title={open ? 'Hide leaderboard' : 'Show leaderboard'}
+                            aria-expanded={open}
                             data-testid={`toggle-parent-group-${group.id}`}
                         >
                             {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -150,8 +160,14 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
 
             {open && (
                 <div className="border-t bg-white">
-                    <div className="px-4 py-2 flex items-center justify-between gap-3 border-b">
-                        <span className="text-xs text-muted-foreground">Pending on top · completed at bottom</span>
+                    <div className="px-4 py-2.5 flex items-center justify-between gap-3 border-b bg-gradient-to-r from-amber-50/80 to-orange-50/40">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span className="text-sm font-semibold text-amber-950">Leaderboard</span>
+                            <span className="text-xs text-amber-800/80 truncate">
+                                {completedCount}/{sorted.length || group.total} finished
+                            </span>
+                        </div>
                         {unfinishedCount > 0 && (
                             <Button
                                 size="sm"
@@ -162,32 +178,60 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                 data-testid={`nudge-parent-group-${group.id}`}
                             >
                                 <Mail className="w-3.5 h-3.5 mr-1" />
-                                {reminding ? 'Sending...' : `Nudge ${unfinishedCount} unfinished`}
+                                {reminding ? 'Sending...' : `Nudge ${unfinishedCount}`}
                             </Button>
                         )}
                     </div>
                     {sorted.length === 0 ? (
-                        <div className="p-4 text-sm text-muted-foreground">Loading assignees...</div>
+                        <div className="p-4 text-sm text-muted-foreground">Loading team…</div>
                     ) : (
                         <ul className="divide-y">
-                            {sorted.map((t) => (
-                                <li
-                                    key={t.id}
-                                    className={`flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50/50 cursor-pointer ${t.status === 'Completed' ? 'opacity-70' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/task/${t.id}`); }}
-                                    data-testid={`parent-group-subtask-${t.id}`}
-                                >
-                                    {t.status === 'Completed' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Circle className="w-4 h-4 text-gray-400 shrink-0" />}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium truncate">{t.assigned_to_name || t.assigned_to_email || 'Unknown'}</div>
-                                        <div className="text-xs text-muted-foreground truncate">{t.status}{t.completed_at ? ` • ${format(new Date(t.completed_at), 'MMM d, h:mm a')}` : ''}</div>
-                                    </div>
-                                    <Badge variant="outline" className={t.status === 'Review Pending' ? 'text-amber-700 border-amber-200 bg-amber-50' : t.status === 'Completed' ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : ''}>{t.status}</Badge>
-                                    <ArrowUpRight className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                                </li>
-                            ))}
+                            {sorted.map((t, i) => {
+                                const done = t.status === 'Completed';
+                                return (
+                                    <li
+                                        key={t.id}
+                                        className={`flex items-center gap-3 px-4 py-2.5 hover:bg-teal-50/50 cursor-pointer ${done ? 'opacity-80' : ''}`}
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/task/${t.id}`); }}
+                                        data-testid={`parent-group-subtask-${t.id}`}
+                                    >
+                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                                            done ? 'bg-emerald-500 text-white'
+                                                : i === 0 ? 'bg-amber-400 text-white'
+                                                    : 'bg-slate-200 text-slate-700'
+                                        }`}>
+                                            {done ? '✓' : i + 1}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium truncate">{t.assigned_to_name || t.assigned_to_email || 'Unknown'}</div>
+                                            <div className="text-xs text-muted-foreground truncate">
+                                                {t.status}
+                                                {t.completed_at ? ` · ${format(new Date(t.completed_at), 'MMM d, h:mm a')}` : ''}
+                                            </div>
+                                        </div>
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                t.status === 'Review Pending' ? 'text-amber-700 border-amber-200 bg-amber-50'
+                                                    : done ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
+                                                        : ''
+                                            }
+                                        >
+                                            {t.status}
+                                        </Badge>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
+                    <button
+                        type="button"
+                        onClick={openTask}
+                        className="w-full py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50 border-t"
+                        data-testid={`view-parent-group-${group.id}`}
+                    >
+                        Open group task
+                    </button>
                 </div>
             )}
         </Card>

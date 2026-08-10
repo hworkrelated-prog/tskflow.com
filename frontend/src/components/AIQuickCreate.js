@@ -52,6 +52,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [groups, setGroups] = useState([]);
     const [peopleSearch, setPeopleSearch] = useState('');
     const [showPeopleDrop, setShowPeopleDrop] = useState(false);
+    const [peopleDropPos, setPeopleDropPos] = useState(null);
     const [mention, setMention] = useState(null); // { start, end, query }
     const [mentionIndex, setMentionIndex] = useState(0);
     const [mentionPos, setMentionPos] = useState(null); // fixed coords for portal menu
@@ -60,6 +61,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const inputRef = useRef(null);
     const composerRef = useRef(null);
     const clarifyRef = useRef(null);
+    const peopleAnchorRef = useRef(null);
     const nudgeSentRef = useRef(false);
     const mentionListRef = useRef(null);
 
@@ -343,8 +345,32 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
 
     const applyPreview = (p) => {
         const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
-        setEditTitle(p.title || '');
-        setEditDesc(p.description || '');
+        let title = (p.title || '').trim();
+        let desc = (p.description || '').trim();
+        const actions = Array.isArray(p.action_items) ? p.action_items.filter(Boolean) : [];
+
+        if (!title || /^assign\b/i.test(title) || title.includes('@') || title.split(/\s+/).length > 14) {
+            const seed = (actions[0] || text || '')
+                .replace(/\b(assign|tell|have|ask)\s+@?\S+\s+(that\s+they\s+need\s+to\s+|to\s+)?/gi, '')
+                .replace(/@\S+/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            title = seed.split(/\s+/).slice(0, 8).join(' ');
+            if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
+        }
+        if (!desc && actions.length) {
+            desc = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
+        }
+        if (!desc && (text || '').trim().length > 60) {
+            desc = text
+                .replace(/\b(assign|tell|have|ask)\s+@?\S+(?:\s+and\s+@?\S+)*\s+(that\s+they\s+(need\s+to|must|should)\s+|to\s+)/gi, '')
+                .replace(/@\S+/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        setEditTitle(title || p.title || '');
+        setEditDesc(desc || '');
         setEditDue(p.due_date || '');
         setEditPriority(p.priority || 'Medium');
         // Keep @mentions the user already picked; merge in any newly resolved assignees
@@ -377,6 +403,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
             : qs;
         const nextPreview = {
             ...p,
+            title: title || p.title,
+            description: desc || p.description,
             is_sales_task: sales,
             category: sales ? (p.category || 'Sales') : p.category,
             clarifying_questions: filteredQs,
@@ -623,6 +651,51 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         if (!peopleQuery) return true;
         return (u.name || '').toLowerCase().includes(peopleQuery) || (u.email || '').toLowerCase().includes(peopleQuery);
     }).slice(0, 8);
+
+    const updatePeopleDropPos = useCallback(() => {
+        const el = peopleAnchorRef.current || clarifyRef.current;
+        if (!el || !showPeopleDrop) {
+            setPeopleDropPos(null);
+            return;
+        }
+        const r = el.getBoundingClientRect();
+        const pad = 8;
+        const spaceBelow = window.innerHeight - r.bottom - pad;
+        const spaceAbove = r.top - pad;
+        const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+        const maxHeight = Math.max(120, Math.min(240, openUp ? spaceAbove - 4 : spaceBelow - 4));
+        setPeopleDropPos({
+            left: Math.max(12, r.left),
+            width: Math.min(r.width, window.innerWidth - 24),
+            maxHeight,
+            openUp,
+            top: openUp ? undefined : r.bottom + 6,
+            bottom: openUp ? Math.max(12, window.innerHeight - r.top + 6) : undefined,
+        });
+    }, [showPeopleDrop]);
+
+    useEffect(() => {
+        if (!showPeopleDrop) {
+            setPeopleDropPos(null);
+            return undefined;
+        }
+        updatePeopleDropPos();
+        const onMove = () => updatePeopleDropPos();
+        const onDoc = (e) => {
+            const t = e.target;
+            if (peopleAnchorRef.current?.contains(t)) return;
+            if (t?.closest?.('[data-testid="clarify-people-dropdown"]')) return;
+            setShowPeopleDrop(false);
+        };
+        window.addEventListener('resize', onMove);
+        window.addEventListener('scroll', onMove, true);
+        document.addEventListener('mousedown', onDoc);
+        return () => {
+            window.removeEventListener('resize', onMove);
+            window.removeEventListener('scroll', onMove, true);
+            document.removeEventListener('mousedown', onDoc);
+        };
+    }, [showPeopleDrop, peopleSearch, updatePeopleDropPos]);
 
     const formatDue = (iso) => {
         if (!iso) return null;
@@ -990,7 +1063,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                         </div>
 
                                         {isWhoClarify ? (
-                                            <div className="relative ml-6">
+                                            <div className="relative ml-6" ref={peopleAnchorRef}>
                                                 <Input
                                                     ref={clarifyRef}
                                                     value={peopleSearch}
@@ -1000,42 +1073,76 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                         setShowPeopleDrop(true);
                                                     }}
                                                     onFocus={() => setShowPeopleDrop(true)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Escape') {
+                                                            e.preventDefault();
+                                                            setShowPeopleDrop(false);
+                                                        }
+                                                    }}
                                                     placeholder="Search people or type @name"
                                                     className="h-9 text-sm rounded-lg border-amber-300 bg-white"
                                                     data-testid="clarify-people-search"
                                                     disabled={loading || sending}
                                                     autoComplete="off"
                                                 />
-                                                {showPeopleDrop && (
-                                                    <div className="absolute z-40 mt-1 w-full max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg py-1" data-testid="clarify-people-dropdown">
+                                                {showPeopleDrop && peopleDropPos && createPortal(
+                                                    <div
+                                                        style={{
+                                                            position: 'fixed',
+                                                            left: peopleDropPos.left,
+                                                            width: peopleDropPos.width,
+                                                            top: peopleDropPos.openUp ? undefined : peopleDropPos.top,
+                                                            bottom: peopleDropPos.openUp ? peopleDropPos.bottom : undefined,
+                                                            maxHeight: peopleDropPos.maxHeight,
+                                                            zIndex: 220,
+                                                        }}
+                                                        className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10 py-1.5 px-1.5 clean-scroll"
+                                                        data-testid="clarify-people-dropdown"
+                                                        role="listbox"
+                                                    >
                                                         {filteredPeople.length === 0 && (
-                                                            <p className="px-3 py-2 text-xs text-slate-500">No matches — try an email</p>
+                                                            <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email</p>
                                                         )}
                                                         {filteredPeople.map((u) => (
                                                             <button
                                                                 key={u.id || u.email}
                                                                 type="button"
-                                                                onClick={() => pickPerson(u)}
-                                                                className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"
+                                                                onMouseDown={(e) => { e.preventDefault(); pickPerson(u); }}
+                                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
+                                                                role="option"
                                                             >
-                                                                <UserIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                                                <span className="text-sm text-slate-800 truncate">{u.name}</span>
-                                                                {u.email ? <span className="text-xs text-slate-400 truncate ml-auto">{u.email}</span> : null}
+                                                                <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                                                    u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-slate-100 text-slate-600'
+                                                                }`}>
+                                                                    {u.id === 'self' ? 'Me' : <UserIcon className="w-3.5 h-3.5" />}
+                                                                </span>
+                                                                <span className="min-w-0 flex-1">
+                                                                    <span className="text-sm font-medium text-slate-800 block truncate">{u.name}</span>
+                                                                    {u.email ? <span className="text-[11px] text-slate-500 truncate block">{u.email}</span> : null}
+                                                                </span>
                                                             </button>
                                                         ))}
                                                         {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
                                                             <button
                                                                 type="button"
-                                                                onClick={() => {
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
                                                                     const email = peopleSearch.replace(/^@/, '').trim();
                                                                     pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
                                                                 }}
-                                                                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm text-slate-700 border-t"
+                                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-50 text-sm text-slate-700 mt-0.5 flex items-center gap-2.5"
                                                             >
-                                                                Assign to {peopleSearch.replace(/^@/, '').trim()}
+                                                                <span className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                                                                    <Plus className="w-3.5 h-3.5" />
+                                                                </span>
+                                                                <span className="min-w-0">
+                                                                    <span className="font-medium block truncate">Assign {peopleSearch.replace(/^@/, '').trim()}</span>
+                                                                    <span className="text-[11px] text-slate-500">Invite by email</span>
+                                                                </span>
                                                             </button>
                                                         )}
-                                                    </div>
+                                                    </div>,
+                                                    document.body
                                                 )}
                                             </div>
                                         ) : (

@@ -193,7 +193,7 @@ const TaskDetail = () => {
                 success_criteria: response.data.success_criteria || '',
             });
             // If this is a parent task, load participants + leaderboard for the collapsible section
-            if (response.data.is_parent) {
+            if (response.data.is_parent || response.data.status === 'Parent') {
                 const pid = response.data.id;
                 axios.get(`${API}/tasks/parents/${pid}/subtasks`).then((r) => {
                     setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
@@ -571,6 +571,7 @@ const TaskDetail = () => {
             'Completed': { class: 'status-badge-completed', label: 'Completed' },
             'Review Pending': { class: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Review Pending' },
             'Blocked': { class: 'bg-orange-100 text-orange-800 border-orange-300', label: 'Blocked' },
+            'Parent': { class: 'bg-teal-100 text-teal-800 border-teal-200', label: 'Group' },
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
@@ -580,9 +581,10 @@ const TaskDetail = () => {
         );
     };
 
-    const canEdit = user?.id === task?.created_by && task?.status !== 'Completed' && task?.status !== 'Review Pending';
+    const canEdit = user?.id === task?.created_by && task?.status !== 'Completed' && task?.status !== 'Review Pending' && task?.status !== 'Parent';
     const canReview = user?.id === task?.created_by && task?.status === 'Review Pending';
     const canDelete = user?.id === task?.created_by || user?.id === task?.assigned_to;
+    const isParentTask = Boolean(task?.is_parent) || task?.status === 'Parent';
 
     if (loading) {
         return (
@@ -781,7 +783,7 @@ const TaskDetail = () => {
                                         {user?.id === task.assigned_to && task.created_by_email && (
                                             <span className="text-xs text-gray-400 ml-1">({task.created_by_email})</span>
                                         )}
-                                        {task.is_parent && Array.isArray(subtasks) && subtasks.length > 0 && (
+                                        {isParentTask && Array.isArray(subtasks) && subtasks.length > 0 && (
                                             <> {' | '}Assigned to <span className="font-medium">{subtasks.length} people</span></>
                                         )}
                                     </CardDescription>
@@ -843,11 +845,21 @@ const TaskDetail = () => {
 
                             <div className="min-w-0">
                                 <Label className="text-muted-foreground">Description</Label>
-                                <div 
-                                    className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
-                                    style={{ overflowWrap: 'anywhere' }}
-                                    dangerouslySetInnerHTML={{ __html: task.description || '' }}
-                                />
+                                {task.description ? (
+                                    /<[a-z][\s\S]*>/i.test(task.description) ? (
+                                        <div
+                                            className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
+                                            style={{ overflowWrap: 'anywhere' }}
+                                            dangerouslySetInnerHTML={{ __html: task.description }}
+                                        />
+                                    ) : (
+                                        <p className="mt-2 text-base leading-relaxed text-slate-800 whitespace-pre-wrap break-words">
+                                            {task.description}
+                                        </p>
+                                    )
+                                ) : (
+                                    <p className="mt-2 text-sm text-muted-foreground italic">No description</p>
+                                )}
                             </div>
 
                             {task.success_criteria && (
@@ -1366,9 +1378,9 @@ const TaskDetail = () => {
                     </Card>
 
                     {/* Assignees panel — lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
-                    {(task.is_parent ? subtasks.length > 0 : Boolean(task.assigned_to_name)) && (
+                    {(isParentTask ? subtasks.length > 0 : Boolean(task.assigned_to_name)) && (
                         <div className="mt-4" data-testid="task-assignees-panel">
-                            {task.is_parent ? (
+                            {isParentTask ? (
                                 <ParticipantsSection
                                     subtasks={subtasks}
                                     leaderboard={leaderboard}
@@ -1577,13 +1589,13 @@ const TaskDetail = () => {
 
 export default TaskDetail;
 
-// ---- Participants section for parent/group tasks ----
+// ---- Leaderboard section for parent/group tasks ----
 const statusRank = (s) => {
-    if (s === 'Pending') return 0;
-    if (s === 'Accepted' || s === 'In Progress') return 1;
-    if (s === 'Review Pending') return 2;
-    if (s === 'Completed') return 3;
-    return 1;
+    if (s === 'Completed') return 0;
+    if (s === 'Review Pending') return 1;
+    if (s === 'Accepted' || s === 'In Progress') return 2;
+    if (s === 'Pending') return 3;
+    return 2;
 };
 
 const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCreator = false, onReviewSubtask, onNudge, nudging = false, onAddAssignees, onRemoveAssignee }) => {
@@ -1607,6 +1619,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(status),
                 completion_note: t.completion_note,
                 completion_note_images: t.completion_note_images,
+                completed_at: t.completed_at,
             };
         });
         // If leaderboard was empty, fall back to subtasks
@@ -1625,30 +1638,39 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                     viewed: Boolean(t.viewed_at) || ['Accepted', 'In Progress', 'Review Pending', 'Completed'].includes(t.status),
                     completion_note: t.completion_note,
                     completion_note_images: t.completion_note_images,
+                    completed_at: t.completed_at,
                 });
             });
         }
-        // Pending (not completed) on top; within group sort by statusRank ascending
-        merged.sort((a, b) => statusRank(a.status) - statusRank(b.status));
+        // Leaderboard order: finished first (fastest), then in-progress, then pending
+        merged.sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? -1 : 1;
+            if (a.completed && b.completed) {
+                const ha = a.completion_hours ?? 9999;
+                const hb = b.completion_hours ?? 9999;
+                if (ha !== hb) return ha - hb;
+                return (a.completed_at || '').localeCompare(b.completed_at || '');
+            }
+            return statusRank(a.status) - statusRank(b.status);
+        });
         return merged;
     }, [subtasks, leaderboard]);
 
     if (rows.length === 0) return null;
-    const visible = showAll ? rows : rows.slice(0, 5);
+    const visible = showAll ? rows : rows.slice(0, 8);
     const completedCount = rows.filter((r) => r.completed).length;
     const unfinishedCount = rows.length - completedCount;
     const pct = Math.round((completedCount / rows.length) * 100);
 
     return (
-        <div className="border rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-50 border-b flex items-center justify-between gap-3 flex-wrap">
+        <div className="border-2 rounded-2xl overflow-hidden" data-testid="task-leaderboard-card">
+            <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 min-w-0">
-                    <Users className="w-4 h-4 text-teal-600" />
-                    <span className="font-semibold">Participants ({rows.length})</span>
-                    <span className="text-xs text-muted-foreground">— pending first, completed at the bottom</span>
+                    <Trophy className="w-5 h-5 text-amber-600" />
+                    <span className="font-semibold text-amber-950">Leaderboard</span>
+                    <span className="text-xs text-amber-800/90">{completedCount}/{rows.length} done · {pct}%</span>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xs text-emerald-700">{completedCount}/{rows.length} done · {pct}%</span>
+                <div className="flex items-center gap-2 flex-wrap">
                     {isCreator && onAddAssignees && (
                         <Button size="sm" variant="outline" onClick={onAddAssignees} className="rounded-full h-7 px-3 text-xs" data-testid="add-assignees-btn">
                             <Plus className="w-3.5 h-3.5 mr-1" /> Add
@@ -1669,7 +1691,13 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                             onClick={() => { if (canOpen) window.location.assign(`/task/${r.subtaskId}`); }}
                             data-testid={`participant-row-${r.subtaskId || i}`}
                         >
-                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${r.completed ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-700'}`}>{i + 1}</span>
+                            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                                r.completed ? 'bg-emerald-500 text-white'
+                                    : i === 0 ? 'bg-amber-400 text-white'
+                                        : i === 1 ? 'bg-slate-300 text-slate-800'
+                                            : i === 2 ? 'bg-orange-200 text-orange-900'
+                                                : 'bg-slate-100 text-slate-600'
+                            }`}>{r.completed ? '✓' : i + 1}</span>
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{r.name}</div>
                                 <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -1679,7 +1707,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
                                 </div>
                             </div>
-                            <div className="text-xs text-gray-500 shrink-0">{r.completion_hours ? `${r.completion_hours}h` : '—'}</div>
+                            <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? '—' : r.status)}</div>
                             {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
                                 <Button
                                     size="sm"
@@ -1708,14 +1736,14 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                     );
                 })}
             </ul>
-            {rows.length > 5 && (
+            {rows.length > 8 && (
                 <button
                     type="button"
                     onClick={() => setShowAll(!showAll)}
                     className="w-full py-2.5 text-sm font-medium text-teal-700 hover:bg-teal-50 border-t"
                     data-testid="participants-show-more"
                 >
-                    {showAll ? 'Show less' : `Show ${rows.length - 5} more`}
+                    {showAll ? 'Show less' : `Show ${rows.length - 8} more`}
                 </button>
             )}
         </div>

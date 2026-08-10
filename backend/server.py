@@ -212,6 +212,8 @@ class TaskResponse(BaseModel):
     requires_screen_recording: Optional[bool] = False
     viewed_at: Optional[str] = None
     parent_id: Optional[str] = None
+    is_parent: Optional[bool] = False
+    child_count: Optional[int] = None
     success_criteria: Optional[str] = None
     blocked_reason: Optional[str] = None
     blocked_at: Optional[str] = None
@@ -2424,6 +2426,8 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         is_sales_task=task.get("is_sales_task", False),
         requires_screen_recording=task.get("requires_screen_recording", False),
         parent_id=task.get("parent_id"),
+        is_parent=bool(task.get("is_parent")),
+        child_count=task.get("child_count"),
         viewed_at=task.get("viewed_at"),
         success_criteria=task.get("success_criteria"),
         blocked_reason=task.get("blocked_reason"),
@@ -6874,8 +6878,8 @@ SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI. Turn one short sente
 
 Return ONE JSON object ONLY (no markdown, no prose):
 {
-  "title": "<crisp 4-8 word instruction, imperative mood, no names or dates>",
-  "description": "<one short helpful sentence telling the assignee exactly what they need to do — empty string if the title says it all>",
+  "title": "<crisp 4-8 word instruction, imperative mood, no names/dates/@handles, never start with Assign>",
+  "description": "<full instructions for the assignee — numbered steps when the user listed requirements; empty string ONLY for trivial one-liners>",
   "priority": "Low|Medium|High|Urgent",
   "category": "Sales|Engineering|Marketing|Design|Product|Operations|Finance|HR|Support|Legal|General",
   "due_date": "YYYY-MM-DDTHH:MM" or null,
@@ -6960,15 +6964,22 @@ CLARIFYING QUESTIONS:
 - Ask about due_date only if truly missing/ambiguous AND assignee is already clear.
 - Ask about assignees only if no usable hint was found (do not invent names).
 
+TITLE RULES:
+- Crisp imperative 4–8 words summarizing the WORK itself (e.g. "Brief managers on TskFlow pains").
+- NEVER start with "Assign", never include @handles, names, emails, dates, or priority words.
+- Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
+
+DESCRIPTION RULES (critical when the user wrote detailed instructions):
+- Put the full instructions, numbered requirements, context, and what to cover in description.
+- If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
+- Also fill action_items with those steps.
+- Only leave description empty for a trivial one-liner where the title alone is enough.
+- Never leave description empty when the input is longer than ~1 sentence or contains multiple requirements.
+
 SUCCESS CRITERIA (expectations):
 - Extract when the manager states what "done well" / "done right" / "success" looks like, or phrases like "I expect…", "make sure…", "quality bar…", "acceptance criteria…".
 - Keep it as a short plain sentence the assignee can aim for. Empty string if not stated.
 - Do NOT invent success criteria.
-
-TITLE RULES:
-- Imperative mood: "Submit MEA report", "Call Alex about Q3", "Review Alice's PR".
-- No names, no dates, no priority words.
-- Keep between 4-8 words.
 
 is_sales_task=true when the text mentions sales work — e.g. sales, prospect, lead, pipeline, deal, opportunity,
 demo, discovery, pitch, proposal, quote, CRM, HubSpot, Salesforce, SDR/BDR/AE, cold call, outbound, renewal,
@@ -7313,6 +7324,52 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     return {"resolved": resolved, "ambiguous": ambiguous, "unresolved": unresolved}
 
 
+def _enrich_parse_title_description(parsed: dict, raw_text: str) -> None:
+    """Keep title short/clean and ensure detailed prompts land in description."""
+    title = str(parsed.get("title") or "").strip()
+    desc = str(parsed.get("description") or "").strip()
+    actions = parsed.get("action_items") if isinstance(parsed.get("action_items"), list) else []
+    actions = [str(a).strip() for a in actions if str(a).strip()]
+
+    # Bad titles: assign @noise, or basically the whole prompt
+    bad_title = (
+        not title
+        or re.match(r"(?i)^assign\b", title)
+        or "@" in title
+        or len(title.split()) > 14
+        or (len(raw_text) > 80 and title.lower()[:40] in raw_text.lower()[:80] and len(title) > 50)
+    )
+    if bad_title:
+        # Prefer first action item as a short title seed
+        seed = actions[0] if actions else raw_text
+        seed = re.sub(r"(?i)\b(assign|tell|have|ask)\s+@?\S+\s+(that\s+they\s+need\s+to\s+|to\s+)?", "", seed)
+        seed = re.sub(r"@\S+", "", seed)
+        seed = re.sub(r"\s+", " ", seed).strip(" .,:;-")
+        words = [w for w in seed.split() if w][:8]
+        if words:
+            title = " ".join(words)
+            if title and title[0].islower():
+                title = title[0].upper() + title[1:]
+            parsed["title"] = title
+
+    if not desc and actions:
+        desc = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+        parsed["description"] = desc
+
+    # Detailed user prompt with empty description → keep instructions for assignees
+    if not str(parsed.get("description") or "").strip() and len((raw_text or "").strip()) > 60:
+        cleaned = raw_text.strip()
+        cleaned = re.sub(r"(?i)\b(assign|tell|have|ask)\s+@?\S+(?:\s+and\s+@?\S+)*\s+(that\s+they\s+(need\s+to|must|should)\s+|to\s+)", "", cleaned)
+        cleaned = re.sub(r"@\S+", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,:;-")
+        # Drop trailing due-date fluff lightly
+        cleaned = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", cleaned).strip(" .,:;-")
+        if len(cleaned) > 40:
+            parsed["description"] = cleaned
+        if actions and not parsed.get("description"):
+            parsed["description"] = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+
+
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
@@ -7408,6 +7465,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             parsed["due_date"] = _round_to_quarter(now + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
             if not parsed.get("due_date_expression"):
                 parsed["due_date_expression"] = "ASAP"
+
+    # Title/description quality — detailed prompts must not collapse into a useless title
+    _enrich_parse_title_description(parsed, text)
 
     # Sales language → always mark as a sales task (don't rely on the LLM alone)
     _apply_sales_detection(parsed, text)
