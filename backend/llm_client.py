@@ -4,7 +4,24 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Optional
+
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
+
+
+def get_emergent_llm_key() -> Optional[str]:
+    """Return EMERGENT_LLM_KEY, reloading backend/.env if it was added after boot."""
+    api_key = (os.getenv("EMERGENT_LLM_KEY") or "").strip()
+    if api_key:
+        return api_key
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_ENV_PATH, override=False)
+    except Exception:
+        pass
+    api_key = (os.getenv("EMERGENT_LLM_KEY") or "").strip()
+    return api_key or None
 
 
 async def emergent_chat(
@@ -21,7 +38,7 @@ async def emergent_chat(
     method, which freezes uvicorn so Jarvis timeouts hang until Cloudflare
     kills the request. This uses acompletion + the same Emergent proxy headers.
     """
-    api_key = os.getenv("EMERGENT_LLM_KEY")
+    api_key = get_emergent_llm_key()
     if not api_key:
         return None
     try:

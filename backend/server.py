@@ -5278,6 +5278,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         # LLM unavailable — still try to create tasks locally so chat stays useful.
         if _looks_like_create_task(transcript):
             title = _fallback_title(transcript)
+            description = await _polish_task_description(transcript, title)
             priority = "Urgent" if re.search(r"\b(asap|urgent(ly)?|immediately)\b", transcript, re.I) else "Medium"
             due = _fallback_parse_date_expression(transcript, get_pst_now())
             # Resolve a single obvious assignee if present
@@ -5299,7 +5300,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             task_doc = {
                 "id": tid,
                 "title": title,
-                "description": transcript.strip(),
+                "description": description,
                 "assigned_to": current_user["id"] if is_self else assignee_id,
                 "assigned_to_email": current_user["email"] if is_self else (assignee_email or ""),
                 "created_by": current_user["id"],
@@ -5371,6 +5372,11 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         raw_title = (params.get("title") or "").strip()
         title = raw_title if raw_title and not _title_looks_like_prompt(raw_title, transcript) else _fallback_title(transcript)
         title = title[:200]
+        description = await _polish_task_description(
+            transcript,
+            title,
+            (params.get("description") or "").strip(),
+        )
         assignee_email = params.get("assignee_email")
         priority = params.get("priority") if params.get("priority") in ["Low", "Medium", "High", "Urgent"] else "Medium"
         due = params.get("due_date") or (get_pst_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
@@ -5387,7 +5393,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             accepted0 = get_pst_now().isoformat()
         sales = _text_looks_like_sales(f"{title} {transcript}")
         await db.tasks.insert_one({
-            "id": tid, "title": title, "description": f"Created by voice: {transcript}",
+            "id": tid, "title": title, "description": description,
             "assigned_to": assigned_to, "assigned_to_email": assignee_email,
             "created_by": current_user["id"], "due_date": due, "status": status0,
             "priority": priority, "created_at": get_pst_now().isoformat(),
@@ -6974,7 +6980,7 @@ SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI. Turn one short sente
 Return ONE JSON object ONLY (no markdown, no prose):
 {
   "title": "<crisp 4-8 word instruction, imperative mood, no names or dates>",
-  "description": "<one short helpful sentence telling the assignee exactly what they need to do — empty string if the title says it all>",
+  "description": "<1-2 clean sentences for the assignee — what to do and any useful context. NEVER paste the user's raw prompt / chat phrasing>",
   "priority": "Low|Medium|High|Urgent",
   "category": "Sales|Engineering|Marketing|Design|Product|Operations|Finance|HR|Support|Legal|General",
   "due_date": "YYYY-MM-DDTHH:MM" or null,
@@ -7072,6 +7078,16 @@ TITLE RULES (critical — never paste the user's prompt as the title):
 - Do NOT include assignee names, due dates/times, or priority words (urgent/ASAP) in the title.
 - Prefer 3–7 words. Hard max 60 characters. Capitalize like a sentence headline (first word capital).
 - Put leftover context in description, not the title.
+
+DESCRIPTION RULES (critical — never paste the user's prompt as the description):
+- Rewrite the request as a clear brief the assignee can act on without hearing the original chat.
+- Good: "Prepare the Q3 board deck and send it to the leadership group before Friday EOD."
+- Bad: "can you please remind Alice to send the Q3 board deck by Friday EOD"
+- Bad: "Created by voice: …" or any verbatim dump of the manager's prompt.
+- Strip conversational wrappers (please / can you / remind X to / create a task / Jarvis…).
+- Do not address Jarvis or the manager; speak to the assignee in second person or imperative.
+- Keep 1–2 sentences. Include only useful context (deliverable, audience, constraints). Empty string if the title alone is enough.
+- Do NOT invent requirements that were not implied by the prompt.
 
 is_sales_task=true when the text mentions sales work — e.g. sales, prospect, lead, pipeline, deal, opportunity,
 demo, discovery, pitch, proposal, quote, CRM, HubSpot, Salesforce, SDR/BDR/AE, cold call, outbound, renewal,
@@ -7571,8 +7587,102 @@ def _title_looks_like_prompt(title: str, source_text: str) -> bool:
     return False
 
 
+def _description_looks_like_prompt(description: str, source_text: str) -> bool:
+    """True when description is basically the raw prompt / chat dump."""
+    d = (description or "").strip()
+    if not d:
+        return True
+    src = (source_text or "").strip()
+    low = d.lower()
+    if low.startswith("created by voice:") or low.startswith("created by jarvis:"):
+        return True
+    if src and d.lower() == src.lower():
+        return True
+    if src and len(src) > 20 and src.lower()[:50] in low:
+        return True
+    if re.match(
+        r"^(can you|could you|would you|please|pls|i need|i want|remind |ask |hey |jarvis\b|create a task\b)",
+        d,
+        re.I,
+    ):
+        return True
+    return False
+
+
+def _fallback_description(text: str, title: str = "") -> str:
+    """Local rewrite of a prompt into an assignee-facing brief (no LLM)."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    t = re.sub(r"^(created by voice|created by jarvis)\s*:\s*", "", raw, flags=re.I).strip()
+    for _ in range(4):
+        changed = False
+        for rx in _TITLE_FLUFF_RES:
+            nxt = rx.sub("", t).strip(" \t:-–—")
+            if nxt != t:
+                t = nxt
+                changed = True
+        if not changed:
+            break
+    t = re.sub(r"^(for|to)\s+[@\w.'-]{1,40}\s*[:\-–—]\s*", "", t, flags=re.I).strip()
+    t = re.sub(
+        r"^(?:[A-Z][a-z][\w.']{0,28}(?:\s+[A-Z][a-z][\w.']{0,28})?)\s*[:\-–—]\s+",
+        "",
+        t,
+    ).strip()
+    t = re.sub(r"\s+", " ", t).strip(" ,;:-")
+    if not t:
+        return ""
+    if t and t[0].islower():
+        t = t[0].upper() + t[1:]
+    if not t.endswith((".", "!", "?")):
+        t = t + "."
+    # If it's essentially just the title, skip a redundant description.
+    title_norm = re.sub(r"[^\w\s]", "", (title or "").lower()).strip()
+    desc_norm = re.sub(r"[^\w\s]", "", t.lower()).strip()
+    if title_norm and (desc_norm == title_norm or desc_norm.rstrip(".") == title_norm):
+        return ""
+    if len(t) > 280:
+        cut = t[:280]
+        if " " in cut:
+            cut = cut.rsplit(" ", 1)[0]
+        t = cut.rstrip(" ,;:") + "."
+    return t
+
+
+async def _polish_task_description(source_text: str, title: str, existing: str = "") -> str:
+    """Prefer an AI-cleaned assignee brief; fall back to local rewrite — never raw prompt."""
+    existing = (existing or "").strip()
+    source_text = (source_text or "").strip()
+    if existing and not _description_looks_like_prompt(existing, source_text):
+        return existing
+
+    polished = await _emergent_chat(
+        (
+            "Rewrite the manager's task request as a clear brief for the assignee. "
+            "1–2 sentences, imperative or second person. No conversational fluff "
+            "(no please/can you/remind X/create a task/Jarvis). "
+            "Do not invent requirements. Return ONLY the brief text — no quotes, no JSON. "
+            "If the title alone is enough, return an empty string."
+        ),
+        f"Title: {title or '(none)'}\nManager request: {source_text}",
+        model="gpt-4o-mini",
+        timeout=8.0,
+        temperature=0.2,
+    )
+    if polished is not None:
+        polished = polished.strip().strip('"').strip("'")
+        if polished.lower() in ("", "none", "n/a", "(none)", "empty"):
+            return ""
+        if not _description_looks_like_prompt(polished, source_text):
+            return polished[:500]
+
+    return _fallback_description(source_text, title)
+
+
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
-    if not os.getenv("EMERGENT_LLM_KEY"):
+    from llm_client import get_emergent_llm_key
+    if not get_emergent_llm_key():
         return None
     now = get_pst_now()
     context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}, org: {current_user.get('company_domain', 'personal')}."
@@ -7609,10 +7719,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
 
     now = get_pst_now()
     local_title = _fallback_title(text)
-    # Put the original prompt in description when we're offline (no LLM) so context isn't lost.
     fallback = {
         "title": local_title,
-        "description": text.strip() if text.strip().lower() != local_title.lower() else "",
+        "description": _fallback_description(text, local_title),
         "priority": "Medium",
         "category": "General",
         "due_date": None,
@@ -7639,12 +7748,16 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     # Never ship a title that is just the user's prompt — rewrite locally.
     if _title_looks_like_prompt(parsed.get("title") or "", text):
         parsed["title"] = local_title
-        if not (parsed.get("description") or "").strip():
-            parsed["description"] = text.strip()
         conf = parsed.get("confidence") or {}
         if isinstance(conf, dict):
             conf["title"] = min(float(conf.get("title") or 0.5), 0.6)
             parsed["confidence"] = conf
+    # Never ship the raw prompt as description — AI-polish (or local rewrite).
+    parsed["description"] = await _polish_task_description(
+        text,
+        parsed.get("title") or local_title,
+        parsed.get("description") or "",
+    )
     if not isinstance(parsed.get("assignee_hints"), list):
         parsed["assignee_hints"] = []
     # Offline / thin LLM responses: pull obvious assignee mentions from the prompt.
@@ -7791,6 +7904,7 @@ Rules:
 - For TskFlow product questions, ground answers in the Knowledge Base — never invent features.
 - For questions about the user's own tasks/contacts, use the Context JSON.
 - Task commands use query_outstanding / create_task / assign_task / update_status / navigate.
+- create_task / assign_task params: {"title": "<short imperative, not the raw prompt>", "description": "<1-2 clean assignee-facing sentences, never the raw chat text>", "assignee_email": str|null, "priority": "Low|Medium|High|Urgent"|null, "due_date": "YYYY-MM-DDTHH:MM"|null}.
 - If unclear, action.type="none" and ask one short clarifying question.
 - Keep replies concise (about 40 words max unless listing tasks). Write for speaking aloud: short sentences, natural rhythm, no bullet theater unless listing tasks.
 
