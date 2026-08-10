@@ -343,30 +343,55 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         }
     };
 
+    const stripPeopleNoise = (value, peopleNames = []) => {
+        let s = String(value || '');
+        // Multi-word @mentions: "@Mark Sibghat"
+        s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}/g, ' ');
+        s = s.replace(/@\S+/g, ' ');
+        const names = [...peopleNames].filter(Boolean).sort((a, b) => b.length - a.length);
+        for (const name of names) {
+            s = s.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
+        }
+        const nameTokens = new Set();
+        names.forEach((n) => n.split(/\s+/).forEach((p) => { if (p.length > 1) nameTokens.add(p.toLowerCase()); }));
+        const tokens = s.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+        while (tokens.length && nameTokens.has(tokens[0].toLowerCase().replace(/[.,;:]+$/g, ''))) {
+            tokens.shift();
+        }
+        return tokens.join(' ').replace(/^(need to|needs to|have to|must|please)\s+/i, '').trim();
+    };
+
     const applyPreview = (p) => {
         const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
-        let title = (p.title || '').trim();
-        let desc = (p.description || '').trim();
-        const actions = Array.isArray(p.action_items) ? p.action_items.filter(Boolean) : [];
+        const peopleNames = [
+            ...editAssignees.map((a) => a.name).filter(Boolean),
+            ...((p.assignee_resolution?.resolved || []).map((a) => a.name).filter(Boolean)),
+            ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
+        ];
+        let title = stripPeopleNoise(p.title || '', peopleNames);
+        let desc = stripPeopleNoise(p.description || '', peopleNames);
+        const actions = Array.isArray(p.action_items)
+            ? p.action_items.map((a) => stripPeopleNoise(a, peopleNames)).filter(Boolean)
+            : [];
 
-        if (!title || /^assign\b/i.test(title) || title.includes('@') || title.split(/\s+/).length > 14) {
-            const seed = (actions[0] || text || '')
-                .replace(/\b(assign|tell|have|ask)\s+@?\S+\s+(that\s+they\s+need\s+to\s+|to\s+)?/gi, '')
-                .replace(/@\S+/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-            title = seed.split(/\s+/).slice(0, 8).join(' ');
+        const work = stripPeopleNoise(text || '', peopleNames)
+            .replace(/\b(by|before|due)\s+.+$/i, '')
+            .trim();
+        const looksNamed = peopleNames.some((n) => {
+            const last = (n || '').split(/\s+/).pop();
+            return last && last.length > 2 && new RegExp(`\\b${last}\\b`, 'i').test(title);
+        });
+        if (!title || /^assign\b/i.test(title) || title.includes('@') || looksNamed || title.split(/\s+/).length > 14) {
+            const seed = actions[0] || work;
+            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close)\b.*$/i);
+            title = (m ? m[0] : seed).split(/\s+/).slice(0, 8).join(' ');
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
         if (!desc && actions.length) {
             desc = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
         }
-        if (!desc && (text || '').trim().length > 60) {
-            desc = text
-                .replace(/\b(assign|tell|have|ask)\s+@?\S+(?:\s+and\s+@?\S+)*\s+(that\s+they\s+(need\s+to|must|should)\s+|to\s+)/gi, '')
-                .replace(/@\S+/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+        if (!desc && work.length > 20) {
+            desc = work;
         }
 
         setEditTitle(title || p.title || '');

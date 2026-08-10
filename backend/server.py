@@ -6954,6 +6954,7 @@ DATE RULES (this is the most important part — be aggressive and accurate):
 - "tomorrow" alone → 12:00 PM tomorrow
 - "tomorrow morning" → 9:00 AM tomorrow
 - "tomorrow afternoon" → 2:00 PM tomorrow
+- "10 tomorrow" / "tomorrow at 10" / "by 10 tomorrow" / "tomorrow 10am" → that clock time tomorrow (NOT noon). Bare hour 8–11 without am/pm → morning; 1–7 without am/pm → evening (PM).
 - "before standup" → 9:00 AM the next working day
 - Weekday names ("Monday", "this Friday", "next Tuesday") → next occurrence of that weekday at 5:00 PM. "next X" always means the following week's X.
 - "next week" → Monday of next week at 12:00 PM
@@ -7005,8 +7006,10 @@ CLARIFYING QUESTIONS:
 - Ask about assignees only if no usable hint was found (do not invent names).
 
 TITLE RULES:
-- Crisp imperative 4–8 words summarizing the WORK itself (e.g. "Brief managers on TskFlow pains").
-- NEVER start with "Assign", never include @handles, names, emails, dates, or priority words.
+- Crisp imperative 4–8 words summarizing the WORK itself (e.g. "Finalize opportunity action plans").
+- NEVER start with "Assign", never include @handles, person names, last names, emails, dates, or priority words.
+- Completely ignore leading @mentions like "@Mark Sibghat @Benjamin White …" — those are assignees, not title words.
+- Keep compound phrases intact (e.g. "action plans", not truncated "action").
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
 
 DESCRIPTION RULES (critical when the user wrote detailed instructions):
@@ -7105,6 +7108,29 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
         return (now + timedelta(days=1)).replace(hour=14, minute=0).strftime("%Y-%m-%dT%H:%M")
     if "tomorrow evening" in e or "tomorrow night" in e:
         return (now + timedelta(days=1)).replace(hour=18, minute=0).strftime("%Y-%m-%dT%H:%M")
+
+    # "10 tomorrow" / "by 10 tomorrow" / "tomorrow at 10" / "tomorrow 10pm"
+    # Must run BEFORE bare "tomorrow" → noon default.
+    m = re.search(
+        r"\b(?:by\s+|at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+tomorrow\b"
+        r"|\btomorrow\s+(?:at\s+|by\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b",
+        e,
+    )
+    if m:
+        hour = int(m.group(1) or m.group(4))
+        minute = int((m.group(2) or m.group(5) or 0))
+        ampm = m.group(3) or m.group(6)
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        elif not ampm:
+            # 1–7 → evening; 8–11 → morning; 12 → noon
+            if 1 <= hour <= 7:
+                hour += 12
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return (now + timedelta(days=1)).replace(hour=hour, minute=minute).strftime("%Y-%m-%dT%H:%M")
+
     if re.search(r"\btomorrow\b", e):
         return (now + timedelta(days=1)).replace(hour=12, minute=0).strftime("%Y-%m-%dT%H:%M")
 
@@ -7364,50 +7390,120 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     return {"resolved": resolved, "ambiguous": ambiguous, "unresolved": unresolved}
 
 
+def _assignee_name_list(parsed: dict) -> List[str]:
+    names = []
+    for h in parsed.get("assignee_hints") or []:
+        if isinstance(h, str) and h.strip():
+            names.append(h.strip().lstrip("@"))
+    ar = parsed.get("assignee_resolution") or {}
+    for r in ar.get("resolved") or []:
+        if isinstance(r, dict) and r.get("name"):
+            names.append(str(r["name"]).strip())
+    # unique, longest first so "Mark Sibghat" is removed before "Mark"
+    uniq = []
+    seen = set()
+    for n in sorted(names, key=lambda x: len(x), reverse=True):
+        key = n.lower()
+        if key and key not in seen and key not in ("me", "self"):
+            seen.add(key)
+            uniq.append(n)
+    return uniq
+
+
+def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> str:
+    """Remove @mentions and known person names so they don't leak into title/description."""
+    if not text:
+        return ""
+    s = str(text)
+    # Multi-word @mentions: "@Mark Sibghat", "@Benjamin White"
+    s = re.sub(r"@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}", " ", s)
+    s = re.sub(r"@\S+", " ", s)
+    for name in people_names or []:
+        if not name:
+            continue
+        s = re.sub(rf"\b{re.escape(name)}\b", " ", s, flags=re.I)
+    # Drop leading leftover first/last name tokens from known people
+    name_tokens = set()
+    for name in people_names or []:
+        for part in re.split(r"\s+", name.strip()):
+            if len(part) > 1:
+                name_tokens.add(part.lower())
+    tokens = s.split()
+    while tokens and tokens[0].lower().strip(".,;:") in name_tokens:
+        tokens.pop(0)
+    s = " ".join(tokens)
+    s = re.sub(r"\s+", " ", s).strip(" .,:;-")
+    return s
+
+
+def _title_from_work_text(work: str) -> str:
+    """Build a short imperative title from cleaned work text."""
+    if not work:
+        return ""
+    s = work
+    s = re.sub(r"(?i)^(need to|needs to|have to|must|please)\s+", "", s).strip()
+    # Prefer starting at a strong verb when present
+    m = re.search(
+        r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close)\b.*$",
+        s,
+    )
+    if m:
+        s = m.group(0)
+    s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
+    words = [w for w in s.split() if w][:8]
+    title = " ".join(words)
+    if title and title[0].islower():
+        title = title[0].upper() + title[1:]
+    return title
+
+
 def _enrich_parse_title_description(parsed: dict, raw_text: str) -> None:
     """Keep title short/clean and ensure detailed prompts land in description."""
-    title = str(parsed.get("title") or "").strip()
-    desc = str(parsed.get("description") or "").strip()
+    people = _assignee_name_list(parsed)
+    title = _strip_people_noise(str(parsed.get("title") or "").strip(), people)
+    desc = _strip_people_noise(str(parsed.get("description") or "").strip(), people)
     actions = parsed.get("action_items") if isinstance(parsed.get("action_items"), list) else []
-    actions = [str(a).strip() for a in actions if str(a).strip()]
+    actions = [_strip_people_noise(str(a), people) for a in actions if str(a).strip()]
+    actions = [a for a in actions if a]
 
-    # Bad titles: assign @noise, or basically the whole prompt
+    work = _strip_people_noise(raw_text or "", people)
+    work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", work).strip(" .,:;-")
+
+    # Bad / name-contaminated titles
+    title_l = title.lower()
+    has_person_token = any(
+        re.search(rf"\b{re.escape(p.split()[-1])}\b", title_l)
+        for p in people
+        if p and len(p.split()[-1]) > 2
+    )
     bad_title = (
         not title
         or re.match(r"(?i)^assign\b", title)
         or "@" in title
+        or has_person_token
         or len(title.split()) > 14
-        or (len(raw_text) > 80 and title.lower()[:40] in raw_text.lower()[:80] and len(title) > 50)
+        or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
     )
     if bad_title:
-        # Prefer first action item as a short title seed
-        seed = actions[0] if actions else raw_text
-        seed = re.sub(r"(?i)\b(assign|tell|have|ask)\s+@?\S+\s+(that\s+they\s+need\s+to\s+|to\s+)?", "", seed)
-        seed = re.sub(r"@\S+", "", seed)
-        seed = re.sub(r"\s+", " ", seed).strip(" .,:;-")
-        words = [w for w in seed.split() if w][:8]
-        if words:
-            title = " ".join(words)
-            if title and title[0].islower():
-                title = title[0].upper() + title[1:]
+        seed = actions[0] if actions else work
+        title = _title_from_work_text(seed) or _title_from_work_text(work)
+        if title:
             parsed["title"] = title
+    else:
+        parsed["title"] = title
 
     if not desc and actions:
         desc = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
-        parsed["description"] = desc
 
-    # Detailed user prompt with empty description → keep instructions for assignees
-    if not str(parsed.get("description") or "").strip() and len((raw_text or "").strip()) > 60:
-        cleaned = raw_text.strip()
-        cleaned = re.sub(r"(?i)\b(assign|tell|have|ask)\s+@?\S+(?:\s+and\s+@?\S+)*\s+(that\s+they\s+(need\s+to|must|should)\s+|to\s+)", "", cleaned)
-        cleaned = re.sub(r"@\S+", "", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,:;-")
-        # Drop trailing due-date fluff lightly
-        cleaned = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", cleaned).strip(" .,:;-")
-        if len(cleaned) > 40:
-            parsed["description"] = cleaned
-        if actions and not parsed.get("description"):
-            parsed["description"] = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+    if not desc and len((raw_text or "").strip()) > 40:
+        cleaned = work
+        if len(cleaned) > 20:
+            desc = cleaned
+
+    if desc:
+        parsed["description"] = desc
+    if actions:
+        parsed["action_items"] = actions
 
 
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
@@ -7424,8 +7520,8 @@ async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] 
             api_key=emergent_key,
             session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
             system_message=SMART_PARSE_SYSTEM + "\n\n" + context
-        ).with_model("openai", "gpt-4o")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=12.0)
+        ).with_model("openai", "gpt-4o-mini")
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=8.0)
     except Exception as e:
         logging.warning(f"smart_parse LLM error: {e}")
         return None
@@ -7486,10 +7582,20 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     elif not isinstance(parsed.get("success_criteria"), str):
         parsed["success_criteria"] = str(parsed.get("success_criteria") or "")
 
-    # Date fallback — if LLM didn't produce a date but the text clearly has one
-    if not parsed.get("due_date"):
-        fb = _fallback_parse_date_expression(parsed.get("due_date_expression") or text, now)
-        if fb:
+    # Date: prefer deterministic parser on the FULL user text (e.g. "10 tomorrow"),
+    # even when the LLM returned a weak default like noon tomorrow.
+    fb = _fallback_parse_date_expression(text, now) or _fallback_parse_date_expression(
+        parsed.get("due_date_expression") or "", now
+    )
+    if fb:
+        explicit_clock = bool(re.search(
+            r"\b(?:by\s+|at\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\s+tomorrow\b"
+            r"|\btomorrow\s+(?:at\s+|by\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\b"
+            r"|\b(?:by |at )?\d{1,2}(?::\d{2})?\s*(am|pm)\b"
+            r"|\b(?:asap|urgent(ly)?|eod|end of day)\b",
+            (text or "").lower(),
+        ))
+        if (not parsed.get("due_date")) or explicit_clock:
             parsed["due_date"] = fb
 
     # ASAP override — if the text is explicitly ASAP/urgent, force within-2h regardless of what LLM said
@@ -7506,15 +7612,26 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             if not parsed.get("due_date_expression"):
                 parsed["due_date_expression"] = "ASAP"
 
-    # Title/description quality — detailed prompts must not collapse into a useless title
-    _enrich_parse_title_description(parsed, text)
-
     # Sales language → always mark as a sales task (don't rely on the LLM alone)
     _apply_sales_detection(parsed, text)
 
-    # Optionally resolve assignees first so we can prioritize "who" over "when"
+    # Ensure multi-word @mentions become assignee hints even if the LLM skipped them
+    hints = list(parsed.get("assignee_hints") or [])
+    hint_keys = {str(h).strip().lstrip("@").lower() for h in hints}
+    for m in re.finditer(r"@([A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2})", text or ""):
+        hint = m.group(1).strip()
+        key = hint.lower()
+        if hint and key not in hint_keys:
+            hints.append(hint)
+            hint_keys.add(key)
+    parsed["assignee_hints"] = hints
+
+    # Resolve assignees before title scrub so known names can be removed from title/description
     if req.resolve:
         parsed["assignee_resolution"] = await _resolve_assignee_hints(parsed.get("assignee_hints", []), current_user)
+
+    # Title/description quality — strip @people and keep real work text
+    _enrich_parse_title_description(parsed, text)
 
     # Rebuild clarifying questions: at most ONE, preferring who over when
     needs_who = False
