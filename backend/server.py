@@ -816,11 +816,16 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
     accepted_at = get_pst_now().isoformat() if is_self_assigned else None
+
+    clean_title, clean_description = await _sanitize_incoming_task_copy(
+        task.title or "",
+        task.description or "",
+    )
     
     task_doc = {
         "id": task_id,
-        "title": task.title,
-        "description": task.description or "",
+        "title": clean_title,
+        "description": clean_description or "",
         "assigned_to": assigned_to_id,
         "assigned_to_email": assigned_to_email,
         "created_by": current_user["id"],
@@ -846,7 +851,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         "shareable_token": str(uuid.uuid4())[:12],
         "comments": [],
         "requires_screen_recording": task.requires_screen_recording or False,
-        "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{task.title or ''} {task.description or ''}"),
+        "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{clean_title} {clean_description}"),
         "success_criteria": (task.success_criteria or "").strip() or None,
         "viewed_at": None
     }
@@ -872,8 +877,8 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                         You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below and take appropriate action.
                     </p>
                     <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
-                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
+                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{clean_title}</h2>
+                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(clean_description or '')[:300]}{'...' if clean_description and len(clean_description) > 300 else ''}</p>
                         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                             <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
                                 {task.priority} Priority
@@ -900,15 +905,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
             </body>
         </html>
         """
-        background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {task.title}", email_content)
+        background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {clean_title}", email_content)
         # Background browser push (if the assignee is a registered user with a subscription)
         if assigned_to_id and not str(assigned_to_id).startswith("email_"):
-            background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", task.title, f"/task/{task_id}")
+            background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", clean_title, f"/task/{task_id}")
     
     return TaskResponse(
         id=task_id,
-        title=task.title,
-        description=task.description,
+        title=clean_title,
+        description=clean_description,
         assigned_to=assigned_to_id,
         assigned_to_name=assigned_user.get("name", assigned_to_email),
         created_by=current_user["id"],
@@ -931,6 +936,11 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
 async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     """Create the same task for multiple assignees at once"""
     # Free tier: no hard limit, only soft nudges handled in frontend
+
+    clean_title, clean_description = await _sanitize_incoming_task_copy(
+        task.title or "",
+        task.description or "",
+    )
     
     created_tasks = []
     # When assigning to 2+ people, group them under a collapsible parent task
@@ -973,8 +983,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         invite_token = str(uuid.uuid4())[:8]
         task_doc = {
             "id": task_id,
-            "title": task.title,
-            "description": task.description,
+            "title": clean_title,
+            "description": clean_description,
             "assigned_to": assigned_to_id,
             "created_by": current_user["id"],
             "due_date": task.due_date,
@@ -987,7 +997,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             "parent_id": parent_id,
             "assigned_to_email": assigned_to_email,
             "attachments": task.attachments or None,
-            "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{task.title or ''} {task.description or ''}"),
+            "is_sales_task": bool(task.is_sales_task) or _text_looks_like_sales(f"{clean_title} {clean_description}"),
             "requires_screen_recording": task.requires_screen_recording or False,
             "success_criteria": (task.success_criteria or "").strip() or None,
         }
@@ -1015,8 +1025,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                                 You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below.
                             </p>
                             <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
-                                <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
+                                <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{clean_title}</h2>
+                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(clean_description or '')[:300]}{'...' if clean_description and len(clean_description) > 300 else ''}</p>
                                 <div>
                                     <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
                                         {task.priority} Priority
@@ -1036,14 +1046,14 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                     </body>
                 </html>
                 """
-                background_tasks.add_task(send_email_notification, email_to_send, f"New Task: {task.title}", email_content)
+                background_tasks.add_task(send_email_notification, email_to_send, f"New Task: {clean_title}", email_content)
                 if not str(assigned_to_id).startswith("email_"):
-                    background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", task.title, f"/task/{task_id}")
+                    background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", clean_title, f"/task/{task_id}")
         
         created_tasks.append(TaskResponse(
             id=task_id,
-            title=task.title,
-            description=task.description,
+            title=clean_title,
+            description=clean_description,
             assigned_to=assigned_to_id,
             assigned_to_name=assigned_user.get("name", assigned_to_email or "Unknown"),
             created_by=current_user["id"],
@@ -1064,8 +1074,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         await db.tasks.insert_one({
             "id": parent_id,
             "is_parent": True,
-            "title": task.title,
-            "description": task.description,
+            "title": clean_title,
+            "description": clean_description,
             "created_by": current_user["id"],
             "assigned_to": current_user["id"],
             "due_date": task.due_date,
@@ -2475,6 +2485,37 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Lazy-repair older tasks that stored the raw prompt as title/description.
+    try:
+        raw_title = task.get("title") or ""
+        raw_desc = task.get("description") or ""
+        if _title_looks_like_prompt(raw_title, raw_title) or _description_looks_like_prompt(raw_desc, raw_title):
+            clean_title, clean_desc = await _sanitize_incoming_task_copy(raw_title, raw_desc, raw_title)
+            if clean_title != raw_title or clean_desc != raw_desc:
+                await db.tasks.update_one(
+                    {"id": task_id},
+                    {"$set": {"title": clean_title, "description": clean_desc}},
+                )
+                # Keep parent/children in sync for group tasks
+                if task.get("is_parent"):
+                    await db.tasks.update_many(
+                        {"parent_id": task_id, "deleted": {"$ne": True}},
+                        {"$set": {"title": clean_title, "description": clean_desc}},
+                    )
+                elif task.get("parent_id"):
+                    await db.tasks.update_one(
+                        {"id": task["parent_id"]},
+                        {"$set": {"title": clean_title, "description": clean_desc}},
+                    )
+                    await db.tasks.update_many(
+                        {"parent_id": task["parent_id"], "deleted": {"$ne": True}},
+                        {"$set": {"title": clean_title, "description": clean_desc}},
+                    )
+                task["title"] = clean_title
+                task["description"] = clean_desc
+    except Exception as e:
+        logging.warning(f"task copy repair skipped for {task_id}: {e}")
     
     assigned_user = await db.users.find_one({"id": task["assigned_to"]}, {"_id": 0})
     created_user = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
@@ -7665,8 +7706,24 @@ _TITLE_FLUFF_RES = [
         re.I,
     ),
     re.compile(r"^(please\s+)?(remind|ask|tell|have|get)\s+[@\w.'\s-]{1,40}?\s+to\s+", re.I),
+    # "Assign @Hm Managers that they need to ensure…" / "Assign Alice to…"
+    re.compile(
+        r"^(please\s+)?assign\s+@?[\w.'-]{1,40}(?:\s+[\w.'-]{1,40}){0,5}\s+"
+        r"(?:that\s+they\s+(?:need\s+to|must|should)\s+|to\s+)",
+        re.I,
+    ),
+    re.compile(
+        r"^(please\s+)?assign\s+@?[\w.'-]{1,40}(?:\s+[\w.'-]{1,40}){0,5}\s*[:\-–—]\s*",
+        re.I,
+    ),
     re.compile(r"^(please\s+)?assign\s+[@\w.'-]{1,40}\s+to\s+", re.I),
     re.compile(r"^(please\s+)?send\s+(this\s+)?(task|todo|reminder)\s+to\s+", re.I),
+    # "@Hm Managers need to ensure…" / "@Sales team should…"
+    re.compile(
+        r"^@[\w.'-]{1,40}(?:\s+[\w.'-]{1,40}){0,4}\s+"
+        r"(?:need\s+to|must|should|have\s+to|to)\s+",
+        re.I,
+    ),
     re.compile(r"^task[:\s-]+", re.I),
     re.compile(r"^@[\w.'-]{1,40}\s+", re.I),
 ]
@@ -7735,8 +7792,9 @@ def _fallback_title(text: str) -> str:
         return "New task"
 
     # Keep first sentence / clause — titles shouldn't carry the whole brief.
+    # Don't treat numbered-list markers ("1. Item") as sentence boundaries.
     t = re.split(r"[\n;]|\s+[-–—]\s+", t, maxsplit=1)[0]
-    t = re.split(r"(?<=[.!?])\s+", t, maxsplit=1)[0]
+    t = re.split(r"(?<=[^\d][.!?])\s+", t, maxsplit=1)[0]
 
     # Peel wrappers a few times (please → create a task for X → …)
     for _ in range(4):
@@ -7757,11 +7815,30 @@ def _fallback_title(text: str) -> str:
         t,
     ).strip()
 
+    # "ensure that: 1. Pain points…" → prefer a short checklist-style title
+    ensure = re.match(r"^(ensure(?:\s+that)?)\s*[:\-–—]?\s*(.+)$", t, re.I)
+    if ensure:
+        body = ensure.group(2).strip()
+        # Numbered / bulleted list → title from first real item, drop the "1."
+        parts = re.split(r"(?:^|\s+)(?:\d+[\.)]|[-*•])\s+", body)
+        first_item = next((x.strip(" :-–—") for x in parts if x and x.strip()), body)
+        if re.search(r"(?:^|\s)(?:\d+[\.)]|[-*•])\s+\S", body):
+            # Multi-step brief — keep a stable umbrella title
+            if re.search(r"\bpain\b", body, re.I) and re.search(r"\bdiscovery\b", body, re.I):
+                t = "Complete discovery checklist"
+            elif len(first_item.split()) <= 4:
+                t = f"Complete {first_item} checklist" if not re.search(r"\bchecklist\b", first_item, re.I) else first_item
+            else:
+                t = first_item
+        else:
+            t = first_item or body
+
     for rx in _TITLE_TRAILING_RES:
         t = rx.sub("", t).strip()
 
     # Drop leftover leading conjunctions / infinitive markers
-    t = re.sub(r"^(to|and|then|also)\s+", "", t, flags=re.I).strip()
+    t = re.sub(r"^(to|and|then|also|that\s+they)\s+", "", t, flags=re.I).strip()
+    t = re.sub(r"^that\s+", "", t, flags=re.I).strip()
 
     # Collapse whitespace / dangling punctuation
     t = re.sub(r"\s+", " ", t).strip(" ,;:-")
@@ -7800,10 +7877,13 @@ def _title_looks_like_prompt(title: str, source_text: str) -> bool:
     if src and t.lower()[:40] == src.lower()[:40] and len(t) > 40:
         return True
     if re.match(
-        r"^(can you|could you|would you|please|pls|i need|i want|remind |ask |hey |jarvis\b|create a task\b)",
+        r"^(can you|could you|would you|please|pls|i need|i want|remind |ask |"
+        r"hey |jarvis\b|create a task\b|assign\s+@|assign\s+\w+.*\b(that they|need to)\b)",
         t,
         re.I,
     ):
+        return True
+    if re.search(r"@\w+", t) and re.search(r"\b(assign|ensure that|need to)\b", t, re.I):
         return True
     if len(t.split()) > 12:
         return True
@@ -7853,24 +7933,43 @@ def _fallback_description(text: str, title: str = "") -> str:
         "",
         t,
     ).strip()
-    t = re.sub(r"\s+", " ", t).strip(" ,;:-")
+    # Prefer a checklist layout when the brief has numbered steps
+    if re.search(r"(?:^|\s)\d+[\.)]\s+\S", t):
+        # Normalize "ensure that: 1. … 2. …" into readable lines
+        t = re.sub(r"^(ensure(?:\s+that)?)\s*[:\-–—]?\s*", "Please ensure:\n", t, flags=re.I)
+        t = re.sub(r"\s*(\d+[\.)])\s*", r"\n\1 ", t).strip()
+        if not t.lower().startswith("please ensure"):
+            # Still a numbered list without ensure — prefix once
+            if not re.match(r"^(please\s+)?ensure\b", t, re.I):
+                t = "Please complete:\n" + t.lstrip("\n")
+    else:
+        t = re.sub(r"\s+", " ", t).strip(" ,;:-")
+        if t and t[0].islower():
+            t = t[0].upper() + t[1:]
+        if t and not t.endswith((".", "!", "?")):
+            t = t + "."
     if not t:
         return ""
-    if t and t[0].islower():
-        t = t[0].upper() + t[1:]
-    if not t.endswith((".", "!", "?")):
-        t = t + "."
     # If it's essentially just the title, skip a redundant description.
     title_norm = re.sub(r"[^\w\s]", "", (title or "").lower()).strip()
     desc_norm = re.sub(r"[^\w\s]", "", t.lower()).strip()
     if title_norm and (desc_norm == title_norm or desc_norm.rstrip(".") == title_norm):
         return ""
-    if len(t) > 280:
-        cut = t[:280]
-        if " " in cut:
-            cut = cut.rsplit(" ", 1)[0]
-        t = cut.rstrip(" ,;:") + "."
+    if len(t) > 500:
+        t = t[:500].rstrip() + "…"
     return t
+
+
+async def _sanitize_incoming_task_copy(title: str, description: str, source_hint: str = "") -> tuple:
+    """Rewrite prompt-like title/description before persisting a task."""
+    src = (source_hint or description or title or "").strip()
+    clean_title = (title or "").strip()
+    clean_desc = (description or "").strip()
+    if _title_looks_like_prompt(clean_title, src):
+        clean_title = _fallback_title(src or clean_title)
+    if _description_looks_like_prompt(clean_desc, src) or not clean_desc:
+        clean_desc = await _polish_task_description(src or clean_title, clean_title, clean_desc)
+    return clean_title[:200], clean_desc
 
 
 async def _polish_task_description(source_text: str, title: str, existing: str = "") -> str:

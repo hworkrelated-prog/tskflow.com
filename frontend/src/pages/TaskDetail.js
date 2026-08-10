@@ -584,6 +584,7 @@ const TaskDetail = () => {
             'Completed': { class: 'status-badge-completed', label: 'Completed' },
             'Review Pending': { class: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Review Pending' },
             'Blocked': { class: 'bg-orange-100 text-orange-800 border-orange-300', label: 'Blocked' },
+            'Parent': { class: 'bg-slate-50 text-slate-700 border border-slate-200', label: 'Group' },
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
@@ -671,10 +672,16 @@ const TaskDetail = () => {
                 >
                     <Card className="border-2 shadow-soft rounded-2xl">
                         <CardHeader>
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <CardTitle className="text-4xl" style={{ fontFamily: 'Outfit' }}>{task.title}</CardTitle>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-start gap-2 mb-2">
+                                        <CardTitle
+                                            className="text-2xl sm:text-3xl lg:text-4xl leading-tight break-words [overflow-wrap:anywhere]"
+                                            style={{ fontFamily: 'Outfit' }}
+                                            data-testid="task-detail-title"
+                                        >
+                                            {task.title}
+                                        </CardTitle>
                                         {canEdit && (
                                             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
                                                 <DialogTrigger asChild>
@@ -799,13 +806,21 @@ const TaskDetail = () => {
                                         )}
                                     </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
                                     {task.is_sales_task && (
                                         <Badge
                                             className="rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200"
                                             data-testid="sales-badge"
                                         >
                                             Sales
+                                        </Badge>
+                                    )}
+                                    {(task.is_parent || task.parent_id) && task.status !== 'Parent' && (
+                                        <Badge
+                                            className="rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide bg-slate-50 text-slate-700 border border-slate-200"
+                                            data-testid="group-badge"
+                                        >
+                                            Group
                                         </Badge>
                                     )}
                                     {getStatusBadge(task.status)}
@@ -859,13 +874,25 @@ const TaskDetail = () => {
                                 {/* NOTE: The "Assigned to" info is rendered only ONCE — in the "Assignees" card beneath the Comments/Chatter panel. */}
                             </div>
 
-                            <div className="min-w-0">
+                            <div className="min-w-0" data-testid="task-detail-description">
                                 <Label className="text-muted-foreground">Description</Label>
-                                <div 
-                                    className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
-                                    style={{ overflowWrap: 'anywhere' }}
-                                    dangerouslySetInnerHTML={{ __html: task.description || '' }}
-                                />
+                                {task.description && String(task.description).replace(/<[^>]+>/g, '').trim() ? (
+                                    <div
+                                        className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden whitespace-pre-wrap"
+                                        style={{ overflowWrap: 'anywhere' }}
+                                        dangerouslySetInnerHTML={{
+                                            __html: String(task.description).includes('<')
+                                                ? task.description
+                                                : String(task.description)
+                                                    .replace(/&/g, '&amp;')
+                                                    .replace(/</g, '&lt;')
+                                                    .replace(/>/g, '&gt;')
+                                                    .replace(/\n/g, '<br/>'),
+                                        }}
+                                    />
+                                ) : (
+                                    <p className="mt-2 text-base text-slate-400 italic">No description</p>
+                                )}
                             </div>
 
                             {task.success_criteria && (
