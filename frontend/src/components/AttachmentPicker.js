@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
+import { pickRecorderMimeType, extForMime, mediaErrorMessage, canRecordScreen } from '@/lib/mediaRecorder';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -68,7 +69,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             });
             setAttachments((prev) => [...prev, ref]);
         } catch (e) {
-            toast.error(`Failed to upload ${filename}`);
+            toast.error(e?.message || `Failed to upload ${filename}`);
         } finally {
             setUploads((u) => {
                 const next = { ...u };
@@ -220,10 +221,24 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             if (audioTrack) composed.addTrack(audioTrack);
             streamsRef.current.composed = composed;
 
-            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-                ? 'video/webm;codecs=vp9,opus'
-                : (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm');
-            const rec = new MediaRecorder(composed, { mimeType, videoBitsPerSecond: 2_500_000 });
+            if (!canRecordScreen()) {
+                toast.error('Screen recording is not supported in this browser. Please use Chrome, Edge, or Firefox.');
+                cleanupStreams();
+                return;
+            }
+            const mimeType = pickRecorderMimeType();
+            let rec;
+            try {
+                rec = new MediaRecorder(composed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 2_500_000 });
+            } catch {
+                try { rec = new MediaRecorder(composed); }
+                catch {
+                    toast.error('This browser cannot record the selected screen. Try Chrome or Edge.');
+                    cleanupStreams();
+                    return;
+                }
+            }
+            const resolvedMime = rec.mimeType || mimeType || 'video/webm';
             recorderRef.current = rec;
             chunksRef.current = [];
             rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data); };
@@ -232,7 +247,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
                 setRecording(false);
                 setSeconds(0);
-                const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+                const blob = new Blob(chunksRef.current, { type: resolvedMime });
                 cleanupStreams();
                 if (blob.size > 0) {
                     // Show preview instead of auto-uploading
@@ -242,14 +257,17 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                     toast.error('Recording was empty — try again');
                 }
             };
-            rec.onerror = () => {
-                toast.error('Recording error — please try again');
+            rec.onerror = (ev) => {
+                toast.error(ev?.error?.message || 'Recording error — please try again');
                 cleanupStreams();
                 setRecording(false);
                 setSeconds(0);
             };
             screenStream.getVideoTracks()[0].addEventListener('ended', () => {
-                if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+                if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+                    try { recorderRef.current.requestData?.(); } catch { /* noop */ }
+                    recorderRef.current.stop();
+                }
             });
             rec.start(1000);
             setRecording(true);
@@ -263,22 +281,24 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             }
         } catch (e) {
             cleanupStreams();
-            if (e && e.name !== 'NotAllowedError') {
-                console.error(e);
-                toast.error('Could not start screen recording');
-            }
+            toast.error(mediaErrorMessage(e, 'screen'));
         } finally {
             setStarting(false);
         }
     };
 
     const stopRecording = () => {
-        if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+        if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+            try { recorderRef.current.requestData?.(); } catch { /* noop */ }
+            recorderRef.current.stop();
+        }
     };
 
     const handleSaveRecording = async () => {
         if (previewBlob) {
-            await doUpload(previewBlob, `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`, 'video/webm');
+            const ext = extForMime(previewBlob.type);
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            await doUpload(previewBlob, `screen-recording-${stamp}.${ext}`, previewBlob.type || 'video/webm');
             setShowPreview(false);
             setPreviewBlob(null);
             toast.success('Recording saved!');

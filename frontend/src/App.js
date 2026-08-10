@@ -18,6 +18,7 @@ import TranscriptImportPage from '@/pages/TranscriptImportPage';
 import RecordingEditorPage from '@/pages/RecordingEditorPage';
 import RecordingLibraryPage from '@/pages/RecordingLibraryPage';
 import RecordingControlsPopup from '@/pages/RecordingControlsPopup';
+import RecordingSharePage from '@/pages/RecordingSharePage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
@@ -402,6 +403,8 @@ function App() {
                     <Route path="/transcript" element={<ProtectedRoute><TranscriptImportPage /></ProtectedRoute>} />
                     <Route path="/recording/edit" element={<ProtectedRoute><RecordingEditorPage /></ProtectedRoute>} />
                     <Route path="/recording/controls" element={<RecordingControlsPopup />} />
+                    {/* Public share page — must stay outside ProtectedRoute so anyone with the link can watch. */}
+                    <Route path="/recording/:token" element={<RecordingSharePage />} />
                     <Route path="/recordings" element={<ProtectedRoute><RecordingLibraryPage /></ProtectedRoute>} />
                     <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
