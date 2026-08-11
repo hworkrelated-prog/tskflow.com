@@ -1,15 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Video, Square, Pause, Play, Mic, MicOff, Camera, CameraOff, RotateCcw } from 'lucide-react';
+import { Square, Pause, Play, Mic, MicOff, Camera, CameraOff, RotateCcw } from 'lucide-react';
 
 /*
- * Recording Controls Popup — opens as a small always-on-top-ish window (350x110).
- * It is used because the browser's floating bar in the RECORDER TAB overlaps the
- * recorded content when the user picks "This tab" as the source. Opening a small
- * separate window ("popup=1" size) causes Chrome/Firefox to render it as a top-level
- * OS window rather than a new tab — so it visually floats over any content the user
- * is recording (unless they picked "Entire screen", in which case it's still captured).
- *
- * Communication with the opener tab is done via window.opener.__tskRecorderApi.
+ * Loom-style recording controls popup — compact OS window that floats above
+ * the recorded surface. Driven by window.opener.__tskRecorderApi.
  */
 const RecordingControlsPopup = () => {
     const [seconds, setSeconds] = useState(0);
@@ -27,8 +21,15 @@ const RecordingControlsPopup = () => {
         } catch { return null; }
     };
 
-    // Poll opener state — timer, paused, micOn, camOn, recording?
     useEffect(() => {
+        document.title = 'Recording';
+        try {
+            document.documentElement.style.background = '#0f172a';
+            document.body.style.background = '#0f172a';
+            document.body.style.margin = '0';
+            document.body.style.overflow = 'hidden';
+        } catch { /* noop */ }
+
         const tick = () => {
             try {
                 const api = window.opener && window.opener.__tskRecorderApi;
@@ -41,13 +42,12 @@ const RecordingControlsPopup = () => {
                     setMicOn(!!s.micOn);
                     setCamOn(!!s.camOn);
                     if (!s.recording) {
-                        // Recording has stopped → close popup
                         try { window.close(); } catch { /* noop */ }
                     }
                 }
             } catch { setDetached(true); }
         };
-        tickRef.current = setInterval(tick, 500);
+        tickRef.current = setInterval(tick, 250);
         tick();
         return () => { if (tickRef.current) clearInterval(tickRef.current); };
     }, []);
@@ -60,34 +60,57 @@ const RecordingControlsPopup = () => {
     const handleMic = () => callOpener('toggleMic');
     const handleCam = () => callOpener('toggleCam');
 
+    const IconBtn = ({ onClick, title, active, testId, children }) => (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            data-testid={testId}
+            className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                active ? 'bg-white/20 text-white' : 'text-white/85 hover:bg-white/15'
+            }`}
+        >
+            {children}
+        </button>
+    );
+
     return (
-        <div className="min-h-screen bg-gray-900 text-white p-2 select-none" data-testid="recording-controls-popup">
-            <div className="flex items-center gap-2 h-full">
-                <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shrink-0">
-                    <Video className="w-4 h-4" />
+        <div className="min-h-screen bg-slate-900 text-white select-none flex items-center px-2" data-testid="recording-controls-popup">
+            <div className="w-full flex items-center gap-1.5 rounded-full bg-slate-950/60 border border-white/10 px-2 py-1.5 shadow-xl">
+                <div className="flex items-center gap-2 pr-2.5 border-r border-white/10 mr-0.5 min-w-[88px]">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
+                    <div className="leading-tight">
+                        <div className="text-[9px] uppercase tracking-wider text-white/45">{paused ? 'Paused' : 'Rec'}</div>
+                        <div className="font-mono font-semibold text-sm tabular-nums" data-testid="popup-timer">{fmt(seconds)}</div>
+                    </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                    <div className="text-[11px] uppercase tracking-wide text-red-300">{paused ? 'Paused' : 'Recording'}</div>
-                    <div className="font-mono font-bold text-lg tabular-nums" data-testid="popup-timer">{fmt(seconds)}</div>
-                </div>
-                <button onClick={handlePause} title={paused ? 'Resume' : 'Pause'} className="p-2 rounded-lg hover:bg-white/10" data-testid="popup-pause-btn">
-                    {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                </button>
-                <button onClick={handleRestart} title="Restart" className="p-2 rounded-lg hover:bg-white/10" data-testid="popup-restart-btn">
+
+                <IconBtn onClick={handlePause} title={paused ? 'Resume' : 'Pause'} active={paused} testId="popup-pause-btn">
+                    {paused ? <Play className="w-4 h-4" fill="currentColor" /> : <Pause className="w-4 h-4" fill="currentColor" />}
+                </IconBtn>
+                <IconBtn onClick={handleRestart} title="Restart" testId="popup-restart-btn">
                     <RotateCcw className="w-4 h-4" />
-                </button>
-                <button onClick={handleMic} title={micOn ? 'Mute mic' : 'Unmute'} className="p-2 rounded-lg hover:bg-white/10" data-testid="popup-mic-btn">
-                    {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 opacity-50" />}
-                </button>
-                <button onClick={handleCam} title={camOn ? 'Hide cam' : 'Show cam'} className="p-2 rounded-lg hover:bg-white/10" data-testid="popup-cam-btn">
-                    {camOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4 opacity-50" />}
-                </button>
-                <button onClick={handleStop} className="bg-white text-red-600 px-3 py-1.5 rounded-lg font-semibold text-sm ml-1 hover:bg-gray-100" data-testid="popup-stop-btn">
-                    <Square className="w-4 h-4 inline mr-1" /> Stop
+                </IconBtn>
+                <IconBtn onClick={handleMic} title={micOn ? 'Mute mic' : 'Unmute'} active={!micOn} testId="popup-mic-btn">
+                    {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 opacity-70" />}
+                </IconBtn>
+                <IconBtn onClick={handleCam} title={camOn ? 'Hide cam' : 'Show cam'} active={!camOn} testId="popup-cam-btn">
+                    {camOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4 opacity-70" />}
+                </IconBtn>
+
+                <button
+                    type="button"
+                    onClick={handleStop}
+                    className="ml-1 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5"
+                    data-testid="popup-stop-btn"
+                >
+                    <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop
                 </button>
             </div>
             {detached && (
-                <p className="text-[10px] text-amber-300 mt-1 px-1">Lost connection to recorder — please stop from the main tab.</p>
+                <p className="absolute bottom-1 left-2 right-2 text-[10px] text-amber-300">
+                    Lost connection — stop from the main tab.
+                </p>
             )}
         </div>
     );

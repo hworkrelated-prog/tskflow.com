@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { API } from '@/App';
 import { Video, Clock, AlertCircle } from 'lucide-react';
+import LoomPlayer from '@/components/LoomPlayer';
 
 const fmtDuration = (secs) => {
     if (!secs || Number.isNaN(secs)) return null;
@@ -14,13 +15,17 @@ const fmtDuration = (secs) => {
 
 /**
  * Public Loom-style watch page for a shareable recording token.
+<<<<<<< HEAD
  * Video streams from /api/recordings/{token}/media (viewers do not need an account).
+=======
+>>>>>>> origin/main
  */
 const RecordingSharePage = () => {
     const { token } = useParams();
     const [rec, setRec] = useState(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [playedDuration, setPlayedDuration] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -49,6 +54,7 @@ const RecordingSharePage = () => {
     }, [token]);
 
     const mediaUrl = token ? `${API}/recordings/${token}/media` : '';
+    const shownDuration = playedDuration || rec?.duration_seconds;
 
     return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col">
@@ -63,9 +69,9 @@ const RecordingSharePage = () => {
                             {rec?.title || (loading ? 'Loading…' : 'Recording')}
                         </h1>
                     </div>
-                    {fmtDuration(rec?.duration_seconds) && (
+                    {fmtDuration(shownDuration) && (
                         <span className="text-xs text-white/50 inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> {fmtDuration(rec.duration_seconds)}
+                            <Clock className="w-3.5 h-3.5" /> {fmtDuration(shownDuration)}
                         </span>
                     )}
                 </div>
@@ -85,13 +91,12 @@ const RecordingSharePage = () => {
                     </div>
                 )}
                 {!loading && rec && !error && (
-                    <div className="bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                        <video
+                    <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                        <LoomPlayer
                             src={mediaUrl}
-                            controls
                             autoPlay
-                            playsInline
-                            className="w-full max-h-[75vh] bg-black"
+                            onDuration={setPlayedDuration}
+                            videoClassName="max-h-[75vh]"
                             data-testid="share-page-video"
                         />
                     </div>

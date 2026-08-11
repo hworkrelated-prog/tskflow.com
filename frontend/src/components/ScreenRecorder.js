@@ -4,22 +4,40 @@ import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, 
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 
-// Draggable floating control bar rendered as a fixed overlay (top-most z-index).
+const CtrlBtn = ({ onClick, title, active, danger, children, testId }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        data-testid={testId}
+        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+            danger
+                ? 'bg-rose-500 hover:bg-rose-400 text-white'
+                : active
+                    ? 'bg-white/20 text-white'
+                    : 'text-white/85 hover:bg-white/15 hover:text-white'
+        }`}
+    >
+        {children}
+    </button>
+);
+
+// Loom-like draggable floating control pill (dark glass, not a red brick).
 const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     const clampPos = (p) => {
         const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
         const h = typeof window !== 'undefined' ? window.innerHeight : 768;
         return {
-            x: Math.max(12, Math.min(w - 380, p?.x ?? 24)),
-            y: Math.max(12, Math.min(h - 96, p?.y ?? (h - 96))),
+            x: Math.max(12, Math.min(w - 420, p?.x ?? Math.max(12, (w - 420) / 2))),
+            y: Math.max(12, Math.min(h - 72, p?.y ?? (h - 88))),
         };
     };
     const [pos, setPos] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-            return clampPos(saved || { x: 24, y: (typeof window !== 'undefined' ? window.innerHeight : 768) - 96 });
+            return clampPos(saved || null);
         } catch {
-            return clampPos({ x: 24, y: (typeof window !== 'undefined' ? window.innerHeight : 768) - 96 });
+            return clampPos(null);
         }
     });
     useEffect(() => {
@@ -44,8 +62,8 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
         if (e.cancelable) e.preventDefault?.();
         const evt = e.touches ? e.touches[0] : e;
         const next = {
-            x: Math.max(4, Math.min(window.innerWidth - 340, evt.clientX - start.current.x)),
-            y: Math.max(4, Math.min(window.innerHeight - 80, evt.clientY - start.current.y)),
+            x: Math.max(4, Math.min(window.innerWidth - 400, evt.clientX - start.current.x)),
+            y: Math.max(4, Math.min(window.innerHeight - 70, evt.clientY - start.current.y)),
         };
         setPos(next);
     };
@@ -59,10 +77,18 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     };
 
     return (
-        <div style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 2147483647 }}
-            className="bg-red-600 text-white rounded-2xl shadow-2xl flex items-center gap-2 px-3 py-2 select-none">
-            <div className="cursor-grab active:cursor-grabbing p-1" onMouseDown={onDown} onTouchStart={onDown} title="Drag">
-                <Move className="w-4 h-4 opacity-80" />
+        <div
+            style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 2147483647 }}
+            className="bg-slate-900/95 backdrop-blur-md text-white rounded-full shadow-2xl border border-white/10 flex items-center gap-1.5 pl-2 pr-2 py-1.5 select-none"
+            data-testid="recording-floating-bar"
+        >
+            <div
+                className="cursor-grab active:cursor-grabbing p-2 text-white/50 hover:text-white/80"
+                onMouseDown={onDown}
+                onTouchStart={onDown}
+                title="Drag"
+            >
+                <Move className="w-3.5 h-3.5" />
             </div>
             {children}
         </div>
@@ -413,8 +439,8 @@ export const ScreenRecorder = ({ onSaved }) => {
 
     const openControlsPopup = () => {
         try {
-            const width = 380;
-            const height = 120;
+            const width = 420;
+            const height = 72;
             const left = Math.max(0, (window.screen?.availWidth || 1200) - width - 24);
             const top = 24;
             const features = `popup=1,noopener=0,width=${width},height=${height},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0,resizable=1`;
@@ -485,31 +511,46 @@ export const ScreenRecorder = ({ onSaved }) => {
 
             {recording && !popupOpen && (
                 <FloatingBar>
-                    <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
-                    <span className="font-mono font-bold text-base" data-testid="recording-timer">{fmt(seconds)}</span>
-                    <button onClick={pauseResume} title={paused ? 'Resume' : 'Pause'} className="p-1.5 rounded-full hover:bg-white/20">
-                        {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                    </button>
-                    <button onClick={restart} title="Restart" className="p-1.5 rounded-full hover:bg-white/20">
+                    <div className="flex items-center gap-2 pr-2 border-r border-white/10 mr-1">
+                        <span className={`w-2.5 h-2.5 rounded-full ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
+                        <span className="font-mono text-sm font-semibold tabular-nums tracking-wide" data-testid="recording-timer">{fmt(seconds)}</span>
+                    </div>
+                    <CtrlBtn onClick={pauseResume} title={paused ? 'Resume' : 'Pause'} active={paused}>
+                        {paused ? <Play className="w-4 h-4" fill="currentColor" /> : <Pause className="w-4 h-4" fill="currentColor" />}
+                    </CtrlBtn>
+                    <CtrlBtn onClick={restart} title="Restart">
                         <RotateCcw className="w-4 h-4" />
+                    </CtrlBtn>
+                    <CtrlBtn onClick={toggleMic} title={micOn ? 'Mute mic' : 'Unmute mic'} active={!micOn}>
+                        {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 opacity-70" />}
+                    </CtrlBtn>
+                    <CtrlBtn onClick={toggleCam} title={camOn ? 'Hide webcam' : 'Show webcam'} active={!camOn}>
+                        {camOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4 opacity-70" />}
+                    </CtrlBtn>
+                    <button
+                        type="button"
+                        onClick={stop}
+                        className="ml-1 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5 shadow-lg shadow-rose-900/30"
+                        data-testid="stop-recording-btn"
+                    >
+                        <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop
                     </button>
-                    <button onClick={toggleMic} title={micOn ? 'Mute mic' : 'Unmute mic'} className="p-1.5 rounded-full hover:bg-white/20">
-                        {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 opacity-60" />}
-                    </button>
-                    <button onClick={toggleCam} title={camOn ? 'Hide webcam' : 'Show webcam'} className="p-1.5 rounded-full hover:bg-white/20">
-                        {camOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4 opacity-60" />}
-                    </button>
-                    <Button size="sm" onClick={stop} className="bg-white text-red-600 hover:bg-gray-100 rounded-full ml-2" data-testid="stop-recording-btn">
-                        <Square className="w-4 h-4 mr-1" /> Stop
-                    </Button>
                 </FloatingBar>
             )}
 
             {recording && popupOpen && (
-                <div style={{ position: 'fixed', top: 12, left: 12, zIndex: 2147483647 }}
-                    className="bg-black/70 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Recording · <span className="font-mono" data-testid="recording-timer">{fmt(seconds)}</span>
-                    <button onClick={() => { try { controlsPopupRef.current?.focus?.(); } catch { /* noop */ } }} className="ml-1 text-indigo-200 hover:text-white underline decoration-dotted">Focus controls</button>
+                <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483647 }}
+                    className="bg-slate-900/90 backdrop-blur text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-xl border border-white/10 flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
+                    <span>{paused ? 'Paused' : 'Recording'}</span>
+                    <span className="font-mono tabular-nums" data-testid="recording-timer">{fmt(seconds)}</span>
+                    <button
+                        type="button"
+                        onClick={() => { try { controlsPopupRef.current?.focus?.(); } catch { /* noop */ } }}
+                        className="ml-1 text-rose-200 hover:text-white underline decoration-dotted"
+                    >
+                        Controls
+                    </button>
                 </div>
             )}
 
