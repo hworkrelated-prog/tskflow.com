@@ -88,7 +88,7 @@ const topics = [
         id: 'reminders',
         icon: <HelpCircle className="w-4 h-4" />, title: 'Smart Reminders', category: 'Notifications',
         body: (
-            <p className="text-sm">Enable Smart Reminders in Settings → Reminders. Choose triggers (time-before-due, no progress, no response, approaching deadline, overdue), how often to remind, and which channels (in-app, email, Slack).</p>
+            <p className="text-sm">Enable Smart Reminders in Settings → Reminders. Start from Essential / Balanced / Assertive, then choose triggers (before due, no response, no progress, overdue), priorities, channels (in-app, email, Slack), timing, quiet hours, and a daily email cap. Defaults stay quiet so nudges help instead of overwhelm.</p>
         )
     },
     {
