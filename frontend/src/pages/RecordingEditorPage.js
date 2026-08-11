@@ -140,7 +140,8 @@ const RecordingEditorPage = () => {
             toast.success('Recording saved');
             try { await clearRecordingBlob(); } catch { /* noop */ }
         } catch (e) {
-            toast.error(e?.response?.data?.detail || e?.message || 'Failed to save recording');
+            const detail = e?.response?.data?.detail || e?.message || 'Failed to save recording';
+            toast.error(typeof detail === 'string' ? detail : 'Failed to save recording');
         } finally { setSaving(false); }
     };
 
@@ -250,7 +251,7 @@ const RecordingEditorPage = () => {
                     {!shareLink ? (
                         <div className="space-y-3">
                             <p className="text-sm text-white/70">
-                                Save to your library and get a shareable link anyone can watch — no login required.
+                                Save this recording to your library. You&apos;ll get a link you can share with others.
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 <Button
@@ -289,7 +290,7 @@ const RecordingEditorPage = () => {
                     ) : (
                         <div className="space-y-4" data-testid="share-success-panel">
                             <div className="flex items-center gap-2 text-sm text-emerald-300 font-medium">
-                                <Check className="w-4 h-4" /> Saved. Anyone with this link can watch your recording.
+                                <Check className="w-4 h-4" /> Saved to your library. Share this link so others can watch.
                             </div>
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 <input

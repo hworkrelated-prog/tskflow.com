@@ -14,7 +14,7 @@ const fmtDuration = (secs) => {
 
 /**
  * Public Loom-style watch page for a shareable recording token.
- * Video streams from /api/recordings/{token}/media (no login required).
+ * Video streams from /api/recordings/{token}/media (viewers do not need an account).
  */
 const RecordingSharePage = () => {
     const { token } = useParams();
@@ -58,7 +58,7 @@ const RecordingSharePage = () => {
                         <Video className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="text-xs uppercase tracking-wider text-white/40">Shared recording</p>
+                        <p className="text-xs uppercase tracking-wider text-white/40">Recording</p>
                         <h1 className="font-semibold truncate" data-testid="share-page-title">
                             {rec?.title || (loading ? 'Loading…' : 'Recording')}
                         </h1>
