@@ -8,6 +8,7 @@ import { ArrowLeft, Video, Copy, Trash2, Share2, ExternalLink, Clock, Play } fro
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import ScreenRecorder from '@/components/ScreenRecorder';
+import LoomPlayer from '@/components/LoomPlayer';
 
 const fmtDuration = (secs) => {
     if (!secs || Number.isNaN(secs)) return null;
@@ -145,11 +146,10 @@ const RecordingLibraryPage = () => {
                         </div>
                         <div className="bg-black">
                             {preview.shareable_token ? (
-                                <video
+                                <LoomPlayer
                                     src={`${API}/recordings/${preview.shareable_token}/media`}
-                                    controls
                                     autoPlay
-                                    className="w-full aspect-video bg-black"
+                                    videoClassName="aspect-video"
                                     data-testid="library-preview-video"
                                 />
                             ) : (
