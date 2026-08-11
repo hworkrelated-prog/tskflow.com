@@ -38,7 +38,7 @@ const getMentionState = (value, caret) => {
 
 const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
 
-const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
+const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false }) => {
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState(null);
@@ -535,19 +535,26 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setPeopleSearch('');
         setShowPeopleDrop(false);
         setClarifyAnswer('');
+        const label = person.name || person.email;
+        const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
+            || 'Who should own this task?';
+        const nextAnswers = label ? { ...answers, [whoQ]: label } : { ...answers };
+        if (label) setAnswers(nextAnswers);
+
+        const hasDue = Boolean(editDue || preview?.due_date);
+        // Keep the flow in-dialog: drop the "who" question; ask "when" if still missing.
         setPreview((p) => {
             if (!p) return p;
             const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
-            const hasDue = Boolean(p.due_date || editDue);
             if (!hasDue && !qs.some((q) => /when|due|deadline/i.test(q || ''))) {
                 qs.push('When should this be done by?');
             }
             return { ...p, clarifying_questions: qs };
         });
-        const label = person.name || person.email;
-        if (label) {
-            const q = (preview?.clarifying_questions || [])[0] || 'Who should own this task?';
-            setAnswers((prev) => ({ ...prev, [q]: label }));
+
+        // If due is already known, re-run preview so Confirm appears without leaving the dialog.
+        if (hasDue) {
+            runPreview(text, nextAnswers);
         }
     };
 
@@ -678,6 +685,21 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         !!editDue &&
         editAssignees.length > 0 &&
         !needsAmbiguousPick;
+
+    // Keep parent in sync so dismissing the dialog can save a draft.
+    useEffect(() => {
+        onSnapshot?.({
+            text,
+            editTitle,
+            editDesc,
+            editDue,
+            editPriority,
+            editAssignees,
+            editCriteria,
+            sending,
+            preview: !!preview,
+        });
+    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -858,6 +880,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                     data-testid="mention-dropdown"
                                     role="listbox"
                                     aria-label="Assign to"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
                                 >
                                     <div className="px-3 pt-2.5 pb-1.5">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1127,6 +1151,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                         className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10 py-1.5 px-1.5 clean-scroll"
                                                         data-testid="clarify-people-dropdown"
                                                         role="listbox"
+                                                        onPointerDown={(e) => e.stopPropagation()}
+                                                        onMouseDown={(e) => e.stopPropagation()}
                                                     >
                                                         {filteredPeople.length === 0 && (
                                                             <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email</p>
@@ -1135,9 +1161,18 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                             <button
                                                                 key={u.id || u.email}
                                                                 type="button"
-                                                                onMouseDown={(e) => { e.preventDefault(); pickPerson(u); }}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    pickPerson(u);
+                                                                }}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                }}
                                                                 className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
                                                                 role="option"
+                                                                data-testid={`clarify-pick-${u.id || u.email}`}
                                                             >
                                                                 <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                                                                     u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-slate-100 text-slate-600'
