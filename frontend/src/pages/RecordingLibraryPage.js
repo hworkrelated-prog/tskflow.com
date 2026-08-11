@@ -144,8 +144,14 @@ const RecordingLibraryPage = () => {
                             <Button size="sm" variant="ghost" onClick={() => setPreview(null)} className="rounded-full">Close</Button>
                         </div>
                         <div className="bg-black">
-                            {preview.shareable_link ? (
-                                <iframe title="Recording preview" src={preview.shareable_link} className="w-full aspect-video" />
+                            {preview.shareable_token ? (
+                                <video
+                                    src={`${API}/recordings/${preview.shareable_token}/media`}
+                                    controls
+                                    autoPlay
+                                    className="w-full aspect-video bg-black"
+                                    data-testid="library-preview-video"
+                                />
                             ) : (
                                 <div className="w-full aspect-video flex items-center justify-center text-white text-sm">No preview available</div>
                             )}

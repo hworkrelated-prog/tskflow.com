@@ -16,6 +16,7 @@ import UpdatesPage from '@/pages/UpdatesPage';
 import LeaderboardPage from '@/pages/LeaderboardPage';
 import TranscriptImportPage from '@/pages/TranscriptImportPage';
 import RecordingEditorPage from '@/pages/RecordingEditorPage';
+import RecordingSharePage from '@/pages/RecordingSharePage';
 import RecordingLibraryPage from '@/pages/RecordingLibraryPage';
 import RecordingControlsPopup from '@/pages/RecordingControlsPopup';
 import AnalyticsPage from '@/pages/AnalyticsPage';
@@ -402,6 +403,7 @@ function App() {
                     <Route path="/transcript" element={<ProtectedRoute><TranscriptImportPage /></ProtectedRoute>} />
                     <Route path="/recording/edit" element={<ProtectedRoute><RecordingEditorPage /></ProtectedRoute>} />
                     <Route path="/recording/controls" element={<RecordingControlsPopup />} />
+                    <Route path="/recording/:token" element={<RecordingSharePage />} />
                     <Route path="/recordings" element={<ProtectedRoute><RecordingLibraryPage /></ProtectedRoute>} />
                     <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />

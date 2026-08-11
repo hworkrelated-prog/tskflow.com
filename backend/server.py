@@ -2054,7 +2054,7 @@ async def delete_my_recording(recording_id: str, current_user: dict = Depends(ge
 
 @api_router.get("/recordings/{token}")
 async def get_recording_by_token(token: str):
-    """Get recording by shareable token"""
+    """Get recording by shareable token (public metadata for the share page)."""
     recording = await db.recordings.find_one({"shareable_token": token}, {"_id": 0})
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
@@ -2068,10 +2068,84 @@ async def get_recording_by_token(token: str):
                     "expired": True,
                     "message": "This recording has been automatically deleted 24h after task completion"
                 }
-        except:
+        except Exception:
             pass
     
-    return recording
+    # Public share metadata (no owner id). Keep recording_url for API compat;
+    # playback should use /recordings/{token}/media.
+    return {
+        "id": recording.get("id"),
+        "title": recording.get("title") or "Untitled recording",
+        "description": recording.get("description"),
+        "recording_url": recording.get("recording_url"),
+        "duration_seconds": recording.get("duration_seconds"),
+        "size_bytes": recording.get("size_bytes"),
+        "mime_type": recording.get("mime_type"),
+        "created_at": recording.get("created_at"),
+        "shareable_token": recording.get("shareable_token"),
+        "has_media": bool(recording.get("recording_url")),
+    }
+
+
+@api_router.get("/recordings/{token}/media")
+async def stream_recording_by_token(token: str, request: HTTPRequest):
+    """Public media stream for a shareable recording — Loom-style watch-without-login."""
+    recording = await db.recordings.find_one({"shareable_token": token}, {"_id": 0})
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    if recording.get("auto_delete_at"):
+        try:
+            delete_time = datetime.fromisoformat(recording["auto_delete_at"].replace('Z', '+00:00'))
+            if get_pst_now() > delete_time:
+                raise HTTPException(status_code=410, detail="This recording has expired")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    path = recording.get("recording_url")
+    if not path:
+        raise HTTPException(status_code=404, detail="Recording media not found")
+
+    # Prefer attachment metadata when available; fall back to storage path directly
+    record = await db.attachments.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    try:
+        data, content_type = await storage_get(path)
+    except Exception as e:
+        logging.error(f"Recording media fetch failed: {e}")
+        raise HTTPException(status_code=502, detail="Could not fetch recording")
+
+    content_type = (record or {}).get("content_type") or recording.get("mime_type") or content_type or "video/webm"
+    total = len(data)
+    filename = (record or {}).get("original_filename") or f"{recording.get('title') or 'recording'}.webm"
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Cache-Control": "public, max-age=3600",
+    }
+    range_header = request.headers.get("range")
+    if range_header and range_header.startswith("bytes="):
+        try:
+            rng = range_header.replace("bytes=", "").split("-")
+            start = int(rng[0]) if rng[0] else 0
+            end = int(rng[1]) if len(rng) > 1 and rng[1] else total - 1
+            end = min(end, total - 1)
+            start = max(0, min(start, end))
+            chunk = data[start:end + 1]
+            headers = {
+                **common_headers,
+                "Content-Range": f"bytes {start}-{end}/{total}",
+                "Content-Length": str(len(chunk)),
+            }
+            return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+        except Exception:
+            pass
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={**common_headers, "Content-Length": str(total)},
+    )
 
 # Section 5: Auto-delete recordings 24h after task completion
 async def schedule_recording_deletion(task_id: str):
@@ -7755,12 +7829,20 @@ KNOWLEDGE BASE:
 # ==========================================================================
 
 class ReminderRule(BaseModel):
+    """User-controllable smart reminder preferences.
+
+    Defaults are intentionally quiet: only High/Urgent, before-due + overdue,
+    in-app only (no email until the user opts in).
+    """
     enabled: bool = True
-    triggers: List[str] = ["time_before_due", "no_response", "no_progress", "overdue"]
+    triggers: List[str] = ["time_before_due", "overdue"]
     hours_before_due: int = 4
-    frequency_hours: int = 12  # base gap; scaled down by priority at runtime
-    channels: List[str] = ["in_app", "email"]
-    priorities: List[str] = ["Low", "Medium", "High", "Urgent"]
+    frequency_hours: int = 12  # minimum hours between nudges for the same task
+    channels: List[str] = ["in_app"]
+    priorities: List[str] = ["High", "Urgent"]
+    quiet_hours_start: Optional[int] = 21  # 9pm local/PST — suppress Low/Medium-style noise; Urgent ignores
+    quiet_hours_end: Optional[int] = 8    # 8am
+    max_emails_per_day: int = 5           # hard cap so email never overwhelms
 
 
 @api_router.get("/reminders/rules")
@@ -7783,14 +7865,22 @@ async def set_reminder_rules(rule: ReminderRule, current_user: dict = Depends(ge
 
 
 async def _check_smart_reminders():
-    """Enhanced reminder job — respects user rules + multiple trigger types with rotating wording.
+    """Smart reminder job — fully respects each assignee's ReminderRule.
+
+    Controllable knobs:
+      - enabled / priorities / triggers / channels
+      - hours_before_due (when "before due" fires)
+      - frequency_hours (min gap between nudges)
+      - max_emails_per_day (hard email volume cap)
+      - quiet hours (suppresses Low/Medium; Urgent/High still fire)
     Also auto-cleans orphan tasks (missing/deleted parent, missing user, invalid due date).
     """
     try:
         now = get_pst_now()
-        # Load all rules keyed by user
+        day_key = now.strftime("%Y-%m-%d")
+        # Load all rules keyed by user (including disabled — we skip them later)
         rules_by_user = {}
-        async for r in db.reminder_rules.find({"enabled": True}, {"_id": 0}):
+        async for r in db.reminder_rules.find({}, {"_id": 0}):
             rules_by_user[r["user_id"]] = r
         # Find candidate open tasks — MUST match the dashboard's "live task" definition
         tasks = await db.tasks.find({
@@ -7808,11 +7898,13 @@ async def _check_smart_reminders():
         user_ids_needed = list({t["assigned_to"] for t in tasks if t.get("assigned_to") and not str(t["assigned_to"]).startswith("email_")})
         users_by_id = {}
         if user_ids_needed:
-            async for u in db.users.find({"id": {"$in": user_ids_needed}}, {"_id": 0, "id": 1, "deleted": 1, "email": 1, "name": 1, "company_domain": 1}):
+            async for u in db.users.find({"id": {"$in": user_ids_needed}}, {"_id": 0, "id": 1, "deleted": 1, "email": 1, "name": 1, "company_domain": 1, "preferences": 1}):
                 users_by_id[u["id"]] = u
 
         default_rule = ReminderRule().dict()
         orphans_marked = 0
+        emails_sent_today = {}  # user_id -> count for this run day
+
         for t in tasks:
             aid = t.get("assigned_to")
 
@@ -7853,25 +7945,49 @@ async def _check_smart_reminders():
             r = rules_by_user.get(aid, default_rule)
             if not r.get("enabled", True):
                 continue
-            allowed_prios = r.get("priorities") or ["Low", "Medium", "High", "Urgent"]
-            if t.get("priority") not in allowed_prios:
+            allowed_prios = r.get("priorities") or []
+            if not allowed_prios or t.get("priority") not in allowed_prios:
                 continue
             if t.get("status") == "Blocked":
                 continue
-            pcfg = priority_followup_config(t.get("priority"))
-            # Quiet hours for low/medium: only nudge 9am-6pm PST
-            if pcfg.get("quiet") and not (9 <= now.hour < 18):
-                continue
-            last = t.get("last_smart_reminder_sent")
-            gap_hours = min(int(r.get("frequency_hours", 12)), int(pcfg["gap_hours"]))
 
-            triggers = r.get("triggers", [])
+            channels = r.get("channels") or []
+            if not channels:
+                continue  # nowhere to send → skip
+
+            pcfg = priority_followup_config(t.get("priority"))
+            # Quiet hours: user-configurable; Urgent always breaks through
+            q_start = r.get("quiet_hours_start")
+            q_end = r.get("quiet_hours_end")
+            if q_start is not None and q_end is not None and t.get("priority") != "Urgent":
+                try:
+                    qs, qe = int(q_start), int(q_end)
+                    in_quiet = (qs <= now.hour or now.hour < qe) if qs > qe else (qs <= now.hour < qe)
+                    # Also keep legacy priority quiet window for Low/Medium during off-hours
+                    if in_quiet and pcfg.get("quiet"):
+                        continue
+                except Exception:
+                    pass
+            elif pcfg.get("quiet") and not (9 <= now.hour < 18):
+                continue
+
+            last = t.get("last_smart_reminder_sent")
+            # User frequency is the floor; priority config can only make it *more* frequent up to that floor.
+            try:
+                user_gap = max(1, int(r.get("frequency_hours", 12)))
+            except Exception:
+                user_gap = 12
+            gap_hours = max(user_gap, 1)
+            # Still allow High/Urgent to come a bit sooner than Low, but never below user's floor
+            # unless user set a very high floor — user wins.
+            _ = pcfg  # priority config still used for no_response / no_progress thresholds
+
+            triggers = r.get("triggers") or []
             try:
                 due = datetime.fromisoformat(t["due_date"].replace("Z", "+00:00"))
                 if due.tzinfo is None:
                     due = due.replace(tzinfo=PST)
             except Exception:
-                # Corrupted due_date - treat as orphan
                 await db.tasks.update_one(
                     {"id": t["id"]},
                     {"$set": {"deleted": True, "deleted_at": now.isoformat(), "deleted_by": "system_orphan_cleanup"}}
@@ -7880,37 +7996,41 @@ async def _check_smart_reminders():
                 continue
 
             hours_to_due = (due - now).total_seconds() / 3600.0
+            try:
+                hours_before = max(1, min(72, int(r.get("hours_before_due", 4))))
+            except Exception:
+                hours_before = 4
 
-            # Time buckets: aggressive for High/Urgent/Medium; Low only gets overdue + no_response
             fired_buckets = t.get("reminder_buckets_fired", []) or []
             bucket = None
-            if pcfg.get("buckets"):
-                if hours_to_due < 0:
-                    bucket = "overdue"
-                elif hours_to_due <= 0.5:
-                    bucket = "30min"
-                elif hours_to_due <= 2 and hours_to_due > 0.5:
-                    bucket = "2h"
-                elif hours_to_due <= 3 and hours_to_due > 2:
-                    bucket = "3h"
-            elif hours_to_due < 0:
+
+            # Overdue — only if trigger enabled
+            if hours_to_due < 0 and "overdue" in triggers:
                 bucket = "overdue"
+            # Before due — only if trigger enabled; use user's hours_before_due window
+            elif "time_before_due" in triggers and 0 <= hours_to_due <= hours_before:
+                # Sub-buckets inside the user window so Urgent still gets a late nudge,
+                # but never outside hours_before_due.
+                if hours_to_due <= 0.5 and hours_before >= 0.5:
+                    bucket = "30min"
+                elif hours_to_due <= min(2, hours_before) and hours_to_due > 0.5:
+                    bucket = "2h"
+                elif hours_to_due <= hours_before:
+                    bucket = "before_due"
 
             # If bucket already fired, skip UNLESS overdue (overdue rotates every gap_hours)
             if bucket and bucket != "overdue" and bucket in fired_buckets:
-                continue
+                bucket = None
             if bucket == "overdue" and last:
                 try:
                     last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
                     if last_dt.tzinfo is None:
                         last_dt = last_dt.replace(tzinfo=PST)
-                    # For overdue, respect frequency gap
                     if (now - last_dt).total_seconds() < gap_hours * 3600:
-                        continue
+                        bucket = None
                 except Exception:
                     pass
 
-            # If no bucket matched but existing trigger types apply (no_response, no_progress)
             fired_kind = None
             if bucket:
                 fired_kind = bucket
@@ -7922,7 +8042,6 @@ async def _check_smart_reminders():
                         if cdt.tzinfo is None:
                             cdt = cdt.replace(tzinfo=PST)
                         if (now - cdt).total_seconds() >= float(pcfg["no_response_hours"]) * 3600:
-                            # Respect frequency gap
                             if last:
                                 last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
                                 if last_dt.tzinfo is None:
@@ -7953,32 +8072,73 @@ async def _check_smart_reminders():
             if not fired_kind:
                 continue
 
-            # Rotating wording — never the exact same twice
-            wording = _reminder_wording(fired_kind, t)
+            # Global gap check for non-overdue kinds that skipped the earlier last check
+            if fired_kind not in ("overdue",) and last and fired_kind not in ("no_response", "no_progress"):
+                try:
+                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                    if last_dt.tzinfo is None:
+                        last_dt = last_dt.replace(tzinfo=PST)
+                    if (now - last_dt).total_seconds() < gap_hours * 3600:
+                        continue
+                except Exception:
+                    pass
 
-            # Fire notification (in-app always; email if channel selected)
-            user = await db.users.find_one({"id": aid}, {"_id": 0})
+            wording = _reminder_wording(fired_kind, t)
+            user = users_by_id.get(aid) or await db.users.find_one({"id": aid}, {"_id": 0})
             if not user:
                 continue
-            nid = str(uuid.uuid4())
-            await db.notifications.insert_one({
-                "id": nid,
-                "user_id": aid,
-                "type": "reminder",
-                "title": wording["title"],
-                "body": f"{t['title']} — priority {t.get('priority')}",
-                "task_id": t["id"],
-                "read": False,
-                "delivered": False,
-                "created_at": now.isoformat(),
-            })
-            if "email" in r.get("channels", []):
-                await send_email_notification(
-                    user["email"],
-                    f"[TskFlow] {wording['title']}: {t['title']}",
-                    render_reminder_email(user["name"], t, wording, APP_BASE_URL)
-                )
-            # Update state
+
+            # Channel delivery — each channel is opt-in
+            if "in_app" in channels:
+                nid = str(uuid.uuid4())
+                await db.notifications.insert_one({
+                    "id": nid,
+                    "user_id": aid,
+                    "type": "reminder",
+                    "title": wording["title"],
+                    "body": f"{t['title']} — priority {t.get('priority')}",
+                    "task_id": t["id"],
+                    "read": False,
+                    "delivered": False,
+                    "created_at": now.isoformat(),
+                })
+
+            if "email" in channels:
+                try:
+                    max_emails = max(0, int(r.get("max_emails_per_day", 5)))
+                except Exception:
+                    max_emails = 5
+                sent = emails_sent_today.get(aid, 0)
+                # Persist a daily counter on the rule doc so caps survive across job runs
+                rule_day = r.get("emails_sent_day")
+                rule_count = int(r.get("emails_sent_count") or 0) if rule_day == day_key else 0
+                if sent == 0:
+                    sent = rule_count
+                if max_emails > 0 and sent < max_emails:
+                    await send_email_notification(
+                        user["email"],
+                        f"[TskFlow] {wording['title']}: {t['title']}",
+                        render_reminder_email(user["name"], t, wording, APP_BASE_URL)
+                    )
+                    sent += 1
+                    emails_sent_today[aid] = sent
+                    await db.reminder_rules.update_one(
+                        {"user_id": aid},
+                        {"$set": {"emails_sent_day": day_key, "emails_sent_count": sent}},
+                        upsert=False,
+                    )
+
+            if "slack" in channels:
+                try:
+                    webhook = await _resolve_slack_webhook(user)
+                    if webhook:
+                        await _post_to_slack(
+                            webhook,
+                            f"⏰ *{wording['title']}*: {t['title']} ({t.get('priority')})",
+                        )
+                except Exception as slack_err:
+                    logging.warning(f"[smart_reminders] slack post failed: {slack_err}")
+
             update_doc = {
                 "last_smart_reminder_sent": now.isoformat(),
                 "last_reminder_wording_idx": (t.get("last_reminder_wording_idx", -1) + 1) % 100,
