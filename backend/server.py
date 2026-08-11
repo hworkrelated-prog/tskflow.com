@@ -5652,11 +5652,71 @@ class UploadFinish(BaseModel):
     filename: str
     content_type: Optional[str] = None
 
+async def _persist_uploaded_bytes(current_user: dict, data: bytes, filename: str, content_type: str) -> dict:
+    """Write bytes to object storage + attachments collection; shared by direct & chunked finish."""
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty upload")
+    if len(data) > 200 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 200MB)")
+    safe_name = (filename or "file").replace("/", "_").replace("\\", "_")[:200]
+    ext = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else "bin"
+    ct = content_type or "application/octet-stream"
+    path = f"{APP_STORAGE_PREFIX}/attachments/{current_user['id']}/{uuid.uuid4()}.{ext}"
+    try:
+        result = await storage_put(path, data, ct)
+    except Exception as e:
+        logging.error(f"Storage upload failed: {e}")
+        raise HTTPException(status_code=502, detail="Upload to storage failed")
+    attachment = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result.get("path", path),
+        "original_filename": safe_name,
+        "content_type": ct,
+        "size": result.get("size", len(data)),
+        "kind": _kind_for(ct),
+    }
+    await db.attachments.insert_one({
+        **attachment,
+        "owner_id": current_user["id"],
+        "is_deleted": False,
+        "created_at": get_pst_now().isoformat()
+    })
+    return attachment
+
+
+@api_router.post("/uploads/direct")
+async def upload_direct(
+    request: HTTPRequest,
+    current_user: dict = Depends(get_current_user),
+    x_filename: Optional[str] = Header(None),
+):
+    """Single-request upload — preferred for recordings/attachments.
+
+    Avoids multi-step /tmp sessions that break across workers ("Upload session not found").
+    """
+    from urllib.parse import unquote
+    data = await request.body()
+    filename = unquote(x_filename or "file")
+    # Prefer explicit X-Content-Type header; fall back to request Content-Type (skip generic)
+    x_ct = request.headers.get("x-content-type") or ""
+    req_ct = (request.headers.get("content-type") or "").split(";")[0].strip()
+    content_type = x_ct or (req_ct if req_ct and req_ct != "application/octet-stream" else "") or "application/octet-stream"
+    if filename.lower().endswith(".webm") and content_type == "application/octet-stream":
+        content_type = "video/webm"
+    return await _persist_uploaded_bytes(current_user, data, filename, content_type)
+
+
 @api_router.post("/uploads/start")
 async def upload_start(current_user: dict = Depends(get_current_user)):
     upload_id = str(uuid.uuid4())
-    # Create empty temp file
+    # Create empty temp file + durable session record (survives for debugging / ownership checks)
     open(os.path.join(UPLOAD_TMP_DIR, upload_id), "wb").close()
+    await db.upload_sessions.insert_one({
+        "id": upload_id,
+        "user_id": current_user["id"],
+        "created_at": get_pst_now().isoformat(),
+        "bytes_received": 0,
+    })
     return {"upload_id": upload_id}
 
 @api_router.put("/uploads/{upload_id}/chunk")
@@ -5664,9 +5724,17 @@ async def upload_chunk(upload_id: str, request: HTTPRequest, current_user: dict 
     # Basic guard against path traversal
     if "/" in upload_id or ".." in upload_id:
         raise HTTPException(status_code=400, detail="Invalid upload id")
-    tmp_path = os.path.join(UPLOAD_TMP_DIR, upload_id)
-    if not os.path.exists(tmp_path):
+    session = await db.upload_sessions.find_one({"id": upload_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not session:
         raise HTTPException(status_code=404, detail="Upload session not found")
+    tmp_path = os.path.join(UPLOAD_TMP_DIR, upload_id)
+    # Recreate if this worker never saw /start (multi-instance) — cannot recover prior chunks,
+    # so fail clearly and let the client retry with /uploads/direct.
+    if not os.path.exists(tmp_path):
+        raise HTTPException(
+            status_code=409,
+            detail="Upload session lost on this server — retry with a fresh upload",
+        )
     chunk = await request.body()
     # Cap total size at 200MB
     if os.path.getsize(tmp_path) + len(chunk) > 200 * 1024 * 1024:
@@ -5675,45 +5743,36 @@ async def upload_chunk(upload_id: str, request: HTTPRequest, current_user: dict 
         with open(tmp_path, "ab") as f:
             f.write(chunk)
     await asyncio.to_thread(_append)
+    await db.upload_sessions.update_one(
+        {"id": upload_id},
+        {"$inc": {"bytes_received": len(chunk)}},
+    )
     return {"received": len(chunk)}
 
 @api_router.post("/uploads/{upload_id}/finish")
 async def upload_finish(upload_id: str, meta: UploadFinish, current_user: dict = Depends(get_current_user)):
     if "/" in upload_id or ".." in upload_id:
         raise HTTPException(status_code=400, detail="Invalid upload id")
+    session = await db.upload_sessions.find_one({"id": upload_id, "user_id": current_user["id"]}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Upload session not found")
     tmp_path = os.path.join(UPLOAD_TMP_DIR, upload_id)
     if not os.path.exists(tmp_path):
-        raise HTTPException(status_code=404, detail="Upload session not found")
+        raise HTTPException(
+            status_code=409,
+            detail="Upload session lost on this server — retry with a fresh upload",
+        )
     data = await asyncio.to_thread(lambda: open(tmp_path, "rb").read())
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty upload")
-    ext = meta.filename.rsplit(".", 1)[-1].lower() if "." in meta.filename else "bin"
-    content_type = meta.content_type or "application/octet-stream"
-    path = f"{APP_STORAGE_PREFIX}/attachments/{current_user['id']}/{uuid.uuid4()}.{ext}"
     try:
-        result = await storage_put(path, data, content_type)
-    except Exception as e:
-        logging.error(f"Storage upload failed: {e}")
-        raise HTTPException(status_code=502, detail="Upload to storage failed")
+        attachment = await _persist_uploaded_bytes(
+            current_user, data, meta.filename, meta.content_type or "application/octet-stream"
+        )
     finally:
         try:
             os.remove(tmp_path)
         except OSError:
             pass
-    attachment = {
-        "id": str(uuid.uuid4()),
-        "storage_path": result.get("path", path),
-        "original_filename": meta.filename,
-        "content_type": content_type,
-        "size": result.get("size", len(data)),
-        "kind": _kind_for(content_type),
-    }
-    await db.attachments.insert_one({
-        **attachment,
-        "owner_id": current_user["id"],
-        "is_deleted": False,
-        "created_at": get_pst_now().isoformat()
-    })
+        await db.upload_sessions.delete_one({"id": upload_id})
     return attachment
 
 @api_router.get("/files/{path:path}")
