@@ -1,17 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, Copy, Check, ListPlus, Download, Video, Library, X, Plus } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Download, Video, Library, Trash2, Link2 } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
 import { loadRecordingBlob, clearRecordingBlob } from '@/lib/recordingStore';
-import RichTextEditor from '@/components/RichTextEditor';
 
 const defaultTitle = () => {
     const now = new Date();
@@ -24,6 +20,23 @@ const defaultTitle = () => {
     return `Recording · ${now.getFullYear()}-${mm}-${dd} ${hh}:${mn} ${ap}`;
 };
 
+const fmtDuration = (secs) => {
+    if (!secs || !Number.isFinite(secs)) return null;
+    const s = Math.max(0, Math.floor(secs));
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+};
+
+const fmtSize = (bytes) => {
+    if (!bytes || Number.isNaN(bytes)) return null;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+/**
+ * Loom-style post-record screen: preview, name, save (share link), download, discard.
+ */
 const RecordingEditorPage = () => {
     const navigate = useNavigate();
     const [blob, setBlob] = useState(null);
@@ -33,31 +46,23 @@ const RecordingEditorPage = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [shareLink, setShareLink] = useState('');
     const [copied, setCopied] = useState(false);
-    const [showAssign, setShowAssign] = useState(false);
     const [title, setTitle] = useState(defaultTitle());
-    const [uploadRef, setUploadRef] = useState(null); // cached upload result so we don't re-upload for "Assign as task"
-
-    // Assign form state — mirrors TaskHub's create-task form
-    const [users, setUsers] = useState([]);
-    const [emailInput, setEmailInput] = useState('');
-    const [showUserDropdown, setShowUserDropdown] = useState(false);
-    const dropdownRef = useRef(null);
-    const [selectedAssignees, setSelectedAssignees] = useState([]);
-    const [assignForm, setAssignForm] = useState({
-        title: 'Screen recording task',
-        description: '',
-        due_date: '',
-        priority: 'Medium',
-    });
+    const [uploadRef, setUploadRef] = useState(null);
+    const [looking, setLooking] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
         let poll = null;
+        let objectUrl = null;
 
         const setFromBlob = (b) => {
-            if (cancelled) return;
+            if (cancelled || !b) return;
             setBlob(b);
-            try { setVideoUrl(URL.createObjectURL(b)); } catch { /* noop */ }
+            try {
+                objectUrl = URL.createObjectURL(b);
+                setVideoUrl(objectUrl);
+            } catch { /* noop */ }
+            setLooking(false);
         };
 
         const tryOpenerBlob = () => {
@@ -76,7 +81,10 @@ const RecordingEditorPage = () => {
             } catch { /* silent */ }
             if (tryOpenerBlob()) return;
             const url = sessionStorage.getItem('tsk_last_recording_url');
-            if (url && !cancelled) setVideoUrl(url);
+            if (url && !cancelled) {
+                setVideoUrl(url);
+                setLooking(false);
+            }
             let tries = 0;
             poll = setInterval(async () => {
                 tries += 1;
@@ -85,27 +93,20 @@ const RecordingEditorPage = () => {
                     const entry = await loadRecordingBlob();
                     if (entry?.blob && entry.blob.size > 0) { setFromBlob(entry.blob); clearInterval(poll); return; }
                 } catch { /* silent */ }
-                if (tries > 30) clearInterval(poll);
+                if (tries > 30) {
+                    clearInterval(poll);
+                    setLooking(false);
+                }
             }, 400);
         })();
 
-        return () => { cancelled = true; if (poll) clearInterval(poll); };
-    }, []);
-
-    useEffect(() => {
-        (async () => {
-            try {
-                const res = await axios.get(`${API}/users/mentionable`);
-                setUsers(res.data || []);
-            } catch { /* silent */ }
-        })();
-    }, []);
-
-    // Close user dropdown on outside click
-    useEffect(() => {
-        const onDoc = (e) => { if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowUserDropdown(false); };
-        document.addEventListener('mousedown', onDoc);
-        return () => document.removeEventListener('mousedown', onDoc);
+        return () => {
+            cancelled = true;
+            if (poll) clearInterval(poll);
+            if (objectUrl) {
+                try { URL.revokeObjectURL(objectUrl); } catch { /* noop */ }
+            }
+        };
     }, []);
 
     const handleLoadedMetadata = (e) => {
@@ -130,268 +131,196 @@ const RecordingEditorPage = () => {
             const ref = await ensureUploaded();
             const res = await axios.post(`${API}/recordings/standalone`, {
                 recording_url: ref.storage_path || ref.path,
-                title,
+                title: title.trim() || defaultTitle(),
                 duration_seconds: duration,
                 size_bytes: blob?.size,
                 mime_type: blob?.type,
             });
             setShareLink(res.data.shareable_link);
-            toast.success('Recording saved to your library');
+            toast.success('Recording saved');
             try { await clearRecordingBlob(); } catch { /* noop */ }
         } catch (e) {
             toast.error(e?.response?.data?.detail || e?.message || 'Failed to save recording');
         } finally { setSaving(false); }
     };
 
-    // Multi-assignee helpers (mirror TaskHub)
-    const addEmailAssignee = () => {
-        const emails = emailInput.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-        if (emails.length === 0) return;
-        const next = [...selectedAssignees];
-        emails.forEach((email) => {
-            const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-            const exists = next.some((a) => (a.type === 'user' && a.email === email) || (a.type === 'email' && a.value === email));
-            if (exists) return;
-            if (found) next.push({ type: 'user', id: found.id, name: found.name, email: found.email });
-            else next.push({ type: 'email', value: email });
-        });
-        setSelectedAssignees(next);
-        setEmailInput('');
-    };
-    const removeAssignee = (idx) => setSelectedAssignees(selectedAssignees.filter((_, i) => i !== idx));
-    const toggleUser = (u) => {
-        const exists = selectedAssignees.some((a) => a.type === 'user' && a.id === u.id);
-        if (exists) setSelectedAssignees(selectedAssignees.filter((a) => !(a.type === 'user' && a.id === u.id)));
-        else setSelectedAssignees([...selectedAssignees, { type: 'user', id: u.id, name: u.name, email: u.email }]);
-    };
-    const handleEmailKeyDown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addEmailAssignee(); } };
-
-    const assignAsTask = async (e) => {
-        if (e) e.preventDefault();
-        if (!blob) { toast.error('No recording data available'); return; }
-        if (!assignForm.title.trim()) { toast.error('Please add a title'); return; }
-        if (selectedAssignees.length === 0) { toast.error('Please select at least one assignee'); return; }
-        if (!assignForm.due_date) { toast.error('Please pick a due date'); return; }
-        setSaving(true);
+    const copyLink = async () => {
         try {
-            const ref = await ensureUploaded();
-            const recRes = await axios.post(`${API}/recordings/standalone`, {
-                recording_url: ref.storage_path || ref.path,
-                title,
-                duration_seconds: duration,
-                size_bytes: blob?.size,
-                mime_type: blob?.type,
-            });
-            const linkNote = `\n\n<p>🎥 <a href="${recRes.data.shareable_link}" target="_blank" rel="noopener noreferrer">Screen recording</a></p>`;
-            const description = (assignForm.description || '') + linkNote;
-
-            const assigneeList = selectedAssignees.map((a) => a.type === 'user' ? a.id : a.value);
-            if (assigneeList.length === 1) {
-                await axios.post(`${API}/tasks`, {
-                    title: assignForm.title,
-                    description,
-                    assigned_to: assigneeList[0],
-                    due_date: assignForm.due_date,
-                    priority: assignForm.priority,
-                });
-            } else {
-                await axios.post(`${API}/tasks/bulk`, {
-                    title: assignForm.title,
-                    description,
-                    assignees: assigneeList,
-                    due_date: assignForm.due_date,
-                    priority: assignForm.priority,
-                });
-            }
-            toast.success('Task created with the recording attached');
-            try { await clearRecordingBlob(); } catch { /* noop */ }
-            setTimeout(() => { try { window.close(); } catch { /* noop */ } navigate('/dashboard'); }, 600);
-        } catch (err) {
-            toast.error(err?.response?.data?.detail || err?.message || 'Failed to create task');
-        } finally { setSaving(false); }
-    };
-
-    const copyLink = () => {
-        navigator.clipboard.writeText(shareLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(shareLink);
+            setCopied(true);
+            toast.success('Link copied');
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error('Could not copy link');
+        }
     };
 
     const downloadLocal = () => {
         if (!videoUrl) return;
         const a = document.createElement('a');
         a.href = videoUrl;
-        a.download = `recording-${Date.now()}.webm`;
+        a.download = `${(title || 'recording').replace(/[^\w\- ]+/g, '').trim() || 'recording'}.webm`;
         a.click();
     };
 
+    const discard = async () => {
+        if (shareLink) {
+            navigate('/recordings');
+            return;
+        }
+        if (!window.confirm('Discard this recording? It will not be saved.')) return;
+        try { await clearRecordingBlob(); } catch { /* noop */ }
+        try { delete window.__tskLastRecordingBlob; } catch { /* noop */ }
+        try {
+            sessionStorage.removeItem('tsk_last_recording_url');
+            sessionStorage.removeItem('tsk_last_recording_type');
+            sessionStorage.removeItem('tsk_last_recording_size');
+        } catch { /* noop */ }
+        try { if (window.opener) { window.close(); return; } } catch { /* noop */ }
+        navigate('/recordings');
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Sticky header with Back + Library */}
-            <header className="bg-white border-b sticky top-0 z-30">
-                <div className="container mx-auto px-6 py-3 flex items-center gap-3 max-w-4xl">
-                    <Button variant="ghost" size="sm" onClick={() => { try { if (window.opener) { window.close(); return; } } catch { /* noop */ } navigate('/dashboard'); }} className="rounded-full" data-testid="recording-back-btn">
+        <div className="min-h-screen bg-slate-950 text-white">
+            <header className="border-b border-white/10 sticky top-0 z-30 bg-slate-950/90 backdrop-blur">
+                <div className="container mx-auto px-4 sm:px-6 py-3 flex items-center gap-3 max-w-5xl">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { try { if (window.opener) { window.close(); return; } } catch { /* noop */ } navigate('/recordings'); }}
+                        className="rounded-full text-white hover:bg-white/10"
+                        data-testid="recording-back-btn"
+                    >
                         <ArrowLeft className="w-4 h-4 mr-1" /> Back
                     </Button>
-                    <div className="flex-1">
-                        <h1 className="text-lg font-semibold flex items-center gap-2"><Video className="w-4 h-4 text-indigo-600" /> Preview &amp; Share</h1>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-base sm:text-lg font-semibold flex items-center gap-2 truncate">
+                            <Video className="w-4 h-4 text-rose-400 shrink-0" /> Preview &amp; save
+                        </h1>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/recordings')} className="rounded-full" data-testid="open-library-btn">
-                        <Library className="w-4 h-4 mr-1" /> My library
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/recordings')} className="rounded-full text-white/80 hover:bg-white/10" data-testid="open-library-btn">
+                        <Library className="w-4 h-4 mr-1" /> Library
                     </Button>
                 </div>
             </header>
 
-            <div className="container mx-auto px-6 py-6 max-w-4xl">
-                <div className="bg-black rounded-2xl overflow-hidden mb-4">
+            <div className="container mx-auto px-4 sm:px-6 py-6 max-w-5xl">
+                <div className="bg-black rounded-2xl overflow-hidden mb-5 border border-white/10 shadow-2xl">
                     {videoUrl ? (
-                        <video src={videoUrl} controls autoPlay onLoadedMetadata={handleLoadedMetadata} className="w-full max-h-[60vh] bg-black" />
+                        <video
+                            src={videoUrl}
+                            controls
+                            autoPlay
+                            onLoadedMetadata={handleLoadedMetadata}
+                            className="w-full max-h-[62vh] bg-black"
+                            data-testid="recording-preview-video"
+                        />
                     ) : (
-                        <div className="p-10 text-center text-white">
+                        <div className="p-12 text-center">
                             <div className="inline-flex items-center gap-2 mb-3">
                                 <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
                                 <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" style={{ animationDelay: '150ms' }} />
                                 <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" style={{ animationDelay: '300ms' }} />
                             </div>
-                            <p className="text-sm opacity-80">Looking for your recording...</p>
-                            <p className="text-xs opacity-60 mt-1">If nothing appears in a few seconds, return to the previous tab and try recording again.</p>
+                            <p className="text-sm text-white/80">{looking ? 'Looking for your recording…' : 'No recording found.'}</p>
+                            <p className="text-xs text-white/50 mt-1">If nothing appears, go back and record again.</p>
                         </div>
                     )}
                 </div>
 
-                {/* Title editor + download */}
-                <div className="flex gap-2 items-center mb-4 flex-wrap">
-                    <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Give this recording a name" className="rounded-full max-w-md" data-testid="recording-title-input" />
-                    <Button variant="outline" onClick={downloadLocal} disabled={!videoUrl} className="rounded-full ml-auto"><Download className="w-4 h-4 mr-1" /> Download</Button>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-white/50 mb-4">
+                    {fmtDuration(duration) && <span>Duration {fmtDuration(duration)}</span>}
+                    {fmtSize(blob?.size) && <span>· {fmtSize(blob.size)}</span>}
+                    {blob?.type && <span>· {blob.type.replace('video/', '').toUpperCase()}</span>}
                 </div>
 
-                {/* Primary action — Save & share (also stores in library) */}
-                <div className="bg-white border-2 rounded-2xl p-5 mb-4">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-5">
+                    <div>
+                        <label className="text-xs font-medium text-white/60 uppercase tracking-wider block mb-1.5">Title</label>
+                        <Input
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Give this recording a name"
+                            className="rounded-xl bg-white text-slate-900 border-0 h-11"
+                            data-testid="recording-title-input"
+                            disabled={!!shareLink}
+                        />
+                    </div>
+
                     {!shareLink ? (
-                        <div className="flex flex-col items-start gap-3">
-                            <p className="text-sm text-muted-foreground">Save this recording — you&apos;ll get a shareable link and it&apos;ll appear in your library.</p>
-                            <Button onClick={saveAndShare} disabled={saving || !blob} className="rounded-full h-11 px-5" data-testid="save-share-btn">
-                                {saving ? `Uploading ${uploadProgress}%...` : '💾 Save & get share link'}
-                            </Button>
+                        <div className="space-y-3">
+                            <p className="text-sm text-white/70">
+                                Save to your library and get a shareable link anyone can watch — no login required.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    onClick={saveAndShare}
+                                    disabled={saving || !blob}
+                                    className="rounded-full h-11 px-6 bg-rose-500 hover:bg-rose-600 text-white"
+                                    data-testid="save-share-btn"
+                                >
+                                    <Link2 className="w-4 h-4 mr-2" />
+                                    {saving ? `Uploading ${uploadProgress}%…` : 'Save & get link'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={downloadLocal}
+                                    disabled={!videoUrl}
+                                    className="rounded-full h-11 px-5 bg-transparent border-white/20 text-white hover:bg-white/10"
+                                    data-testid="download-recording-btn"
+                                >
+                                    <Download className="w-4 h-4 mr-2" /> Download
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    onClick={discard}
+                                    className="rounded-full h-11 px-4 text-white/60 hover:text-white hover:bg-white/10 ml-auto"
+                                    data-testid="discard-recording-btn"
+                                >
+                                    <Trash2 className="w-4 h-4 mr-1" /> Discard
+                                </Button>
+                            </div>
                             {saving && (
-                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div className="h-full bg-rose-500 transition-all" style={{ width: `${uploadProgress}%` }} />
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
-                                <Check className="w-4 h-4" /> Saved! Anyone with this link can view your recording.
+                        <div className="space-y-4" data-testid="share-success-panel">
+                            <div className="flex items-center gap-2 text-sm text-emerald-300 font-medium">
+                                <Check className="w-4 h-4" /> Saved. Anyone with this link can watch your recording.
                             </div>
-                            <div className="flex items-center gap-2">
-                                <input value={shareLink} readOnly className="flex-1 border rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono" data-testid="share-link-input" />
-                                <Button onClick={copyLink} variant="outline" className="rounded-full" data-testid="copy-share-btn">{copied ? <><Check className="w-4 h-4 mr-1" /> Copied</> : <><Copy className="w-4 h-4 mr-1" /> Copy</>}</Button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                                <Button variant="outline" onClick={() => setShowAssign((v) => !v)} className="rounded-full" data-testid="toggle-assign-form-btn">
-                                    <ListPlus className="w-4 h-4 mr-1" /> {showAssign ? 'Hide task form' : 'Assign as a task'}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                <input
+                                    value={shareLink}
+                                    readOnly
+                                    className="flex-1 border border-white/15 rounded-xl px-3 py-2.5 text-sm bg-black/40 font-mono text-white"
+                                    data-testid="share-link-input"
+                                />
+                                <Button onClick={copyLink} className="rounded-full bg-white text-slate-900 hover:bg-slate-100" data-testid="copy-share-btn">
+                                    {copied ? <><Check className="w-4 h-4 mr-1" /> Copied</> : <><Copy className="w-4 h-4 mr-1" /> Copy link</>}
                                 </Button>
-                                <Button variant="outline" onClick={() => navigate('/recordings')} className="rounded-full">
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button variant="outline" onClick={downloadLocal} disabled={!videoUrl} className="rounded-full bg-transparent border-white/20 text-white hover:bg-white/10">
+                                    <Download className="w-4 h-4 mr-1" /> Download
+                                </Button>
+                                <Button variant="outline" onClick={() => navigate('/recordings')} className="rounded-full bg-transparent border-white/20 text-white hover:bg-white/10">
                                     <Library className="w-4 h-4 mr-1" /> Go to library
                                 </Button>
+                                <a
+                                    href={shareLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center h-9 px-4 rounded-full border border-white/20 text-sm hover:bg-white/10"
+                                >
+                                    Open share page
+                                </a>
                             </div>
                         </div>
                     )}
                 </div>
-
-                {/* Assign as task form — mirrors TaskHub's create-task form */}
-                {(showAssign || !shareLink) && (
-                    <div className="bg-white border-2 rounded-2xl p-5" data-testid="assign-form-panel">
-                        {!showAssign && (
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-semibold text-sm">Want to also assign this as a task?</h3>
-                                <Button variant="ghost" size="sm" onClick={() => setShowAssign(true)} className="rounded-full">
-                                    <ListPlus className="w-4 h-4 mr-1" /> Open form
-                                </Button>
-                            </div>
-                        )}
-                        {(showAssign) && (
-                            <form onSubmit={assignAsTask} className="space-y-4">
-                                <div>
-                                    <Label htmlFor="ra-title">Title</Label>
-                                    <Input id="ra-title" value={assignForm.title} onChange={(e) => setAssignForm({ ...assignForm, title: e.target.value })} className="rounded-xl" data-testid="assign-title-input" />
-                                </div>
-
-                                <div>
-                                    <Label>Description</Label>
-                                    <RichTextEditor value={assignForm.description} onChange={(val) => setAssignForm({ ...assignForm, description: val })} placeholder="Add context — the recording link will be attached automatically." />
-                                </div>
-
-                                <div ref={dropdownRef}>
-                                    <Label>Assign to</Label>
-                                    {selectedAssignees.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5 mb-2 mt-1">
-                                            {selectedAssignees.map((a, i) => (
-                                                <span key={i} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-1 rounded-full text-xs">
-                                                    {a.type === 'user' ? `${a.name} <${a.email}>` : a.value}
-                                                    <button type="button" onClick={() => removeAssignee(i)} className="ml-0.5 hover:text-indigo-950"><X className="w-3 h-3" /></button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <div className="relative">
-                                        <Input
-                                            placeholder="Type email and press Enter — or click a teammate below"
-                                            value={emailInput}
-                                            onChange={(e) => setEmailInput(e.target.value)}
-                                            onFocus={() => setShowUserDropdown(true)}
-                                            onKeyDown={handleEmailKeyDown}
-                                            className="rounded-xl"
-                                            data-testid="assign-email-input"
-                                        />
-                                        {showUserDropdown && users.length > 0 && (
-                                            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                                                {users.map((u) => {
-                                                    const isSelected = selectedAssignees.some((a) => a.type === 'user' && a.id === u.id);
-                                                    return (
-                                                        <div key={u.id} onClick={() => toggleUser(u)} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer ${isSelected ? 'bg-indigo-50' : ''}`}>
-                                                            <Checkbox checked={isSelected} className="pointer-events-none" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium truncate">{u.name}</p>
-                                                                <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">Select multiple teammates or type any email. Press Enter to add an email.</p>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <Label>Due date</Label>
-                                        <Input type="date" value={assignForm.due_date} onChange={(e) => setAssignForm({ ...assignForm, due_date: e.target.value })} className="rounded-xl" data-testid="assign-due-input" />
-                                    </div>
-                                    <div>
-                                        <Label>Priority</Label>
-                                        <Select value={assignForm.priority} onValueChange={(v) => setAssignForm({ ...assignForm, priority: v })}>
-                                            <SelectTrigger className="rounded-xl" data-testid="assign-priority-select"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Low">Low</SelectItem>
-                                                <SelectItem value="Medium">Medium</SelectItem>
-                                                <SelectItem value="High">High</SelectItem>
-                                                <SelectItem value="Urgent">Urgent</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                <Button type="submit" disabled={saving || selectedAssignees.length === 0} className="w-full rounded-full h-11" data-testid="create-task-btn">
-                                    <Plus className="w-4 h-4 mr-1" />
-                                    {saving ? 'Creating...' : selectedAssignees.length > 1 ? `Create ${selectedAssignees.length} Tasks` : 'Create Task'}
-                                </Button>
-                            </form>
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     );

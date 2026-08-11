@@ -9,8 +9,6 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     const clampPos = (p) => {
         const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
         const h = typeof window !== 'undefined' ? window.innerHeight : 768;
-        // Make sure the bar always ends up on-screen (fix "controls not visible" cases where
-        // stale saved positions push it below the viewport).
         return {
             x: Math.max(12, Math.min(w - 380, p?.x ?? 24)),
             y: Math.max(12, Math.min(h - 96, p?.y ?? (h - 96))),
@@ -77,7 +75,6 @@ const WebcamBubble = ({ stream, mirrored = true }) => {
         const v = videoRef.current;
         if (!v || !stream) return;
         v.srcObject = stream;
-        // Kick playback (autoplay is muted so browser allows it)
         const play = () => v.play().catch(() => {});
         v.onloadedmetadata = play;
         play();
@@ -90,7 +87,6 @@ const WebcamBubble = ({ stream, mirrored = true }) => {
                 autoPlay muted playsInline
                 style={{ transform: mirrored ? 'scaleX(-1)' : 'none', width: '100%', height: '100%', objectFit: 'cover' }}
             />
-            {/* Small "REC" label so users understand this preview is being recorded into the canvas composite */}
             <div className="absolute bottom-1 left-1 right-1 flex justify-center pointer-events-none">
                 <span className="text-[10px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded shadow">● REC</span>
             </div>
@@ -99,14 +95,15 @@ const WebcamBubble = ({ stream, mirrored = true }) => {
 };
 
 /**
- * Robust screen recorder:
- *  - Requests webcam + mic FIRST (so the getDisplayMedia dialog isn't the only prompt)
- *  - Does NOT set preferCurrentTab (some browsers use it to force tab selection)
- *  - Lets the user freely pick monitor / window / tab in the browser picker
- *  - Falls back gracefully if webcam or mic fail
+ * Loom-style screen recorder:
+ *  - Mic + camera first, then free screen/window/tab picker
+ *  - Canvas composites screen + circular webcam bubble
+ *  - Pause / restart / stop with floating or popup controls
+ *  - Saves blob to IndexedDB and opens the preview/save editor
  */
 export const ScreenRecorder = ({ onSaved }) => {
     const [starting, setStarting] = useState(false);
+    const [countdown, setCountdown] = useState(null);
     const [recording, setRecording] = useState(false);
     const [paused, setPaused] = useState(false);
     const [micOn, setMicOn] = useState(true);
@@ -122,6 +119,7 @@ export const ScreenRecorder = ({ onSaved }) => {
     const camStreamRef = useRef(null);
     const mixedStreamRef = useRef(null);
     const canvasStreamRef = useRef(null);
+    const audioCtxRef = useRef(null);
     const rafRef = useRef(null);
     const screenVideoElRef = useRef(null);
     const camVideoElRef = useRef(null);
@@ -129,9 +127,15 @@ export const ScreenRecorder = ({ onSaved }) => {
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
     const mimeTypeRef = useRef('video/webm');
+    const discardOnStopRef = useRef(false);
+    const camOnRef = useRef(camOn);
+
+    useEffect(() => { camOnRef.current = camOn; }, [camOn]);
 
     const stopAllTracks = () => {
         if (rafRef.current) { try { cancelAnimationFrame(rafRef.current); } catch { /* noop */ } rafRef.current = null; }
+        try { audioCtxRef.current?.close?.(); } catch { /* noop */ }
+        audioCtxRef.current = null;
         [displayStreamRef, micStreamRef, camStreamRef, mixedStreamRef, canvasStreamRef].forEach((r) => {
             try { r.current?.getTracks?.().forEach((t) => t.stop()); } catch { /* noop */ }
             r.current = null;
@@ -139,6 +143,39 @@ export const ScreenRecorder = ({ onSaved }) => {
         screenVideoElRef.current = null;
         camVideoElRef.current = null;
         setCamStream(null);
+    };
+
+    const mixAudioTracks = (displayStream, micStream, includeMic) => {
+        const tabTracks = displayStream?.getAudioTracks?.() || [];
+        const micTracks = (includeMic && micStream) ? (micStream.getAudioTracks() || []) : [];
+        if (tabTracks.length === 0 && micTracks.length === 0) return [];
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) {
+                return [...tabTracks, ...micTracks];
+            }
+            const ctx = new AudioCtx();
+            audioCtxRef.current = ctx;
+            const dest = ctx.createMediaStreamDestination();
+            let connected = 0;
+            for (const track of tabTracks) {
+                const src = ctx.createMediaStreamSource(new MediaStream([track]));
+                src.connect(dest);
+                connected += 1;
+            }
+            for (const track of micTracks) {
+                const src = ctx.createMediaStreamSource(new MediaStream([track]));
+                const gain = ctx.createGain();
+                gain.gain.value = 1.0;
+                src.connect(gain);
+                gain.connect(dest);
+                connected += 1;
+            }
+            if (!connected) return [];
+            return dest.stream.getAudioTracks();
+        } catch {
+            return [...tabTracks, ...micTracks];
+        }
     };
 
     // Composite screen video + circular webcam bubble into a canvas and return its stream.
@@ -170,55 +207,49 @@ export const ScreenRecorder = ({ onSaved }) => {
         canvas.height = height;
         const ctx = canvas.getContext('2d', { alpha: false });
 
-        // Bubble geometry (~14% of the smaller dimension, min 120px, capped 260px)
         const computeBubble = () => {
             const size = Math.max(120, Math.min(260, Math.round(Math.min(width, height) * 0.16)));
             const margin = Math.round(size * 0.14);
             const cx = margin + size / 2;
             const cy = height - margin - size / 2;
-            return { size, cx, cy, margin };
+            return { size, cx, cy };
         };
 
-        const draw = () => {
+        let lastDraw = 0;
+        const frameInterval = 1000 / 30;
+        const draw = (now) => {
+            rafRef.current = requestAnimationFrame(draw);
+            if (now - lastDraw < frameInterval) return;
+            lastDraw = now;
             try {
-                // 1) Fill background (black) then draw the screen frame
                 ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, width, height);
                 if (screenVideo.readyState >= 2) {
                     ctx.drawImage(screenVideo, 0, 0, width, height);
                 }
-                // 2) Draw circular webcam bubble in bottom-left, mirrored, with white border
                 if (camVideo && camOnRef.current && camVideo.readyState >= 2) {
                     const { size, cx, cy } = computeBubble();
                     const r = size / 2;
                     ctx.save();
-                    // White ring
                     ctx.beginPath();
                     ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
                     ctx.fillStyle = '#ffffff';
                     ctx.fill();
-                    // Clip to circle
                     ctx.beginPath();
                     ctx.arc(cx, cy, r, 0, Math.PI * 2);
                     ctx.clip();
-                    // Mirror the webcam horizontally to feel natural
                     ctx.translate(cx + r, cy - r);
                     ctx.scale(-1, 1);
-                    // Cover fit: compute source crop to preserve aspect
                     const cw = camVideo.videoWidth || size;
                     const ch = camVideo.videoHeight || size;
                     const sr = cw / ch;
                     let sx = 0, sy = 0, sW = cw, sH = ch;
-                    if (sr > 1) { // wider than tall
-                        sW = ch; sx = (cw - ch) / 2;
-                    } else if (sr < 1) {
-                        sH = cw; sy = (ch - cw) / 2;
-                    }
+                    if (sr > 1) { sW = ch; sx = (cw - ch) / 2; }
+                    else if (sr < 1) { sH = cw; sy = (ch - cw) / 2; }
                     ctx.drawImage(camVideo, sx, sy, sW, sH, 0, 0, size, size);
                     ctx.restore();
                 }
             } catch { /* keep looping */ }
-            rafRef.current = requestAnimationFrame(draw);
         };
         rafRef.current = requestAnimationFrame(draw);
 
@@ -227,14 +258,9 @@ export const ScreenRecorder = ({ onSaved }) => {
         return canvasStream;
     };
 
-    // Keep a live ref of camOn so the draw loop reflects toggles in real time
-    const camOnRef = useRef(camOn);
-    useEffect(() => { camOnRef.current = camOn; }, [camOn]);
-
-    // Expose a small imperative API on window so the standalone controls popup can drive us.
     useEffect(() => {
         window.__tskRecorderApi = {
-            getState: () => ({ recording, paused, seconds, micOn, camOn }),
+            getState: () => ({ recording, paused, seconds, micOn, camOn, countdown }),
             stop: () => stop(),
             pauseResume: () => pauseResume(),
             restart: () => restart(),
@@ -245,33 +271,55 @@ export const ScreenRecorder = ({ onSaved }) => {
             try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [recording, paused, seconds, micOn, camOn]);
+    }, [recording, paused, seconds, micOn, camOn, countdown]);
 
-    const start = async () => {
+    const finalizeAndOpenEditor = async (blob) => {
+        if (!blob || blob.size === 0) {
+            toast.error('Recording was empty');
+            return;
+        }
+        try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
+        try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
+        const localUrl = URL.createObjectURL(blob);
+        try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
+        try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
+        try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
+        if (onSaved) onSaved(blob, localUrl);
+        toast.success('Recording ready — opening preview...');
+        let editorWin = null;
+        try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
+        if (!editorWin) {
+            toast.info('Popup blocked — opening editor in this tab');
+            window.location.href = '/recording/edit?pending=1';
+        }
+    };
+
+    const beginRecording = async () => {
         setStarting(true);
         let micErr = null;
         let camErr = null;
         try {
-            // 1) Ask for webcam + mic FIRST so the small bubble is ready before the screen picker
             if (camOn) {
                 try {
-                    const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 320, facingMode: 'user' } });
+                    const cam = await navigator.mediaDevices.getUserMedia({
+                        video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
+                    });
                     camStreamRef.current = cam;
                     setCamStream(cam);
                 } catch (e) { camErr = e; }
             }
             if (micOn) {
                 try {
-                    const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+                    const mic = await navigator.mediaDevices.getUserMedia({
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+                    });
                     micStreamRef.current = mic;
                 } catch (e) { micErr = e; }
             }
 
-            // 2) Screen picker (native dialog offers Screen / Window / Chrome Tab tabs)
             const display = await navigator.mediaDevices.getDisplayMedia({
                 video: { frameRate: 30, cursor: 'always' },
                 audio: true,
-                // Do NOT set preferCurrentTab — that forces the picker to only offer current tab in some browsers.
                 selfBrowserSurface: 'include',
                 surfaceSwitching: 'include',
                 systemAudio: 'include',
@@ -280,8 +328,14 @@ export const ScreenRecorder = ({ onSaved }) => {
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
 
-            // 3) Build the composite video via canvas (screen + circular webcam bubble).
-            //    If canvas composite fails for any reason, fall back to the raw screen stream so recording still succeeds.
+            // Loom-style 3-2-1 after the user picks a surface
+            for (let n = 3; n >= 1; n -= 1) {
+                setCountdown(n);
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise((r) => setTimeout(r, 700));
+            }
+            setCountdown(null);
+
             let compositeStream = null;
             try {
                 compositeStream = await buildCompositeStream(display, (camOn && camStreamRef.current) ? camStreamRef.current : null);
@@ -290,12 +344,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 toast.info('Webcam overlay disabled for this recording — continuing with just the screen.');
             }
 
-            // Mix audio: tab audio (from getDisplayMedia) + mic audio (if enabled)
-            const audioTracks = [
-                ...(display.getAudioTracks() || []),
-                ...((micStreamRef.current && micOn && micStreamRef.current.getAudioTracks()) || []),
-            ];
-            // Prefer the canvas composite (screen + webcam) but fall back to the raw screen tracks if the composite failed.
+            const audioTracks = mixAudioTracks(display, micStreamRef.current, micOn);
             const videoTracks = compositeStream?.getVideoTracks?.() || display.getVideoTracks();
             const mixed = new MediaStream([...videoTracks, ...audioTracks]);
             mixedStreamRef.current = mixed;
@@ -303,37 +352,29 @@ export const ScreenRecorder = ({ onSaved }) => {
             const preferred = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
             const mimeType = preferred.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || '';
             mimeTypeRef.current = mimeType || 'video/webm';
-            const rec = new MediaRecorder(mixed, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 1_200_000 });
+            // Loom-like quality: ~2.5 Mbps video + solid audio
+            const rec = new MediaRecorder(mixed, {
+                ...(mimeType ? { mimeType } : {}),
+                videoBitsPerSecond: 2_500_000,
+                audioBitsPerSecond: 128_000,
+            });
             chunksRef.current = [];
+            discardOnStopRef.current = false;
             rec.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
             rec.onstop = async () => {
                 if (timerRef.current) clearInterval(timerRef.current);
                 setRecording(false);
                 setPaused(false);
                 setSeconds(0);
+                const wasDiscard = discardOnStopRef.current;
+                discardOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
+                chunksRef.current = [];
                 stopAllTracks();
-                if (blob.size === 0) { toast.error('Recording was empty'); return; }
-                // Persist the blob in IndexedDB so the editor can reliably retrieve it
-                // even when opened in a new tab (window.opener is unreliable with COOP).
-                try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
-                // Also stash on window and sessionStorage as best-effort fallbacks
-                try { window.__tskLastRecordingBlob = blob; } catch { /* noop */ }
-                const localUrl = URL.createObjectURL(blob);
-                try { sessionStorage.setItem('tsk_last_recording_url', localUrl); } catch { /* noop */ }
-                try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
-                try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
-                if (onSaved) onSaved(blob, localUrl);
-                toast.success('Recording ready — opening preview...');
-                // Open the editor. Pass empty features string so window.opener stays accessible
-                // as an additional fallback (IndexedDB is the primary channel now).
-                let editorWin = null;
-                try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
-                if (!editorWin) {
-                    // Popup blocked — same-tab fallback
-                    toast.info('Popup blocked — opening editor in this tab');
-                    window.location.href = '/recording/edit?pending=1';
-                }
+                try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
+                setPopupOpen(false);
+                if (wasDiscard) return;
+                await finalizeAndOpenEditor(blob);
             };
             recorderRef.current = rec;
             display.getVideoTracks()[0].addEventListener('ended', () => {
@@ -344,8 +385,6 @@ export const ScreenRecorder = ({ onSaved }) => {
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-            // Open a small popup window with the controls so they truly "float over the selected screen"
-            // (as a separate OS window instead of an overlay inside the recorded tab).
             openControlsPopup();
 
             const surf = settings.displaySurface;
@@ -357,18 +396,21 @@ export const ScreenRecorder = ({ onSaved }) => {
             if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
         } catch (e) {
             if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
+            setCountdown(null);
             stopAllTracks();
         } finally { setStarting(false); }
     };
 
+    const start = () => beginRecording();
+
     const stop = () => {
+        discardOnStopRef.current = false;
         try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); }
         catch { stopAllTracks(); }
         try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
         setPopupOpen(false);
     };
 
-    // Open a small standalone OS window (via popup features) so controls "float" separately from the recorded surface.
     const openControlsPopup = () => {
         try {
             const width = 380;
@@ -380,7 +422,6 @@ export const ScreenRecorder = ({ onSaved }) => {
             if (w) {
                 controlsPopupRef.current = w;
                 setPopupOpen(true);
-                // Detect when user closes the popup so we can fall back to the in-tab bar
                 const check = setInterval(() => {
                     if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
                         clearInterval(check);
@@ -401,22 +442,24 @@ export const ScreenRecorder = ({ onSaved }) => {
     };
 
     const restart = () => {
+        // Discard the current take without opening the editor, then start a fresh one.
+        discardOnStopRef.current = true;
         try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); } catch { /* noop */ }
         chunksRef.current = [];
-        setTimeout(() => { start(); }, 400);
+        setTimeout(() => { beginRecording(); }, 350);
     };
 
     const toggleMic = () => {
         setMicOn((v) => {
             const on = !v;
-            micStreamRef.current?.getAudioTracks?.().forEach((t) => (t.enabled = on));
+            micStreamRef.current?.getAudioTracks?.().forEach((t) => { t.enabled = on; });
             return on;
         });
     };
     const toggleCam = () => {
         setCamOn((v) => {
             const on = !v;
-            camStreamRef.current?.getVideoTracks?.().forEach((t) => (t.enabled = on));
+            camStreamRef.current?.getVideoTracks?.().forEach((t) => { t.enabled = on; });
             return on;
         });
     };
@@ -425,10 +468,19 @@ export const ScreenRecorder = ({ onSaved }) => {
 
     return (
         <>
-            {!recording && (
+            {!recording && countdown == null && (
                 <Button variant="outline" onClick={start} disabled={starting} className="rounded-full" size="sm" data-testid="start-recording-btn">
                     <Video className="w-4 h-4 mr-2" /> {starting ? 'Starting...' : 'Record Screen'}
                 </Button>
+            )}
+
+            {countdown != null && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647 }}
+                    className="bg-black/50 flex items-center justify-center pointer-events-none" data-testid="recording-countdown">
+                    <div className="w-28 h-28 rounded-full bg-red-600 text-white flex items-center justify-center text-5xl font-bold shadow-2xl animate-pulse">
+                        {countdown}
+                    </div>
+                </div>
             )}
 
             {recording && !popupOpen && (
@@ -453,7 +505,6 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </FloatingBar>
             )}
 
-            {/* When the popup controls window is up, show a small status indicator at the top-left. */}
             {recording && popupOpen && (
                 <div style={{ position: 'fixed', top: 12, left: 12, zIndex: 2147483647 }}
                     className="bg-black/70 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg flex items-center gap-2">

@@ -71,6 +71,10 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
     const [editPriority, setEditPriority] = useState('Medium');
     const [editAssignees, setEditAssignees] = useState([]);
     const [editCriteria, setEditCriteria] = useState('');
+    const [editSales, setEditSales] = useState(false);
+    const [editScreenRecording, setEditScreenRecording] = useState(false);
+    // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
+    const [editingField, setEditingField] = useState(null);
 
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus(), 30);
@@ -417,6 +421,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
             return merged;
         });
         setEditCriteria(p.success_criteria || '');
+        setEditSales(!!sales);
+        setEditScreenRecording(!!p.requires_screen_recording);
+        setEditingField(null);
         setShowDetails(false);
         setClarifyAnswer('');
         setPeopleSearch('');
@@ -554,6 +561,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         setEditDue('');
         setEditPriority('Medium');
         setEditCriteria('');
+        setEditSales(false);
+        setEditScreenRecording(false);
+        setEditingField(null);
         setShowDetails(false);
         setClarifyAnswer('');
         setPeopleSearch('');
@@ -617,14 +627,14 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                     end_date: rec.end_date || null,
                     end_count: rec.end_count || null,
                     start_date: editDue ? editDue.slice(0, 10) : undefined,
-                    is_sales_task: !!(preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc)),
-                    category: (preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc)) ? 'Sales' : undefined,
+                    is_sales_task: !!editSales,
+                    category: editSales ? 'Sales' : undefined,
                     success_criteria: criteria,
                 }));
                 await Promise.all(payloads.map((p) => axios.post(`${API}/recurring`, p)));
                 toast.success(`Recurring series set up for ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
             } else {
-                const sales = !!(preview?.is_sales_task || looksLikeSales(text, editTitle, editDesc));
+                const sales = !!editSales;
                 const payload = {
                     title: editTitle.trim(),
                     description: editDesc || '',
@@ -633,7 +643,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                     priority: editPriority,
                     is_sales_task: sales,
                     category: sales ? 'Sales' : undefined,
-                    requires_screen_recording: preview?.requires_screen_recording || false,
+                    requires_screen_recording: !!editScreenRecording,
                     success_criteria: criteria,
                 };
                 if (unique.length === 1) {
@@ -729,13 +739,6 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
         } catch {
             return iso.replace('T', ' ');
         }
-    };
-
-    const assigneeLabel = () => {
-        if (editAssignees.length === 0) return 'no one yet';
-        const names = editAssignees.map((a) => a.name).filter(Boolean);
-        if (names.length <= 2) return names.join(' and ');
-        return `${names[0]} + ${names.length - 1} others`;
     };
 
     const personCount = editAssignees.reduce((n, a) => n + (a.member_count || a.members?.length || 1), 0);
@@ -1227,33 +1230,243 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
 
                             {readyToConfirm && (
                                 <div className="flex justify-start">
-                                    <div className="max-w-[95%] rounded-2xl rounded-bl-md bg-slate-50 border border-slate-200 px-3.5 py-3 space-y-3">
-                                        <p className="text-sm text-slate-800 leading-relaxed">
-                                            Got it — I&apos;ll assign <span className="font-semibold">&ldquo;{editTitle || 'this task'}&rdquo;</span>
-                                            {' '}to <span className="font-semibold">{assigneeLabel()}</span>
-                                            {editDue ? <> by <span className="font-semibold">{formatDue(editDue)}</span></> : null}
-                                            {' '}(<span className="font-semibold">{editPriority}</span>).
-                                        </p>
-                                        {editCriteria ? (
-                                            <p className="text-sm text-slate-600">
-                                                <span className="font-medium text-slate-800">Done well:</span> {editCriteria}
-                                            </p>
-                                        ) : null}
-                                        {(preview.is_sales_task || preview.requires_screen_recording || preview.recurring?.is_recurring) && (
-                                            <div className="flex flex-wrap gap-2">
-                                                {preview.recurring?.is_recurring && (
-                                                    <Badge className="bg-slate-200 text-slate-800">
-                                                        Recurring · {preview.recurring.frequency}
-                                                    </Badge>
-                                                )}
-                                                {preview.is_sales_task && (
-                                                    <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase text-[10px] tracking-wide">Sales</Badge>
-                                                )}
-                                                {preview.requires_screen_recording && (
-                                                    <Badge className="bg-violet-100 text-violet-800">Screen recording required</Badge>
+                                    <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-slate-50 border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
+                                        <p className="text-xs text-slate-500">Click any value to edit it.</p>
+
+                                        <div className="space-y-2.5 text-sm text-slate-800">
+                                            <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                                                <span className="text-slate-500 shrink-0 pt-1">Task</span>
+                                                {editingField === 'title' ? (
+                                                    <Input
+                                                        autoFocus
+                                                        value={editTitle}
+                                                        onChange={(e) => setEditTitle(e.target.value)}
+                                                        onBlur={() => setEditingField(null)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingField(null); }}
+                                                        className="h-8 text-sm rounded-lg flex-1 min-w-[180px]"
+                                                        data-testid="ai-inline-title"
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField('title')}
+                                                        className="font-semibold text-left rounded-md px-1.5 py-0.5 -mx-1 hover:bg-white border border-transparent hover:border-slate-200"
+                                                        data-testid="ai-chip-title"
+                                                        title="Edit title"
+                                                    >
+                                                        &ldquo;{editTitle || 'Untitled'}&rdquo;
+                                                    </button>
                                                 )}
                                             </div>
-                                        )}
+
+                                            <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                                                <span className="text-slate-500 shrink-0 pt-1">To</span>
+                                                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                                                    {editAssignees.map((a, i) => (
+                                                        <button
+                                                            key={`${a.kind}-${a.id || a.email || i}`}
+                                                            type="button"
+                                                            onClick={() => setEditingField(editingField === 'assignees' ? null : 'assignees')}
+                                                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border ${chipColor(a.kind)} hover:opacity-90`}
+                                                            data-testid={`ai-chip-assignee-${i}`}
+                                                            title="Edit assignees"
+                                                        >
+                                                            {a.name}
+                                                            <span
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                onClick={(e) => { e.stopPropagation(); removeAssignee(i); }}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeAssignee(i); } }}
+                                                                className="opacity-60 hover:opacity-100"
+                                                                aria-label="Remove assignee"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField(editingField === 'assignees' ? null : 'assignees')}
+                                                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border border-dashed border-slate-300 text-slate-600 hover:bg-white"
+                                                        data-testid="ai-chip-add-assignee"
+                                                    >
+                                                        <Plus className="w-3 h-3" /> Add
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {editingField === 'assignees' && (
+                                                <div className="rounded-xl border border-slate-200 bg-white p-2 space-y-2" data-testid="ai-inline-assignees">
+                                                    <Input
+                                                        autoFocus
+                                                        value={peopleSearch}
+                                                        onChange={(e) => setPeopleSearch(e.target.value)}
+                                                        placeholder="Search people or type an email…"
+                                                        className="h-8 text-sm rounded-lg"
+                                                        data-testid="ai-inline-assignee-search"
+                                                    />
+                                                    <div className="max-h-36 overflow-y-auto space-y-0.5">
+                                                        {filteredPeople.map((u) => {
+                                                            const selected = editAssignees.some((a) => a.id === u.id || (u.email && a.email === u.email));
+                                                            return (
+                                                                <button
+                                                                    key={u.id || u.email}
+                                                                    type="button"
+                                                                    disabled={selected}
+                                                                    onClick={() => pickPerson(u)}
+                                                                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
+                                                                >
+                                                                    <span className="font-medium">{u.name}</span>
+                                                                    {u.email ? <span className="text-slate-500 ml-1">{u.email}</span> : null}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                        {isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const email = peopleSearch.trim();
+                                                                    setEditAssignees((prev) => [...prev, { kind: 'email', email, name: email }]);
+                                                                    setPeopleSearch('');
+                                                                }}
+                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-50"
+                                                            >
+                                                                Add email <span className="font-medium">{peopleSearch.trim()}</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <button type="button" onClick={() => setEditingField(null)} className="text-[11px] text-slate-500 underline">Done</button>
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                                <span className="text-slate-500 shrink-0">Due</span>
+                                                {editingField === 'due' ? (
+                                                    <div className="flex-1 min-w-[200px]" data-testid="ai-inline-due">
+                                                        <DateTimePicker
+                                                            value={editDue}
+                                                            onChange={(v) => { setEditDue(v); setEditingField(null); }}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField('due')}
+                                                        className="font-semibold rounded-md px-1.5 py-0.5 -mx-1 hover:bg-white border border-transparent hover:border-slate-200"
+                                                        data-testid="ai-chip-due"
+                                                    >
+                                                        {formatDue(editDue) || 'Pick a date'}
+                                                    </button>
+                                                )}
+                                                <span className="text-slate-400">·</span>
+                                                <span className="text-slate-500 shrink-0">Priority</span>
+                                                {editingField === 'priority' ? (
+                                                    <Select value={editPriority} onValueChange={(v) => { setEditPriority(v); setEditingField(null); }}>
+                                                        <SelectTrigger className={`h-8 w-[130px] rounded-lg ${priorityColor}`} data-testid="ai-inline-priority">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="Low">Low</SelectItem>
+                                                            <SelectItem value="Medium">Medium</SelectItem>
+                                                            <SelectItem value="High">High</SelectItem>
+                                                            <SelectItem value="Urgent">Urgent</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField('priority')}
+                                                        className={`font-semibold rounded-full px-2.5 py-0.5 text-xs ${priorityColor}`}
+                                                        data-testid="ai-chip-priority"
+                                                    >
+                                                        {editPriority}
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                                                <span className="text-slate-500 shrink-0 pt-1">Done well</span>
+                                                {editingField === 'criteria' ? (
+                                                    <Textarea
+                                                        autoFocus
+                                                        value={editCriteria}
+                                                        onChange={(e) => setEditCriteria(e.target.value)}
+                                                        onBlur={() => setEditingField(null)}
+                                                        className="rounded-lg text-sm min-h-[56px] flex-1"
+                                                        placeholder="What does done well look like?"
+                                                        rows={2}
+                                                        data-testid="ai-inline-criteria"
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField('criteria')}
+                                                        className="text-left text-slate-700 rounded-md px-1.5 py-0.5 -mx-1 hover:bg-white border border-transparent hover:border-slate-200 flex-1 min-w-[160px]"
+                                                        data-testid="ai-chip-criteria"
+                                                    >
+                                                        {editCriteria || <span className="text-slate-400 italic">Add success criteria (optional)</span>}
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                                                <span className="text-slate-500 shrink-0 pt-1">Notes</span>
+                                                {editingField === 'desc' ? (
+                                                    <Textarea
+                                                        autoFocus
+                                                        value={editDesc}
+                                                        onChange={(e) => setEditDesc(e.target.value)}
+                                                        onBlur={() => setEditingField(null)}
+                                                        className="rounded-lg text-sm min-h-[56px] flex-1"
+                                                        placeholder="Optional description"
+                                                        rows={2}
+                                                        data-testid="ai-inline-desc"
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingField('desc')}
+                                                        className="text-left text-slate-700 rounded-md px-1.5 py-0.5 -mx-1 hover:bg-white border border-transparent hover:border-slate-200 flex-1 min-w-[160px]"
+                                                        data-testid="ai-chip-desc"
+                                                    >
+                                                        {editDesc || <span className="text-slate-400 italic">Add description (optional)</span>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2">
+                                            {preview.recurring?.is_recurring && (
+                                                <Badge className="bg-slate-200 text-slate-800">
+                                                    Recurring · {preview.recurring.frequency}
+                                                </Badge>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditSales((v) => !v)}
+                                                className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-wide font-semibold border transition-colors ${
+                                                    editSales
+                                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                                data-testid="ai-chip-sales"
+                                            >
+                                                {editSales ? 'Sales' : 'Mark as sales'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditScreenRecording((v) => !v)}
+                                                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold border transition-colors ${
+                                                    editScreenRecording
+                                                        ? 'bg-violet-100 text-violet-800 border-violet-200'
+                                                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                                data-testid="ai-chip-screen-recording"
+                                            >
+                                                {editScreenRecording ? 'Screen recording required' : 'Require screen recording'}
+                                            </button>
+                                        </div>
+
                                         <div className="flex flex-wrap items-center gap-2 pt-1">
                                             <Button
                                                 type="button"
@@ -1273,7 +1486,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                 data-testid="ai-edit-details"
                                             >
                                                 <Pencil className="w-3.5 h-3.5" />
-                                                {showDetails ? 'Hide details' : 'Edit details'}
+                                                {showDetails ? 'Hide details' : 'All fields'}
                                             </Button>
                                             <button
                                                 type="button"
@@ -1432,7 +1645,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                 description: editDesc,
                                                 due_date: editDue,
                                                 priority: editPriority,
-                                                is_sales_task: preview.is_sales_task,
+                                                is_sales_task: editSales,
+                                                requires_screen_recording: editScreenRecording,
                                                 success_criteria: editCriteria,
                                             })}
                                             className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
@@ -1462,7 +1676,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, embedded = false }) => {
                                                 description: editDesc,
                                                 due_date: editDue,
                                                 priority: editPriority,
-                                                is_sales_task: preview.is_sales_task,
+                                                is_sales_task: editSales,
+                                                requires_screen_recording: editScreenRecording,
                                                 success_criteria: editCriteria,
                                             })}
                                             className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"

@@ -974,14 +974,59 @@ const SettingsPage = () => {
 export default SettingsPage;
 
 // -------- Smart Reminders card --------
-const SmartRemindersCard = ({ slackConnected }) => {
-    const [rule, setRule] = React.useState({
+const REMINDER_PRESETS = {
+    essential: {
+        label: 'Essential',
+        help: 'Only High/Urgent, before due + overdue, in-app. Quiet inbox.',
+        enabled: true,
+        triggers: ['time_before_due', 'overdue'],
+        hours_before_due: 4,
+        frequency_hours: 12,
+        channels: ['in_app'],
+        priorities: ['High', 'Urgent'],
+        max_emails_per_day: 3,
+        quiet_hours_start: 21,
+        quiet_hours_end: 8,
+    },
+    balanced: {
+        label: 'Balanced',
+        help: 'High/Urgent + Medium, email for deadlines, capped daily.',
         enabled: true,
         triggers: ['time_before_due', 'no_response', 'overdue'],
         hours_before_due: 4,
-        frequency_hours: 12,
+        frequency_hours: 8,
         channels: ['in_app', 'email'],
         priorities: ['Medium', 'High', 'Urgent'],
+        max_emails_per_day: 5,
+        quiet_hours_start: 21,
+        quiet_hours_end: 8,
+    },
+    assertive: {
+        label: 'Assertive',
+        help: 'All priorities & triggers. More follow-ups when work stalls.',
+        enabled: true,
+        triggers: ['time_before_due', 'no_response', 'no_progress', 'overdue'],
+        hours_before_due: 6,
+        frequency_hours: 4,
+        channels: ['in_app', 'email'],
+        priorities: ['Low', 'Medium', 'High', 'Urgent'],
+        max_emails_per_day: 8,
+        quiet_hours_start: 22,
+        quiet_hours_end: 7,
+    },
+};
+
+const SmartRemindersCard = ({ slackConnected }) => {
+    const [rule, setRule] = React.useState({
+        enabled: true,
+        triggers: ['time_before_due', 'overdue'],
+        hours_before_due: 4,
+        frequency_hours: 12,
+        channels: ['in_app'],
+        priorities: ['High', 'Urgent'],
+        max_emails_per_day: 5,
+        quiet_hours_start: 21,
+        quiet_hours_end: 8,
     });
     const [saving, setSaving] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
@@ -996,14 +1041,26 @@ const SmartRemindersCard = ({ slackConnected }) => {
         })();
     }, []);
 
-    const save = async (patch) => {
+    const save = async (patch, opts = {}) => {
         const next = { ...rule, ...patch };
+        // Never persist empty channels while enabled — fall back to in-app
+        if (next.enabled && (!next.channels || next.channels.length === 0)) {
+            next.channels = ['in_app'];
+        }
         setRule(next);
         setSaving(true);
         try {
             await axios.put(`${API}/reminders/rules`, next);
+            if (opts.notify) toast.success(opts.notify);
         } catch (_) { toast.error('Failed to save reminders'); }
         finally { setSaving(false); }
+    };
+
+    const applyPreset = (key) => {
+        const p = REMINDER_PRESETS[key];
+        if (!p) return;
+        const { label, help, ...settings } = p;
+        save(settings, { notify: `Applied “${label}” reminder preset` });
     };
 
     const toggleFrom = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
@@ -1013,17 +1070,24 @@ const SmartRemindersCard = ({ slackConnected }) => {
     }
 
     const nudgeWhen = [
-        { key: 'time_before_due', label: 'Before a due date', help: 'Heads-up while there\'s still time.' },
+        { key: 'time_before_due', label: 'Before a due date', help: 'One clear heads-up while there is still time.' },
         { key: 'no_response', label: 'Nobody accepted yet', help: 'When an assigned task is still pending.' },
         { key: 'no_progress', label: 'Work isn\'t moving', help: 'Accepted, but no activity for a while.' },
-        { key: 'overdue', label: 'Past due', help: 'Keep following up after the deadline.' },
+        { key: 'overdue', label: 'Past due', help: 'Follow up after the deadline — at your chosen gap.' },
     ];
 
     const channels = [
-        { key: 'in_app', label: 'In the app', help: 'Bell + browser notification' },
-        { key: 'email', label: 'Email', help: 'From Jarvis' },
+        { key: 'in_app', label: 'In the app', help: 'Bell notification only' },
+        { key: 'email', label: 'Email', help: 'From Jarvis — capped per day' },
         { key: 'slack', label: 'Slack', help: slackConnected ? 'Your team channel' : 'Ask admin to connect Slack', disabled: !slackConnected },
     ];
+
+    const valueLine = (() => {
+        if (!rule.enabled) return 'Reminders are off. You will not get automated nudges.';
+        const prios = (rule.priorities || []).join(', ') || 'none';
+        const ch = (rule.channels || []).join(' + ') || 'nowhere';
+        return `Nudging ${prios} via ${ch}. Before-due window: ${rule.hours_before_due}h · min gap: ${rule.frequency_hours}h${rule.channels?.includes('email') ? ` · ≤${rule.max_emails_per_day || 5} emails/day` : ''}.`;
+    })();
 
     return (
         <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
@@ -1032,7 +1096,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
                     <p className="text-xs text-muted-foreground">
-                        Turn on the situations you care about. Urgent tasks get chased sooner; Low stays quieter.
+                        You control every nudge. Defaults stay quiet so reminders help — they never spam.
                     </p>
                 </div>
                 <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
@@ -1049,24 +1113,47 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 </label>
             </div>
 
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2" data-testid="reminders-value-summary">
+                {valueLine}
+            </p>
+
             {rule.enabled && (
                 <div className="space-y-5 pt-2 border-t">
                     <div>
+                        <p className="text-sm font-medium text-slate-800 mb-1">Quick setup</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Start from a preset, then fine-tune below.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {Object.entries(REMINDER_PRESETS).map(([key, p]) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => applyPreset(key)}
+                                    className="text-left p-3 rounded-xl border border-slate-200 bg-white hover:border-rose-300 hover:bg-rose-50/40 transition-colors"
+                                    data-testid={`reminder-preset-${key}`}
+                                >
+                                    <span className="text-sm font-semibold text-slate-800 block">{p.label}</span>
+                                    <span className="text-[11px] text-slate-500">{p.help}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
                         <p className="text-sm font-medium text-slate-800">1. When should we nudge?</p>
-                        <p className="text-[11px] text-slate-500 mb-2">Check what you want. Uncheck the rest.</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Only checked situations fire. Unchecked means silence.</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {nudgeWhen.map((t) => (
                                 <label
                                     key={t.key}
                                     className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer ${
-                                        rule.triggers.includes(t.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:bg-slate-50'
+                                        (rule.triggers || []).includes(t.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200 hover:bg-slate-50'
                                     }`}
                                     data-testid={`reminder-trigger-${t.key}`}
                                 >
                                     <input
                                         type="checkbox"
-                                        checked={rule.triggers.includes(t.key)}
-                                        onChange={() => save({ triggers: toggleFrom(rule.triggers, t.key) })}
+                                        checked={(rule.triggers || []).includes(t.key)}
+                                        onChange={() => save({ triggers: toggleFrom(rule.triggers || [], t.key) })}
                                         className="mt-0.5 accent-rose-600"
                                     />
                                     <span>
@@ -1080,20 +1167,20 @@ const SmartRemindersCard = ({ slackConnected }) => {
 
                     <div>
                         <p className="text-sm font-medium text-slate-800">2. Which priorities?</p>
-                        <p className="text-[11px] text-slate-500 mb-2">Reminders only apply to the priorities you check.</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Leave Low unchecked unless you want more noise.</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {['Low', 'Medium', 'High', 'Urgent'].map((p) => (
                                 <label
                                     key={p}
                                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer text-sm ${
-                                        rule.priorities.includes(p) ? 'bg-teal-50 border-teal-200 font-medium' : 'bg-white border-slate-200'
+                                        (rule.priorities || []).includes(p) ? 'bg-teal-50 border-teal-200 font-medium' : 'bg-white border-slate-200'
                                     }`}
                                     data-testid={`reminder-priority-${p}`}
                                 >
                                     <input
                                         type="checkbox"
-                                        checked={rule.priorities.includes(p)}
-                                        onChange={() => save({ priorities: toggleFrom(rule.priorities, p) })}
+                                        checked={(rule.priorities || []).includes(p)}
+                                        onChange={() => save({ priorities: toggleFrom(rule.priorities || [], p) })}
                                         className="accent-teal-700"
                                     />
                                     {p}
@@ -1104,20 +1191,21 @@ const SmartRemindersCard = ({ slackConnected }) => {
 
                     <div>
                         <p className="text-sm font-medium text-slate-800">3. Where should we send them?</p>
+                        <p className="text-[11px] text-slate-500 mb-2">Email is off by default. Turn it on only if you want Jarvis in your inbox.</p>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                             {channels.map((c) => (
                                 <label
                                     key={c.key}
                                     className={`flex items-start gap-2.5 p-3 rounded-xl border ${
                                         c.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                                    } ${rule.channels.includes(c.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}
+                                    } ${(rule.channels || []).includes(c.key) ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}
                                     data-testid={`reminder-channel-${c.key}`}
                                 >
                                     <input
                                         type="checkbox"
                                         disabled={c.disabled}
-                                        checked={rule.channels.includes(c.key)}
-                                        onChange={() => !c.disabled && save({ channels: toggleFrom(rule.channels, c.key) })}
+                                        checked={(rule.channels || []).includes(c.key)}
+                                        onChange={() => !c.disabled && save({ channels: toggleFrom(rule.channels || [], c.key) })}
                                         className="mt-0.5 accent-rose-600"
                                     />
                                     <span>
@@ -1134,8 +1222,9 @@ const SmartRemindersCard = ({ slackConnected }) => {
                             type="button"
                             onClick={() => setShowTiming((v) => !v)}
                             className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-slate-700"
+                            data-testid="reminder-timing-toggle"
                         >
-                            <span>Timing (optional)</span>
+                            <span>Timing &amp; volume</span>
                             <span className="text-xs text-slate-500">{showTiming ? 'Hide' : 'Show'}</span>
                         </button>
                         {showTiming && (
@@ -1151,6 +1240,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                         className="rounded-xl mt-1 bg-white"
                                         data-testid="reminder-hours-before"
                                     />
+                                    <p className="text-[11px] text-slate-500 mt-1">Only fires if &quot;Before a due date&quot; is checked.</p>
                                 </div>
                                 <div>
                                     <Label className="text-xs text-muted-foreground">Wait at least this many hours between nudges</Label>
@@ -1163,7 +1253,48 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                         className="rounded-xl mt-1 bg-white"
                                         data-testid="reminder-frequency"
                                     />
-                                    <p className="text-[11px] text-slate-500 mt-1">Urgent/High may still come sooner than Low/Medium.</p>
+                                    <p className="text-[11px] text-slate-500 mt-1">Hard floor — we will not nudge the same task sooner.</p>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">Max reminder emails per day</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={20}
+                                        value={rule.max_emails_per_day ?? 5}
+                                        onChange={(e) => save({ max_emails_per_day: parseInt(e.target.value || '0', 10) })}
+                                        className="rounded-xl mt-1 bg-white"
+                                        data-testid="reminder-max-emails"
+                                        disabled={!(rule.channels || []).includes('email')}
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">0 = no emails even if Email is checked.</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Quiet from (hour, PST)</Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={23}
+                                            value={rule.quiet_hours_start ?? 21}
+                                            onChange={(e) => save({ quiet_hours_start: parseInt(e.target.value || '21', 10) })}
+                                            className="rounded-xl mt-1 bg-white"
+                                            data-testid="reminder-quiet-start"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Quiet until</Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={23}
+                                            value={rule.quiet_hours_end ?? 8}
+                                            onChange={(e) => save({ quiet_hours_end: parseInt(e.target.value || '8', 10) })}
+                                            className="rounded-xl mt-1 bg-white"
+                                            data-testid="reminder-quiet-end"
+                                        />
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 col-span-2">Quiet hours mute Low/Medium. Urgent still breaks through.</p>
                                 </div>
                             </div>
                         )}
