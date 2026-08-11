@@ -93,6 +93,7 @@ const TaskHub = () => {
 
     // AI Command Center dialog (primary flow for + New Task)
     const [showAIDialog, setShowAIDialog] = useState(false);
+    const aiQuickSnapRef = useRef(null);
 
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
@@ -1696,8 +1697,56 @@ const TaskHub = () => {
                 </Dialog>
 
                 {/* AI Command Center Dialog — primary flow for new tasks + Q&A + help */}
-                <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
-                    <DialogContent className="max-w-2xl w-full sm:w-full max-h-[92dvh] overflow-y-auto p-0 pb-[env(safe-area-inset-bottom,0px)]">
+                <Dialog
+                    open={showAIDialog}
+                    onOpenChange={async (open) => {
+                        if (!open) {
+                            // Persist in-progress quick-create so accidental dismiss doesn't lose work
+                            const snap = aiQuickSnapRef.current;
+                            if (snap && (snap.text?.trim() || snap.editTitle?.trim()) && !snap.sending) {
+                                try {
+                                    const a = (snap.editAssignees || [])[0];
+                                    const assigned = a?.id === 'self' ? 'self' : (a?.id || a?.email || '');
+                                    await axios.post(`${API}/tasks/drafts`, {
+                                        title: (snap.editTitle || snap.text || 'Untitled draft').trim().slice(0, 120),
+                                        description: snap.editDesc || snap.text || '',
+                                        due_date: snap.editDue || '',
+                                        priority: snap.editPriority || 'Medium',
+                                        assigned_to: assigned,
+                                        success_criteria: snap.editCriteria || undefined,
+                                    });
+                                    toast.message('Saved as draft', { description: 'You can resume it from Drafts below.' });
+                                    fetchDrafts();
+                                } catch (_) { /* silent */ }
+                            }
+                            aiQuickSnapRef.current = null;
+                        }
+                        setShowAIDialog(open);
+                    }}
+                >
+                    <DialogContent
+                        className="max-w-2xl w-full sm:w-full max-h-[92dvh] overflow-y-auto p-0 pb-[env(safe-area-inset-bottom,0px)]"
+                        // Portaled @mention / assignee pickers live on document.body — don't treat
+                        // those clicks as "outside" or the dialog closes and loses the task.
+                        onPointerDownOutside={(e) => {
+                            const t = e.target;
+                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
+                                e.preventDefault();
+                            }
+                        }}
+                        onInteractOutside={(e) => {
+                            const t = e.target;
+                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
+                                e.preventDefault();
+                            }
+                        }}
+                        onFocusOutside={(e) => {
+                            const t = e.target;
+                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
+                                e.preventDefault();
+                            }
+                        }}
+                    >
                         <div className="p-4 sm:p-6">
                             <DialogHeader className="mb-3">
                                 <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
@@ -1710,8 +1759,16 @@ const TaskHub = () => {
                             </DialogHeader>
                             <AIQuickCreate
                                 embedded
-                                onCreated={() => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); setShowAIDialog(false); }}
+                                onSnapshot={(snap) => { aiQuickSnapRef.current = snap; }}
+                                onCreated={() => {
+                                    aiQuickSnapRef.current = null;
+                                    fetchDashboard();
+                                    fetchParentGroups();
+                                    fetchDrafts();
+                                    setShowAIDialog(false);
+                                }}
                                 onOpenAdvanced={(prefill) => {
+                                    aiQuickSnapRef.current = null;
                                     if (prefill) {
                                         setTaskForm((f) => ({
                                             ...f,
