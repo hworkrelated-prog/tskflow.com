@@ -33,6 +33,7 @@ import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalFAB from '@/components/GlobalFAB';
 import VoiceMode from '@/components/VoiceMode';
+import CatchUpReview from '@/components/CatchUpReview';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
@@ -76,38 +77,85 @@ const AuthProvider = ({ children }) => {
         }
     }, [user]);
 
-    // Poll for pending mentions / notifications and fire native Chrome notifications
+    // Smart catch-up on login (replaces spammy per-task Chrome popups for backlog).
+    // Also poll only for *very recent* live events (mentions/nudges) — never reminders.
     useEffect(() => {
         if (!user) return;
         let cancelled = false;
-        const pollOnce = async () => {
+
+        const sanitize = (s) => (s || '')
+            .replace(/\u2014|\u2013/g, '-')
+            .replace(/\u2018|\u2019/g, "'")
+            .replace(/\u201c|\u201d/g, '"');
+
+        const runCatchUp = async () => {
+            if (cancelled) return;
+            const sessionKey = `tsk_catchup_shown_${user.id || user.email || 'me'}`;
+            try {
+                const res = await axios.get(`${API}/notifications/catch-up`);
+                if (cancelled) return;
+                const data = res.data;
+                if (!data?.has_items) return;
+
+                // Open the in-app review once per browser session
+                if (!sessionStorage.getItem(sessionKey)) {
+                    sessionStorage.setItem(sessionKey, '1');
+                    window.dispatchEvent(new CustomEvent('tskflow:catch-up', { detail: data }));
+
+                    // At most ONE summary OS toast (same tag collapses duplicates)
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        const s = data.summary || {};
+                        const parts = [];
+                        if (s.overdue_tasks) parts.push(`${s.overdue_tasks} overdue`);
+                        if (s.due_soon_tasks) parts.push(`${s.due_soon_tasks} due soon`);
+                        if (s.unread_mentions) parts.push(`${s.unread_mentions} mentions`);
+                        if (s.unread_nudges) parts.push(`${s.unread_nudges} nudges`);
+                        if (!parts.length && s.unread_reminders) parts.push(`${s.unread_reminders} reminders`);
+                        try {
+                            const notif = new Notification('Catch up on your work', {
+                                body: parts.join(' · ') || 'You have updates waiting in TskFlow',
+                                icon: '/favicon.ico',
+                                tag: 'tsk-catch-up',
+                            });
+                            notif.onclick = () => {
+                                window.focus();
+                                window.dispatchEvent(new CustomEvent('tskflow:open-catch-up'));
+                                notif.close();
+                            };
+                        } catch (_) { /* silent */ }
+                    }
+                }
+            } catch (_) { /* silent */ }
+        };
+
+        const pollLive = async () => {
             if (cancelled) return;
             try {
                 const res = await axios.get(`${API}/notifications/pending`);
                 const items = (res.data && res.data.notifications) || [];
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    items.forEach((n) => {
-                        try {
-                            const notif = new Notification(n.title || 'Tskflow', {
-                                body: n.body || '',
-                                icon: '/favicon.ico',
-                                tag: n.id,
-                            });
-                            notif.onclick = () => {
-                                window.focus();
-                                if (n.task_id) {
-                                    window.location.href = `/task/${n.task_id}`;
-                                }
-                                notif.close();
-                            };
-                        } catch (_) { /* silent */ }
-                    });
-                }
-            } catch (_) { /* silent — server may be down momentarily */ }
+                if (!items.length) return;
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                // Cap live OS toasts hard — never dump a backlog
+                items.slice(0, 3).forEach((n) => {
+                    try {
+                        const notif = new Notification(sanitize(n.title) || 'TskFlow', {
+                            body: sanitize(n.body),
+                            icon: '/favicon.ico',
+                            tag: n.id || n.task_id || 'tsk-live',
+                        });
+                        notif.onclick = () => {
+                            window.focus();
+                            if (n.task_id) window.location.href = `/task/${n.task_id}`;
+                            notif.close();
+                        };
+                    } catch (_) { /* silent */ }
+                });
+            } catch (_) { /* silent */ }
         };
-        // Fire once immediately, then every 30s
-        pollOnce();
-        const interval = setInterval(pollOnce, 30000);
+
+        runCatchUp();
+        // Live poll is infrequent and only for brand-new non-reminder events
+        const interval = setInterval(pollLive, 60000);
         return () => { cancelled = true; clearInterval(interval); };
     }, [user]);
 
@@ -125,10 +173,14 @@ const AuthProvider = ({ children }) => {
                         const data = JSON.parse(ev.data);
                         if (data.event === 'notification') {
                             window.dispatchEvent(new CustomEvent('tskflow:notification', { detail: data.notification }));
-                            // Also trigger a native notification if allowed
-                            if ('Notification' in window && Notification.permission === 'granted' && data.notification) {
+                            // Realtime OS toast for live events only — never for reminder backlog types
+                            const nType = data.notification?.type;
+                            const allowOs = nType && nType !== 'reminder';
+                            if (allowOs && 'Notification' in window && Notification.permission === 'granted' && data.notification) {
                                 try {
-                                    const n = new Notification(data.notification.title, { body: data.notification.body, tag: data.notification.id });
+                                    const title = (data.notification.title || 'TskFlow').replace(/\u2014|\u2013/g, '-');
+                                    const body = (data.notification.body || '').replace(/\u2014|\u2013/g, '-');
+                                    const n = new Notification(title, { body, tag: data.notification.id });
                                     n.onclick = () => { window.focus(); if (data.notification.task_id) window.location.href = `/task/${data.notification.task_id}`; };
                                 } catch (_) { /* noop */ }
                             }
@@ -410,6 +462,7 @@ function App() {
                 </Routes>
                 <GlobalFAB />
                 <VoiceMode />
+                <CatchUpReview />
             </BrowserRouter>
             <Toaster position="top-right" />
         </AuthProvider>

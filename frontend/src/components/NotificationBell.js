@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Bell, Check, CheckCheck } from 'lucide-react';
+import { Bell, Check, CheckCheck, Inbox } from 'lucide-react';
 import { API } from '@/App';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -89,6 +89,19 @@ export const NotificationBell = () => {
                             </button>
                         )}
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setOpen(false);
+                            window.dispatchEvent(new CustomEvent('tskflow:open-catch-up'));
+                        }}
+                        className="w-full px-4 py-2.5 text-left border-b bg-rose-50/60 hover:bg-rose-50 text-sm text-rose-900 flex items-center gap-2"
+                        data-testid="catch-up-link"
+                    >
+                        <Inbox className="w-4 h-4 text-rose-600" />
+                        <span className="font-medium">Catch up on what&apos;s due</span>
+                        <span className="ml-auto text-xs text-rose-500">Review →</span>
+                    </button>
                     <button
                         type="button"
                         onClick={() => { setOpen(false); navigate('/updates'); }}
