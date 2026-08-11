@@ -1821,24 +1821,171 @@ async def get_task_comments(task_id: str, current_user: dict = Depends(get_curre
     
     return {"comments": task.get("comments", [])}
 
+def _notify_text(s: Optional[str]) -> str:
+    """Normalize notification text for OS / browsers that mangle unicode dashes."""
+    if not s:
+        return ""
+    return (
+        str(s)
+        .replace("\u2014", "-")  # em dash
+        .replace("\u2013", "-")  # en dash
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\xa0", " ")
+    )
+
+
 # ===== BROWSER NOTIFICATIONS (poll-based) =====
 @api_router.get("/notifications/pending")
 async def get_pending_notifications(current_user: dict = Depends(get_current_user)):
-    """Return undelivered browser notifications for the current user and mark as delivered.
+    """Return ONLY very recent live notifications for OS toasts.
 
-    Used by the frontend to trigger native `Notification` popups (Chrome/Edge/etc).
+    Reminders and backlog are intentionally excluded — those go through
+    /notifications/catch-up so login does not spam Chrome popups.
     """
+    cutoff = (get_pst_now() - timedelta(seconds=90)).isoformat()
     docs = await db.notifications.find(
-        {"user_id": current_user["id"], "delivered": {"$ne": True}},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
+        {
+            "user_id": current_user["id"],
+            "delivered": {"$ne": True},
+            "type": {"$nin": ["reminder"]},
+            "created_at": {"$gte": cutoff},
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(10)
+    # Still mark older undelivered non-toast items delivered so they don't pile up forever
+    await db.notifications.update_many(
+        {
+            "user_id": current_user["id"],
+            "delivered": {"$ne": True},
+            "$or": [
+                {"type": "reminder"},
+                {"created_at": {"$lt": cutoff}},
+            ],
+        },
+        {"$set": {"delivered": True, "delivered_at": get_pst_now().isoformat()}},
+    )
     if docs:
         ids = [d["id"] for d in docs]
         await db.notifications.update_many(
             {"id": {"$in": ids}},
-            {"$set": {"delivered": True, "delivered_at": get_pst_now().isoformat()}}
+            {"$set": {"delivered": True, "delivered_at": get_pst_now().isoformat()}},
         )
+        for d in docs:
+            d["title"] = _notify_text(d.get("title"))
+            d["body"] = _notify_text(d.get("body"))
     return {"notifications": docs}
+
+
+@api_router.get("/notifications/catch-up")
+async def notifications_catch_up(current_user: dict = Depends(get_current_user)):
+    """Smart catch-up for login / dashboard: grouped pending work, not a toast storm.
+
+    Marks undelivered notifications as delivered (so OS poll won't spam them) but
+    leaves unread state intact for the in-app review UI.
+    """
+    now = get_pst_now()
+    uid = current_user["id"]
+
+    # Drain undelivered so legacy poll never dumps a backlog
+    await db.notifications.update_many(
+        {"user_id": uid, "delivered": {"$ne": True}},
+        {"$set": {"delivered": True, "delivered_at": now.isoformat()}},
+    )
+
+    unread = await db.notifications.find(
+        {"user_id": uid, "read": {"$ne": True}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+
+    def _dedupe_by_task(rows):
+        seen = set()
+        out = []
+        for n in rows:
+            key = n.get("task_id") or n.get("id")
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "id": n.get("id"),
+                "type": n.get("type"),
+                "title": _notify_text(n.get("title")),
+                "body": _notify_text(n.get("body")),
+                "task_id": n.get("task_id"),
+                "created_at": n.get("created_at"),
+            })
+        return out
+
+    reminders = _dedupe_by_task([n for n in unread if n.get("type") == "reminder"])
+    mentions = _dedupe_by_task([n for n in unread if n.get("type") == "mention"])
+    nudges = _dedupe_by_task([n for n in unread if n.get("type") == "nudge"])
+    other = _dedupe_by_task([
+        n for n in unread
+        if n.get("type") not in ("reminder", "mention", "nudge")
+    ])
+
+    # Live task snapshot for assignee — what's overdue / due soon
+    open_tasks = await db.tasks.find(
+        {
+            "assigned_to": uid,
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True},
+            "status": {"$nin": ["Completed", "Declined", "Draft", "Cancelled", "Rejected"]},
+        },
+        {"_id": 0, "id": 1, "title": 1, "due_date": 1, "priority": 1, "status": 1},
+    ).to_list(300)
+
+    overdue = []
+    due_soon = []
+    for t in open_tasks:
+        raw = t.get("due_date")
+        if not raw:
+            continue
+        try:
+            due = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=PST)
+        except Exception:
+            continue
+        hours = (due - now).total_seconds() / 3600.0
+        item = {
+            "id": t["id"],
+            "title": _notify_text(t.get("title") or "Untitled"),
+            "due_date": t.get("due_date"),
+            "priority": t.get("priority") or "Medium",
+            "status": t.get("status"),
+            "hours_to_due": round(hours, 1),
+        }
+        if hours < 0:
+            overdue.append(item)
+        elif hours <= 24:
+            due_soon.append(item)
+
+    overdue.sort(key=lambda x: x.get("hours_to_due", 0))
+    due_soon.sort(key=lambda x: x.get("hours_to_due", 99))
+
+    summary = {
+        "overdue_tasks": len(overdue),
+        "due_soon_tasks": len(due_soon),
+        "unread_reminders": len(reminders),
+        "unread_mentions": len(mentions),
+        "unread_nudges": len(nudges),
+        "other_unread": len(other),
+    }
+    has_items = any(summary.values())
+
+    return {
+        "has_items": has_items,
+        "summary": summary,
+        "overdue": overdue[:12],
+        "due_soon": due_soon[:12],
+        "reminders": reminders[:12],
+        "mentions": mentions[:12],
+        "nudges": nudges[:12],
+        "other": other[:12],
+    }
 
 @api_router.get("/users/mentionable")
 async def get_mentionable_users(current_user: dict = Depends(get_current_user)):
@@ -5751,12 +5898,12 @@ async def create_notification(
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "type": n_type,
-        "title": title,
-        "body": body,
+        "title": _notify_text(title),
+        "body": _notify_text(body),
         "task_id": task_id,
         "actor_name": actor_name,
         "created_at": get_pst_now().isoformat(),
-        "delivered": False,   # for legacy browser-notification poll
+        "delivered": False,   # for live OS toast poll (recent non-reminders only)
         "read": False,        # for in-app bell
     }
     await db.notifications.insert_one(doc)
@@ -8090,18 +8237,36 @@ async def _check_smart_reminders():
 
             # Channel delivery — each channel is opt-in
             if "in_app" in channels:
-                nid = str(uuid.uuid4())
-                await db.notifications.insert_one({
-                    "id": nid,
+                # Don't pile unread reminder rows for the same task (login spam source)
+                existing_unread = await db.notifications.find_one({
                     "user_id": aid,
-                    "type": "reminder",
-                    "title": wording["title"],
-                    "body": f"{t['title']} — priority {t.get('priority')}",
                     "task_id": t["id"],
-                    "read": False,
-                    "delivered": False,
-                    "created_at": now.isoformat(),
-                })
+                    "type": "reminder",
+                    "read": {"$ne": True},
+                }, {"_id": 0, "id": 1})
+                if existing_unread:
+                    await db.notifications.update_one(
+                        {"id": existing_unread["id"]},
+                        {"$set": {
+                            "title": _notify_text(wording["title"]),
+                            "body": _notify_text(f"{t.get('title')} - priority {t.get('priority')}"),
+                            "created_at": now.isoformat(),
+                            "delivered": True,  # catch-up UI, not OS toast
+                        }},
+                    )
+                else:
+                    nid = str(uuid.uuid4())
+                    await db.notifications.insert_one({
+                        "id": nid,
+                        "user_id": aid,
+                        "type": "reminder",
+                        "title": _notify_text(wording["title"]),
+                        "body": _notify_text(f"{t.get('title')} - priority {t.get('priority')}"),
+                        "task_id": t["id"],
+                        "read": False,
+                        "delivered": True,  # bell/catch-up only; never OS-spam on login
+                        "created_at": now.isoformat(),
+                    })
 
             if "email" in channels:
                 try:
@@ -8251,26 +8416,32 @@ async def cleanup_orphaned_tasks(current_user: dict = Depends(get_current_user))
 
 # ---------- Rotating reminder wording ----------
 
+# Use ASCII hyphens only — unicode em-dashes show as "Ã¢ÂÂ" in some Chrome OS toasts.
 _REMINDER_LINES = {
+    "before_due": [
+        {"title": "Due soon - heads up", "line": "This is coming due soon. A quick win closes it out."},
+        {"title": "Deadline approaching", "line": "Keeping this on your radar before it becomes overdue."},
+        {"title": "Coming due", "line": "You've still got time - wrap it up or propose a new deadline if needed."},
+    ],
     "3h": [
-        {"title": "Reminder — due in ~3 hours", "line": "Heads up: this is due in about 3 hours. A quick win closes it out."},
-        {"title": "3 hours to go", "line": "Just a nudge — you've got about 3 hours before this is due."},
+        {"title": "Reminder - due in ~3 hours", "line": "Heads up: this is due in about 3 hours. A quick win closes it out."},
+        {"title": "3 hours to go", "line": "Just a nudge - you've got about 3 hours before this is due."},
         {"title": "Roughly 3 hours left", "line": "Keeping this on your radar: about 3 hours until the deadline."},
     ],
     "2h": [
-        {"title": "2 hours left", "line": "Two hours to the deadline. If you're close, keep going — you've got this."},
-        {"title": "Heads up — 2 hours to go", "line": "The deadline is in about 2 hours. Anything blocking you?"},
+        {"title": "2 hours left", "line": "Two hours to the deadline. If you're close, keep going - you've got this."},
+        {"title": "Heads up - 2 hours to go", "line": "The deadline is in about 2 hours. Anything blocking you?"},
         {"title": "T-2 hours", "line": "About 2 hours left. If you need more time, tap Counter-Propose on the task."},
     ],
     "30min": [
-        {"title": "You're almost out of time", "line": "Only 30 minutes left. Wrap it up if you can — or propose a new time."},
+        {"title": "You're almost out of time", "line": "Only 30 minutes left. Wrap it up if you can - or propose a new time."},
         {"title": "Final 30 minutes", "line": "Deadline is 30 minutes away. Now's the moment to close this out."},
         {"title": "Half an hour to go", "line": "30 minutes remaining. If it's done, mark complete; if not, let the requester know."},
     ],
     "overdue": [
         {"title": "This task is now overdue", "line": "The deadline has passed. Please close it out or update the requester with a new plan."},
-        {"title": "Still open — please close it out", "line": "This one's overdue. Even a quick status update helps."},
-        {"title": "Overdue — quick check-in", "line": "It's past due. If it's done, mark it complete. If not, propose a new deadline."},
+        {"title": "Still open - please close it out", "line": "This one's overdue. Even a quick status update helps."},
+        {"title": "Overdue - quick check-in", "line": "It's past due. If it's done, mark it complete. If not, propose a new deadline."},
         {"title": "This is overdue", "line": "The task blew past its due time. Please prioritize it or renegotiate."},
     ],
     "no_response": [
@@ -8278,7 +8449,7 @@ _REMINDER_LINES = {
         {"title": "Have you seen this task?", "line": "It's been assigned to you but not yet acted on. Please accept, decline, or counter-propose."},
     ],
     "no_progress": [
-        {"title": "No progress yet — need help?", "line": "You accepted this task but haven't updated it. Everything OK? Reply on the task or complete it."},
+        {"title": "No progress yet - need help?", "line": "You accepted this task but haven't updated it. Everything OK? Reply on the task or complete it."},
         {"title": "Quick check-in", "line": "The deadline's approaching and there's been no update. Is anything blocking you?"},
     ],
 }
