@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Copy, Check, Download, Video, Library, Trash2, Link2 } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
 import { loadRecordingBlob, clearRecordingBlob } from '@/lib/recordingStore';
+import LoomPlayer from '@/components/LoomPlayer';
 
 const defaultTitle = () => {
     const now = new Date();
@@ -109,11 +110,6 @@ const RecordingEditorPage = () => {
         };
     }, []);
 
-    const handleLoadedMetadata = (e) => {
-        const d = e.target?.duration;
-        if (d && Number.isFinite(d)) setDuration(d);
-    };
-
     const ensureUploaded = async () => {
         if (uploadRef) return uploadRef;
         if (!blob) throw new Error('No recording data available');
@@ -205,18 +201,17 @@ const RecordingEditorPage = () => {
             </header>
 
             <div className="container mx-auto px-4 sm:px-6 py-6 max-w-5xl">
-                <div className="bg-black rounded-2xl overflow-hidden mb-5 border border-white/10 shadow-2xl">
+                <div className="rounded-2xl overflow-hidden mb-5 border border-white/10 shadow-2xl">
                     {videoUrl ? (
-                        <video
+                        <LoomPlayer
                             src={videoUrl}
-                            controls
                             autoPlay
-                            onLoadedMetadata={handleLoadedMetadata}
-                            className="w-full max-h-[62vh] bg-black"
+                            onDuration={(d) => setDuration(d)}
+                            videoClassName="max-h-[62vh]"
                             data-testid="recording-preview-video"
                         />
                     ) : (
-                        <div className="p-12 text-center">
+                        <div className="p-12 text-center bg-black">
                             <div className="inline-flex items-center gap-2 mb-3">
                                 <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
                                 <span className="w-2 h-2 rounded-full bg-white/70 animate-pulse" style={{ animationDelay: '150ms' }} />

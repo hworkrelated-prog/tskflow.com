@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { API } from '@/App';
 import { Video, Clock, AlertCircle } from 'lucide-react';
+import LoomPlayer from '@/components/LoomPlayer';
 
 const fmtDuration = (secs) => {
     if (!secs || Number.isNaN(secs)) return null;
@@ -14,13 +15,13 @@ const fmtDuration = (secs) => {
 
 /**
  * Public Loom-style watch page for a shareable recording token.
- * Video streams from /api/recordings/{token}/media (no login required).
  */
 const RecordingSharePage = () => {
     const { token } = useParams();
     const [rec, setRec] = useState(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [playedDuration, setPlayedDuration] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -49,6 +50,7 @@ const RecordingSharePage = () => {
     }, [token]);
 
     const mediaUrl = token ? `${API}/recordings/${token}/media` : '';
+    const shownDuration = playedDuration || rec?.duration_seconds;
 
     return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col">
@@ -58,14 +60,14 @@ const RecordingSharePage = () => {
                         <Video className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="text-xs uppercase tracking-wider text-white/40">Shared recording</p>
+                        <p className="text-xs uppercase tracking-wider text-white/40">Recording</p>
                         <h1 className="font-semibold truncate" data-testid="share-page-title">
                             {rec?.title || (loading ? 'Loading…' : 'Recording')}
                         </h1>
                     </div>
-                    {fmtDuration(rec?.duration_seconds) && (
+                    {fmtDuration(shownDuration) && (
                         <span className="text-xs text-white/50 inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> {fmtDuration(rec.duration_seconds)}
+                            <Clock className="w-3.5 h-3.5" /> {fmtDuration(shownDuration)}
                         </span>
                     )}
                 </div>
@@ -85,13 +87,12 @@ const RecordingSharePage = () => {
                     </div>
                 )}
                 {!loading && rec && !error && (
-                    <div className="bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                        <video
+                    <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                        <LoomPlayer
                             src={mediaUrl}
-                            controls
                             autoPlay
-                            playsInline
-                            className="w-full max-h-[75vh] bg-black"
+                            onDuration={setPlayedDuration}
+                            videoClassName="max-h-[75vh]"
                             data-testid="share-page-video"
                         />
                     </div>
