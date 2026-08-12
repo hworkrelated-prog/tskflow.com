@@ -35,6 +35,7 @@ import GlobalFAB from '@/components/GlobalFAB';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import TeamSetupModal from '@/components/TeamSetupModal';
+import WhatsNewPrompt from '@/components/WhatsNewPrompt';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
@@ -523,6 +524,7 @@ function App() {
                 </Routes>
                 <GlobalFAB />
                 <TeamSetupModal />
+                <WhatsNewPrompt />
                 <VoiceMode />
                 <CatchUpReview />
             </BrowserRouter>

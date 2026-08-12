@@ -3559,6 +3559,7 @@ class UserPreferences(BaseModel):
     # Post-login team setup + how often org/reporting changes are expected.
     team_setup_complete: Optional[bool] = None
     hierarchy_review_frequency: Optional[str] = None  # weekly | monthly | quarterly | rarely
+    last_seen_product_update: Optional[str] = None  # changelog batch id for What's New nudge
 
 
 DEFAULT_EOD_SECTIONS = {
@@ -6775,8 +6776,12 @@ async def test_slack_webhook(body: dict, current_user: dict = Depends(get_curren
 
 @api_router.get("/product-updates")
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
-    """Static feed of what changed in the July 2025 batch."""
+    """Static feed of product changes (newest first)."""
     updates = [
+        {"id": "u19", "area": "AI Command Bar", "change": "A persistent bottom prompt bar — type what you need, paste a screenshot, attach a recording, @assign, and send. Recurring, sales, and reminders are inferred automatically.", "was": "Task creation lived only inside a modal and felt like a long Q&A."},
+        {"id": "u20", "area": "Screen Recording", "change": "Loom-style controls stay on the bottom-left and stay draggable. Capture uses the raw screen track so video no longer freezes when you switch tabs.", "was": "Recording could freeze after leaving the tab even though audio kept going."},
+        {"id": "u21", "area": "Smart Assignment", "change": "“My team” resolves direct reports vs everyone under you, @groups work with multi-word names, and duplicate name picks are cleaned up.", "was": "Team phrases often failed; clicking a name could add duplicates."},
+        {"id": "u22", "area": "Assignee-facing tasks", "change": "Manager prompts like “ask my team to send me…” are rewritten into clear steps for the person doing the work.", "was": "Raw manager wording was sometimes shown to assignees."},
         {"id": "u14", "area": "Slack Bridge", "change": "Paste your Slack Incoming Webhook in Settings to cross-post mentions, assignments, and EOD summaries into a Slack channel.", "was": "No Slack integration \u2014 mentions could get missed if you lived in Slack."},
         {"id": "u15", "area": "Screen Recording (robust)", "change": "Screen picker now lets you pick tab / window / entire screen freely; webcam preview is requested first and reliably renders in the recording bubble.", "was": "Was forced to current tab and the webcam bubble often didn\u2019t appear."},
         {"id": "u16", "area": "Unified Task View", "change": "Group tasks now open the same detail page as single tasks, with a collapsible Participants section (unfinished on top, top 5 visible, Show more).", "was": "Group tasks opened a separate stripped-down page."},
@@ -7759,6 +7764,10 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
         (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
         (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        # "get Hashim to review the recording" → "review the recording"
+        (r"(?i)\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+", ""),
+        (r"(?i)\bget\s+do\b", "do"),
+        (r"(?i)\band\s+get\b", "and"),
         (r"(?i)\bsend\s+me\b", f"send {mgr}"),
         (r"(?i)\breport\s+(?:back\s+)?to\s+me\b", f"report to {mgr}"),
         (r"(?i)\bupdate\s+me\b", f"update {mgr}"),
@@ -7768,6 +7777,7 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     ]
     for pat, repl in replacements:
         s = re.sub(pat, repl, s)
+    s = re.sub(r"\s+", " ", s).strip()
 
     if s and not re.match(r"(?i)^(please|kindly|complete|send|submit|prepare|create|update|review|finalize|draft|schedule|call|follow)\b", s):
         # Soft nudge into imperative assignee voice when it still reads like a note-to-self
