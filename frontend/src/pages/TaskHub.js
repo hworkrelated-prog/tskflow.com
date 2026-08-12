@@ -29,6 +29,7 @@ import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
 import RecurrenceEditor from '@/components/RecurrenceEditor';
 import AIQuickCreate from '@/components/AIQuickCreate';
+import GroupsManager from '@/components/GroupsManager';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
@@ -358,9 +359,35 @@ const TaskHub = () => {
             }
         };
 
-        // Poll every 10 seconds
-        const interval = setInterval(pollForNewTasks, 10000);
-        return () => clearInterval(interval);
+        // Poll every 10 seconds while visible; wake instantly when the tab returns
+        let interval = null;
+        const start = () => {
+            if (interval) return;
+            interval = setInterval(() => {
+                if (document.visibilityState === 'visible') pollForNewTasks();
+            }, 10000);
+        };
+        const stop = () => {
+            if (interval) { clearInterval(interval); interval = null; }
+        };
+        const onWake = () => {
+            pollForNewTasks();
+            fetchDashboard();
+            fetchParentGroups();
+            start();
+        };
+        const onVis = () => {
+            if (document.visibilityState === 'visible') onWake();
+            else stop();
+        };
+        if (document.visibilityState === 'visible') start();
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('tskflow:app-wake', onWake);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('tskflow:app-wake', onWake);
+        };
     }, [viewMode]);
 
     useEffect(() => {
@@ -1148,31 +1175,33 @@ const TaskHub = () => {
                                 </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
-                                        <DialogHeader>
+                                        <DialogHeader className="pr-8">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Advanced create</DialogTitle>
-                                                    <DialogDescription>Full form for attachments, groups, and recurrence — or use New Task for the AI assistant</DialogDescription>
+                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Manual form</DialogTitle>
+                                                    <DialogDescription className="sr-only">Create a task with the full form</DialogDescription>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
                                                     {draftInModal.status === 'saved' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
                                                     {draftInModal.status === 'error' && <span className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Save failed — will retry</span>}
                                                     {smartParsing && <span className="text-[11px] text-teal-600 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Analyzing…</span>}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-teal-200 text-teal-700 text-xs font-medium hover:bg-teal-50 hover:border-teal-300 shadow-sm transition-colors"
-                                                        data-testid="from-transcript-btn"
-                                                        title="Auto-draft tasks from a meeting transcript"
-                                                    >
-                                                        <FileText className="w-3.5 h-3.5" />
-                                                        <span className="whitespace-nowrap">From transcript</span>
-                                                    </button>
                                                 </div>
                                             </div>
                                         </DialogHeader>
                                         <form onSubmit={handleCreateTask} className="space-y-5">
+                                            <div className="flex justify-start -mt-1 mb-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowCreateModal(false); navigate('/transcript'); }}
+                                                    className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-teal-700 transition-colors"
+                                                    data-testid="from-transcript-btn"
+                                                    title="Auto-draft tasks from a meeting transcript"
+                                                >
+                                                    <FileText className="w-3.5 h-3.5" />
+                                                    <span>From transcript</span>
+                                                </button>
+                                            </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor="title">Task Title</Label>
                                                 <Input id="title" data-testid="task-title-input" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Enter task title" required className="rounded-xl" />
@@ -1335,178 +1364,17 @@ const TaskHub = () => {
                                 {!isFreeUser && (
                                     <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
                                         <DialogContent className="rounded-2xl max-w-lg w-[95vw] sm:w-full max-h-[85vh] p-0 gap-0 flex flex-col overflow-hidden">
-                                            <DialogHeader className="p-6 pb-3 shrink-0">
-                                                <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Your Groups</DialogTitle>
-                                                <DialogDescription>Save a group of emails once, then assign to everyone in one click.</DialogDescription>
+                                            <DialogHeader className="p-6 pb-3 shrink-0 pr-10">
+                                                <DialogTitle className="text-xl" style={{ fontFamily: 'Outfit' }}>Groups</DialogTitle>
+                                                <DialogDescription className="sr-only">Manage assignment groups</DialogDescription>
                                             </DialogHeader>
-
                                             <div className="px-6 pb-6 overflow-y-auto flex-1 min-h-0">
-                                            {groups.length > 0 && (
-                                                <div className="space-y-2 mb-4">
-                                                    {groups.map((group) => {
-                                                        const isExpanded = expandedGroup === group.id;
-                                                        const showAllEmails = isExpanded || group.emails.length <= 3;
-                                                        const displayEmails = showAllEmails ? group.emails : group.emails.slice(0, 3);
-                                                        
-                                                        return (
-                                                            <div key={group.id} data-testid={`group-row-${group.id}`} className="rounded-xl border bg-slate-50 overflow-hidden">
-                                                                <div className="flex items-start justify-between gap-3 p-3">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setExpandedGroup(isExpanded ? null : group.id)}
-                                                                        className="min-w-0 flex-1 text-left"
-                                                                    >
-                                                                        <p className="font-semibold">{group.name}</p>
-                                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                                            {displayEmails.join(', ')}
-                                                                            {!showAllEmails && <span className="text-teal-600 ml-1">+{group.emails.length - 3} more</span>}
-                                                                        </p>
-                                                                        {group.emails.length > 3 && (
-                                                                            <p className="text-xs text-teal-600 mt-1">
-                                                                                {isExpanded ? 'Click to collapse' : 'Click to see all'}
-                                                                            </p>
-                                                                        )}
-                                                                    </button>
-                                                                    <div className="flex items-center gap-1 shrink-0">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleEditGroup(group)}
-                                                                            className="text-teal-600 hover:bg-teal-50 rounded-full p-2"
-                                                                            title="Edit group"
-                                                                        >
-                                                                            <Pencil className="w-4 h-4" />
-                                                                        </button>
-                                                                        {isExpanded && (
-                                                                            <button
-                                                                                type="button"
-                                                                                data-testid={`delete-group-${group.id}`}
-                                                                                onClick={() => handleDeleteGroup(group.id)}
-                                                                                className="text-red-500 hover:bg-red-50 rounded-full p-2"
-                                                                                title="Delete group"
-                                                                            >
-                                                                                <Trash2 className="w-4 h-4" />
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-
-                                            <div className="space-y-3 pt-2 border-t">
-                                                <p className="text-sm font-semibold">{editingGroupId ? 'Edit group' : 'Create a new group'}</p>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="group-name">Group name</Label>
-                                                    <Input
-                                                        id="group-name"
-                                                        data-testid="group-name-input"
-                                                        value={groupForm.name}
-                                                        onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                                                        placeholder='e.g., "My Team", "Design Squad"'
-                                                        className="rounded-xl"
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="group-user-picker" className="flex items-center gap-2"><Users className="w-4 h-4" />Add teammates</Label>
-                                                    <div className="border rounded-xl bg-white max-h-40 overflow-y-auto divide-y" data-testid="group-user-picker">
-                                                        {(users || []).filter((u) => u.id !== user?.id).length === 0 ? (
-                                                            <div className="p-3 text-xs text-muted-foreground">No teammates found yet — invite people to your workspace first, or just paste emails below.</div>
-                                                        ) : (
-                                                            (users || []).filter((u) => u.id !== user?.id).map((u) => {
-                                                                const already = groupForm.emails.includes(u.email);
-                                                                return (
-                                                                    <label key={u.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${already ? 'bg-teal-50/60' : 'hover:bg-gray-50'}`}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={already}
-                                                                            onChange={(e) => {
-                                                                                if (e.target.checked) {
-                                                                                    if (!groupForm.emails.includes(u.email)) setGroupForm({ ...groupForm, emails: [...groupForm.emails, u.email] });
-                                                                                } else {
-                                                                                    setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== u.email) });
-                                                                                }
-                                                                            }}
-                                                                            className="accent-teal-600 w-4 h-4"
-                                                                            data-testid={`group-user-checkbox-${u.id}`}
-                                                                        />
-                                                                        <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold shrink-0">
-                                                                            {(u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
-                                                                        </div>
-                                                                        <div className="min-w-0 flex-1">
-                                                                            <p className="text-sm font-medium truncate">{u.name}</p>
-                                                                            <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                                                                        </div>
-                                                                    </label>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="group-email">Or paste external emails</Label>
-                                                    <div className="flex gap-2">
-                                                        <Textarea
-                                                            id="group-email"
-                                                            data-testid="group-email-input"
-                                                            value={groupEmailInput}
-                                                            onChange={(e) => setGroupEmailInput(e.target.value)}
-                                                            placeholder="external@vendor.com (or paste multiple emails from a spreadsheet)"
-                                                            className="rounded-xl min-h-[60px]"
-                                                        />
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            data-testid="add-group-email-button"
-                                                            onClick={addGroupEmail}
-                                                            className="rounded-xl shrink-0 self-start"
-                                                        >
-                                                            Add
-                                                        </Button>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Tip: Paste a column of emails from Excel/Sheets to bulk import
-                                                    </p>
-                                                    {groupForm.emails.length > 0 && (
-                                                        <div className="flex flex-wrap gap-2 mt-2">
-                                                            {groupForm.emails.map((email) => (
-                                                                <div key={email} className="flex items-center gap-1 bg-teal-100 text-teal-800 px-3 py-1.5 rounded-full text-sm">
-                                                                    <span>{email}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setGroupForm({ ...groupForm, emails: groupForm.emails.filter((em) => em !== email) })}
-                                                                        className="ml-1 hover:bg-teal-200 rounded-full p-0.5"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        type="button"
-                                                        data-testid="save-group-button"
-                                                        onClick={handleSaveGroup}
-                                                        disabled={groupSaving}
-                                                        className="flex-1 rounded-full"
-                                                    >
-                                                        {groupSaving ? 'Saving...' : (editingGroupId ? 'Update Group' : 'Create Group')}
-                                                    </Button>
-                                                    {editingGroupId && (
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            onClick={handleCancelEdit}
-                                                            className="rounded-full"
-                                                        >
-                                                            Cancel
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
+                                                <GroupsManager
+                                                    compact
+                                                    onChanged={(next) => {
+                                                        setGroups(next || []);
+                                                    }}
+                                                />
                                             </div>
                                         </DialogContent>
                                     </Dialog>
@@ -1725,7 +1593,7 @@ const TaskHub = () => {
                     }}
                 >
                     <DialogContent
-                        className="max-w-2xl w-full sm:w-full max-h-[92dvh] overflow-y-auto p-0 pb-[env(safe-area-inset-bottom,0px)]"
+                        className="max-w-2xl w-[min(96vw,42rem)] sm:w-full max-h-[88dvh] overflow-y-auto p-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] fixed left-1/2 bottom-3 top-auto translate-x-[-50%] translate-y-0 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4"
                         // Portaled @mention / assignee pickers live on document.body — don't treat
                         // those clicks as "outside" or the dialog closes and loses the task.
                         onPointerDownOutside={(e) => {
@@ -1747,10 +1615,10 @@ const TaskHub = () => {
                             }
                         }}
                     >
-                        <div className="p-4 sm:p-6">
-                            <DialogHeader className="mb-3">
-                                <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
-                                    <Sparkles className="w-5 h-5 text-slate-800" />
+                        <div className="p-4 sm:p-5">
+                            <DialogHeader className="mb-2 pr-8">
+                                <DialogTitle className="flex items-center gap-2 text-lg" style={{ fontFamily: 'Outfit' }}>
+                                    <Sparkles className="w-4.5 h-4.5 text-slate-800" />
                                     New task
                                 </DialogTitle>
                                 <DialogDescription className="sr-only">
@@ -1778,7 +1646,26 @@ const TaskHub = () => {
                                             priority: prefill.priority || f.priority,
                                             is_sales_task: prefill.is_sales_task || f.is_sales_task,
                                             success_criteria: prefill.success_criteria || f.success_criteria || '',
+                                            requires_screen_recording: prefill.requires_screen_recording || f.requires_screen_recording,
                                         }));
+                                        if (Array.isArray(prefill.attachments) && prefill.attachments.length) {
+                                            setAttachments(prefill.attachments);
+                                        }
+                                        if (Array.isArray(prefill.assignees) && prefill.assignees.length) {
+                                            const mapped = prefill.assignees.map((a) => {
+                                                if (a.id === 'self' || a.kind === 'self') return { type: 'self' };
+                                                if (a.kind === 'email' || (!a.id && a.email)) return { type: 'email', email: a.email, name: a.name || a.email };
+                                                if (a.kind === 'user' && a.id) return { type: 'user', id: a.id, name: a.name, email: a.email };
+                                                if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.emails)) {
+                                                    return (a.emails || []).map((email) => ({ type: 'email', email, name: email.split('@')[0] }));
+                                                }
+                                                if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
+                                                    return a.members.map((id) => ({ type: 'user', id, name: a.name }));
+                                                }
+                                                return null;
+                                            }).flat().filter(Boolean);
+                                            if (mapped.length) setSelectedAssignees(mapped);
+                                        }
                                     }
                                     setShowAIDialog(false);
                                     setShowCreateModal(true);

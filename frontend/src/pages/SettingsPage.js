@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -43,6 +43,8 @@ const SettingsPage = () => {
     });
     const [eodSaving, setEodSaving] = React.useState(false);
     const [eodPreviewing, setEodPreviewing] = React.useState(false);
+    const [hierarchyReviewFrequency, setHierarchyReviewFrequency] = React.useState('monthly');
+    const [savingTeamChanges, setSavingTeamChanges] = React.useState(false);
 
     React.useEffect(() => {
         fetchPreferences();
@@ -67,9 +69,23 @@ const SettingsPage = () => {
                 suggested_plan: true,
                 ...(response.data.eod_sections || {}),
             });
+            setHierarchyReviewFrequency(response.data.hierarchy_review_frequency || 'monthly');
             document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
         } catch (error) {
             console.error('Failed to fetch preferences');
+        }
+    };
+
+    const saveTeamChanges = async (value) => {
+        setHierarchyReviewFrequency(value);
+        setSavingTeamChanges(true);
+        try {
+            await axios.put(`${API}/auth/preferences`, { hierarchy_review_frequency: value });
+            toast.success('Saved');
+        } catch {
+            toast.error('Failed to save');
+        } finally {
+            setSavingTeamChanges(false);
         }
     };
 
@@ -281,19 +297,15 @@ const SettingsPage = () => {
                     transition={{ duration: 0.5 }}
                     className="space-y-8"
                 >
-                    <div className="text-center">
-                        <h1 className="text-5xl font-bold mb-2 text-foreground" style={{ fontFamily: 'Outfit' }}>Settings</h1>
-                        <p className="text-muted-foreground text-lg">Manage your account and subscription</p>
-                    </div>
+                    <h1 className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>Settings</h1>
 
                     {/* Profile Section */}
-                    <Card className="border-2 shadow-soft rounded-2xl">
-                        <CardHeader>
-                            <CardTitle className="text-2xl flex items-center gap-2 text-foreground" style={{ fontFamily: 'Outfit' }}>
-                                <User className="w-6 h-6" />
+                    <Card className="border shadow-soft rounded-2xl">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center gap-2 text-foreground" style={{ fontFamily: 'Outfit' }}>
+                                <User className="w-5 h-5" />
                                 Profile
                             </CardTitle>
-                            <CardDescription>Update your display name</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex items-end gap-3">
@@ -323,21 +335,21 @@ const SettingsPage = () => {
                         </CardContent>
                     </Card>
 
-                    <Card className="border-2 shadow-soft rounded-2xl">
-                        <CardHeader>
-                            <CardTitle className="text-2xl text-foreground" style={{ fontFamily: 'Outfit' }}>Account Information</CardTitle>
+                    <Card className="border shadow-soft rounded-2xl">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg text-foreground" style={{ fontFamily: 'Outfit' }}>Account</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div>
                                 <p className="text-sm text-muted-foreground">Name</p>
-                                <p className="font-semibold text-lg text-foreground">{user?.name}</p>
+                                <p className="font-semibold text-foreground">{user?.name}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">Email</p>
-                                <p className="font-semibold text-lg">{user?.email}</p>
+                                <p className="font-semibold">{user?.email}</p>
                             </div>
                             <div>
-                                <p className="text-sm text-muted-foreground">Current Plan</p>
+                                <p className="text-sm text-muted-foreground">Plan</p>
                                 <div className="flex items-center gap-2 mt-1">
                                     {user?.subscription_tier === 'teams' ? (
                                         <Badge className="bg-teal-600 text-white rounded-full px-3 py-1 text-sm font-semibold flex items-center gap-1">
@@ -392,7 +404,6 @@ const SettingsPage = () => {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="font-semibold text-blue-900">Google Calendar</h4>
-                                            <p className="text-sm text-blue-700">Auto-block time for urgent tasks</p>
                                         </div>
                                         {user?.google_calendar_connected ? (
                                             <Button
@@ -429,14 +440,18 @@ const SettingsPage = () => {
                                         )}
                                     </div>
                                 </div>
-                                {user?.subscription_tier === 'teams' && (
+                                {(user?.subscription_tier === 'teams' || user?.subscription_tier === 'pro') && (
                                     <Button
                                         onClick={() => navigate('/team')}
                                         variant="outline"
                                         className="mt-3 rounded-full"
                                     >
                                         <Users className="w-4 h-4 mr-2" />
-                                        {user?.is_team_owner ? 'Manage Team' : 'My Team & Reports'}
+                                        {user?.subscription_tier === 'pro'
+                                            ? 'Groups'
+                                            : user?.is_team_owner
+                                                ? 'Manage Team'
+                                                : 'My Team & Reports'}
                                     </Button>
                                 )}
                                 {(user?.subscription_tier === 'pro' || (user?.subscription_tier === 'teams' && user?.is_team_owner)) && (
@@ -462,14 +477,32 @@ const SettingsPage = () => {
                                     </p>
                                 )}
                             </div>
+                            {user?.subscription_tier === 'teams' && (
+                                <div className="pt-2 border-t" data-testid="team-changes-preference">
+                                    <Label htmlFor="team-changes" className="text-sm text-muted-foreground">Team changes</Label>
+                                    <select
+                                        id="team-changes"
+                                        value={hierarchyReviewFrequency}
+                                        onChange={(e) => saveTeamChanges(e.target.value)}
+                                        disabled={savingTeamChanges}
+                                        className="mt-1.5 w-full sm:w-64 px-3 py-2 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none"
+                                        data-testid="hierarchy-review-frequency"
+                                    >
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="quarterly">Quarterly</option>
+                                        <option value="rarely">Rarely</option>
+                                    </select>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Password Change */}
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader>
-                                <CardTitle className="text-xl flex items-center gap-2">
+                        <Card className="border shadow-soft rounded-2xl">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-lg flex items-center gap-2">
                                     <Lock className="w-5 h-5" />
                                     Security
                                 </CardTitle>
@@ -484,7 +517,6 @@ const SettingsPage = () => {
                                     <DialogContent className="rounded-2xl">
                                         <DialogHeader>
                                             <DialogTitle>Change Password</DialogTitle>
-                                            <DialogDescription>Update your account password</DialogDescription>
                                         </DialogHeader>
                                         <form onSubmit={handlePasswordChange} className="space-y-4 pt-4">
                                             <div className="space-y-2">
@@ -535,19 +567,19 @@ const SettingsPage = () => {
                         </Card>
 
                         {/* Theme Selection */}
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader>
-                                <CardTitle className="text-xl flex items-center gap-2">
+                        <Card className="border shadow-soft rounded-2xl">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-lg flex items-center gap-2">
                                     <Palette className="w-5 h-5" />
                                     Appearance
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-3">
+                            <CardContent className="space-y-2">
                                 {['light', 'dark', 'minimal'].map((t) => (
                                     <button
                                         key={t}
                                         onClick={() => handleThemeChange(t)}
-                                        className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                                        className={`w-full p-3 rounded-xl border text-left transition-all ${
                                             theme === t ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
                                         }`}
                                     >
@@ -562,12 +594,11 @@ const SettingsPage = () => {
                     </div>
 
                     {/* End-of-day report */}
-                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="eod-settings-card">
+                    <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="eod-settings-card">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
-                                <p className="text-xs text-muted-foreground">A short daily wrap-up of your work.</p>
                             </div>
                             <label className="inline-flex items-center gap-2 cursor-pointer shrink-0" data-testid="eod-enabled-toggle">
                                 <input
@@ -589,7 +620,7 @@ const SettingsPage = () => {
                                         <select
                                             value={eodHour}
                                             onChange={(e) => { const h = parseInt(e.target.value, 10); setEodHour(h); saveEod({ eod_hour: h }); }}
-                                            className="mt-1 w-full px-3 py-2 border-2 rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            className="mt-1 w-full px-3 py-2 border rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
                                             data-testid="eod-hour-select"
                                         >
                                             {Array.from({ length: 24 }, (_, i) => (
@@ -602,7 +633,7 @@ const SettingsPage = () => {
                                         <select
                                             value={eodChannel}
                                             onChange={(e) => { const v = e.target.value; setEodChannel(v); saveEod({ eod_channel: v }); }}
-                                            className="mt-1 w-full px-3 py-2 border-2 rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            className="mt-1 w-full px-3 py-2 border rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
                                             data-testid="eod-channel-select"
                                         >
                                             <option value="email">Email</option>
@@ -632,7 +663,6 @@ const SettingsPage = () => {
                                         <span className="text-xs text-slate-500 hidden group-open:inline">Hide</span>
                                     </summary>
                                     <div className="px-4 pb-3 border-t border-slate-200/80 pt-2" data-testid="eod-sections">
-                                        <p className="text-[11px] text-slate-500 mb-2">Everything is included by default. Uncheck what you don’t want.</p>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                             {[
                                                 { key: 'completed', label: 'Completed today' },
@@ -667,12 +697,11 @@ const SettingsPage = () => {
 
                     {/* Slack Bridge — Teams admin only */}
                     {canManageSlack ? (
-                    <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
+                    <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div className="flex-1">
-                                <h3 className="font-semibold text-base">Slack notifications</h3>
-                                <p className="text-xs text-muted-foreground">Teams admin: connect one webhook for your org. Mentions, EOD summaries, and reminders post here.</p>
+                                <h3 className="font-semibold text-base">Slack</h3>
                             </div>
                             {slackWebhook && (
                                 <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
@@ -728,7 +757,7 @@ const SettingsPage = () => {
                                                 // Handle paste directly to auto-connect on next tick with the pasted value
                                                 setTimeout(() => handleSlackInput(e.target.value), 0);
                                             }}
-                                            className="flex-1 px-3 py-2.5 border-2 rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none font-mono"
+                                            className="flex-1 px-3 py-2.5 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none font-mono"
                                             data-testid="slack-webhook-input"
                                         />
                                         {slackWebhook.trim() && !slackWebhook.startsWith('https://hooks.slack.com/') ? null : (
@@ -772,31 +801,29 @@ const SettingsPage = () => {
                         )}
                     </div>
                     ) : user?.subscription_tier === 'teams' ? (
-                    <div className="bg-white/70 border-2 rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
+                    <div className="bg-white/70 border rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div>
-                                <h3 className="font-semibold text-base">Slack notifications</h3>
+                                <h3 className="font-semibold text-base">Slack</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {slackTeamConnected
-                                        ? 'Your team admin has connected Slack. Mentions and summaries can go there.'
-                                        : 'Only your Teams admin can connect the Slack webhook. Ask them to set it up in Settings.'}
+                                        ? 'Connected by your admin'
+                                        : 'Ask your admin to connect Slack'}
                                 </p>
                             </div>
                             {slackTeamConnected && (
-                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected by admin</span>
+                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected</span>
                             )}
                         </div>
                     </div>
                     ) : (
-                    <div className="bg-white/70 border-2 rounded-2xl p-5" data-testid="slack-settings-upgrade">
+                    <div className="bg-white/70 border rounded-2xl p-5" data-testid="slack-settings-upgrade">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B]/80 text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div>
-                                <h3 className="font-semibold text-base">Slack notifications</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Slack webhooks are available on the <strong>Teams</strong> plan — your team admin connects one webhook for the org.
-                                </p>
+                                <h3 className="font-semibold text-base">Slack</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">Available on Teams</p>
                             </div>
                         </div>
                     </div>
@@ -835,18 +862,18 @@ const SettingsPage = () => {
 
                     {!(user?.subscription_tier === 'teams' && !user?.is_team_owner) && (
                     <div>
-                        <h2 className="text-3xl font-bold mb-6 text-center text-foreground" style={{ fontFamily: 'Outfit' }}>Subscription Plans</h2>
+                        <h2 className="text-2xl font-bold mb-6 text-foreground" style={{ fontFamily: 'Outfit' }}>Plans</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Free Plan */}
-                            <Card className={`border-2 rounded-2xl ${
+                            <Card className={`border rounded-2xl ${
                                 user?.subscription_tier === 'free' 
                                     ? 'border-primary shadow-lg' 
                                     : 'border-border shadow-soft'
                             }`}>
                                 <CardHeader>
-                                    <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Free</CardTitle>
+                                    <CardTitle className="text-xl" style={{ fontFamily: 'Outfit' }}>Free</CardTitle>
                                     <CardDescription>
-                                        <span className="text-4xl font-bold" style={{ fontFamily: 'Outfit' }}>$0</span>
+                                        <span className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>$0</span>
                                         <span className="text-muted-foreground">/month</span>
                                     </CardDescription>
                                 </CardHeader>
@@ -868,18 +895,18 @@ const SettingsPage = () => {
                             </Card>
 
                             {/* Pro Plan */}
-                            <Card className={`border-2 rounded-2xl ${
+                            <Card className={`border rounded-2xl ${
                                 user?.subscription_tier === 'pro' 
                                     ? 'border-primary shadow-lg' 
                                     : 'border-border shadow-soft'
                             }`}>
                                 <CardHeader>
-                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                        <Crown className="w-6 h-6 text-amber-500" />
+                                    <CardTitle className="text-xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <Crown className="w-5 h-5 text-amber-500" />
                                         Pro
                                     </CardTitle>
                                     <CardDescription>
-                                        <span className="text-4xl font-bold" style={{ fontFamily: 'Outfit' }}>$9</span>
+                                        <span className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>$9</span>
                                         <span className="text-muted-foreground">/month</span>
                                     </CardDescription>
                                 </CardHeader>
@@ -913,18 +940,18 @@ const SettingsPage = () => {
                             </Card>
 
                             {/* Teams Plan */}
-                            <Card className={`border-2 rounded-2xl ${
+                            <Card className={`border rounded-2xl ${
                                 user?.subscription_tier === 'teams' 
                                     ? 'border-primary shadow-lg' 
                                     : 'border-border shadow-soft'
                             }`}>
                                 <CardHeader>
-                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                        <Users className="w-6 h-6 text-teal-600" />
+                                    <CardTitle className="text-xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <Users className="w-5 h-5 text-teal-600" />
                                         Teams
                                     </CardTitle>
                                     <CardDescription>
-                                        <span className="text-4xl font-bold" style={{ fontFamily: 'Outfit' }}>$12</span>
+                                        <span className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>$12</span>
                                         <span className="text-muted-foreground">/user/month</span>
                                     </CardDescription>
                                 </CardHeader>
@@ -976,7 +1003,7 @@ export default SettingsPage;
 const REMINDER_PRESETS = {
     essential: {
         label: 'Quiet',
-        help: 'High & Urgent only, in the app.',
+        help: 'High & Urgent',
         enabled: true,
         triggers: ['time_before_due', 'overdue'],
         hours_before_due: 4,
@@ -989,7 +1016,7 @@ const REMINDER_PRESETS = {
     },
     balanced: {
         label: 'Balanced',
-        help: 'Medium+, app + email.',
+        help: 'Medium+',
         enabled: true,
         triggers: ['time_before_due', 'no_response', 'overdue'],
         hours_before_due: 4,
@@ -1002,7 +1029,7 @@ const REMINDER_PRESETS = {
     },
     assertive: {
         label: 'Assertive',
-        help: 'All priorities, more follow-ups.',
+        help: 'All priorities',
         enabled: true,
         triggers: ['time_before_due', 'no_response', 'no_progress', 'overdue'],
         hours_before_due: 6,
@@ -1089,7 +1116,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
     const toggleFrom = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 
     if (loading) {
-        return <div className="bg-white/70 border-2 rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
+        return <div className="bg-white/70 border rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
     }
 
     const activePreset = matchReminderPreset(rule);
@@ -1101,7 +1128,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
         overdue: 'Past due',
     };
     const summary = !rule.enabled
-        ? 'Off — no automated nudges.'
+        ? 'Off'
         : `${(rule.priorities || []).join(', ') || 'No priorities'} · ${(rule.channels || []).map((c) => channelLabels[c] || c).join(', ') || 'No channels'}`;
 
     const nudgeWhen = [
@@ -1118,12 +1145,11 @@ const SmartRemindersCard = ({ slackConnected }) => {
     ];
 
     return (
-        <div className="bg-white/70 border-2 rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
+        <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
             <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Nudges when tasks need attention.</p>
                 </div>
                 <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
                     <input

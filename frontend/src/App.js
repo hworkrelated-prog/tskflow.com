@@ -34,6 +34,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalFAB from '@/components/GlobalFAB';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
+import TeamSetupModal from '@/components/TeamSetupModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const API = `${BACKEND_URL}/api`;
@@ -154,9 +155,33 @@ const AuthProvider = ({ children }) => {
         };
 
         runCatchUp();
-        // Live poll is infrequent and only for brand-new non-reminder events
-        const interval = setInterval(pollLive, 60000);
-        return () => { cancelled = true; clearInterval(interval); };
+        // Live poll is infrequent and only for brand-new non-reminder events.
+        // Pause while the tab is hidden so background timer throttling doesn't stall the app.
+        let interval = null;
+        const startPoll = () => {
+            if (interval) return;
+            interval = setInterval(() => {
+                if (document.visibilityState === 'visible') pollLive();
+            }, 60000);
+        };
+        const stopPoll = () => {
+            if (interval) { clearInterval(interval); interval = null; }
+        };
+        const onVis = () => {
+            if (document.visibilityState === 'visible') {
+                pollLive();
+                startPoll();
+            } else {
+                stopPoll();
+            }
+        };
+        if (document.visibilityState === 'visible') startPoll();
+        document.addEventListener('visibilitychange', onVis);
+        return () => {
+            cancelled = true;
+            stopPoll();
+            document.removeEventListener('visibilitychange', onVis);
+        };
     }, [user]);
 
     // WebSocket connection for real-time notifications + chatter
@@ -164,12 +189,30 @@ const AuthProvider = ({ children }) => {
         if (!user || !token) return;
         let ws;
         let reconnectTimer;
+        let pingTimer;
+        let intentionalClose = false;
+
+        const clearTimers = () => {
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+            if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+        };
+
         const connect = () => {
             try {
+                clearTimers();
                 const wsProto = (BACKEND_URL || window.location.origin).replace(/^http/, 'ws');
                 ws = new WebSocket(`${wsProto}/api/ws?token=${encodeURIComponent(token)}`);
+                ws.onopen = () => {
+                    // Keep-alive so proxies / laptop sleep don't silently kill the socket
+                    pingTimer = setInterval(() => {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            try { ws.send('ping'); } catch (_) { /* noop */ }
+                        }
+                    }, 25000);
+                };
                 ws.onmessage = (ev) => {
                     try {
+                        if (ev.data === 'pong') return;
                         const data = JSON.parse(ev.data);
                         if (data.event === 'notification') {
                             window.dispatchEvent(new CustomEvent('tskflow:notification', { detail: data.notification }));
@@ -190,15 +233,33 @@ const AuthProvider = ({ children }) => {
                     } catch (_) { /* silent */ }
                 };
                 ws.onclose = () => {
-                    reconnectTimer = setTimeout(connect, 3000);
+                    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+                    if (!intentionalClose) {
+                        reconnectTimer = setTimeout(connect, 3000);
+                    }
                 };
                 ws.onerror = () => { try { ws.close(); } catch (_) { /* noop */ } };
             } catch (_) { /* silent */ }
         };
         connect();
+
+        const onVis = () => {
+            if (document.visibilityState !== 'visible') return;
+            // Wake from sleep / background: reconnect if the socket died
+            if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+                connect();
+            }
+            window.dispatchEvent(new CustomEvent('tskflow:app-wake'));
+        };
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('online', onVis);
+
         return () => {
+            intentionalClose = true;
+            clearTimers();
+            document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('online', onVis);
             try { ws && ws.close(); } catch (_) { /* noop */ }
-            if (reconnectTimer) clearTimeout(reconnectTimer);
         };
     }, [user, token]);
 
@@ -461,6 +522,7 @@ function App() {
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
                 </Routes>
                 <GlobalFAB />
+                <TeamSetupModal />
                 <VoiceMode />
                 <CatchUpReview />
             </BrowserRouter>

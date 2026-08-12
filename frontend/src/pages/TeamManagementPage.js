@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, UserPlus, Trash2, DollarSign, Users as UsersIcon, GitBranch, ChevronRight, Clock, CheckCircle2, AlertCircle, UserCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
+import GroupsManager from '@/components/GroupsManager';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
@@ -39,13 +40,21 @@ const TeamManagementPage = () => {
     const [performance, setPerformance] = useState(null);
     
     const navigate = useNavigate();
+    const isTeams = user?.subscription_tier === 'teams';
+    const isPro = user?.subscription_tier === 'pro';
+    const isOwner = Boolean(user?.is_team_owner);
 
     useEffect(() => {
-        if (user?.subscription_tier !== 'teams') {
+        if (!user) return;
+        if (user.subscription_tier === 'free') {
             navigate('/settings');
             return;
         }
-        fetchAllData();
+        if (user.subscription_tier === 'teams') {
+            fetchAllData();
+        } else {
+            setLoading(false);
+        }
     }, [user]);
 
     const fetchAllData = async () => {
@@ -187,26 +196,41 @@ const TeamManagementPage = () => {
                     transition={{ duration: 0.5 }}
                     className="space-y-8"
                 >
-                    <div className="text-center">
-                        <h1 className="text-5xl font-bold mb-2 text-foreground" style={{ fontFamily: 'Outfit' }}>Team Management</h1>
-                        <p className="text-muted-foreground text-lg">Manage your team, direct reports, and hierarchy</p>
+                    <div>
+                        <h1 className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>
+                            {isPro ? 'Groups' : 'Team Management'}
+                        </h1>
                     </div>
 
-                    <Tabs defaultValue="direct-reports" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-8">
-                            <TabsTrigger value="direct-reports" className="rounded-full">
-                                <GitBranch className="w-4 h-4 mr-2" />
-                                Direct Reports
+                    <Tabs defaultValue={isPro ? 'groups' : 'direct-reports'} className="w-full">
+                        <TabsList className={`grid w-full mb-8 ${
+                            isPro
+                                ? 'grid-cols-1 max-w-xs'
+                                : isOwner
+                                    ? 'grid-cols-2 sm:grid-cols-5'
+                                    : 'grid-cols-2 sm:grid-cols-4'
+                        }`}>
+                            {isTeams && (
+                                <>
+                                    <TabsTrigger value="direct-reports" className="rounded-full">
+                                        <GitBranch className="w-4 h-4 mr-2" />
+                                        Direct Reports
+                                    </TabsTrigger>
+                                    <TabsTrigger value="performance" className="rounded-full">
+                                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                                        Performance
+                                    </TabsTrigger>
+                                    <TabsTrigger value="my-hierarchy" className="rounded-full">
+                                        <UserCheck className="w-4 h-4 mr-2" />
+                                        My Hierarchy
+                                    </TabsTrigger>
+                                </>
+                            )}
+                            <TabsTrigger value="groups" className="rounded-full">
+                                <UsersIcon className="w-4 h-4 mr-2" />
+                                Groups
                             </TabsTrigger>
-                            <TabsTrigger value="performance" className="rounded-full">
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Performance
-                            </TabsTrigger>
-                            <TabsTrigger value="my-hierarchy" className="rounded-full">
-                                <UserCheck className="w-4 h-4 mr-2" />
-                                My Hierarchy
-                            </TabsTrigger>
-                            {user?.is_team_owner && (
+                            {isTeams && isOwner && (
                                 <TabsTrigger value="team-admin" className="rounded-full">
                                     <UsersIcon className="w-4 h-4 mr-2" />
                                     Team Admin
@@ -214,7 +238,23 @@ const TeamManagementPage = () => {
                             )}
                         </TabsList>
 
+                        <TabsContent value="groups">
+                            <Card className="border shadow-soft rounded-2xl">
+                                <CardHeader>
+                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <UsersIcon className="w-6 h-6" />
+                                        Groups
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <GroupsManager />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
                         {/* Performance Analytics Tab */}
+                        {isTeams && (
+                        <>
                         <TabsContent value="performance">
                             <Card className="border-2 shadow-soft rounded-2xl">
                                 <CardHeader>
@@ -614,9 +654,11 @@ const TeamManagementPage = () => {
                                 </Card>
                             </div>
                         </TabsContent>
+                        </>
+                        )}
 
                         {/* Team Admin Tab (Team Owners Only) */}
-                        {user?.is_team_owner && (
+                        {isTeams && isOwner && (
                             <TabsContent value="team-admin">
                                 {/* Billing Card */}
                                 <Card className="border-2 shadow-soft rounded-2xl mb-6">
