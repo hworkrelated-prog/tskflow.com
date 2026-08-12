@@ -102,6 +102,9 @@ class UserResponse(BaseModel):
     is_team_owner: Optional[bool] = False
     team_owner_email: Optional[str] = None
     google_calendar_connected: Optional[bool] = False
+    preferences: Optional[dict] = None
+    reports_to: Optional[str] = None
+    company_domain: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -551,7 +554,13 @@ async def verify_email(request: EmailVerifyRequest):
             name=user["name"],
             email=user["email"],
             subscription_tier=user["subscription_tier"],
-            email_verified=True
+            email_verified=True,
+            is_team_owner=user.get("is_team_owner", False),
+            team_owner_email=user.get("team_owner_email"),
+            google_calendar_connected=user.get("google_calendar_connected", False),
+            preferences=user.get("preferences") or {},
+            reports_to=user.get("reports_to"),
+            company_domain=user.get("company_domain"),
         )
     )
 
@@ -626,7 +635,12 @@ async def login(user: UserLogin):
             email=db_user["email"],
             subscription_tier=db_user["subscription_tier"],
             email_verified=db_user["email_verified"],
-            google_calendar_connected=db_user.get("google_calendar_connected", False)
+            is_team_owner=db_user.get("is_team_owner", False),
+            team_owner_email=db_user.get("team_owner_email"),
+            google_calendar_connected=db_user.get("google_calendar_connected", False),
+            preferences=db_user.get("preferences") or {},
+            reports_to=db_user.get("reports_to"),
+            company_domain=db_user.get("company_domain"),
         )
     )
 
@@ -640,7 +654,10 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         email_verified=current_user["email_verified"],
         is_team_owner=current_user.get("is_team_owner", False),
         team_owner_email=current_user.get("team_owner_email"),
-        google_calendar_connected=current_user.get("google_calendar_connected", False)
+        google_calendar_connected=current_user.get("google_calendar_connected", False),
+        preferences=current_user.get("preferences") or {},
+        reports_to=current_user.get("reports_to"),
+        company_domain=current_user.get("company_domain"),
     )
 
 class UpdateProfileRequest(BaseModel):
@@ -3539,6 +3556,9 @@ class UserPreferences(BaseModel):
     # Which sections to include in the EOD report (all default on when omitted).
     # Keys: completed | open | missed | manager_snapshot | suggested_plan
     eod_sections: Optional[Dict[str, bool]] = None
+    # Post-login team setup + how often org/reporting changes are expected.
+    team_setup_complete: Optional[bool] = None
+    hierarchy_review_frequency: Optional[str] = None  # weekly | monthly | quarterly | rarely
 
 
 DEFAULT_EOD_SECTIONS = {
@@ -4797,16 +4817,24 @@ def _require_paid(current_user: dict):
 @api_router.get("/groups")
 async def list_groups(current_user: dict = Depends(get_current_user)):
     _require_paid(current_user)
-    # Get organization-wide groups based on company domain
+    # Org-wide by company domain, plus any groups the user owns (covers missing domain).
     company_domain = current_user.get("company_domain")
-    if not company_domain:
-        return []
-    
-    groups = await db.user_groups.find(
-        {"company_domain": company_domain},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(200)
-    return groups
+    query = {"owner_id": current_user["id"]}
+    if company_domain:
+        query = {"$or": [{"company_domain": company_domain}, {"owner_id": current_user["id"]}]}
+
+    groups = await db.user_groups.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # De-dupe by id while preserving order
+    seen = set()
+    out = []
+    for g in groups:
+        gid = g.get("id")
+        if gid and gid in seen:
+            continue
+        if gid:
+            seen.add(gid)
+        out.append(g)
+    return out
 
 @api_router.post("/groups")
 async def create_group(group: GroupCreate, current_user: dict = Depends(get_current_user)):
@@ -4816,16 +4844,18 @@ async def create_group(group: GroupCreate, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=400, detail="Group name is required")
 
     company_domain = current_user.get("company_domain")
-    if not company_domain:
-        raise HTTPException(status_code=400, detail="Company domain not found")
+    # Allow personal groups even without a company domain (owner-scoped).
+    dup_query = {
+        "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"},
+    }
+    if company_domain:
+        dup_query["company_domain"] = company_domain
+    else:
+        dup_query["owner_id"] = current_user["id"]
 
-    # Prevent duplicate group names (case-insensitive) org-wide
-    existing = await db.user_groups.find_one({
-        "company_domain": company_domain,
-        "name": {"$regex": f"^{name}$", "$options": "i"}
-    }, {"_id": 0})
+    existing = await db.user_groups.find_one(dup_query, {"_id": 0})
     if existing:
-        raise HTTPException(status_code=400, detail="A group with this name already exists in your organization")
+        raise HTTPException(status_code=400, detail="A group with this name already exists")
 
     group_doc = {
         "id": str(uuid.uuid4()),
@@ -4845,11 +4875,11 @@ async def update_group(group_id: str, update: GroupUpdate, current_user: dict = 
     _require_paid(current_user)
     company_domain = current_user.get("company_domain")
     
-    # Anyone in the org can edit org-wide groups
-    group = await db.user_groups.find_one({
-        "id": group_id,
-        "company_domain": company_domain
-    }, {"_id": 0})
+    # Org members (same domain) or the owner can edit
+    or_clauses = [{"owner_id": current_user["id"]}]
+    if company_domain:
+        or_clauses.append({"company_domain": company_domain})
+    group = await db.user_groups.find_one({"id": group_id, "$or": or_clauses}, {"_id": 0})
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -4858,11 +4888,15 @@ async def update_group(group_id: str, update: GroupUpdate, current_user: dict = 
         new_name = update.name.strip()
         if not new_name:
             raise HTTPException(status_code=400, detail="Group name cannot be empty")
-        dup = await db.user_groups.find_one({
-            "company_domain": company_domain,
-            "name": {"$regex": f"^{new_name}$", "$options": "i"},
-            "id": {"$ne": group_id}
-        }, {"_id": 0})
+        dup_q = {
+            "name": {"$regex": f"^{re.escape(new_name)}$", "$options": "i"},
+            "id": {"$ne": group_id},
+        }
+        if company_domain:
+            dup_q["company_domain"] = company_domain
+        else:
+            dup_q["owner_id"] = current_user["id"]
+        dup = await db.user_groups.find_one(dup_q, {"_id": 0})
         if dup:
             raise HTTPException(status_code=400, detail="A group with this name already exists")
         set_data["name"] = new_name
@@ -4882,11 +4916,10 @@ async def delete_group(group_id: str, current_user: dict = Depends(get_current_u
     _require_paid(current_user)
     company_domain = current_user.get("company_domain")
     
-    # Anyone in the org can delete org-wide groups
-    result = await db.user_groups.delete_one({
-        "id": group_id,
-        "company_domain": company_domain
-    })
+    or_clauses = [{"owner_id": current_user["id"]}]
+    if company_domain:
+        or_clauses.append({"company_domain": company_domain})
+    result = await db.user_groups.delete_one({"id": group_id, "$or": or_clauses})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"message": "Group deleted"}
@@ -7292,12 +7325,16 @@ TITLE RULES:
 - Keep compound phrases intact (e.g. "action plans", not truncated "action").
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
 
-DESCRIPTION RULES (critical when the user wrote detailed instructions):
-- Put the full instructions, numbered requirements, context, and what to cover in description.
+DESCRIPTION RULES (critical — write for the assignee, not the manager):
+- Distill the manager's request into clear, actionable steps the assignee should follow.
+- ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…").
+- NEVER paste manager-centric phrasing like "Ask my team to…", "I want them to…", "send me a report" as-is.
+  Rewrite those into assignee-facing instructions, e.g. "Please send your manager an end-of-day report…".
 - If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
-- Also fill action_items with those steps.
+- Also fill action_items with those assignee-facing steps.
 - Only leave description empty for a trivial one-liner where the title alone is enough.
 - Never leave description empty when the input is longer than ~1 sentence or contains multiple requirements.
+- For recurring asks (e.g. "every day at 2:15"), state the cadence clearly in the description for the assignee.
 
 SUCCESS CRITERIA (expectations):
 - Extract when the manager states what "done well" / "done right" / "success" looks like, or phrases like "I expect…", "make sure…", "quality bar…", "acceptance criteria…".
@@ -7509,13 +7546,18 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     if domain:
         users = await db.users.find({"company_domain": domain}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
     groups = []
+    g_query = {"owner_id": current_user.get("id")}
     if domain:
-        groups = await db.user_groups.find({"company_domain": domain}, {"_id": 0}).to_list(200)
+        g_query = {"$or": [{"company_domain": domain}, {"owner_id": current_user.get("id")}]}
+    groups = await db.user_groups.find(g_query, {"_id": 0}).to_list(200)
 
-    # Preload direct reports (for 'my team')
+    # Preload direct reports (for 'my team') — hierarchy uses reports_to
     my_reports = []
     if current_user.get("id"):
-        my_reports = await db.users.find({"manager_id": current_user["id"]}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(200)
+        my_reports = await db.users.find(
+            {"reports_to": current_user["id"]},
+            {"_id": 0, "id": 1, "name": 1, "email": 1},
+        ).to_list(200)
 
     # Preload FULL transitive subordinates (direct reports of direct reports, ...)
     async def _all_subordinates(root_id: str) -> List[dict]:
@@ -7524,7 +7566,10 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
         all_subs = []
         while frontier:
             next_frontier = []
-            reports = await db.users.find({"manager_id": {"$in": frontier}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
+            reports = await db.users.find(
+                {"reports_to": {"$in": frontier}},
+                {"_id": 0, "id": 1, "name": 1, "email": 1},
+            ).to_list(500)
             for u in reports:
                 if u["id"] in seen:
                     continue
@@ -7534,11 +7579,13 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             frontier = next_frontier
         return all_subs
     everyone_under_me = await _all_subordinates(current_user["id"]) if current_user.get("id") else []
+    has_indirect = len(everyone_under_me) > len(my_reports)
 
     resolved = []
     ambiguous = []
     unresolved = []
     seen_ids = set()
+    needs_team_scope = False
 
     for raw in hints:
         h = (raw or "").strip()
@@ -7557,9 +7604,10 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             targets = my_reports or [u for u in users if u["id"] != current_user["id"]]
             member_ids = [u["id"] for u in targets]
             if member_ids:
-                # Provide alternates so frontend can show a subtle dropdown
+                # Provide alternates so frontend can show a subtle scope picker
                 alternates = []
-                if my_reports:
+                if my_reports and has_indirect:
+                    needs_team_scope = True
                     alternates.append({
                         "kind": "team", "id": "everyone-under-me",
                         "name": f"Everyone under me ({len(everyone_under_me)})",
@@ -7567,9 +7615,12 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                         "member_count": len(everyone_under_me),
                         "member_names": [u["name"] for u in everyone_under_me],
                     })
-                # Always offer the flat domain list as an alt
+                elif everyone_under_me and not my_reports:
+                    # No direct reports recorded but transitive graph exists
+                    targets = everyone_under_me
+                    member_ids = [u["id"] for u in targets]
                 domain_flat = [u for u in users if u["id"] != current_user["id"]]
-                if domain_flat and len(domain_flat) != len(targets):
+                if domain_flat and len(domain_flat) != len(member_ids):
                     alternates.append({
                         "kind": "team", "id": "everyone-in-domain",
                         "name": f"Everyone in {domain}" if domain else "Everyone",
@@ -7577,20 +7628,41 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                         "member_count": len(domain_flat),
                         "member_names": [u["name"] for u in domain_flat],
                     })
+                # Also surface named groups as quick alternates
+                for g in groups[:5]:
+                    g_emails = g.get("emails") or []
+                    g_member_ids = []
+                    g_names = []
+                    for em in g_emails:
+                        u = next((x for x in users if x["email"].lower() == em.lower()), None)
+                        if u:
+                            g_member_ids.append(u["id"])
+                            g_names.append(u["name"])
+                    if g_emails:
+                        alternates.append({
+                            "kind": "group",
+                            "id": g["id"],
+                            "name": g["name"],
+                            "members": g_member_ids,
+                            "emails": g_emails,
+                            "member_count": len(g_emails),
+                            "member_names": g_names,
+                        })
                 resolved.append({
                     "kind": "team",
                     "id": "my-team",
-                    "name": "My team" if my_reports else (f"Everyone in {domain}" if domain else "Everyone"),
+                    "name": f"Direct reports ({len(my_reports)})" if my_reports else (f"Everyone in {domain}" if domain else "Everyone"),
                     "email": None,
                     "members": member_ids,
                     "member_count": len(member_ids),
                     "member_names": [u["name"] for u in targets],
                     "alternates": alternates,
+                    "needs_scope_pick": needs_team_scope,
                 })
             continue
 
         # Special: everyone under me → transitive
-        if low in ("everyone under me", "everyone reporting to me", "my whole team", "whole team", "all my reports"):
+        if low in ("everyone under me", "everyone reporting to me", "my whole team", "whole team", "all my reports", "indirect reports", "all reports"):
             if everyone_under_me:
                 resolved.append({
                     "kind": "team",
@@ -7667,7 +7739,46 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             top = [u for s, u in user_candidates if s == top_score][:5]
             ambiguous.append({"hint": h, "candidates": top})
 
-    return {"resolved": resolved, "ambiguous": ambiguous, "unresolved": unresolved}
+    return {
+        "resolved": resolved,
+        "ambiguous": ambiguous,
+        "unresolved": unresolved,
+        "needs_team_scope": needs_team_scope,
+    }
+
+
+def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = None) -> str:
+    """Turn manager-centric wording into clear instructions for the assignee."""
+    if not desc:
+        return desc
+    s = str(desc).strip()
+    mgr = (manager_name or "your manager").strip() or "your manager"
+
+    replacements = [
+        (r"(?i)^ask\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
+        (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)\bsend\s+me\b", f"send {mgr}"),
+        (r"(?i)\breport\s+(?:back\s+)?to\s+me\b", f"report to {mgr}"),
+        (r"(?i)\bupdate\s+me\b", f"update {mgr}"),
+        (r"(?i)\blet\s+me\s+know\b", f"let {mgr} know"),
+        (r"(?i)\bshare\s+(?:it|this|them)?\s*with\s+me\b", f"share with {mgr}"),
+        (r"(?i)\bemail\s+me\b", f"email {mgr}"),
+    ]
+    for pat, repl in replacements:
+        s = re.sub(pat, repl, s)
+
+    if s and not re.match(r"(?i)^(please|kindly|complete|send|submit|prepare|create|update|review|finalize|draft|schedule|call|follow)\b", s):
+        # Soft nudge into imperative assignee voice when it still reads like a note-to-self
+        if re.search(r"(?i)\b(my team|them|they)\b", s):
+            s = re.sub(r"(?i)\b(?:my|the|our)\s+team\b", "you", s)
+            s = re.sub(r"(?i)\bthem\b", "this", s)
+            s = re.sub(r"(?i)\bthey\b", "you", s)
+        if not re.match(r"(?i)^please\b", s):
+            s = "Please " + s[0].lower() + s[1:] if len(s) > 1 else "Please " + s
+
+    return s.strip()
 
 
 def _assignee_name_list(parsed: dict) -> List[str]:
@@ -7737,8 +7848,8 @@ def _title_from_work_text(work: str) -> str:
     return title
 
 
-def _enrich_parse_title_description(parsed: dict, raw_text: str) -> None:
-    """Keep title short/clean and ensure detailed prompts land in description."""
+def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: Optional[str] = None) -> None:
+    """Keep title short/clean and ensure detailed prompts land as assignee-facing description."""
     people = _assignee_name_list(parsed)
     title = _strip_people_noise(str(parsed.get("title") or "").strip(), people)
     desc = _strip_people_noise(str(parsed.get("description") or "").strip(), people)
@@ -7747,6 +7858,12 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str) -> None:
     actions = [a for a in actions if a]
 
     work = _strip_people_noise(raw_text or "", people)
+    # Drop manager-voice prefixes before building title/description
+    work = re.sub(
+        r"(?i)^(ask|tell|have|i want)\s+(?:my|the|our)\s+team\s+to\s+",
+        "",
+        work,
+    ).strip()
     work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", work).strip(" .,:;-")
 
     # Bad / name-contaminated titles
@@ -7780,10 +7897,13 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str) -> None:
         if len(cleaned) > 20:
             desc = cleaned
 
+    # Always present the task the way the assignee should read it
     if desc:
-        parsed["description"] = desc
+        parsed["description"] = _rewrite_description_for_assignee(desc, manager_name)
     if actions:
-        parsed["action_items"] = actions
+        parsed["action_items"] = [
+            _rewrite_description_for_assignee(a, manager_name) for a in actions
+        ]
 
 
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
@@ -7895,7 +8015,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     # Sales language → always mark as a sales task (don't rely on the LLM alone)
     _apply_sales_detection(parsed, text)
 
-    # Ensure multi-word @mentions become assignee hints even if the LLM skipped them
+    # Ensure multi-word @mentions / team phrases become assignee hints even if the LLM skipped them
     hints = list(parsed.get("assignee_hints") or [])
     hint_keys = {str(h).strip().lstrip("@").lower() for h in hints}
     for m in re.finditer(r"@([A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2})", text or ""):
@@ -7904,20 +8024,34 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         if hint and key not in hint_keys:
             hints.append(hint)
             hint_keys.add(key)
+    # Manager-voice team phrases
+    low_text = (text or "").lower()
+    team_phrase_map = [
+        (r"\beveryone under me\b|\bmy whole team\b|\ball my reports\b|\bindirect reports\b", "everyone under me"),
+        (r"\bmy direct reports\b|\bdirect reports\b", "my direct reports"),
+        (r"\bmy team\b|\bour team\b|\bthe team\b", "my team"),
+    ]
+    for pat, token in team_phrase_map:
+        if re.search(pat, low_text) and token not in hint_keys:
+            hints.append(token)
+            hint_keys.add(token)
+            break
     parsed["assignee_hints"] = hints
 
     # Resolve assignees before title scrub so known names can be removed from title/description
     if req.resolve:
         parsed["assignee_resolution"] = await _resolve_assignee_hints(parsed.get("assignee_hints", []), current_user)
 
-    # Title/description quality — strip @people and keep real work text
-    _enrich_parse_title_description(parsed, text)
+    # Title/description quality — strip @people and keep real work text (assignee-facing)
+    _enrich_parse_title_description(parsed, text, manager_name=current_user.get("name"))
 
-    # Rebuild clarifying questions: at most ONE, preferring who over when
+    # Rebuild clarifying questions: at most ONE, preferring who / team-scope over when
     needs_who = False
+    needs_team_scope = False
     needs_when = not bool(parsed.get("due_date"))
     if req.resolve:
         ar = parsed.get("assignee_resolution") or {}
+        needs_team_scope = bool(ar.get("needs_team_scope"))
         # Ask who only when we have no resolved assignees and no ambiguous candidates to pick from
         if not ar.get("resolved") and not ar.get("ambiguous"):
             needs_who = True
@@ -7925,6 +8059,8 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     single_q = None
     if needs_who:
         single_q = "Who should own this task?"
+    elif needs_team_scope:
+        single_q = "Which team scope — direct reports or everyone under you?"
     elif needs_when:
         single_q = "When should this be done by?"
     else:

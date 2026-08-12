@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { useAuth } from '@/App';
 
 // Global floating "New Task" button visible on every authenticated page.
-// Bottom-LEFT. Opens the AI create dialog (not the advanced form).
+// Bottom-LEFT. Opens the AI create prompt (not the Manual form).
 // TaskHub listens for 'tskflow:open-ai-create'; other pages navigate to /dashboard?create=1.
 const GlobalFAB = () => {
     const { user } = useAuth();

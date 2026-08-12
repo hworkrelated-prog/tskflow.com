@@ -22,9 +22,26 @@ export const NotificationBell = () => {
 
     useEffect(() => {
         fetchAll();
-        // Poll as a safety net alongside WS
-        const t = setInterval(fetchAll, 45000);
-        return () => clearInterval(t);
+        let t = null;
+        const start = () => {
+            if (t) return;
+            t = setInterval(() => {
+                if (document.visibilityState === 'visible') fetchAll();
+            }, 45000);
+        };
+        const stop = () => { if (t) { clearInterval(t); t = null; } };
+        const onVis = () => {
+            if (document.visibilityState === 'visible') { fetchAll(); start(); }
+            else stop();
+        };
+        if (document.visibilityState === 'visible') start();
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('tskflow:app-wake', fetchAll);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('tskflow:app-wake', fetchAll);
+        };
     }, []);
 
     // Listen for WS-driven notification events dispatched from App.js

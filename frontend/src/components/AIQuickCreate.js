@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus } from 'lucide-react';
+import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
+import { uploadBlob } from '@/lib/upload';
+import { AttachmentPicker } from '@/components/AttachmentPicker';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -26,10 +28,11 @@ const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quot
 
 const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
 
-/** Detect an @mention token just before the caret. */
+/** Detect an @mention token just before the caret (supports multi-word group names). */
 const getMentionState = (value, caret) => {
     const before = (value || '').slice(0, caret ?? (value || '').length);
-    const m = before.match(/(^|[\s([{])@([^\s@]*)$/);
+    // Allow up to 4 word tokens after @ so "@Sales Team" / "@East Coast Managers" work
+    const m = before.match(/(^|[\s([{])@([A-Za-z0-9_.+'@-]*(?:\s+[A-Za-z0-9_.+'-]+){0,3})$/);
     if (!m) return null;
     const query = m[2] || '';
     const start = before.length - query.length - 1;
@@ -73,8 +76,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
     const [editCriteria, setEditCriteria] = useState('');
     const [editSales, setEditSales] = useState(false);
     const [editScreenRecording, setEditScreenRecording] = useState(false);
+    const [attachments, setAttachments] = useState([]);
+    const [uploadingPaste, setUploadingPaste] = useState(false);
+    const [showRecordPicker, setShowRecordPicker] = useState(false);
+    const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
+    const fileInputRef = useRef(null);
 
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus(), 30);
@@ -317,11 +325,11 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                     members: [],
                     member_count: 0,
                 });
-                toast.success(`Group “${g.name}” created — add members anytime in Advanced`);
+                toast.success(`Group “${g.name}” created — add members in Manual form or Team → Groups`);
             } catch (err) {
                 // Free tier / errors: still put the @mention in the prompt for the parser
                 replaceMention(`@${name} `);
-                toast.message(`Mentioned “${name}” — create the group in Advanced if needed`);
+                toast.message(`Mentioned “${name}” — create the group in Manual form if needed`);
             }
         }
     }, [mention, replaceMention, addAssigneeChip]);
@@ -428,10 +436,29 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         setClarifyAnswer('');
         setPeopleSearch('');
         setMention(null);
+
+        // Offer a quick scope pick when "my team" could mean direct vs everyone under me
+        const teamChip = (p.assignee_resolution?.resolved || []).find(
+            (a) => a.kind === 'team' && (a.needs_scope_pick || (Array.isArray(a.alternates) && a.alternates.some((x) => x.id === 'everyone-under-me')))
+        );
+        if (teamChip && (p.assignee_resolution?.needs_team_scope || teamChip.needs_scope_pick)) {
+            setTeamScopePrompt({
+                current: teamChip,
+                options: [
+                    { ...teamChip, label: teamChip.name || 'Direct reports' },
+                    ...(teamChip.alternates || []).map((alt) => ({ ...alt, label: alt.name })),
+                ],
+            });
+        } else {
+            setTeamScopePrompt(null);
+        }
+
         const qs = p.clarifying_questions || [];
         // Skip "who" clarify if @mention already picked someone (or parse resolved them)
-        const filteredQs = mergedCount > 0 || (p.assignee_resolution?.resolved || []).length > 0 || /@/.test(text)
-            ? qs.filter((q) => !/who|own|assign/i.test(q || ''))
+        // Keep team-scope questions so the user can confirm direct vs all reports
+        const hasAssignees = mergedCount > 0 || (p.assignee_resolution?.resolved || []).length > 0 || /@/.test(text);
+        const filteredQs = hasAssignees
+            ? qs.filter((q) => !/who|own|assign/i.test(q || '') || /scope|direct reports|everyone under/i.test(q || ''))
             : qs;
         const nextPreview = {
             ...p,
@@ -570,6 +597,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         setEditCriteria('');
         setEditSales(false);
         setEditScreenRecording(false);
+        setAttachments([]);
+        setShowRecordPicker(false);
+        setTeamScopePrompt(null);
         setEditingField(null);
         setShowDetails(false);
         setClarifyAnswer('');
@@ -585,15 +615,92 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
     const flattenAssignees = () => {
         const targets = [];
         for (const a of editAssignees) {
-            if (a.kind === 'user' || a.id === 'self') targets.push(a.id === 'self' ? 'self' : a.id);
-            else if (a.kind === 'email' && a.email) targets.push(a.email);
-            else if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
-                for (const m of a.members) targets.push(m);
-            } else if (a.kind === 'group' && Array.isArray(a.emails)) {
-                for (const e of a.emails) targets.push(e);
+            if (a.kind === 'user' || a.id === 'self') {
+                targets.push(a.id === 'self' ? 'self' : a.id);
+                continue;
+            }
+            if (a.kind === 'email' && a.email) {
+                targets.push(a.email);
+                continue;
+            }
+            if (a.kind === 'group' || a.kind === 'team') {
+                const members = Array.isArray(a.members) ? a.members.filter(Boolean) : [];
+                const emails = Array.isArray(a.emails) ? a.emails.filter(Boolean) : [];
+                // Prefer registered member ids; always include emails (empty members used to block send)
+                if (members.length) {
+                    for (const m of members) targets.push(m);
+                }
+                for (const e of emails) {
+                    // Avoid double-counting when members already hold the same id
+                    if (!members.includes(e)) targets.push(e);
+                }
             }
         }
         return Array.from(new Set(targets)).filter(Boolean);
+    };
+
+    const handlePasteImage = async (e) => {
+        const items = Array.from(e.clipboardData?.items || []);
+        const images = items.filter((it) => it.type && it.type.startsWith('image/'));
+        if (!images.length) return;
+        e.preventDefault();
+        setUploadingPaste(true);
+        try {
+            for (const item of images) {
+                const file = item.getAsFile();
+                if (!file) continue;
+                const name = file.name && file.name !== 'image.png'
+                    ? file.name
+                    : `screenshot-${Date.now()}.png`;
+                const ref = await uploadBlob(file, name, file.type || 'image/png');
+                setAttachments((prev) => [...prev, ref]);
+            }
+            toast.success('Screenshot attached');
+        } catch (_) {
+            toast.error('Could not attach screenshot');
+        } finally {
+            setUploadingPaste(false);
+        }
+    };
+
+    const handleAttachFiles = async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        setUploadingPaste(true);
+        try {
+            for (const file of files) {
+                const ref = await uploadBlob(file, file.name, file.type);
+                setAttachments((prev) => [...prev, ref]);
+            }
+        } catch (_) {
+            toast.error('Upload failed');
+        } finally {
+            setUploadingPaste(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const pickTeamScope = (opt) => {
+        if (!opt) return;
+        setEditAssignees([{
+            kind: opt.kind || 'team',
+            id: opt.id,
+            name: opt.label || opt.name,
+            members: opt.members || [],
+            emails: opt.emails || [],
+            member_count: opt.member_count || (opt.members || []).length || (opt.emails || []).length,
+            member_names: opt.member_names,
+            alternates: opt.alternates,
+        }]);
+        setTeamScopePrompt(null);
+        // Drop the scope clarifying question so Confirm can appear
+        setPreview((p) => {
+            if (!p) return p;
+            const qs = (p.clarifying_questions || []).filter(
+                (q) => !/scope|direct reports|everyone under/i.test(q || '')
+            );
+            return { ...p, clarifying_questions: qs };
+        });
     };
 
     const send = async () => {
@@ -620,23 +727,32 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
             const rec = preview?.recurring;
             const isRecurring = rec && rec.is_recurring && rec.frequency;
             const criteria = (editCriteria || '').trim() || undefined;
+            const timeOfDay = rec?.time_of_day || (editDue ? editDue.slice(11, 16) : '09:00');
             if (isRecurring) {
+                const rule = {
+                    frequency: rec.frequency === 'weekdays' ? 'weekdays' : rec.frequency,
+                    interval: rec.frequency === 'biweekly' ? 2 : 1,
+                    weekdays: rec.days_of_week || null,
+                    end_type: rec.end_type || 'never',
+                    end_date: rec.end_date || null,
+                    end_count: rec.end_count || null,
+                };
+                if (rec.frequency === 'weekdays') {
+                    rule.weekdays = [0, 1, 2, 3, 4];
+                }
                 const payloads = unique.map((aid) => ({
                     title: editTitle.trim(),
                     description: editDesc || '',
                     assigned_to: aid,
                     priority: editPriority,
-                    frequency: rec.frequency,
-                    days_of_week: rec.days_of_week || null,
-                    time_of_day: rec.time_of_day || (editDue ? editDue.slice(11, 16) : '09:00'),
-                    end_time_of_day: rec.end_time_of_day || null,
-                    end_type: rec.end_type || 'never',
-                    end_date: rec.end_date || null,
-                    end_count: rec.end_count || null,
-                    start_date: editDue ? editDue.slice(0, 10) : undefined,
+                    start_due_date: editDue.includes('T')
+                        ? `${editDue.slice(0, 10)}T${timeOfDay}`
+                        : `${editDue}T${timeOfDay}`,
                     is_sales_task: !!editSales,
-                    category: editSales ? 'Sales' : undefined,
-                    success_criteria: criteria,
+                    requires_screen_recording: !!editScreenRecording,
+                    auto_reminder: true,
+                    attachments: attachments.length ? attachments : undefined,
+                    recurrence: rule,
                 }));
                 await Promise.all(payloads.map((p) => axios.post(`${API}/recurring`, p)));
                 toast.success(`Recurring series set up for ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
@@ -652,6 +768,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                     category: sales ? 'Sales' : undefined,
                     requires_screen_recording: !!editScreenRecording,
                     success_criteria: criteria,
+                    attachments: attachments.length ? attachments : undefined,
+                    auto_reminder: true,
                 };
                 if (unique.length === 1) {
                     await axios.post(`${API}/tasks`, { ...payload, assigned_to: unique[0] });
@@ -684,7 +802,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         clarifying.length === 0 &&
         !!editDue &&
         editAssignees.length > 0 &&
-        !needsAmbiguousPick;
+        !needsAmbiguousPick &&
+        !teamScopePrompt;
 
     // Keep parent in sync so dismissing the dialog can save a draft.
     useEffect(() => {
@@ -797,7 +916,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                     className="text-xs text-slate-500 hover:text-slate-800"
                                     data-testid="ai-advanced-btn"
                                 >
-                                    Advanced
+                                    Manual form
                                 </button>
                             </div>
                         )}
@@ -817,6 +936,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                     setText(val);
                                     syncMentionFromCaret(val, caret);
                                 }}
+                                onPaste={handlePasteImage}
                                 onClick={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
                                 onKeyUp={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
                                 onKeyDown={(e) => {
@@ -855,9 +975,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                         runPreview();
                                     }
                                 }}
-                                placeholder="What needs to get done? Type @ to assign someone"
+                                placeholder="What needs to get done? @ to assign · paste a screenshot"
                                 rows={1}
-                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-44 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
@@ -1034,22 +1154,41 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                 document.body
                             )}
 
-                            {editAssignees.length > 0 && !preview && (
+                            {(editAssignees.length > 0 || attachments.length > 0) && !preview && (
                                 <div className="flex flex-wrap gap-1.5 px-3 pb-11">
                                     {editAssignees.map((a, i) => (
                                         <span
                                             key={`${a.id || a.email || a.name}-${i}`}
                                             className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${
-                                                a.kind === 'group'
+                                                a.kind === 'group' || a.kind === 'team'
                                                     ? 'bg-teal-100 text-teal-900 border-teal-200'
                                                     : a.kind === 'email'
                                                         ? 'bg-slate-100 text-slate-700 border-slate-200'
                                                         : 'bg-teal-100 text-teal-800 border-teal-200'
                                             }`}
                                         >
-                                            {a.kind === 'group' ? <Users className="w-3 h-3" /> : <UserIcon className="w-3 h-3" />}
+                                            {(a.kind === 'group' || a.kind === 'team') ? <Users className="w-3 h-3" /> : <UserIcon className="w-3 h-3" />}
                                             {a.name || a.email}
                                             <button type="button" onClick={() => removeAssignee(i)} className="opacity-60 hover:opacity-100" aria-label="Remove">
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                    {attachments.map((att, i) => (
+                                        <span
+                                            key={att.id || att.storage_path || i}
+                                            className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200"
+                                        >
+                                            {(att.kind === 'video' || (att.content_type || '').startsWith('video/'))
+                                                ? <Video className="w-3 h-3" />
+                                                : <ImageIcon className="w-3 h-3" />}
+                                            <span className="max-w-[120px] truncate">{att.original_filename || 'Attachment'}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                                                className="opacity-60 hover:opacity-100"
+                                                aria-label="Remove attachment"
+                                            >
                                                 <X className="w-3 h-3" />
                                             </button>
                                         </span>
@@ -1057,22 +1196,66 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                 </div>
                             )}
 
-                            <div className="absolute bottom-2 right-2 flex items-center gap-2">
-                                <span className="hidden sm:inline text-[10px] text-slate-400 pr-1 select-none">
-                                    @ to assign · Enter to go
-                                </span>
-                                <Button
-                                    type="button"
-                                    onClick={() => runPreview()}
-                                    disabled={loading || sending || answerLoading || !text.trim()}
-                                    className="rounded-xl bg-slate-900 hover:bg-slate-800 h-10 sm:h-9 px-3.5 gap-1.5"
-                                    data-testid="ai-quick-preview-btn"
-                                >
-                                    {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                    <span>{loading || answerLoading ? '…' : 'Go'}</span>
-                                </Button>
+                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 pointer-events-none">
+                                <div className="flex items-center gap-0.5 pointer-events-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowRecordPicker((v) => !v)}
+                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-teal-700 hover:bg-teal-50/80 flex items-center justify-center transition-colors"
+                                        title="Record your screen to attach"
+                                        aria-label="Record screen"
+                                        data-testid="ai-screen-record-btn"
+                                    >
+                                        <Video className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors"
+                                        title="Attach a file"
+                                        aria-label="Attach file"
+                                        data-testid="ai-attach-file-btn"
+                                    >
+                                        {(uploadingPaste)
+                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            : <Paperclip className="w-3.5 h-3.5" strokeWidth={1.75} />}
+                                    </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        className="hidden"
+                                        multiple
+                                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                                        onChange={handleAttachFiles}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 pointer-events-auto">
+                                    <span className="hidden sm:inline text-[10px] text-slate-400 pr-1 select-none">
+                                        Enter to go
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        onClick={() => runPreview()}
+                                        disabled={loading || sending || answerLoading || !text.trim()}
+                                        className="rounded-xl bg-slate-900 hover:bg-slate-800 h-10 sm:h-9 px-3.5 gap-1.5"
+                                        data-testid="ai-quick-preview-btn"
+                                    >
+                                        {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                        <span>{loading || answerLoading ? '…' : 'Go'}</span>
+                                    </Button>
+                                </div>
                             </div>
                         </div>
+
+                        {showRecordPicker && (
+                            <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3" data-testid="ai-inline-recorder">
+                                <AttachmentPicker
+                                    attachments={attachments}
+                                    setAttachments={setAttachments}
+                                    requiresScreenRecording={editScreenRecording}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1106,6 +1289,28 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                 </div>
                             </div>
 
+                            {teamScopePrompt && (
+                                <div className="flex justify-start" data-testid="ai-team-scope">
+                                    <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-teal-50 border border-teal-200 px-3.5 py-3 space-y-2">
+                                        <p className="text-sm font-medium text-teal-950">Who should this go to?</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {(teamScopePrompt.options || []).map((opt) => (
+                                                <button
+                                                    key={opt.id || opt.label}
+                                                    type="button"
+                                                    onClick={() => pickTeamScope(opt)}
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:bg-teal-100 transition-colors"
+                                                    data-testid={`team-scope-${opt.id}`}
+                                                >
+                                                    <Users className="w-3.5 h-3.5" />
+                                                    {opt.label || opt.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {clarifying.length > 0 && (
                                 <div className="flex justify-start" data-testid="ai-clarifying">
                                     <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
@@ -1114,7 +1319,21 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                             <p className="text-sm font-medium text-amber-950">{clarifying[0]}</p>
                                         </div>
 
-                                        {isWhoClarify ? (
+                                        {/scope|direct reports|everyone under/i.test(clarifying[0] || '') && teamScopePrompt ? (
+                                            <div className="flex flex-wrap gap-2 ml-6">
+                                                {(teamScopePrompt.options || []).map((opt) => (
+                                                    <button
+                                                        key={`q-${opt.id || opt.label}`}
+                                                        type="button"
+                                                        onClick={() => pickTeamScope(opt)}
+                                                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100"
+                                                    >
+                                                        <Users className="w-3.5 h-3.5" />
+                                                        {opt.label || opt.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : isWhoClarify ? (
                                             <div className="relative ml-6" ref={peopleAnchorRef}>
                                                 <Input
                                                     ref={clarifyRef}
@@ -1154,9 +1373,53 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                                         onPointerDown={(e) => e.stopPropagation()}
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                     >
-                                                        {filteredPeople.length === 0 && (
-                                                            <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email</p>
+                                                        {filteredPeople.length === 0 && groups.filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)).length === 0 && (
+                                                            <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email or group</p>
                                                         )}
+                                                        {groups
+                                                            .filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery))
+                                                            .slice(0, 4)
+                                                            .map((g) => (
+                                                                <button
+                                                                    key={`cg-${g.id}`}
+                                                                    type="button"
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        addAssigneeChip({
+                                                                            kind: 'group',
+                                                                            id: g.id,
+                                                                            name: g.name,
+                                                                            emails: g.emails || [],
+                                                                            members: g.emails || [],
+                                                                            member_count: (g.emails || []).length,
+                                                                        });
+                                                                        setShowPeopleDrop(false);
+                                                                        setPeopleSearch('');
+                                                                        const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
+                                                                            || 'Who should own this task?';
+                                                                        const nextAnswers = { ...answers, [whoQ]: g.name };
+                                                                        setAnswers(nextAnswers);
+                                                                        setPreview((p) => {
+                                                                            if (!p) return p;
+                                                                            const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
+                                                                            return { ...p, clarifying_questions: qs };
+                                                                        });
+                                                                        if (editDue || preview?.due_date) runPreview(text, nextAnswers);
+                                                                    }}
+                                                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
+                                                                    role="option"
+                                                                    data-testid={`clarify-pick-group-${g.id}`}
+                                                                >
+                                                                    <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                                                                        <Users className="w-3.5 h-3.5" />
+                                                                    </span>
+                                                                    <span className="min-w-0 flex-1">
+                                                                        <span className="text-sm font-medium text-slate-800 block truncate">{g.name}</span>
+                                                                        <span className="text-[11px] text-slate-500">Group · {(g.emails || []).length}</span>
+                                                                    </span>
+                                                                </button>
+                                                            ))}
                                                         {filteredPeople.map((u) => (
                                                             <button
                                                                 key={u.id || u.email}
@@ -1641,7 +1904,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                     </div>
                                     {unresolved.length > 0 && (
                                         <p className="text-xs text-slate-500 italic">
-                                            {`Couldn't identify: ${unresolved.join(', ')}. Add via the advanced form.`}
+                                            {`Couldn't identify: ${unresolved.join(', ')}. Add via the manual form.`}
                                         </p>
                                     )}
                                 </div>
@@ -1683,11 +1946,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                                 is_sales_task: editSales,
                                                 requires_screen_recording: editScreenRecording,
                                                 success_criteria: editCriteria,
+                                                assignees: editAssignees,
+                                                attachments,
                                             })}
                                             className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
                                             data-testid="ai-open-advanced"
                                         >
-                                            Open advanced form
+                                            Open manual form
                                         </button>
                                         <Button
                                             type="button"
@@ -1714,11 +1979,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                                 is_sales_task: editSales,
                                                 requires_screen_recording: editScreenRecording,
                                                 success_criteria: editCriteria,
+                                                assignees: editAssignees,
+                                                attachments,
                                             })}
                                             className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
                                             data-testid="ai-open-advanced"
                                         >
-                                            Open advanced form for attachments & notes
+                                            Open manual form
                                         </button>
                                     </div>
                                 )}
@@ -1735,7 +2002,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                             className="text-xs text-slate-500 hover:text-slate-800"
                             data-testid="ai-advanced-btn-embedded"
                         >
-                            Advanced
+                            Manual form
                         </button>
                     </div>
                 )}
