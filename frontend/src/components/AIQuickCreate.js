@@ -11,8 +11,9 @@ import { toast } from 'sonner';
 import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
-import { uploadBlob } from '@/lib/upload';
+import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -79,6 +80,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
     const [attachments, setAttachments] = useState([]);
     const [uploadingPaste, setUploadingPaste] = useState(false);
     const [showRecordPicker, setShowRecordPicker] = useState(false);
+    const [previewAttachment, setPreviewAttachment] = useState(null);
     const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
@@ -116,6 +118,12 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
     useEffect(() => {
         if (embedded) focusInput();
     }, [embedded, focusInput]);
+
+    useEffect(() => {
+        const onFocus = () => focusInput();
+        window.addEventListener('tskflow:focus-ai-prompt', onFocus);
+        return () => window.removeEventListener('tskflow:focus-ai-prompt', onFocus);
+    }, [focusInput]);
 
     useEffect(() => {
         let cancelled = false;
@@ -360,17 +368,27 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         // Multi-word @mentions: "@Mark Sibghat"
         s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}/g, ' ');
         s = s.replace(/@\S+/g, ' ');
+        // Manager-voice: "get Hashim to review…" / "have Sarah do…" → keep the work clause
+        s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
+        s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/gi, '');
         const names = [...peopleNames].filter(Boolean).sort((a, b) => b.length - a.length);
         for (const name of names) {
             s = s.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
         }
+        // Collapse broken remnants like "get do it" / "to do it by"
+        s = s.replace(/\b(?:get|have|ask|tell)\s+(?=do\b|to\b)/gi, '');
+        s = s.replace(/\bget\s+do\b/gi, 'do');
+        s = s.replace(/\band\s+get\b/gi, 'and');
         const nameTokens = new Set();
         names.forEach((n) => n.split(/\s+/).forEach((p) => { if (p.length > 1) nameTokens.add(p.toLowerCase()); }));
         const tokens = s.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
         while (tokens.length && nameTokens.has(tokens[0].toLowerCase().replace(/[.,;:]+$/g, ''))) {
             tokens.shift();
         }
-        return tokens.join(' ').replace(/^(need to|needs to|have to|must|please)\s+/i, '').trim();
+        return tokens.join(' ')
+            .replace(/^(need to|needs to|have to|must|please|kindly)\s+/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
     };
 
     const applyPreview = (p) => {
@@ -380,7 +398,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
             ...((p.assignee_resolution?.resolved || []).map((a) => a.name).filter(Boolean)),
             ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
         ];
-        let title = stripPeopleNoise(p.title || '', peopleNames);
+        // Prefer the LLM title when it already looks clean — avoid over-scrubbing into "get do it"
+        const llmTitle = String(p.title || '').trim();
+        const llmTitleClean = !llmTitle
+            || /@/.test(llmTitle)
+            || /^assign\b/i.test(llmTitle)
+            || peopleNames.some((n) => n && llmTitle.toLowerCase().includes(String(n).toLowerCase()));
+        let title = llmTitleClean ? stripPeopleNoise(llmTitle, peopleNames) : llmTitle;
         let desc = stripPeopleNoise(p.description || '', peopleNames);
         const actions = Array.isArray(p.action_items)
             ? p.action_items.map((a) => stripPeopleNoise(a, peopleNames)).filter(Boolean)
@@ -388,22 +412,43 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
 
         const work = stripPeopleNoise(text || '', peopleNames)
             .replace(/\b(by|before|due)\s+.+$/i, '')
+            .replace(/\band\s+get\b/gi, 'and')
             .trim();
         const looksNamed = peopleNames.some((n) => {
             const last = (n || '').split(/\s+/).pop();
             return last && last.length > 2 && new RegExp(`\\b${last}\\b`, 'i').test(title);
         });
-        if (!title || /^assign\b/i.test(title) || title.includes('@') || looksNamed || title.split(/\s+/).length > 14) {
+        const titleBad = !title
+            || /^assign\b/i.test(title)
+            || title.includes('@')
+            || looksNamed
+            || title.split(/\s+/).length > 14
+            || /\bget\s+do\b/i.test(title)
+            || /\bget\s*$/i.test(title);
+        if (titleBad) {
             const seed = actions[0] || work;
-            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close)\b.*$/i);
+            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look)\b.*$/i);
             title = (m ? m[0] : seed).split(/\s+/).slice(0, 8).join(' ');
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
+        // Description: prefer clean LLM / action steps — never leave mangled "get do it"
         if (!desc && actions.length) {
             desc = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
         }
-        if (!desc && work.length > 20) {
+        if (!desc && work.length > 12) {
             desc = work;
+        }
+        desc = (desc || '')
+            .replace(/\bget\s+do\b/gi, 'do')
+            .replace(/\band\s+get\b/gi, 'and')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do)\b/i.test(desc)) {
+            if (/\b(review|watch|check|complete|send|submit)\b/i.test(desc)) {
+                desc = desc.charAt(0).toUpperCase() + desc.slice(1);
+            } else {
+                desc = `Please ${desc.charAt(0).toLowerCase()}${desc.slice(1)}`;
+            }
         }
 
         setEditTitle(title || p.title || '');
@@ -1174,25 +1219,42 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                             </button>
                                         </span>
                                     ))}
-                                    {attachments.map((att, i) => (
-                                        <span
-                                            key={att.id || att.storage_path || i}
-                                            className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200"
-                                        >
-                                            {(att.kind === 'video' || (att.content_type || '').startsWith('video/'))
-                                                ? <Video className="w-3 h-3" />
-                                                : <ImageIcon className="w-3 h-3" />}
-                                            <span className="max-w-[120px] truncate">{att.original_filename || 'Attachment'}</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                                                className="opacity-60 hover:opacity-100"
-                                                aria-label="Remove attachment"
+                                    {attachments.map((att, i) => {
+                                        const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
+                                        const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
+                                        const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
+                                        return (
+                                            <span
+                                                key={att.id || att.storage_path || i}
+                                                className="inline-flex items-center gap-1.5 text-[11px] pl-1 pr-2 py-1 rounded-xl border bg-slate-50 text-slate-700 border-slate-200"
                                             >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </span>
-                                    ))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPreviewAttachment(att)}
+                                                    className="inline-flex items-center gap-1.5 hover:opacity-90"
+                                                    title="View attachment"
+                                                    data-testid={`ai-attachment-preview-${i}`}
+                                                >
+                                                    {thumb ? (
+                                                        <img src={thumb} alt="" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
+                                                    ) : (
+                                                        <span className="w-8 h-8 rounded-md bg-slate-200/80 flex items-center justify-center">
+                                                            {isVideo ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                                                        </span>
+                                                    )}
+                                                    <span className="max-w-[120px] truncate text-left">{att.original_filename || (isVideo ? 'Recording' : 'Screenshot')}</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                                                    className="opacity-60 hover:opacity-100"
+                                                    aria-label="Remove attachment"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             )}
 
@@ -1503,25 +1565,59 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                 </div>
                             )}
 
-                            {ambiguous.length > 0 && clarifying.length === 0 && (
+                            {ambiguous.length > 0 && clarifying.length === 0 && editAssignees.length === 0 && (
                                 <div className="flex justify-start">
                                     <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
-                                        <p className="text-sm font-medium text-amber-950">I found a few matches — who did you mean?</p>
-                                        {ambiguous.map((amb, i) => (
-                                            <div key={i} className="flex flex-wrap items-center gap-1.5">
-                                                <span className="text-xs text-amber-900 font-medium">{`"${amb.hint}":`}</span>
-                                                {amb.candidates.map((c) => (
-                                                    <button
-                                                        key={c.id}
-                                                        type="button"
-                                                        onClick={() => setEditAssignees((prev) => [...prev, { kind: 'user', id: c.id, name: c.name, email: c.email }])}
-                                                        className="rounded-full bg-white border border-amber-300 hover:bg-amber-100 px-2.5 py-1 text-xs"
-                                                    >
-                                                        {c.name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ))}
+                                        <p className="text-sm font-medium text-amber-950">Who did you mean?</p>
+                                        {ambiguous.map((amb, i) => {
+                                            // Deduplicate identical name/email candidates
+                                            const seen = new Set();
+                                            const unique = (amb.candidates || []).filter((c) => {
+                                                const key = `${(c.email || '').toLowerCase()}|${(c.name || '').toLowerCase()}|${c.id}`;
+                                                if (seen.has(key) || seen.has(c.id)) return false;
+                                                seen.add(key);
+                                                seen.add(c.id);
+                                                return true;
+                                            });
+                                            // If still same display name, show email to distinguish
+                                            const nameCounts = unique.reduce((m, c) => {
+                                                const n = (c.name || '').toLowerCase();
+                                                m[n] = (m[n] || 0) + 1;
+                                                return m;
+                                            }, {});
+                                            return (
+                                                <div key={i} className="flex flex-wrap items-center gap-1.5">
+                                                    {unique.map((c) => (
+                                                        <button
+                                                            key={c.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                addAssigneeChip({ kind: 'user', id: c.id, name: c.name, email: c.email });
+                                                                // Clear ambiguous so re-clicks don't stack duplicates
+                                                                setPreview((prev) => (prev ? {
+                                                                    ...prev,
+                                                                    assignee_resolution: {
+                                                                        ...(prev.assignee_resolution || {}),
+                                                                        ambiguous: [],
+                                                                        resolved: [
+                                                                            ...((prev.assignee_resolution?.resolved) || []),
+                                                                            { kind: 'user', id: c.id, name: c.name, email: c.email },
+                                                                        ],
+                                                                    },
+                                                                } : prev));
+                                                            }}
+                                                            className="rounded-full bg-white border border-amber-300 hover:bg-amber-100 px-2.5 py-1 text-xs"
+                                                            data-testid={`ambiguous-pick-${c.id}`}
+                                                        >
+                                                            {c.name}
+                                                            {nameCounts[(c.name || '').toLowerCase()] > 1 && c.email
+                                                                ? ` · ${c.email}`
+                                                                : ''}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -1529,7 +1625,34 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                             {readyToConfirm && (
                                 <div className="flex justify-start">
                                     <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-slate-50 border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
-                                        <p className="text-xs text-slate-500">Click any value to edit it.</p>
+                                        <p className="text-xs text-slate-500">Tap to edit · Confirm when it looks right</p>
+
+                                        {attachments.length > 0 && (
+                                            <div className="flex flex-wrap gap-2" data-testid="ai-confirm-attachments">
+                                                {attachments.map((att, i) => {
+                                                    const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
+                                                    const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
+                                                    const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
+                                                    return (
+                                                        <button
+                                                            key={att.id || att.storage_path || i}
+                                                            type="button"
+                                                            onClick={() => setPreviewAttachment(att)}
+                                                            className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-white hover:ring-2 hover:ring-teal-300"
+                                                            title="View attachment"
+                                                        >
+                                                            {thumb ? (
+                                                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <span className="w-full h-full flex items-center justify-center text-slate-500">
+                                                                    {isVideo ? <Video className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
 
                                         <div className="space-y-2.5 text-sm text-slate-800">
                                             <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
@@ -2007,6 +2130,37 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                     </div>
                 )}
             </div>
+
+            <Dialog open={!!previewAttachment} onOpenChange={(o) => { if (!o) setPreviewAttachment(null); }}>
+                <DialogContent className="max-w-2xl rounded-2xl p-0 overflow-hidden" data-testid="ai-attachment-lightbox">
+                    <DialogHeader className="px-4 pt-4 pb-2 pr-10">
+                        <DialogTitle className="text-base truncate">
+                            {previewAttachment?.original_filename || 'Attachment'}
+                        </DialogTitle>
+                        <DialogDescription className="sr-only">Preview attached media</DialogDescription>
+                    </DialogHeader>
+                    <div className="px-4 pb-4">
+                        {previewAttachment?.storage_path && (
+                            (previewAttachment.kind === 'video' || (previewAttachment.content_type || '').startsWith('video/'))
+                                ? (
+                                    <video
+                                        src={fileUrl(previewAttachment.storage_path)}
+                                        controls
+                                        autoPlay
+                                        className="w-full max-h-[70vh] rounded-xl bg-black"
+                                    />
+                                )
+                                : (
+                                    <img
+                                        src={fileUrl(previewAttachment.storage_path)}
+                                        alt={previewAttachment.original_filename || 'Screenshot'}
+                                        className="w-full max-h-[70vh] object-contain rounded-xl bg-slate-50"
+                                    />
+                                )
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

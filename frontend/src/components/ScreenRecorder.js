@@ -35,9 +35,13 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     const [pos, setPos] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-            return clampPos(saved || null);
+            // Default Loom-style: bottom-left
+            const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
+            const h = typeof window !== 'undefined' ? window.innerHeight : 768;
+            return clampPos(saved || { x: 16, y: h - 88 });
         } catch {
-            return clampPos(null);
+            const h = typeof window !== 'undefined' ? window.innerHeight : 768;
+            return clampPos({ x: 16, y: h - 88 });
         }
     });
     useEffect(() => {
@@ -160,6 +164,13 @@ export const ScreenRecorder = ({ onSaved }) => {
 
     const stopAllTracks = () => {
         if (rafRef.current) { try { cancelAnimationFrame(rafRef.current); } catch { /* noop */ } rafRef.current = null; }
+        try {
+            if (window.__tskRecHiddenTimer) { clearInterval(window.__tskRecHiddenTimer); delete window.__tskRecHiddenTimer; }
+            if (window.__tskRecVisHandler) {
+                document.removeEventListener('visibilitychange', window.__tskRecVisHandler);
+                delete window.__tskRecVisHandler;
+            }
+        } catch { /* noop */ }
         try { audioCtxRef.current?.close?.(); } catch { /* noop */ }
         audioCtxRef.current = null;
         [displayStreamRef, micStreamRef, camStreamRef, mixedStreamRef, canvasStreamRef].forEach((r) => {
@@ -204,7 +215,8 @@ export const ScreenRecorder = ({ onSaved }) => {
         }
     };
 
-    // Composite screen video + circular webcam bubble into a canvas and return its stream.
+    // Composite screen + webcam into a canvas. Uses rAF while visible and a
+    // setInterval fallback when the tab is hidden (rAF is paused by browsers).
     const buildCompositeStream = async (displayStream, camMediaStream) => {
         const displayTrack = displayStream.getVideoTracks()[0];
         const settings = displayTrack?.getSettings?.() || {};
@@ -241,12 +253,7 @@ export const ScreenRecorder = ({ onSaved }) => {
             return { size, cx, cy };
         };
 
-        let lastDraw = 0;
-        const frameInterval = 1000 / 30;
-        const draw = (now) => {
-            rafRef.current = requestAnimationFrame(draw);
-            if (now - lastDraw < frameInterval) return;
-            lastDraw = now;
+        const paint = () => {
             try {
                 ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, width, height);
@@ -277,7 +284,23 @@ export const ScreenRecorder = ({ onSaved }) => {
                 }
             } catch { /* keep looping */ }
         };
-        rafRef.current = requestAnimationFrame(draw);
+
+        let lastDraw = 0;
+        const frameInterval = 1000 / 30;
+        const drawRaf = (now) => {
+            rafRef.current = requestAnimationFrame(drawRaf);
+            if (now - lastDraw < frameInterval) return;
+            lastDraw = now;
+            paint();
+        };
+        rafRef.current = requestAnimationFrame(drawRaf);
+
+        // When the tab is backgrounded, rAF stops — keep painting via interval so
+        // canvas.captureStream doesn't stick on the last frame.
+        const hiddenTimer = setInterval(() => {
+            if (document.visibilityState === 'hidden') paint();
+        }, 33);
+        try { window.__tskRecHiddenTimer = hiddenTimer; } catch { /* noop */ }
 
         const canvasStream = canvas.captureStream(30);
         canvasStreamRef.current = canvasStream;
@@ -362,16 +385,11 @@ export const ScreenRecorder = ({ onSaved }) => {
             }
             setCountdown(null);
 
-            let compositeStream = null;
-            try {
-                compositeStream = await buildCompositeStream(display, (camOn && camStreamRef.current) ? camStreamRef.current : null);
-            } catch (err) {
-                console.warn('Canvas composite failed — falling back to raw screen stream', err);
-                toast.info('Webcam overlay disabled for this recording — continuing with just the screen.');
-            }
-
+            // Always record the raw display track. Baking webcam via canvas+rAF freezes when
+            // the user switches tabs (browsers pause rAF; audio keeps going). Webcam is shown
+            // as a live floating bubble during the session instead — Loom-style for the web.
             const audioTracks = mixAudioTracks(display, micStreamRef.current, micOn);
-            const videoTracks = compositeStream?.getVideoTracks?.() || display.getVideoTracks();
+            const videoTracks = display.getVideoTracks();
             const mixed = new MediaStream([...videoTracks, ...audioTracks]);
             mixedStreamRef.current = mixed;
 
@@ -414,12 +432,22 @@ export const ScreenRecorder = ({ onSaved }) => {
             openControlsPopup();
 
             const surf = settings.displaySurface;
-            if (surf === 'monitor') toast.info('Recording your whole screen.');
-            else if (surf === 'browser') toast.info('Recording this browser tab.');
-            else if (surf === 'window') toast.info('Recording a window — controls opened in a separate mini window.');
+            if (surf === 'monitor') toast.info('Recording your whole screen — best quality while you switch tabs.');
+            else if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab. Prefer Entire Screen.');
+            else if (surf === 'window') toast.info('Recording a window — use the floating controls (bottom-left).');
 
             if (camErr) toast.warning('Webcam not available — continuing without it.');
             if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
+
+            // Keep drawing alive if we had to use canvas (cam-in-file): switch to setInterval when hidden
+            const onVis = () => {
+                if (document.visibilityState === 'hidden' && compositeStream && surf === 'browser') {
+                    toast.warning('This tab is in the background — video may freeze. Switch back or record Entire Screen.');
+                }
+            };
+            document.addEventListener('visibilitychange', onVis);
+            // Stash remover on the recorder for cleanup via stopAllTracks path
+            try { window.__tskRecVisHandler = onVis; } catch { /* noop */ }
         } catch (e) {
             if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
             setCountdown(null);
@@ -509,7 +537,9 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </div>
             )}
 
-            {recording && !popupOpen && (
+            {/* Always keep a Loom-style draggable bar on the recording tab (bottom-left by default).
+                A separate popup can also open, but this bar stays with the tab. */}
+            {recording && (
                 <FloatingBar>
                     <div className="flex items-center gap-2 pr-2 border-r border-white/10 mr-1">
                         <span className={`w-2.5 h-2.5 rounded-full ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
@@ -536,22 +566,6 @@ export const ScreenRecorder = ({ onSaved }) => {
                         <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop
                     </button>
                 </FloatingBar>
-            )}
-
-            {recording && popupOpen && (
-                <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483647 }}
-                    className="bg-slate-900/90 backdrop-blur text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-xl border border-white/10 flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
-                    <span>{paused ? 'Paused' : 'Recording'}</span>
-                    <span className="font-mono tabular-nums" data-testid="recording-timer">{fmt(seconds)}</span>
-                    <button
-                        type="button"
-                        onClick={() => { try { controlsPopupRef.current?.focus?.(); } catch { /* noop */ } }}
-                        className="ml-1 text-rose-200 hover:text-white underline decoration-dotted"
-                    >
-                        Controls
-                    </button>
-                </div>
             )}
 
             {recording && camOn && camStream && <WebcamBubble stream={camStream} />}

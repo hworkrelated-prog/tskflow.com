@@ -23,6 +23,11 @@ body.app-authenticated {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
+/* Extra room for the persistent middle-bottom AI command bar on the hub */
+body.app-authenticated.has-ai-dock {
+    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Tap targets feel snappier on mobile without 300ms delay leftovers */
 button,
 [role="button"],
