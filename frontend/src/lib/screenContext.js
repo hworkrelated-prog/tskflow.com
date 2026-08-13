@@ -60,7 +60,9 @@ export function captureVisibleScreenContext() {
 
     // Highlight likely stuck states from the AI task bar / clarify UI
     const clarify = clean(
-        document.querySelector('[data-testid="ai-clarify-question"], [data-testid="ai-quick-clarify"]')?.textContent
+        document.querySelector(
+            '[data-testid="ai-clarifying"], [data-testid="ai-clarify-question"], [data-testid="ai-quick-clarify"]'
+        )?.textContent
     );
     const previewTitle = clean(
         document.querySelector('[data-testid="ai-chip-title"], [data-testid="ai-inline-title"]')?.value
