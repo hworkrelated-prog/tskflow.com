@@ -120,7 +120,15 @@ const RecurringPage = () => {
                             <Repeat className="w-12 h-12 mx-auto text-teal-300 mb-4" />
                             <h3 className="font-semibold text-lg mb-1">No recurring series yet</h3>
                             <p className="text-sm text-muted-foreground mb-4">Turn a task into a series to have it repeat automatically.</p>
-                            <Button onClick={() => navigate('/dashboard?create=1')} className="rounded-full">Create a task</Button>
+                            <Button
+                                onClick={() => {
+                                    window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+                                    if (!window.location.pathname.includes('/dashboard')) navigate('/dashboard?create=1');
+                                }}
+                                className="rounded-full"
+                            >
+                                Create a task
+                            </Button>
                         </CardContent>
                     </Card>
                 ) : (
