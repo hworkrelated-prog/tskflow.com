@@ -50,15 +50,15 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         };
     }, []);
 
-    // Attach webcam preview after React commits the floating <video> (setRecording
-    // alone does not populate cameraPreviewRef synchronously).
+    // Wire webcam preview after the floating <video> mounts (refs are null during startRecording).
     useEffect(() => {
         if (!recording) return undefined;
-        const cam = streamsRef.current.camera;
         const el = cameraPreviewRef.current;
-        if (!cam || !el) return undefined;
-        el.srcObject = cam;
-        el.play().catch(() => {});
+        const cam = streamsRef.current.camera;
+        if (el && cam) {
+            el.srcObject = cam;
+            el.play().catch(() => {});
+        }
         return undefined;
     }, [recording]);
 
@@ -142,10 +142,6 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             // Always use the raw display track — canvas+rAF freezes when the tab is
             // backgrounded (audio would keep going). Camera is optional preview only.
             const videoTrackForRecording = screenStream.getVideoTracks()[0];
-            if (cameraStream) {
-                toast.message('Webcam preview is live — the file records your screen cleanly so it won’t freeze when you switch tabs.');
-            }
-
             let audioTrack = null;
             const hasSystemAudio = opts.systemAudio && screenStream.getAudioTracks().length > 0;
             const hasMic = !!micStream;
@@ -205,7 +201,6 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
             // Webcam preview is wired in the `recording` useEffect once the <video> mounts.
         } catch (e) {
-            // If MediaRecorder already started, stop it so onstop can finalize; otherwise tear down streams.
             try {
                 if (recorderRef.current && recorderRef.current.state !== 'inactive') {
                     recorderRef.current.stop();
@@ -312,25 +307,23 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             )}
 
             {recording && (
-                <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
-                    {/* Floating controls */}
-                    <div className="bg-red-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
-                        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-                        <span className="font-mono font-bold text-lg">{fmt(seconds)}</span>
-                        <Button
+                <>
+                    <div
+                        className="fixed bottom-4 left-3 z-[2147483647] bg-slate-900/35 backdrop-blur-xl text-white rounded-full shadow-lg shadow-black/10 border border-white/20 flex items-center gap-2 pl-2.5 pr-1 py-1 select-none"
+                        data-testid="attachment-recording-bar"
+                    >
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                        <span className="font-mono text-[11px] font-medium tabular-nums">{fmt(seconds)}</span>
+                        <button
                             type="button"
-                            size="sm"
                             onClick={stopRecording}
-                            className="bg-white text-red-600 hover:bg-gray-100 rounded-full ml-2"
+                            className="h-7 px-2.5 rounded-full bg-rose-500/85 hover:bg-rose-400 text-white text-[11px] font-semibold inline-flex items-center gap-1"
                         >
-                            <Square className="w-4 h-4 mr-1" />
-                            Stop
-                        </Button>
+                            <Square className="w-3 h-3" fill="currentColor" /> Stop
+                        </button>
                     </div>
-                    
-                    {/* Live camera preview */}
                     {opts.camera && (
-                        <div className="bg-black rounded-xl overflow-hidden shadow-2xl w-48 h-36">
+                        <div className="fixed top-4 right-4 z-[2147483646] w-20 h-20 rounded-full overflow-hidden border-2 border-white/70 shadow-lg bg-black/80">
                             <video
                                 ref={cameraPreviewRef}
                                 autoPlay
@@ -340,7 +333,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                             />
                         </div>
                     )}
-                </div>
+                </>
             )}
 
             {/* Preview Dialog */}

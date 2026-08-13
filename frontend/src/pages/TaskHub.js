@@ -1070,7 +1070,7 @@ const TaskHub = () => {
                                     <Users className="w-5 h-5" />
                                 </Button>
                             )}
-                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
+                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics, Activity Log & Leaderboards">
                                 <BarChart3 className="w-5 h-5" />
                             </Button>
                             <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
@@ -1586,9 +1586,9 @@ const TaskHub = () => {
                 >
                     <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/15 p-3 sm:p-4 max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll">
                         <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
-                            <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5" style={{ fontFamily: 'Outfit' }}>
-                                <Sparkles className="w-3.5 h-3.5" />
-                                What do you need done?
+                            <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5" style={{ fontFamily: 'Outfit' }}>
+                                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                                Create a task
                             </p>
                             <button
                                 type="button"

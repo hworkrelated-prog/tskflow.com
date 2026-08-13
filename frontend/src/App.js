@@ -20,6 +20,7 @@ import RecordingSharePage from '@/pages/RecordingSharePage';
 import RecordingLibraryPage from '@/pages/RecordingLibraryPage';
 import RecordingControlsPopup from '@/pages/RecordingControlsPopup';
 import AnalyticsPage from '@/pages/AnalyticsPage';
+import ActivityLogPage from '@/pages/ActivityLogPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 import TeamManagementPage from '@/pages/TeamManagementPage';
@@ -116,7 +117,7 @@ const AuthProvider = ({ children }) => {
                         try {
                             const notif = new Notification('Catch up on your work', {
                                 body: parts.join(' · ') || 'You have updates waiting in TskFlow',
-                                icon: '/favicon.ico',
+                                icon: '/icon-192.png',
                                 tag: 'tsk-catch-up',
                             });
                             notif.onclick = () => {
@@ -142,7 +143,7 @@ const AuthProvider = ({ children }) => {
                     try {
                         const notif = new Notification(sanitize(n.title) || 'TskFlow', {
                             body: sanitize(n.body),
-                            icon: '/favicon.ico',
+                            icon: '/icon-192.png',
                             tag: n.id || n.task_id || 'tsk-live',
                         });
                         notif.onclick = () => {
@@ -493,6 +494,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <AnalyticsPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/activity"
+                        element={
+                            <ProtectedRoute>
+                                <ActivityLogPage />
                             </ProtectedRoute>
                         }
                     />

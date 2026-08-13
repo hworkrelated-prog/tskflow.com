@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp,
 import { motion, AnimatePresence } from 'framer-motion';
 import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
 import { getErrorMessage } from '@/lib/utils';
+import { ActivityLogTab } from '@/pages/ActivityLogPage';
 
 // Return YYYY-MM-DD in local time (no TZ drift from toISOString)
 const toDateStr = (d) => {
@@ -43,16 +44,36 @@ const rangePresets = () => {
 const AnalyticsPage = () => {
     const { user } = useAuth();
     const presets = rangePresets();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [startDate, setStartDate] = useState(presets.current.start);
     const [endDate, setEndDate] = useState(presets.current.end);
     const [activePreset, setActivePreset] = useState('current');
-    const [section, setSection] = useState('analytics');
+    const sectionParam = searchParams.get('section');
+    const [section, setSection] = useState(
+        ['analytics', 'activity', 'personal_lb', 'org_lb'].includes(sectionParam) ? sectionParam : 'analytics'
+    );
     const [analytics, setAnalytics] = useState(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     
     // Onboarding
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('analytics');
+
+    const selectSection = (key) => {
+        setSection(key);
+        if (key === 'analytics') {
+            setSearchParams({}, { replace: true });
+        } else {
+            setSearchParams({ section: key }, { replace: true });
+        }
+    };
+
+    useEffect(() => {
+        if (['analytics', 'activity', 'personal_lb', 'org_lb'].includes(sectionParam) && sectionParam !== section) {
+            setSection(sectionParam);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sectionParam]);
 
     const fetchAnalytics = useCallback(async (s, e) => {
         if (!s || !e) return;
@@ -169,17 +190,18 @@ const AnalyticsPage = () => {
                         <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
                     </div>
 
-                    {/* Section tabs — Overall Analytics + Team Leaderboard */}
+                    {/* Section tabs — Overall Analytics + Activity Log + Leaderboards */}
                     <div className="flex flex-wrap gap-2 justify-center">
                         {[
                             { key: 'analytics', label: 'Overall Analytics' },
+                            { key: 'activity', label: 'Activity Log' },
                             { key: 'personal_lb', label: 'Team Leaderboard' },
                             { key: 'org_lb', label: 'Organization Leaderboard' },
                         ].map((t) => (
                             <button
                                 key={t.key}
                                 type="button"
-                                onClick={() => setSection(t.key)}
+                                onClick={() => selectSection(t.key)}
                                 data-testid={`analytics-section-${t.key}`}
                                 className={`px-4 py-2 rounded-full text-sm font-medium border ${section === t.key ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-teal-300'}`}
                             >
@@ -188,7 +210,9 @@ const AnalyticsPage = () => {
                         ))}
                     </div>
 
-                    {section !== 'analytics' && (
+                    {section === 'activity' && <ActivityLogTab />}
+
+                    {(section === 'personal_lb' || section === 'org_lb') && (
                         <LeaderboardTab section={section} startDate={startDate} endDate={endDate} />
                     )}
 

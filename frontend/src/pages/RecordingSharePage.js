@@ -15,10 +15,7 @@ const fmtDuration = (secs) => {
 
 /**
  * Public Loom-style watch page for a shareable recording token.
-<<<<<<< HEAD
  * Video streams from /api/recordings/{token}/media (viewers do not need an account).
-=======
->>>>>>> origin/main
  */
 const RecordingSharePage = () => {
     const { token } = useParams();

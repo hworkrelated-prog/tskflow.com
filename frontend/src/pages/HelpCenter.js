@@ -81,7 +81,7 @@ const topics = [
         id: 'analytics',
         icon: <BookOpen className="w-4 h-4" />, title: 'Analytics & Team Leaderboard', category: 'Reporting',
         body: (
-            <p className="text-sm">Head to /analytics. Two separate views: <strong>Overall Analytics</strong> (completion rate, overdue count, avg completion, avg response, trends, filters) and the <strong>Team Leaderboard</strong> (fastest, highest completion, most completed, streaks, badges).</p>
+            <p className="text-sm">Head to /analytics. Tabs include: <strong>Overall Analytics</strong> (completion rate, overdue count, avg completion, avg response, trends, filters), <strong>Activity Log</strong> (full task data with reminders/chatter + CSV export), and the <strong>Team Leaderboard</strong> (fastest, highest completion, most completed, streaks, badges).</p>
         )
     },
     {
