@@ -1070,7 +1070,7 @@ const TaskHub = () => {
                                     <Users className="w-5 h-5" />
                                 </Button>
                             )}
-                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
+                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics, Activity Log & Leaderboards">
                                 <BarChart3 className="w-5 h-5" />
                             </Button>
                             <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">

@@ -20,6 +20,7 @@ import RecordingSharePage from '@/pages/RecordingSharePage';
 import RecordingLibraryPage from '@/pages/RecordingLibraryPage';
 import RecordingControlsPopup from '@/pages/RecordingControlsPopup';
 import AnalyticsPage from '@/pages/AnalyticsPage';
+import ActivityLogPage from '@/pages/ActivityLogPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PaymentSuccessPage from '@/pages/PaymentSuccessPage';
 import TeamManagementPage from '@/pages/TeamManagementPage';
@@ -493,6 +494,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <AnalyticsPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/activity"
+                        element={
+                            <ProtectedRoute>
+                                <ActivityLogPage />
                             </ProtectedRoute>
                         }
                     />

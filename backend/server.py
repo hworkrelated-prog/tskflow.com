@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks, Request as HTTPRequest
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,7 +11,7 @@ import re
 import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
@@ -28,6 +28,17 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
+from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
+from sheets_helpers import (
+    SHEETS_SCOPES,
+    extract_spreadsheet_id,
+    fetch_sheet_values,
+    parse_metrics_rows,
+    upsert_daily_metrics,
+    build_sheet_metrics_eod_section,
+    find_person_metrics,
+    format_metrics_line,
+)
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -102,6 +113,7 @@ class UserResponse(BaseModel):
     is_team_owner: Optional[bool] = False
     team_owner_email: Optional[str] = None
     google_calendar_connected: Optional[bool] = False
+    google_sheets_connected: Optional[bool] = False
     preferences: Optional[dict] = None
     reports_to: Optional[str] = None
     company_domain: Optional[str] = None
@@ -558,6 +570,7 @@ async def verify_email(request: EmailVerifyRequest):
             is_team_owner=user.get("is_team_owner", False),
             team_owner_email=user.get("team_owner_email"),
             google_calendar_connected=user.get("google_calendar_connected", False),
+            google_sheets_connected=user.get("google_sheets_connected", False),
             preferences=user.get("preferences") or {},
             reports_to=user.get("reports_to"),
             company_domain=user.get("company_domain"),
@@ -638,6 +651,7 @@ async def login(user: UserLogin):
             is_team_owner=db_user.get("is_team_owner", False),
             team_owner_email=db_user.get("team_owner_email"),
             google_calendar_connected=db_user.get("google_calendar_connected", False),
+            google_sheets_connected=db_user.get("google_sheets_connected", False),
             preferences=db_user.get("preferences") or {},
             reports_to=db_user.get("reports_to"),
             company_domain=db_user.get("company_domain"),
@@ -655,6 +669,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         is_team_owner=current_user.get("is_team_owner", False),
         team_owner_email=current_user.get("team_owner_email"),
         google_calendar_connected=current_user.get("google_calendar_connected", False),
+        google_sheets_connected=current_user.get("google_sheets_connected", False),
         preferences=current_user.get("preferences") or {},
         reports_to=current_user.get("reports_to"),
         company_domain=current_user.get("company_domain"),
@@ -1261,6 +1276,32 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
     background_tasks.add_task(send_emails_concurrent, messages)
     reminded = len(messages)
 
+    now_iso = get_pst_now().isoformat()
+    for c in children:
+        try:
+            assignee = await db.users.find_one({"id": c["assigned_to"]}, {"_id": 0}) if c.get("assigned_to") and not str(c["assigned_to"]).startswith("email_") else None
+            email_to = (assignee or {}).get("email") or c.get("assigned_to_email")
+            if not email_to:
+                continue
+            await log_task_activity(
+                db,
+                task_id=c["id"],
+                event_type="reminder",
+                channel="email",
+                actor_id=current_user["id"],
+                actor_name=current_user.get("name"),
+                recipient_id=c.get("assigned_to"),
+                recipient_name=(assignee or {}).get("name"),
+                recipient_email=email_to,
+                company_domain=current_user.get("company_domain"),
+                title="Group reminder",
+                body=f"Reminder for outstanding group task: {parent.get('title')}",
+                meta={"parent_id": parent_id, "source": "group_remind"},
+                created_at=now_iso,
+            )
+        except Exception as e:
+            logging.warning(f"Failed to log group reminder activity: {e}")
+
     return {"message": f"Reminder sent to {reminded} outstanding assignee(s)", "reminded": reminded}
 
 
@@ -1791,6 +1832,23 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
         {"id": task_id},
         {"$push": {"comments": comment_doc}}
     )
+
+    try:
+        await log_task_activity(
+            db,
+            task_id=task_id,
+            event_type="chatter",
+            channel="in_app",
+            actor_id=current_user["id"],
+            actor_name=current_user.get("name"),
+            company_domain=current_user.get("company_domain") or task.get("company_domain"),
+            title="Chatter message",
+            body=comment.content,
+            meta={"mentions": comment.mentions or [], "comment_id": comment_doc["id"]},
+            created_at=comment_doc["created_at"],
+        )
+    except Exception as e:
+        logging.warning(f"Failed to log chatter activity: {e}")
     
     # WebSocket: broadcast new comment to task creator + assignee (real-time chatter)
     try:
@@ -1837,6 +1895,215 @@ async def get_task_comments(task_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=403, detail="Access denied")
     
     return {"comments": task.get("comments", [])}
+
+
+async def _can_view_task_activity(task: dict, current_user: dict) -> bool:
+    if not task:
+        return False
+    if task.get("created_by") == current_user["id"] or task.get("assigned_to") == current_user["id"]:
+        return True
+    if task.get("parent_id"):
+        parent = await db.tasks.find_one({"id": task["parent_id"]}, {"_id": 0, "created_by": 1})
+        if parent and parent.get("created_by") == current_user["id"]:
+            return True
+    domain = current_user.get("company_domain")
+    if not domain:
+        return False
+    if task.get("company_domain") == domain:
+        return True
+    people = [
+        uid for uid in (task.get("created_by"), task.get("assigned_to"))
+        if uid and not str(uid).startswith("email_")
+    ]
+    if people:
+        peer = await db.users.find_one(
+            {"id": {"$in": people}, "company_domain": domain},
+            {"_id": 0, "id": 1},
+        )
+        if peer:
+            return True
+    return False
+
+
+@api_router.get("/tasks/{task_id}/activity")
+async def get_task_activity(
+    task_id: str,
+    kind: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Activity feed for a task. kind=reminders|chatter|all"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not await _can_view_task_activity(task, current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    filt: Dict[str, Any] = {"task_id": task_id}
+    k = (kind or "all").lower()
+    if k in ("reminders", "reminder"):
+        filt["event_type"] = {"$in": ["reminder", "nudge"]}
+    elif k in ("chatter", "comments"):
+        filt["event_type"] = "chatter"
+
+    rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+    # Fallback: if reminders tab empty, surface last_smart_reminder_sent as a synthetic row
+    if k in ("reminders", "reminder") and not rows and task.get("last_smart_reminder_sent"):
+        rows = [{
+            "id": "legacy-last-reminder",
+            "task_id": task_id,
+            "event_type": "reminder",
+            "channel": "unknown",
+            "actor_name": "Smart Reminders",
+            "recipient_id": task.get("assigned_to"),
+            "title": "Reminder sent",
+            "body": task.get("title"),
+            "created_at": task.get("last_smart_reminder_sent"),
+            "meta": {"legacy": True},
+        }]
+
+    return {"activity": rows, "count": len(rows)}
+
+
+@api_router.get("/activity")
+async def list_org_activity(
+    kind: Optional[str] = None,
+    limit: int = 200,
+    current_user: dict = Depends(get_current_user),
+):
+    """Org / personal activity stream (reminders + chatter)."""
+    limit = max(1, min(1000, int(limit or 200)))
+    domain = current_user.get("company_domain")
+    if domain:
+        filt: Dict[str, Any] = {"company_domain": domain}
+    else:
+        # Personal: activity on tasks I created or own
+        my_tasks = await db.tasks.find(
+            {"$or": [{"created_by": current_user["id"]}, {"assigned_to": current_user["id"]}], "deleted": {"$ne": True}},
+            {"_id": 0, "id": 1},
+        ).to_list(2000)
+        ids = [t["id"] for t in my_tasks]
+        filt = {"task_id": {"$in": ids}} if ids else {"actor_id": current_user["id"]}
+
+    k = (kind or "all").lower()
+    if k in ("reminders", "reminder"):
+        filt["event_type"] = {"$in": ["reminder", "nudge"]}
+    elif k in ("chatter", "comments"):
+        filt["event_type"] = "chatter"
+
+    rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return {"activity": rows, "count": len(rows)}
+
+
+@api_router.get("/activity/export")
+async def export_activity_csv(
+    current_user: dict = Depends(get_current_user),
+):
+    """Full task data log as CSV (assigner, assignee, times, reminders, chatter)."""
+    domain = current_user.get("company_domain")
+    if domain:
+        task_q: Dict[str, Any] = {"company_domain": domain, "deleted": {"$ne": True}}
+        # Also include tasks without company_domain but involving this domain's users
+        domain_users = await db.users.find({"company_domain": domain}, {"_id": 0, "id": 1}).to_list(5000)
+        uids = [u["id"] for u in domain_users]
+        task_q = {
+            "deleted": {"$ne": True},
+            "$or": [
+                {"company_domain": domain},
+                {"created_by": {"$in": uids}},
+                {"assigned_to": {"$in": uids}},
+            ],
+        }
+    else:
+        task_q = {
+            "deleted": {"$ne": True},
+            "$or": [{"created_by": current_user["id"]}, {"assigned_to": current_user["id"]}],
+        }
+
+    tasks = await db.tasks.find(task_q, {"_id": 0}).to_list(5000)
+    task_ids = [t["id"] for t in tasks]
+    activity = await db.task_activity.find({"task_id": {"$in": task_ids}}, {"_id": 0}).to_list(20000) if task_ids else []
+    by_task: Dict[str, list] = {}
+    for a in activity:
+        by_task.setdefault(a.get("task_id"), []).append(a)
+
+    user_ids = set()
+    for t in tasks:
+        if t.get("created_by"):
+            user_ids.add(t["created_by"])
+        if t.get("assigned_to") and not str(t["assigned_to"]).startswith("email_"):
+            user_ids.add(t["assigned_to"])
+    users = await db.users.find({"id": {"$in": list(user_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids) or 1)
+    name_map = {u["id"]: u.get("name") or "" for u in users}
+
+    rows = tasks_to_csv_rows(tasks, by_task, name_map)
+    csv_text = rows_to_csv(rows)
+    filename = f"tskflow-activity-{get_pst_now().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.get("/activity/tasks")
+async def list_activity_tasks(
+    limit: int = 200,
+    current_user: dict = Depends(get_current_user),
+):
+    """In-app data log: full tracked fields for tasks visible to the user."""
+    limit = max(1, min(1000, int(limit or 200)))
+    domain = current_user.get("company_domain")
+    if domain:
+        domain_users = await db.users.find({"company_domain": domain}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(5000)
+        uids = [u["id"] for u in domain_users]
+        name_map = {u["id"]: u.get("name") or "" for u in domain_users}
+        email_map = {u["id"]: u.get("email") or "" for u in domain_users}
+        task_q = {
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True},
+            "$or": [
+                {"company_domain": domain},
+                {"created_by": {"$in": uids}},
+                {"assigned_to": {"$in": uids}},
+            ],
+        }
+    else:
+        task_q = {
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True},
+            "$or": [{"created_by": current_user["id"]}, {"assigned_to": current_user["id"]}],
+        }
+        name_map = {current_user["id"]: current_user.get("name") or ""}
+        email_map = {current_user["id"]: current_user.get("email") or ""}
+
+    tasks = await db.tasks.find(task_q, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    # Enrich names for non-domain personal case
+    missing = set()
+    for t in tasks:
+        for key in ("created_by", "assigned_to"):
+            uid = t.get(key)
+            if uid and not str(uid).startswith("email_") and uid not in name_map:
+                missing.add(uid)
+    if missing:
+        extra = await db.users.find({"id": {"$in": list(missing)}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(len(missing))
+        for u in extra:
+            name_map[u["id"]] = u.get("name") or ""
+            email_map[u["id"]] = u.get("email") or ""
+
+    task_ids = [t["id"] for t in tasks]
+    activity = await db.task_activity.find({"task_id": {"$in": task_ids}}, {"_id": 0}).to_list(10000) if task_ids else []
+    by_task: Dict[str, list] = {}
+    for a in activity:
+        by_task.setdefault(a.get("task_id"), []).append(a)
+
+    rows = tasks_to_csv_rows(tasks, by_task, name_map)
+    for row in rows:
+        aid = row.get("assignee_id")
+        if aid and not row.get("assignee_email"):
+            row["assignee_email"] = email_map.get(aid, "")
+    return {"tasks": rows, "count": len(rows)}
+
 
 def _notify_text(s: Optional[str]) -> str:
     """Normalize notification text for OS / browsers that mangle unicode dashes."""
@@ -3554,7 +3821,7 @@ class UserPreferences(BaseModel):
     eod_hour: Optional[int] = None           # 0-23, PST (defaults to 17 = 5pm)
     eod_channel: Optional[str] = None        # 'email' | 'slack' | 'both'
     # Which sections to include in the EOD report (all default on when omitted).
-    # Keys: completed | open | missed | manager_snapshot | suggested_plan
+    # Keys: completed | open | missed | manager_snapshot | suggested_plan | sheet_metrics
     eod_sections: Optional[Dict[str, bool]] = None
     # Post-login team setup + how often org/reporting changes are expected.
     team_setup_complete: Optional[bool] = None
@@ -3568,6 +3835,7 @@ DEFAULT_EOD_SECTIONS = {
     "missed": True,
     "manager_snapshot": True,
     "suggested_plan": True,
+    "sheet_metrics": True,
 }
 
 
@@ -4708,6 +4976,252 @@ async def google_calendar_disconnect(current_user: dict = Depends(get_current_us
     )
     return {"message": "Google Calendar disconnected"}
 
+
+def get_google_sheets_flow(redirect_uri: str):
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri],
+            }
+        },
+        scopes=SHEETS_SCOPES,
+        redirect_uri=redirect_uri,
+    )
+
+
+@api_router.get("/auth/google/sheets/connect")
+async def google_sheets_connect(http_request: HTTPRequest, current_user: dict = Depends(get_current_user)):
+    """Initiate Google Sheets OAuth (read-only) for daily metrics sync."""
+    redirect_uri = f"{APP_BASE_URL}/api/auth/google/sheets/callback"
+    flow = get_google_sheets_flow(redirect_uri)
+    auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "purpose": "google_sheets",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"auth_url": auth_url}
+
+
+@api_router.get("/auth/google/sheets/callback")
+async def google_sheets_callback(code: str, state: str, http_request: HTTPRequest):
+    state_doc = await db.oauth_states.find_one({"state": state})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    user_id = state_doc["user_id"]
+    await db.oauth_states.delete_one({"state": state})
+    try:
+        redirect_uri = f"{APP_BASE_URL}/api/auth/google/sheets/callback"
+        flow = get_google_sheets_flow(redirect_uri)
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "google_sheets_connected": True,
+                "google_sheets_credentials": {
+                    "token": credentials.token,
+                    "refresh_token": credentials.refresh_token,
+                    "token_uri": credentials.token_uri,
+                    "client_id": credentials.client_id,
+                    "client_secret": credentials.client_secret,
+                    "expiry": credentials.expiry.isoformat() if credentials.expiry else None,
+                },
+            }},
+        )
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?sheets=connected")
+    except Exception as e:
+        logging.error(f"Google Sheets OAuth error: {e}")
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=sheets_oauth_failed")
+
+
+@api_router.delete("/auth/google/sheets/disconnect")
+async def google_sheets_disconnect(current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"google_sheets_connected": False}, "$unset": {"google_sheets_credentials": ""}},
+    )
+    return {"message": "Google Sheets disconnected"}
+
+
+class SheetMetricMapping(BaseModel):
+    key: Optional[str] = None
+    label: str
+    column: str
+    daily_target: Optional[float] = None
+
+
+class SheetSyncConfigBody(BaseModel):
+    spreadsheet_url: str
+    sheet_name: str = "Sheet1"
+    person_column: str = "A"
+    date_column: str = "B"
+    has_header: bool = True
+    metrics: List[SheetMetricMapping] = []
+    name: Optional[str] = "Daily activity"
+
+
+@api_router.get("/sheets/config")
+async def get_sheet_sync_configs(current_user: dict = Depends(get_current_user)):
+    configs = await db.sheet_sync_configs.find(
+        {"owner_user_id": current_user["id"]},
+        {"_id": 0},
+    ).to_list(50)
+    return {
+        "connected": bool(current_user.get("google_sheets_connected")),
+        "configs": configs,
+    }
+
+
+@api_router.post("/sheets/config")
+async def upsert_sheet_sync_config(body: SheetSyncConfigBody, current_user: dict = Depends(get_current_user)):
+    if not current_user.get("google_sheets_connected") or not current_user.get("google_sheets_credentials"):
+        raise HTTPException(status_code=400, detail="Connect Google Sheets first")
+    try:
+        spreadsheet_id = extract_spreadsheet_id(body.spreadsheet_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not body.metrics:
+        raise HTTPException(status_code=400, detail="Add at least one metric column mapping")
+    now = get_pst_now().isoformat()
+    metrics = []
+    for m in body.metrics:
+        key = (m.key or m.label or "").strip().lower().replace(" ", "_")
+        metrics.append({
+            "key": key,
+            "label": m.label,
+            "column": m.column,
+            "daily_target": m.daily_target,
+        })
+    # One primary config per owner for simplicity — update latest or insert
+    existing = await db.sheet_sync_configs.find_one({"owner_user_id": current_user["id"]}, {"_id": 0})
+    doc = {
+        "id": (existing or {}).get("id") or str(uuid.uuid4()),
+        "owner_user_id": current_user["id"],
+        "company_domain": current_user.get("company_domain"),
+        "name": body.name or "Daily activity",
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_url": body.spreadsheet_url,
+        "sheet_name": body.sheet_name or "Sheet1",
+        "person_column": body.person_column,
+        "date_column": body.date_column,
+        "has_header": body.has_header,
+        "metrics": metrics,
+        "updated_at": now,
+        "created_at": (existing or {}).get("created_at") or now,
+        "last_synced_at": (existing or {}).get("last_synced_at"),
+        "last_sync_count": (existing or {}).get("last_sync_count"),
+        "last_sync_error": None,
+    }
+    await db.sheet_sync_configs.update_one(
+        {"id": doc["id"]},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"ok": True, "config": {k: v for k, v in doc.items() if k != "_id"}}
+
+
+@api_router.post("/sheets/sync")
+async def sync_google_sheets_now(current_user: dict = Depends(get_current_user)):
+    """Pull mapped Google Sheet rows into daily_metrics."""
+    result = await _sync_sheets_for_user(current_user)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@api_router.get("/sheets/metrics")
+async def get_daily_sheet_metrics(
+    date: Optional[str] = None,
+    person: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    day = date or get_pst_now().strftime("%Y-%m-%d")
+    domain = current_user.get("company_domain")
+    if person:
+        rows = await find_person_metrics(db, current_user, person, date=day)
+        return {"date": day, "metrics": rows}
+    filt: Dict[str, Any] = {"date": day}
+    if domain:
+        filt["$or"] = [
+            {"company_domain": domain},
+            {"owner_user_id": current_user["id"]},
+        ]
+    else:
+        filt["owner_user_id"] = current_user["id"]
+    rows = await db.daily_metrics.find(filt, {"_id": 0}).to_list(500)
+    return {"date": day, "metrics": rows}
+
+
+async def _sync_sheets_for_user(user: dict) -> dict:
+    if not user.get("google_sheets_connected") or not user.get("google_sheets_credentials"):
+        return {"error": "Google Sheets not connected", "synced": 0}
+    configs = await db.sheet_sync_configs.find({"owner_user_id": user["id"]}, {"_id": 0}).to_list(20)
+    if not configs:
+        return {"error": "No sheet mapping configured", "synced": 0}
+    total = 0
+    errors = []
+    for cfg in configs:
+        try:
+            values = fetch_sheet_values(
+                user["google_sheets_credentials"],
+                cfg["spreadsheet_id"],
+                cfg.get("sheet_name") or "Sheet1",
+            )
+            # Persist refreshed token if google client refreshed it
+            rows = parse_metrics_rows(
+                values,
+                person_column=cfg.get("person_column") or "A",
+                date_column=cfg.get("date_column") or "B",
+                metrics=cfg.get("metrics") or [],
+                has_header=bool(cfg.get("has_header", True)),
+            )
+            n = await upsert_daily_metrics(
+                db,
+                owner_user_id=user["id"],
+                company_domain=user.get("company_domain") or cfg.get("company_domain"),
+                config_id=cfg["id"],
+                rows=rows,
+            )
+            total += n
+            await db.sheet_sync_configs.update_one(
+                {"id": cfg["id"]},
+                {"$set": {
+                    "last_synced_at": get_pst_now().isoformat(),
+                    "last_sync_count": n,
+                    "last_sync_error": None,
+                }},
+            )
+        except Exception as e:
+            logging.error(f"[sheets_sync] {e}")
+            errors.append(str(e))
+            await db.sheet_sync_configs.update_one(
+                {"id": cfg["id"]},
+                {"$set": {"last_sync_error": str(e)[:500]}},
+            )
+    if errors and total == 0:
+        return {"error": errors[0], "synced": 0}
+    return {"ok": True, "synced": total, "errors": errors}
+
+
+async def _sync_all_sheet_configs():
+    """Background job: sync every user with a sheet config."""
+    try:
+        owners = await db.sheet_sync_configs.distinct("owner_user_id")
+        for uid in owners:
+            user = await db.users.find_one({"id": uid}, {"_id": 0})
+            if not user:
+                continue
+            await _sync_sheets_for_user(user)
+    except Exception as e:
+        logging.error(f"[sheets_sync_all] {e}")
+
+
 async def create_calendar_event(user_id: str, task: dict):
     """Create a Google Calendar event for a task"""
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
@@ -5474,17 +5988,78 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
         }, {"_id": 0, "id": 1, "title": 1, "status": 1, "due_date": 1, "priority": 1, "assigned_to": 1}).to_list(100)
         outstanding = [{"title": t["title"], "status": t["status"], "due_date": t.get("due_date"), "priority": t.get("priority")} for t in active]
         contacts = await db.user_contacts.find({"user_id": current_user["id"]}, {"_id": 0, "contact_name": 1, "contact_email": 1}).to_list(50)
+        today = get_pst_now().strftime("%Y-%m-%d")
+        metrics_or = [{"owner_user_id": current_user["id"], "date": today}]
+        if current_user.get("company_domain"):
+            metrics_or.append({"company_domain": current_user["company_domain"], "date": today})
+        metrics_today = await db.daily_metrics.find(
+            {"$or": metrics_or},
+            {"_id": 0, "person_name": 1, "metrics": 1, "targets": 1, "date": 1},
+        ).to_list(100)
         context = {
             "my_name": current_user["name"],
             "outstanding_count": len(outstanding),
             "outstanding_tasks": outstanding[:25],
-            "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts]
+            "contacts": [{"name": c.get("contact_name"), "email": c.get("contact_email")} for c in contacts],
+            "daily_sheet_metrics": [
+                {
+                    "person": m.get("person_name"),
+                    "date": m.get("date"),
+                    "summary": format_metrics_line(m),
+                    "metrics": m.get("metrics"),
+                    "targets": m.get("targets"),
+                }
+                for m in metrics_today[:40]
+            ],
         }
     except Exception as e:
         db_ok = False
         logging.error(f"Voice context load error: {e}")
 
     low = transcript.lower()
+    # Manager asks about a person's sheet metrics: "what is my AE Alex doing" / "how is Sarah doing today"
+    person_m = re.search(
+        r"(?:what(?:'s| is)|how(?:'s| is))\s+(?:my\s+)?(?:ae|rep|teammate)?\s*([A-Za-z][A-Za-z.'-]{1,40})\s+(?:doing|up to|working on)",
+        low,
+    )
+    person_m2 = re.search(
+        r"(?:metrics|numbers|stats|activity)\s+(?:for|on)\s+([A-Za-z][A-Za-z.'-]{1,40})",
+        low,
+    )
+    want_team_metrics = bool(re.search(
+        r"\b(daily metrics|sheet metrics|activity metrics|team metrics|calls today|emails today)\b",
+        low,
+    ))
+    if person_m or person_m2 or want_team_metrics:
+        pname = ((person_m or person_m2).group(1) if (person_m or person_m2) else "").strip()
+        skip = {"my", "the", "our", "doing", "today", "their", "his", "her", "an", "a", "is", "are", "team"}
+        if pname.lower() in skip:
+            pname = ""
+        try:
+            day = get_pst_now().strftime("%Y-%m-%d")
+            if pname:
+                hits = await find_person_metrics(db, current_user, pname, date=day)
+            else:
+                metrics_or = [{"owner_user_id": current_user["id"], "date": day}]
+                if current_user.get("company_domain"):
+                    metrics_or.append({"company_domain": current_user["company_domain"], "date": day})
+                hits = await db.daily_metrics.find({"$or": metrics_or}, {"_id": 0}).to_list(40)
+            if hits:
+                lines = [f"• {h.get('person_name')}: {format_metrics_line(h)}" for h in hits[:12]]
+                reply = f"Here's today's sheet activity{f' for {pname}' if pname else ''}:\n" + "\n".join(lines)
+            else:
+                reply = (
+                    f"I don't have synced sheet metrics{f' for {pname}' if pname else ' for today'} yet. "
+                    "Connect Google Sheets and map columns in Settings, then Sync."
+                )
+            return {
+                "reply": reply,
+                "action": {"type": "query_sheet_metrics", "params": {"person": pname}},
+                "executed": {"type": "query_sheet_metrics", "count": len(hits)},
+            }
+        except Exception as e:
+            logging.warning(f"Voice sheet metrics lookup failed: {e}")
+
     if re.search(r"\b(what's outstanding|whats outstanding|what is outstanding|outstanding tasks|what's left|whats left|my open tasks|what do i have)\b", low):
         if not db_ok:
             reply = "I couldn't load your tasks just now. Check the dashboard, or try again in a moment."
@@ -6505,13 +7080,27 @@ async def _build_eod_summary_for_user(u: dict, now):
         slack_bits.append("")
         slack_bits.append(mgr_slack)
 
-    if len(parts_html) <= 2 and not mgr_html:
+    sheet_html, sheet_slack, sheet_counts = ("", "", {})
+    if sections.get("sheet_metrics"):
+        try:
+            sheet_html, sheet_slack, sheet_counts = await build_sheet_metrics_eod_section(
+                db, u, now, include_self=True, include_team=True,
+            )
+        except Exception as e:
+            logging.warning(f"EOD sheet metrics: {e}")
+    if sheet_html:
+        parts_html.append(sheet_html)
+    if sheet_slack:
+        slack_bits.append("")
+        slack_bits.append(sheet_slack)
+
+    if len(parts_html) <= 2 and not mgr_html and not sheet_html:
         parts_html.append("<p style=\"color:#6b7280;\">Quiet day — nothing matched the sections you selected.</p>")
         slack_bits.append("Quiet day — nothing to report for your selected sections.")
 
     html = _jarvis_email_shell("".join(parts_html), cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
     slack_text = "\n".join(slack_bits) + f"\n<{APP_BASE_URL}/dashboard|Open Tskflow>"
-    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts}
+    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts, **sheet_counts}
 
 
 @api_router.post("/cron/eod-report")
@@ -8147,6 +8736,7 @@ BEST PRACTICES
 
 
 VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
+When Context JSON includes daily_sheet_metrics, use those numbers to answer manager questions about what an AE/rep is doing today (calls, emails, Salesforce tasks, etc.). Prefer real metric values over guessing.
 You help with anything the user asks while they work:
 1) EXECUTE task commands ("create a task to X", "what's outstanding", "open analytics", etc.)
 2) ANSWER questions — product how-tos, what a status means, who to assign, deadlines, best practices, and follow-ups on the recent conversation.
@@ -8440,6 +9030,7 @@ async def _check_smart_reminders():
             if not user:
                 continue
 
+            channels_sent = []
             # Channel delivery — each channel is opt-in
             if "in_app" in channels:
                 # Don't pile unread reminder rows for the same task (login spam source)
@@ -8472,6 +9063,7 @@ async def _check_smart_reminders():
                         "delivered": True,  # bell/catch-up only; never OS-spam on login
                         "created_at": now.isoformat(),
                     })
+                channels_sent.append("in_app")
 
             if "email" in channels:
                 try:
@@ -8497,6 +9089,7 @@ async def _check_smart_reminders():
                         {"$set": {"emails_sent_day": day_key, "emails_sent_count": sent}},
                         upsert=False,
                     )
+                    channels_sent.append("email")
 
             if "slack" in channels:
                 try:
@@ -8506,8 +9099,30 @@ async def _check_smart_reminders():
                             webhook,
                             f"⏰ *{wording['title']}*: {t['title']} ({t.get('priority')})",
                         )
+                        channels_sent.append("slack")
                 except Exception as slack_err:
                     logging.warning(f"[smart_reminders] slack post failed: {slack_err}")
+
+            for ch in channels_sent:
+                try:
+                    await log_task_activity(
+                        db,
+                        task_id=t["id"],
+                        event_type="reminder",
+                        channel=ch,
+                        actor_id=None,
+                        actor_name="Smart Reminders",
+                        recipient_id=aid,
+                        recipient_name=user.get("name"),
+                        recipient_email=user.get("email"),
+                        company_domain=user.get("company_domain") or t.get("company_domain"),
+                        title=wording.get("title") or "Reminder",
+                        body=f"{t.get('title')} — {fired_kind}",
+                        meta={"fired_kind": fired_kind, "priority": t.get("priority"), "bucket": bucket},
+                        created_at=now.isoformat(),
+                    )
+                except Exception as log_err:
+                    logging.warning(f"[smart_reminders] activity log failed: {log_err}")
 
             update_doc = {
                 "last_smart_reminder_sent": now.isoformat(),
@@ -8856,6 +9471,32 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
             custom_message=req.custom_message if preset_key != "custom" else None,
         )
         background_tasks.add_task(send_email_notification, u["email"], subject, email_html)
+        # Log on the assignee's task (child if group, else the task itself)
+        log_task_id = task_id
+        if children:
+            child = next((c for c in children if c.get("assigned_to") == uid), None)
+            if child:
+                log_task_id = child["id"]
+        for ch in ("in_app", "email"):
+            try:
+                await log_task_activity(
+                    db,
+                    task_id=log_task_id,
+                    event_type="nudge",
+                    channel=ch,
+                    actor_id=current_user["id"],
+                    actor_name=current_user.get("name"),
+                    recipient_id=uid,
+                    recipient_name=u.get("name"),
+                    recipient_email=u.get("email"),
+                    company_domain=current_user.get("company_domain"),
+                    title=headline,
+                    body=f"{current_user.get('name')}: {task.get('title')}",
+                    meta={"preset": preset_key, "parent_task_id": task_id if log_task_id != task_id else None},
+                    created_at=now.isoformat(),
+                )
+            except Exception as e:
+                logging.warning(f"Failed to log nudge activity: {e}")
         sent += 1
 
     return {"ok": True, "sent": sent, "preset": preset_key}
@@ -8879,6 +9520,7 @@ async def _scheduler_loop():
         try:
             await _background_generate_all_recurring()
             await _check_smart_reminders()
+            await _sync_all_sheet_configs()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
         await asyncio.sleep(300)  # every 5 min
@@ -8893,6 +9535,12 @@ async def _ensure_indexes():
         await db.recurring_series.create_index("created_by")
         await db.tasks.create_index("recurring_series_id")
         await db.reminder_rules.create_index("user_id")
+        await db.task_activity.create_index("task_id")
+        await db.task_activity.create_index([("company_domain", 1), ("created_at", -1)])
+        await db.task_activity.create_index([("event_type", 1), ("created_at", -1)])
+        await db.daily_metrics.create_index([("date", 1), ("person_name", 1)])
+        await db.daily_metrics.create_index([("company_domain", 1), ("date", 1)])
+        await db.sheet_sync_configs.create_index("owner_user_id")
     except Exception:
         pass
 
