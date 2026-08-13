@@ -76,8 +76,32 @@ export const NotificationBell = () => {
 
     const openNotif = (n) => {
         if (!n.read) markOne(n.id);
+        if (n.type === 'team_claim' || n.claim_id) {
+            navigate('/team?claims=1');
+            setOpen(false);
+            return;
+        }
         if (n.task_id) navigate(`/task/${n.task_id}`);
         setOpen(false);
+    };
+
+    const respondClaim = async (e, n, action) => {
+        e.stopPropagation();
+        const claimId = n.claim_id || n.meta?.claim_id;
+        if (!claimId) {
+            navigate('/team?claims=1');
+            setOpen(false);
+            return;
+        }
+        try {
+            await axios.post(`${API}/team/claims/${claimId}/respond`, { action });
+            markOne(n.id);
+            fetchAll();
+            window.dispatchEvent(new CustomEvent('tskflow:notification'));
+        } catch (_) {
+            navigate('/team?claims=1');
+            setOpen(false);
+        }
     };
 
     return (
@@ -133,15 +157,43 @@ export const NotificationBell = () => {
                         {items.length === 0 ? (
                             <div className="px-6 py-10 text-center text-sm text-gray-500">You&apos;re all caught up.</div>
                         ) : items.map((n) => (
-                            <button
+                            <div
                                 key={n.id}
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => openNotif(n)}
-                                className={`w-full text-left px-4 py-3 border-b last:border-0 hover:bg-gray-50 flex items-start gap-3 ${n.read ? 'bg-white' : 'bg-teal-50/40'}`}
+                                onKeyDown={(e) => { if (e.key === 'Enter') openNotif(n); }}
+                                className={`w-full text-left px-4 py-3 border-b last:border-0 hover:bg-gray-50 flex items-start gap-3 cursor-pointer ${n.read ? 'bg-white' : 'bg-teal-50/40'}`}
                             >
                                 <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.read ? 'bg-transparent' : 'bg-teal-500'}`} />
                                 <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium text-gray-900 truncate">{n.title}</div>
                                     <div className="text-xs text-gray-600 line-clamp-2">{n.body}</div>
+                                    {n.type === 'team_claim' && (n.claim_id || n.meta?.claim_id) && (
+                                        <div className="flex flex-wrap gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                type="button"
+                                                className="text-[11px] font-semibold px-2 py-1 rounded-full bg-teal-700 text-white"
+                                                onClick={(e) => respondClaim(e, n, 'accept')}
+                                            >
+                                                Accept
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="text-[11px] font-semibold px-2 py-1 rounded-full border border-slate-200 bg-white text-slate-700"
+                                                onClick={(e) => respondClaim(e, n, 'ignore')}
+                                            >
+                                                Ignore
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="text-[11px] font-semibold px-2 py-1 rounded-full text-rose-700 hover:bg-rose-50"
+                                                onClick={(e) => respondClaim(e, n, 'dispute')}
+                                            >
+                                                Dispute
+                                            </button>
+                                        </div>
+                                    )}
                                     <div className="text-[10px] text-gray-400 mt-1">
                                         {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : ''}
                                     </div>
@@ -151,7 +203,7 @@ export const NotificationBell = () => {
                                         <Check className="w-3 h-3" />
                                     </span>
                                 )}
-                            </button>
+                            </div>
                         ))}
                     </div>
                 </div>

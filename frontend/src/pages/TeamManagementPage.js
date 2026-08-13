@@ -15,6 +15,8 @@ import { ArrowLeft, UserPlus, Trash2, DollarSign, Users as UsersIcon, GitBranch,
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import GroupsManager from '@/components/GroupsManager';
+import TeamPeoplePicker from '@/components/TeamPeoplePicker';
+import TeamClaimsInbox from '@/components/TeamClaimsInbox';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
@@ -31,7 +33,8 @@ const TeamManagementPage = () => {
     const [myManager, setMyManager] = useState(null);
     const [showAddReportDialog, setShowAddReportDialog] = useState(false);
     const [showSetManagerDialog, setShowSetManagerDialog] = useState(false);
-    const [selectedReport, setSelectedReport] = useState('');
+    const [selectedReportIds, setSelectedReportIds] = useState([]);
+    const [selectedReportEmails, setSelectedReportEmails] = useState([]);
     const [selectedManager, setSelectedManager] = useState('');
     const [addingReport, setAddingReport] = useState(false);
     const [settingManager, setSettingManager] = useState(false);
@@ -118,17 +121,23 @@ const TeamManagementPage = () => {
     };
 
     const handleAddDirectReport = async () => {
-        if (!selectedReport) return;
+        if (!selectedReportIds.length && !selectedReportEmails.length) return;
         setAddingReport(true);
-        
         try {
-            await axios.post(`${API}/team/add-direct-report`, { user_id: selectedReport });
-            toast.success('Direct report added successfully');
+            const res = await axios.post(`${API}/team/propose-reports`, {
+                user_ids: selectedReportIds,
+                emails: selectedReportEmails,
+            });
+            const n = (res.data?.created || []).length;
+            toast.success(n
+                ? `Sent ${n} request${n === 1 ? '' : 's'} — they’ll accept, ignore, or dispute`
+                : (res.data?.message || 'No new requests sent'));
             setShowAddReportDialog(false);
-            setSelectedReport('');
+            setSelectedReportIds([]);
+            setSelectedReportEmails([]);
             fetchAllData();
         } catch (error) {
-            toast.error(getErrorMessage(error, 'Failed to add direct report'));
+            toast.error(getErrorMessage(error, 'Failed to send team requests'));
         } finally {
             setAddingReport(false);
         }
@@ -196,6 +205,7 @@ const TeamManagementPage = () => {
                     transition={{ duration: 0.5 }}
                     className="space-y-8"
                 >
+                    {isTeams && <TeamClaimsInbox />}
                     <div>
                         <h1 className="text-3xl font-bold text-foreground" style={{ fontFamily: 'Outfit' }}>
                             {isPro ? 'Groups' : 'Team Management'}
@@ -361,42 +371,24 @@ const TeamManagementPage = () => {
                                                     Add Direct Report
                                                 </Button>
                                             </DialogTrigger>
-                                            <DialogContent className="rounded-2xl">
+                                            <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto">
                                                 <DialogHeader>
-                                                    <DialogTitle>Add Direct Report</DialogTitle>
+                                                    <DialogTitle>Add people to your team</DialogTitle>
                                                     <DialogDescription>
-                                                        Select a team member to add as your direct report
+                                                        Select teammates or paste emails. Each person is notified and can accept, ignore, or dispute.
                                                     </DialogDescription>
                                                 </DialogHeader>
-                                                <div className="space-y-4 pt-4">
-                                                    <div className="space-y-2">
-                                                        <Label>Select Team Member</Label>
-                                                        <Select value={selectedReport} onValueChange={setSelectedReport}>
-                                                            <SelectTrigger className="rounded-xl">
-                                                                <SelectValue placeholder="Choose a team member" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {potentialReports.map((p) => (
-                                                                    <SelectItem key={p.id} value={p.id}>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span>{p.name}</span>
-                                                                            <span className="text-xs text-muted-foreground">({p.email})</span>
-                                                                            {p.current_manager && (
-                                                                                <Badge variant="outline" className="ml-2 text-xs">
-                                                                                    Reports to: {p.current_manager}
-                                                                                </Badge>
-                                                                            )}
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {potentialReports.length === 0 && (
-                                                            <p className="text-sm text-muted-foreground">
-                                                                No available team members to add
-                                                            </p>
-                                                        )}
-                                                    </div>
+                                                <div className="space-y-4 pt-2">
+                                                    <TeamPeoplePicker
+                                                        people={potentialReports}
+                                                        selectedIds={selectedReportIds}
+                                                        selectedEmails={selectedReportEmails}
+                                                        excludeIds={[user?.id]}
+                                                        onChange={({ userIds, emails }) => {
+                                                            setSelectedReportIds(userIds);
+                                                            setSelectedReportEmails(emails);
+                                                        }}
+                                                    />
                                                     <div className="flex gap-2 justify-end">
                                                         <Button
                                                             variant="outline"
@@ -407,10 +399,11 @@ const TeamManagementPage = () => {
                                                         </Button>
                                                         <Button
                                                             onClick={handleAddDirectReport}
-                                                            disabled={!selectedReport || addingReport}
+                                                            disabled={(!selectedReportIds.length && !selectedReportEmails.length) || addingReport}
                                                             className="rounded-full"
+                                                            data-testid="propose-reports-submit"
                                                         >
-                                                            {addingReport ? 'Adding...' : 'Add Direct Report'}
+                                                            {addingReport ? 'Sending…' : 'Send requests'}
                                                         </Button>
                                                     </div>
                                                 </div>

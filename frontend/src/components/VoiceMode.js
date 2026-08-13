@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, API } from '@/App';
+import { JarvisIcon } from '@/components/JarvisIcon';
 import { captureVisibleScreenContext } from '@/lib/screenContext';
 
 const getRecognition = () => {
@@ -89,30 +90,7 @@ const StatusDot = ({ phase }) => {
     );
 };
 
-const JarvisMark = ({ phase, size = 40, className = '' }) => (
-    <div
-        className={`relative rounded-full flex items-center justify-center text-white font-semibold shrink-0 ${className}`}
-        style={{
-            width: size,
-            height: size,
-            fontFamily: 'Outfit, sans-serif',
-            fontSize: size * 0.38,
-            background:
-                phase === 'listening'
-                    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
-                    : 'linear-gradient(145deg,#0f766e,#0f172a)',
-        }}
-        aria-hidden
-    >
-        {phase === 'thinking' ? (
-            <Loader2 className="animate-spin" style={{ width: size * 0.42, height: size * 0.42 }} />
-        ) : (
-            'J'
-        )}
-    </div>
-);
-
-const VoiceMode = () => {
+const VoiceMode = ({ dockIntegrated = false }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -258,7 +236,7 @@ const VoiceMode = () => {
                 : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
             const looksLikeProxy = !status || status >= 502 || /cloudflare|origin web server|bad gateway|gateway time|<!doctype|<html/i.test(asText || '');
             const msg = looksLikeProxy
-                ? "The server didn't finish that one. Try “what's outstanding”, or use New Task on the left."
+                ? "The server didn't finish that one. Try “what's outstanding”, or type a task in the bar below."
                 : (asText || 'Sorry — I had trouble with that. Try again?').slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
@@ -391,7 +369,14 @@ const VoiceMode = () => {
     };
 
     return (
-        <div className="fixed safe-fab-br z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)]" data-testid="voice-mode-widget">
+        <div
+            className={`fixed z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
+                dockIntegrated
+                    ? 'right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom,0px))]'
+                    : 'safe-fab-br'
+            }`}
+            data-testid="voice-mode-widget"
+        >
             <AnimatePresence>
                 {nudge && !open && (
                     <motion.button
@@ -400,10 +385,10 @@ const VoiceMode = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6 }}
                         onClick={askHelpFromScreen}
-                        className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white border border-slate-200 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                        className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white/95 backdrop-blur border border-slate-200/80 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-white flex items-center gap-2.5"
                         data-testid="voice-nudge-bubble"
                     >
-                        <JarvisMark phase="idle" size={28} />
+                        <JarvisIcon phase="idle" size={28} />
                         <span>{typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap for on-screen help.</span>
                     </motion.button>
                 )}
@@ -420,7 +405,7 @@ const VoiceMode = () => {
                     >
                         <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 bg-white">
                             <div className="flex items-center gap-2.5 min-w-0">
-                                <JarvisMark phase={phase} size={36} />
+                                <JarvisIcon phase={phase} size={36} />
                                 <div className="min-w-0">
                                     <p className="text-sm font-semibold text-slate-800 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                         Jarvis
@@ -522,13 +507,21 @@ const VoiceMode = () => {
                 type="button"
                 data-testid="voice-mode-fab"
                 onClick={() => (open ? closePanel() : openPanel())}
-                animate={wiggle ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                animate={wiggle ? { scale: [1, 1.06, 1] } : { scale: 1 }}
                 transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
-                className="h-14 w-14 rounded-full flex items-center justify-center shadow-xl ring-2 ring-white overflow-hidden"
+                className={`relative overflow-hidden flex items-center justify-center transition-shadow ${
+                    dockIntegrated
+                        ? 'h-12 w-12 rounded-[14px] shadow-lg shadow-slate-900/15'
+                        : 'h-14 w-14 rounded-[16px] shadow-xl'
+                }`}
                 title="Jarvis — AI manager"
                 aria-label="Open Jarvis"
             >
-                <JarvisMark phase={open && phase === 'idle' ? 'idle' : phase} size={56} />
+                <JarvisIcon
+                    phase={open && phase === 'idle' ? 'idle' : phase}
+                    size={dockIntegrated ? 48 : 56}
+                    showRing
+                />
             </motion.button>
         </div>
     );

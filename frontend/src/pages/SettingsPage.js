@@ -488,7 +488,7 @@ const SettingsPage = () => {
                                             <Table2 className="w-5 h-5 text-emerald-700" />
                                             <div>
                                                 <h4 className="font-semibold text-emerald-900">Google Sheets activity sync</h4>
-                                                <p className="text-xs text-emerald-800/80">Map AE daily stats (calls, emails, SF tasks…) for EOD + Jarvis answers</p>
+                                                <p className="text-xs text-emerald-800/80">Pull daily sales activity numbers into end-of-day reports and Jarvis answers</p>
                                             </div>
                                         </div>
                                         {sheetConnected || user?.google_sheets_connected ? (
@@ -551,7 +551,7 @@ const SettingsPage = () => {
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div>
-                                                        <Label className="text-xs">Person col</Label>
+                                                        <Label className="text-xs">Name column (letter)</Label>
                                                         <Input
                                                             value={sheetForm.person_column}
                                                             onChange={(e) => setSheetForm((f) => ({ ...f, person_column: e.target.value }))}
@@ -560,7 +560,7 @@ const SettingsPage = () => {
                                                         />
                                                     </div>
                                                     <div>
-                                                        <Label className="text-xs">Date col</Label>
+                                                        <Label className="text-xs">Date column (letter)</Label>
                                                         <Input
                                                             value={sheetForm.date_column}
                                                             onChange={(e) => setSheetForm((f) => ({ ...f, date_column: e.target.value }))}
@@ -740,20 +740,25 @@ const SettingsPage = () => {
                                 )}
                             </div>
                             {user?.subscription_tier === 'teams' && (
-                                <div className="pt-2 border-t" data-testid="team-changes-preference">
-                                    <Label htmlFor="team-changes" className="text-sm text-muted-foreground">Team changes</Label>
+                                <div className="pt-2 border-t space-y-1.5" data-testid="team-changes-preference">
+                                    <Label htmlFor="team-changes" className="text-sm font-medium text-foreground">
+                                        How often does your reporting line change?
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Used to remind you to confirm who you report to and who is on your team.
+                                    </p>
                                     <select
                                         id="team-changes"
                                         value={hierarchyReviewFrequency}
                                         onChange={(e) => saveTeamChanges(e.target.value)}
                                         disabled={savingTeamChanges}
-                                        className="mt-1.5 w-full sm:w-64 px-3 py-2 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none"
+                                        className="mt-1 w-full sm:w-72 px-3 py-2 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none"
                                         data-testid="hierarchy-review-frequency"
                                     >
-                                        <option value="weekly">Weekly</option>
-                                        <option value="monthly">Monthly</option>
-                                        <option value="quarterly">Quarterly</option>
-                                        <option value="rarely">Rarely</option>
+                                        <option value="weekly">Weekly — teams reshuffle often</option>
+                                        <option value="monthly">Monthly — typical</option>
+                                        <option value="quarterly">Quarterly — mostly stable</option>
+                                        <option value="rarely">Rarely — org chart almost never changes</option>
                                     </select>
                                 </div>
                             )}
@@ -861,6 +866,7 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
+                                <p className="text-xs text-muted-foreground">Daily summary of what you finished, what’s still open, and what to do next.</p>
                             </div>
                             <label className="inline-flex items-center gap-2 cursor-pointer shrink-0" data-testid="eod-enabled-toggle">
                                 <input
@@ -878,7 +884,7 @@ const SettingsPage = () => {
                             <div className="space-y-3 pt-2 border-t">
                                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
                                     <div>
-                                        <Label className="text-xs text-muted-foreground">Send at (PST)</Label>
+                                        <Label className="text-xs text-muted-foreground">Delivery time (Pacific)</Label>
                                         <select
                                             value={eodHour}
                                             onChange={(e) => { const h = parseInt(e.target.value, 10); setEodHour(h); saveEod({ eod_hour: h }); }}
@@ -891,7 +897,7 @@ const SettingsPage = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <Label className="text-xs text-muted-foreground">Via</Label>
+                                        <Label className="text-xs text-muted-foreground">Where to send it</Label>
                                         <select
                                             value={eodChannel}
                                             onChange={(e) => { const v = e.target.value; setEodChannel(v); saveEod({ eod_channel: v }); }}
@@ -927,25 +933,28 @@ const SettingsPage = () => {
                                     <div className="px-4 pb-3 border-t border-slate-200/80 pt-2" data-testid="eod-sections">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                             {[
-                                                { key: 'completed', label: 'Completed today' },
-                                                { key: 'open', label: 'Still open' },
-                                                { key: 'missed', label: 'Missed due dates' },
-                                                { key: 'manager_snapshot', label: 'Manager snapshot' },
-                                                { key: 'suggested_plan', label: 'Suggested follow-ups' },
-                                                { key: 'sheet_metrics', label: 'Sheet activity metrics' },
+                                                { key: 'completed', label: 'Completed today', help: 'Tasks you finished' },
+                                                { key: 'open', label: 'Still open', help: 'Work left on your plate' },
+                                                { key: 'missed', label: 'Missed due dates', help: 'Overdue items' },
+                                                { key: 'manager_snapshot', label: 'Team you manage', help: 'Quick view of direct reports’ status' },
+                                                { key: 'suggested_plan', label: 'Suggested follow-ups', help: 'Jarvis tips for tomorrow' },
+                                                { key: 'sheet_metrics', label: 'Spreadsheet activity', help: 'Calls / emails from Google Sheets sync' },
                                             ].map((s) => (
                                                 <label
                                                     key={s.key}
-                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/80"
+                                                    className="flex items-start gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/80"
                                                     data-testid={`eod-section-${s.key}`}
                                                 >
                                                     <input
                                                         type="checkbox"
                                                         checked={!!eodSections[s.key]}
                                                         onChange={() => toggleEodSection(s.key)}
-                                                        className="accent-amber-600"
+                                                        className="accent-amber-600 mt-0.5"
                                                     />
-                                                    <span className="text-sm text-slate-800">{s.label}</span>
+                                                    <span className="min-w-0">
+                                                        <span className="text-sm text-slate-800 block">{s.label}</span>
+                                                        <span className="text-[11px] text-slate-500">{s.help}</span>
+                                                    </span>
                                                 </label>
                                             ))}
                                         </div>
@@ -1266,7 +1275,7 @@ export default SettingsPage;
 const REMINDER_PRESETS = {
     essential: {
         label: 'Quiet',
-        help: 'High & Urgent',
+        help: 'Only High & Urgent tasks · in-app only',
         enabled: true,
         triggers: ['time_before_due', 'overdue'],
         hours_before_due: 4,
@@ -1279,7 +1288,7 @@ const REMINDER_PRESETS = {
     },
     balanced: {
         label: 'Balanced',
-        help: 'Medium+',
+        help: 'Medium+ priorities · app + email',
         enabled: true,
         triggers: ['time_before_due', 'no_response', 'overdue'],
         hours_before_due: 4,
@@ -1292,7 +1301,7 @@ const REMINDER_PRESETS = {
     },
     assertive: {
         label: 'Assertive',
-        help: 'All priorities',
+        help: 'All priorities · more frequent nudges',
         enabled: true,
         triggers: ['time_before_due', 'no_response', 'no_progress', 'overdue'],
         hours_before_due: 6,
@@ -1395,10 +1404,10 @@ const SmartRemindersCard = ({ slackConnected }) => {
         : `${(rule.priorities || []).join(', ') || 'No priorities'} · ${(rule.channels || []).map((c) => channelLabels[c] || c).join(', ') || 'No channels'}`;
 
     const nudgeWhen = [
-        { key: 'time_before_due', label: 'Before a due date' },
-        { key: 'no_response', label: 'Nobody accepted yet' },
-        { key: 'no_progress', label: "Work isn't moving" },
-        { key: 'overdue', label: 'Past due' },
+        { key: 'time_before_due', label: 'Coming up soon (before due date)' },
+        { key: 'no_response', label: 'Assignee hasn’t accepted yet' },
+        { key: 'no_progress', label: 'Accepted but no progress' },
+        { key: 'overdue', label: 'Past the due date' },
     ];
 
     const channels = [
@@ -1413,6 +1422,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
+                    <p className="text-xs text-muted-foreground">Automatic nudges when tasks need attention — before they’re due, stuck, or overdue.</p>
                 </div>
                 <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
                     <input

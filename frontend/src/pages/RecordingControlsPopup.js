@@ -59,6 +59,7 @@ const RecordingControlsPopup = () => {
     const handleRestart = () => callOpener('restart');
     const handleMic = () => callOpener('toggleMic');
     const handleCam = () => callOpener('toggleCam');
+    const handleTask = () => { callOpener('startTask'); };
 
     const IconBtn = ({ onClick, title, active, testId, children }) => (
         <button
@@ -100,8 +101,17 @@ const RecordingControlsPopup = () => {
 
                 <button
                     type="button"
+                    onClick={handleTask}
+                    className="ml-1 h-9 px-3 rounded-full bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold inline-flex items-center gap-1.5"
+                    data-testid="popup-task-btn"
+                    title="Create a task with this recording"
+                >
+                    Task
+                </button>
+                <button
+                    type="button"
                     onClick={handleStop}
-                    className="ml-1 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5"
+                    className="ml-0.5 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5"
                     data-testid="popup-stop-btn"
                 >
                     <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop

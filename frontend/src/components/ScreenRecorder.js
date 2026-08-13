@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move } from 'lucide-react';
+import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
+import { uploadBlob } from '@/lib/upload';
 import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
 
 const CtrlBtn = ({ onClick, title, active, danger, children, testId }) => (
@@ -154,6 +155,7 @@ export const ScreenRecorder = ({ onSaved }) => {
     const timerRef = useRef(null);
     const mimeTypeRef = useRef('video/webm');
     const discardOnStopRef = useRef(false);
+    const attachTaskOnStopRef = useRef(false);
     const camOnRef = useRef(camOn);
 
     useEffect(() => { camOnRef.current = camOn; }, [camOn]);
@@ -311,6 +313,7 @@ export const ScreenRecorder = ({ onSaved }) => {
             restart: () => restart(),
             toggleMic: () => toggleMic(),
             toggleCam: () => toggleCam(),
+            startTask: () => startTaskFromRecording(),
         };
         return () => {
             try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
@@ -407,7 +410,9 @@ export const ScreenRecorder = ({ onSaved }) => {
                 setPaused(false);
                 setSeconds(0);
                 const wasDiscard = discardOnStopRef.current;
+                const attachTask = attachTaskOnStopRef.current;
                 discardOnStopRef.current = false;
+                attachTaskOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
                 chunksRef.current = [];
                 stopAllTracks();
@@ -415,6 +420,10 @@ export const ScreenRecorder = ({ onSaved }) => {
                 try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
                 setPopupOpen(false);
                 if (wasDiscard) return;
+                if (attachTask) {
+                    await attachRecordingToAiBar(blob);
+                    return;
+                }
                 await finalizeAndOpenEditor(blob);
             };
             recorderRef.current = rec;
@@ -457,6 +466,33 @@ export const ScreenRecorder = ({ onSaved }) => {
         closeRecordingControlsOverlay();
         try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
         setPopupOpen(false);
+    };
+
+    const attachRecordingToAiBar = async (blob) => {
+        if (!blob || blob.size === 0) {
+            toast.error('Recording was empty');
+            return;
+        }
+        try {
+            const name = `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`;
+            toast.message('Attaching recording to your task…');
+            const ref = await uploadBlob(blob, name, blob.type || 'video/webm');
+            window.dispatchEvent(new CustomEvent('tskflow:attach-to-ai-create', {
+                detail: { attachments: [ref] },
+            }));
+            window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+            toast.success('Recording attached — finish the task in the bar below');
+        } catch (e) {
+            toast.error('Could not attach recording — try again from the library');
+            await finalizeAndOpenEditor(blob);
+        }
+    };
+
+    const startTaskFromRecording = () => {
+        attachTaskOnStopRef.current = true;
+        window.dispatchEvent(new CustomEvent('tskflow:start-task-from-recording'));
+        toast.message('Finishing recording and opening your task…');
+        stop();
     };
 
     const openControlsPopup = async () => {
@@ -548,6 +584,15 @@ export const ScreenRecorder = ({ onSaved }) => {
                     <CtrlBtn onClick={toggleCam} title={camOn ? 'Hide webcam' : 'Show webcam'} active={!camOn}>
                         {camOn ? <Camera className="w-3.5 h-3.5" /> : <CameraOff className="w-3.5 h-3.5 opacity-70" />}
                     </CtrlBtn>
+                    <button
+                        type="button"
+                        onClick={startTaskFromRecording}
+                        className="ml-0.5 h-7 px-2.5 rounded-full bg-teal-600/90 hover:bg-teal-500 text-white text-[11px] font-semibold inline-flex items-center gap-1"
+                        data-testid="recording-start-task-btn"
+                        title="Open the AI task bar — recording attaches when you stop"
+                    >
+                        <Plus className="w-3 h-3" /> Task
+                    </button>
                     <button
                         type="button"
                         onClick={stop}

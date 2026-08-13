@@ -18,12 +18,12 @@ body {
     overflow-x: hidden;
 }
 
-/* Clear floating New Task + Voice controls across authenticated pages */
+/* Clear floating AI dock + Jarvis across authenticated pages */
 body.app-authenticated {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Extra room for the persistent middle-bottom AI command bar on the hub */
+/* Room for the persistent middle-bottom AI command bar */
 body.app-authenticated.has-ai-dock {
     padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
 }
@@ -204,4 +204,19 @@ h1, h2, h3, h4, h5, h6 {
 
 .prose p {
     margin: 0.5rem 0;
+}
+
+/* Brief attention pulse when New Task focuses the AI dock */
+@keyframes ai-dock-pulse-kf {
+    0% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4); }
+    70% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
+    100% { box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15); }
+}
+.ai-dock-pulse > div:first-child {
+    animation: ai-dock-pulse-kf 0.85s ease-out;
+}
+
+/* Keep bottom-left New Task clear of the center AI dock */
+body.app-authenticated.has-ai-dock .safe-fab-bl {
+    bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }

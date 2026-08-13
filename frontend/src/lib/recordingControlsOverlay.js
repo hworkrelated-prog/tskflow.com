@@ -31,6 +31,7 @@ const renderControlsHtml = () => `<!DOCTYPE html>
     <button type="button" id="restart" title="Restart">↺</button>
     <button type="button" id="mic" title="Mic">🎙</button>
     <button type="button" id="cam" title="Cam">📷</button>
+    <button type="button" id="task" title="Start task" style="width:auto;padding:0 10px;height:32px;background:rgba(13,148,136,.92);color:#fff;font-size:12px;font-weight:700">＋ Task</button>
     <button type="button" class="stop" id="stop">■ Stop</button>
   </div></div>
   <div class="warn" id="warn" hidden>Lost connection — use the browser Stop sharing bar.</div>
@@ -48,6 +49,7 @@ const renderControlsHtml = () => `<!DOCTYPE html>
     document.getElementById('restart').onclick = () => call('restart');
     document.getElementById('mic').onclick = () => call('toggleMic');
     document.getElementById('cam').onclick = () => call('toggleCam');
+    document.getElementById('task').onclick = () => call('startTask');
     document.getElementById('stop').onclick = () => { call('stop'); setTimeout(() => { try { window.close(); } catch {} }, 250); };
     setInterval(() => {
       const a = api();
