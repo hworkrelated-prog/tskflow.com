@@ -7913,17 +7913,19 @@ CLARIFYING QUESTIONS:
 - Ask about assignees only if no usable hint was found (do not invent names).
 
 TITLE RULES:
-- Crisp imperative 4–8 words summarizing the WORK itself (e.g. "Finalize opportunity action plans").
+- Crisp imperative 3–7 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
 - NEVER start with "Assign", never include @handles, person names, last names, emails, dates, or priority words.
 - Completely ignore leading @mentions like "@Mark Sibghat @Benjamin White …" — those are assignees, not title words.
 - Keep compound phrases intact (e.g. "action plans", not truncated "action").
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
+- Speech/dictation is often broken ("Please can you Mahmood an EOD report"). Infer the intent:
+  person name → assignee_hints; work → title like "Send EOD report". Never leave speech debris in the title.
 
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Distill the manager's request into clear, actionable steps the assignee should follow.
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…").
-- NEVER paste manager-centric phrasing like "Ask my team to…", "I want them to…", "send me a report" as-is.
-  Rewrite those into assignee-facing instructions, e.g. "Please send your manager an end-of-day report…".
+- NEVER paste manager-centric or broken speech phrasing like "Ask my team to…", "Please can you Mahmood…", "I want them to…" as-is.
+  Rewrite into assignee-facing instructions, e.g. "Please send your manager an end-of-day report…".
 - If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
 - Also fill action_items with those assignee-facing steps.
 - Only leave description empty for a trivial one-liner where the title alone is enough.
@@ -8341,6 +8343,61 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     }
 
 
+_SPEECH_VERB_STOP = {
+    "send", "make", "do", "get", "have", "ask", "tell", "create", "update", "review",
+    "complete", "prepare", "call", "fix", "submit", "draft", "schedule", "check",
+    "write", "give", "provide", "share", "please", "kindly", "help", "need",
+}
+
+
+def _repair_speech_prompt(text: str) -> tuple:
+    """Normalize broken dictation and pull likely person names into assignee hints.
+
+    Returns (repaired_text, extra_assignee_hints).
+    Example: "Please can you Mahmood an EOD report" →
+      ("Please send an EOD report", ["Mahmood"])
+    """
+    if not text:
+        return "", []
+    s = str(text).strip()
+    hints: List[str] = []
+
+    m = re.match(
+        r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+([A-Z][A-Za-z'.-]{1,30})"
+        r"(?:\s+([A-Z][A-Za-z'.-]{1,30}))?\s+(.*)$",
+        s,
+    )
+    if m:
+        first, second, rest = m.group(1), m.group(2), (m.group(3) or "").strip()
+        name_parts = []
+        if first and first.lower() not in _SPEECH_VERB_STOP:
+            name_parts.append(first)
+            if second and second.lower() not in _SPEECH_VERB_STOP and not re.match(r"(?i)^(an?|the)$", second):
+                # Second token may be last name OR start of work ("an")
+                if second.lower() not in {"an", "a", "the"}:
+                    name_parts.append(second)
+                else:
+                    rest = f"{second} {rest}".strip()
+            elif second:
+                rest = f"{second} {rest}".strip()
+        if name_parts and rest:
+            hints.append(" ".join(name_parts))
+            rest_l = rest.lower()
+            if re.search(r"\b(eod|end of day|report|email|update|summary)\b", rest_l):
+                if not re.match(r"(?i)^(send|provide|share|write|submit)\b", rest):
+                    rest = re.sub(r"(?i)^(an?|the)\s+", "", rest).strip()
+                    rest = f"send {rest}" if not rest.lower().startswith("send ") else rest
+            elif not re.match(r"(?i)^(send|complete|review|create|update|prepare|submit|draft|call|fix|check)\b", rest):
+                rest = re.sub(r"(?i)^(an?|the)\s+", "", rest).strip()
+                rest = f"complete {rest}" if rest else rest
+            s = f"Please {rest}".strip()
+
+    # "Please can you send …" (no name) — just drop the can-you filler
+    s = re.sub(r"(?i)^(?:please\s+)?can\s+you\s+", "Please ", s).strip()
+    s = re.sub(r"\s+", " ", s)
+    return s, hints
+
+
 def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = None) -> str:
     """Turn manager-centric wording into clear instructions for the assignee."""
     if not desc:
@@ -8353,6 +8410,9 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
         (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
         (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        # Broken speech: "Please can you Mahmood an EOD report" (name tokens stay capitalized-only)
+        (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", "Please "),
+        (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+", "Please "),
         # "get Hashim to review the recording" → "review the recording"
         (r"(?i)\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+", ""),
         (r"(?i)\bget\s+do\b", "do"),
@@ -8367,6 +8427,10 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     for pat, repl in replacements:
         s = re.sub(pat, repl, s)
     s = re.sub(r"\s+", " ", s).strip()
+
+    # "Please an EOD report" → "Please send an EOD report"
+    if re.match(r"(?i)^please\s+(an?|the)\s+", s) and re.search(r"(?i)\b(report|email|update|summary)\b", s):
+        s = re.sub(r"(?i)^please\s+", "Please send ", s, count=1)
 
     if s and not re.match(r"(?i)^(please|kindly|complete|send|submit|prepare|create|update|review|finalize|draft|schedule|call|follow)\b", s):
         # Soft nudge into imperative assignee voice when it still reads like a note-to-self
@@ -8408,6 +8472,9 @@ def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> 
     # Multi-word @mentions: "@Mark Sibghat", "@Benjamin White"
     s = re.sub(r"@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}", " ", s)
     s = re.sub(r"@\S+", " ", s)
+    # Capitalized-only name tokens — do not use (?i) with [A-Z] or "an EOD" gets swallowed
+    s = re.sub(r"\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", " ", s)
+    s = re.sub(r"\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+", " ", s)
     for name in people_names or []:
         if not name:
             continue
@@ -8431,32 +8498,73 @@ def _title_from_work_text(work: str) -> str:
     if not work:
         return ""
     s = work
-    s = re.sub(r"(?i)^(need to|needs to|have to|must|please)\s+", "", s).strip()
+    s = re.sub(r"(?i)^(need to|needs to|have to|must|please|kindly|can you)\s+", "", s).strip()
+    s = re.sub(r"(?i)^(an?|the)\s+", "", s).strip()
+    if re.search(r"(?i)\b(eod|end of day)\b", s) and re.search(r"(?i)\breport\b", s):
+        return "Send EOD report"
+    if re.search(r"(?i)\beod\b", s) and not re.search(r"(?i)\breport\b", s):
+        return "Send EOD update"
     # Prefer starting at a strong verb when present
     m = re.search(
-        r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close)\b.*$",
+        r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|provide|share|write)\b.*$",
         s,
     )
     if m:
         s = m.group(0)
+    elif s:
+        s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
-    words = [w for w in s.split() if w][:8]
+    words = [w for w in s.split() if w][:7]
     title = " ".join(words)
     if title and title[0].islower():
         title = title[0].upper() + title[1:]
     return title
 
 
+def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
+    if not title:
+        return True
+    title_l = title.lower().strip()
+    has_person_token = any(
+        re.search(rf"\b{re.escape(p.split()[-1])}\b", title_l)
+        for p in people
+        if p and len(p.split()[-1]) > 2
+    )
+    return bool(
+        re.match(r"(?i)^assign\b", title)
+        or "@" in title
+        or has_person_token
+        or len(title.split()) > 12
+        or len(title.split()) < 2
+        or re.match(r"(?i)^(an?|the)\b", title)
+        or re.search(r"(?i)\b(can you|please can|get do)\b", title)
+        or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
+    )
+
+
 def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: Optional[str] = None) -> None:
     """Keep title short/clean and ensure detailed prompts land as assignee-facing description."""
+    repaired, speech_hints = _repair_speech_prompt(raw_text or "")
+    if speech_hints:
+        hints = list(parsed.get("assignee_hints") or [])
+        for h in speech_hints:
+            if h and h not in hints:
+                hints.append(h)
+        parsed["assignee_hints"] = hints
+
+    source_text = repaired or raw_text or ""
     people = _assignee_name_list(parsed)
+    for h in speech_hints:
+        if h and h not in people:
+            people.append(h)
+
     title = _strip_people_noise(str(parsed.get("title") or "").strip(), people)
     desc = _strip_people_noise(str(parsed.get("description") or "").strip(), people)
     actions = parsed.get("action_items") if isinstance(parsed.get("action_items"), list) else []
     actions = [_strip_people_noise(str(a), people) for a in actions if str(a).strip()]
     actions = [a for a in actions if a]
 
-    work = _strip_people_noise(raw_text or "", people)
+    work = _strip_people_noise(source_text, people)
     # Drop manager-voice prefixes before building title/description
     work = re.sub(
         r"(?i)^(ask|tell|have|i want)\s+(?:my|the|our)\s+team\s+to\s+",
@@ -8465,22 +8573,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     ).strip()
     work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", work).strip(" .,:;-")
 
-    # Bad / name-contaminated titles
-    title_l = title.lower()
-    has_person_token = any(
-        re.search(rf"\b{re.escape(p.split()[-1])}\b", title_l)
-        for p in people
-        if p and len(p.split()[-1]) > 2
-    )
-    bad_title = (
-        not title
-        or re.match(r"(?i)^assign\b", title)
-        or "@" in title
-        or has_person_token
-        or len(title.split()) > 14
-        or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
-    )
-    if bad_title:
+    if _title_looks_bad(title, people, source_text):
         seed = actions[0] if actions else work
         title = _title_from_work_text(seed) or _title_from_work_text(work)
         if title:
@@ -8491,26 +8584,63 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     if not desc and actions:
         desc = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
 
-    if not desc and len((raw_text or "").strip()) > 40:
-        cleaned = work
-        if len(cleaned) > 20:
+    if not desc and len((source_text or "").strip()) > 12:
+        cleaned = work or _strip_people_noise(repaired or "", people)
+        if len(cleaned) > 8:
             desc = cleaned
 
     # Always present the task the way the assignee should read it
     if desc:
         parsed["description"] = _rewrite_description_for_assignee(desc, manager_name)
+    elif repaired:
+        parsed["description"] = _rewrite_description_for_assignee(repaired, manager_name)
     if actions:
         parsed["action_items"] = [
             _rewrite_description_for_assignee(a, manager_name) for a in actions
         ]
 
 
+async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], current_user: dict) -> Optional[str]:
+    """Tiny/fast second pass only when the title still looks wrong. Uses mini + 3s timeout."""
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        return None
+    people_s = ", ".join(people[:8]) if people else "(none)"
+    prompt = (
+        "Rewrite into a crisp task TITLE only (3-7 words, imperative). "
+        "No person names, no @mentions, no dates, no quotes, no explanation.\n"
+        f"People to exclude: {people_s}\n"
+        f"Current bad title: {current_title}\n"
+        f"Original request: {raw_text[:400]}\n"
+        "Title:"
+    )
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=emergent_key,
+            session_id=f"title_{current_user['id']}_{int(get_pst_now().timestamp())}",
+            system_message="You write short imperative task titles. Reply with the title only.",
+        ).with_model("openai", "gpt-4o-mini")
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=3.0)
+        out = (raw if isinstance(raw, str) else str(raw)).strip().strip('"').strip("'")
+        out = re.sub(r"\s+", " ", out).strip()
+        if out and not _title_looks_bad(out, people, raw_text) and len(out.split()) <= 10:
+            return out
+    except Exception as e:
+        logging.warning(f"title vet LLM error: {e}")
+    return None
+
+
 async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
         return None
+    repaired, speech_hints = _repair_speech_prompt(text)
+    parse_text = repaired or text
     now = get_pst_now()
     context = f"Current date/time: {now.strftime('%A, %B %d %Y at %H:%M')} (PST). User: {current_user.get('name')}, org: {current_user.get('company_domain', 'personal')}."
+    if speech_hints:
+        context += f" Likely assignee from speech: {', '.join(speech_hints)}."
     if context_hint:
         context += f" Hint: {context_hint}"
     try:
@@ -8520,7 +8650,7 @@ async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] 
             session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
             system_message=SMART_PARSE_SYSTEM + "\n\n" + context
         ).with_model("openai", "gpt-4o-mini")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=text)), timeout=8.0)
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=parse_text)), timeout=7.0)
     except Exception as e:
         logging.warning(f"smart_parse LLM error: {e}")
         return None
@@ -8534,7 +8664,14 @@ async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] 
     try:
         start = text_out.index("{")
         end = text_out.rindex("}") + 1
-        return _json.loads(text_out[start:end])
+        parsed = _json.loads(text_out[start:end])
+        if isinstance(parsed, dict) and speech_hints:
+            hints = list(parsed.get("assignee_hints") or [])
+            for h in speech_hints:
+                if h and h not in hints:
+                    hints.append(h)
+            parsed["assignee_hints"] = hints
+        return parsed
     except Exception:
         return None
 
@@ -8643,6 +8780,12 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
 
     # Title/description quality — strip @people and keep real work text (assignee-facing)
     _enrich_parse_title_description(parsed, text, manager_name=current_user.get("name"))
+    # Fast title re-vet only when still bad (speech debris / names). Skip when already clean.
+    people_for_vet = _assignee_name_list(parsed)
+    if _title_looks_bad(str(parsed.get("title") or ""), people_for_vet, text):
+        vetted = await _llm_vet_title(text, str(parsed.get("title") or ""), people_for_vet, current_user)
+        if vetted:
+            parsed["title"] = vetted
 
     # Rebuild clarifying questions: at most ONE, preferring who / team-scope over when
     needs_who = False

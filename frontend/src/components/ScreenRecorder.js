@@ -10,38 +10,36 @@ const CtrlBtn = ({ onClick, title, active, danger, children, testId }) => (
         onClick={onClick}
         title={title}
         data-testid={testId}
-        className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+        className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
             danger
-                ? 'bg-rose-500 hover:bg-rose-400 text-white'
+                ? 'bg-rose-500/90 hover:bg-rose-400 text-white'
                 : active
-                    ? 'bg-white/20 text-white'
-                    : 'text-white/85 hover:bg-white/15 hover:text-white'
+                    ? 'bg-white/25 text-white'
+                    : 'text-white/80 hover:bg-white/15 hover:text-white'
         }`}
     >
         {children}
     </button>
 );
 
-// Loom-like draggable floating control pill (dark glass, not a red brick).
+// Minimal glass floating control pill — low visual weight, stays out of the way.
 const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     const clampPos = (p) => {
         const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
         const h = typeof window !== 'undefined' ? window.innerHeight : 768;
         return {
-            x: Math.max(12, Math.min(w - 420, p?.x ?? Math.max(12, (w - 420) / 2))),
-            y: Math.max(12, Math.min(h - 72, p?.y ?? (h - 88))),
+            x: Math.max(8, Math.min(w - 280, p?.x ?? 12)),
+            y: Math.max(8, Math.min(h - 56, p?.y ?? (h - 64))),
         };
     };
     const [pos, setPos] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-            // Default Loom-style: bottom-left
-            const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
             const h = typeof window !== 'undefined' ? window.innerHeight : 768;
-            return clampPos(saved || { x: 16, y: h - 88 });
+            return clampPos(saved || { x: 12, y: h - 64 });
         } catch {
             const h = typeof window !== 'undefined' ? window.innerHeight : 768;
-            return clampPos({ x: 16, y: h - 88 });
+            return clampPos({ x: 12, y: h - 64 });
         }
     });
     useEffect(() => {
@@ -66,8 +64,8 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
         if (e.cancelable) e.preventDefault?.();
         const evt = e.touches ? e.touches[0] : e;
         const next = {
-            x: Math.max(4, Math.min(window.innerWidth - 400, evt.clientX - start.current.x)),
-            y: Math.max(4, Math.min(window.innerHeight - 70, evt.clientY - start.current.y)),
+            x: Math.max(4, Math.min(window.innerWidth - 260, evt.clientX - start.current.x)),
+            y: Math.max(4, Math.min(window.innerHeight - 52, evt.clientY - start.current.y)),
         };
         setPos(next);
     };
@@ -83,16 +81,16 @@ const FloatingBar = ({ children, storageKey = 'tsk_rec_bar_pos' }) => {
     return (
         <div
             style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 2147483647 }}
-            className="bg-slate-900/95 backdrop-blur-md text-white rounded-full shadow-2xl border border-white/10 flex items-center gap-1.5 pl-2 pr-2 py-1.5 select-none"
+            className="bg-slate-900/35 backdrop-blur-xl text-white rounded-full shadow-lg shadow-black/10 border border-white/20 flex items-center gap-0.5 pl-1 pr-1 py-1 select-none"
             data-testid="recording-floating-bar"
         >
             <div
-                className="cursor-grab active:cursor-grabbing p-2 text-white/50 hover:text-white/80"
+                className="cursor-grab active:cursor-grabbing p-1.5 text-white/40 hover:text-white/75"
                 onMouseDown={onDown}
                 onTouchStart={onDown}
                 title="Drag"
             >
-                <Move className="w-3.5 h-3.5" />
+                <Move className="w-3 h-3" />
             </div>
             {children}
         </div>
@@ -110,16 +108,13 @@ const WebcamBubble = ({ stream, mirrored = true }) => {
         play();
     }, [stream]);
     return (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 2147483646 }}
-            className="w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-black">
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 2147483646 }}
+            className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/70 shadow-lg bg-black/80 ring-1 ring-black/10">
             <video
                 ref={videoRef}
                 autoPlay muted playsInline
                 style={{ transform: mirrored ? 'scaleX(-1)' : 'none', width: '100%', height: '100%', objectFit: 'cover' }}
             />
-            <div className="absolute bottom-1 left-1 right-1 flex justify-center pointer-events-none">
-                <span className="text-[10px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded shadow">● REC</span>
-            </div>
         </div>
     );
 };
@@ -432,21 +427,17 @@ export const ScreenRecorder = ({ onSaved }) => {
             openControlsPopup();
 
             const surf = settings.displaySurface;
-            if (surf === 'monitor') toast.info('Recording your whole screen — best quality while you switch tabs.');
-            else if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab. Prefer Entire Screen.');
-            else if (surf === 'window') toast.info('Recording a window — use the floating controls (bottom-left).');
+            if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab — prefer Entire Screen.');
 
             if (camErr) toast.warning('Webcam not available — continuing without it.');
             if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
 
-            // Keep drawing alive if we had to use canvas (cam-in-file): switch to setInterval when hidden
             const onVis = () => {
-                if (document.visibilityState === 'hidden' && compositeStream && surf === 'browser') {
+                if (document.visibilityState === 'hidden' && surf === 'browser') {
                     toast.warning('This tab is in the background — video may freeze. Switch back or record Entire Screen.');
                 }
             };
             document.addEventListener('visibilitychange', onVis);
-            // Stash remover on the recorder for cleanup via stopAllTracks path
             try { window.__tskRecVisHandler = onVis; } catch { /* noop */ }
         } catch (e) {
             if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
@@ -541,29 +532,29 @@ export const ScreenRecorder = ({ onSaved }) => {
                 A separate popup can also open, but this bar stays with the tab. */}
             {recording && (
                 <FloatingBar>
-                    <div className="flex items-center gap-2 pr-2 border-r border-white/10 mr-1">
-                        <span className={`w-2.5 h-2.5 rounded-full ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
-                        <span className="font-mono text-sm font-semibold tabular-nums tracking-wide" data-testid="recording-timer">{fmt(seconds)}</span>
+                    <div className="flex items-center gap-1.5 pr-1.5 border-r border-white/15 mr-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-amber-300' : 'bg-rose-400 animate-pulse'}`} />
+                        <span className="font-mono text-[11px] font-medium tabular-nums tracking-wide text-white/90" data-testid="recording-timer">{fmt(seconds)}</span>
                     </div>
                     <CtrlBtn onClick={pauseResume} title={paused ? 'Resume' : 'Pause'} active={paused}>
-                        {paused ? <Play className="w-4 h-4" fill="currentColor" /> : <Pause className="w-4 h-4" fill="currentColor" />}
+                        {paused ? <Play className="w-3.5 h-3.5" fill="currentColor" /> : <Pause className="w-3.5 h-3.5" />}
                     </CtrlBtn>
                     <CtrlBtn onClick={restart} title="Restart">
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className="w-3.5 h-3.5" />
                     </CtrlBtn>
                     <CtrlBtn onClick={toggleMic} title={micOn ? 'Mute mic' : 'Unmute mic'} active={!micOn}>
-                        {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 opacity-70" />}
+                        {micOn ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 opacity-70" />}
                     </CtrlBtn>
                     <CtrlBtn onClick={toggleCam} title={camOn ? 'Hide webcam' : 'Show webcam'} active={!camOn}>
-                        {camOn ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4 opacity-70" />}
+                        {camOn ? <Camera className="w-3.5 h-3.5" /> : <CameraOff className="w-3.5 h-3.5 opacity-70" />}
                     </CtrlBtn>
                     <button
                         type="button"
                         onClick={stop}
-                        className="ml-1 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5 shadow-lg shadow-rose-900/30"
+                        className="ml-0.5 h-7 px-2.5 rounded-full bg-rose-500/85 hover:bg-rose-400 text-white text-[11px] font-semibold inline-flex items-center gap-1"
                         data-testid="stop-recording-btn"
                     >
-                        <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop
+                        <Square className="w-3 h-3" fill="currentColor" /> Stop
                     </button>
                 </FloatingBar>
             )}

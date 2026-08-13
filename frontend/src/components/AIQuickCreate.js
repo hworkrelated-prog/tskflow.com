@@ -80,11 +80,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
     const [attachments, setAttachments] = useState([]);
     const [uploadingPaste, setUploadingPaste] = useState(false);
     const [showRecordPicker, setShowRecordPicker] = useState(false);
+    const [showAttachPrompt, setShowAttachPrompt] = useState(false);
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
     const fileInputRef = useRef(null);
+    const pasteZoneRef = useRef(null);
 
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus(), 30);
@@ -368,6 +370,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         // Multi-word @mentions: "@Mark Sibghat"
         s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}/g, ' ');
         s = s.replace(/@\S+/g, ' ');
+        // Speech debris: "please can you Mahmood an EOD report" → drop can-you + capitalized name only
+        s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/g, '');
+        s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+/g, '');
         // Manager-voice: "get Hashim to review…" / "have Sarah do…" → keep the work clause
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/gi, '');
@@ -386,7 +391,8 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
             tokens.shift();
         }
         return tokens.join(' ')
-            .replace(/^(need to|needs to|have to|must|please|kindly)\s+/i, '')
+            .replace(/^(need to|needs to|have to|must|please|kindly|can you)\s+/i, '')
+            .replace(/^(an?|the)\s+/i, '')
             .replace(/\s+/g, ' ')
             .trim();
     };
@@ -422,13 +428,22 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
             || /^assign\b/i.test(title)
             || title.includes('@')
             || looksNamed
-            || title.split(/\s+/).length > 14
-            || /\bget\s+do\b/i.test(title)
+            || title.split(/\s+/).length > 12
+            || title.split(/\s+/).length < 2
+            || /^(an?|the)\b/i.test(title)
+            || /\b(can you|please can|get do)\b/i.test(title)
             || /\bget\s*$/i.test(title);
         if (titleBad) {
             const seed = actions[0] || work;
-            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look)\b.*$/i);
-            title = (m ? m[0] : seed).split(/\s+/).slice(0, 8).join(' ');
+            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look|provide|share|write)\b.*$/i);
+            if (m) {
+                title = m[0].split(/\s+/).slice(0, 8).join(' ');
+            } else if (/\beod\b|end of day|report/i.test(seed)) {
+                title = 'Send EOD report';
+            } else {
+                const cleaned = seed.replace(/^(an?|the)\s+/i, '').split(/\s+/).slice(0, 8).join(' ');
+                title = cleaned ? `Complete ${cleaned}` : '';
+            }
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
         // Description: prefer clean LLM / action steps — never leave mangled "get do it"
@@ -701,12 +716,19 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                 setAttachments((prev) => [...prev, ref]);
             }
             toast.success('Screenshot attached');
+            setShowAttachPrompt(false);
         } catch (_) {
             toast.error('Could not attach screenshot');
         } finally {
             setUploadingPaste(false);
         }
     };
+
+    useEffect(() => {
+        if (!showAttachPrompt) return undefined;
+        const t = setTimeout(() => pasteZoneRef.current?.focus?.(), 50);
+        return () => clearTimeout(t);
+    }, [showAttachPrompt]);
 
     const handleAttachFiles = async (e) => {
         const files = Array.from(e.target.files || []);
@@ -1020,9 +1042,9 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                         runPreview();
                                     }
                                 }}
-                                placeholder="What needs to get done? @ to assign · paste a screenshot"
+                                placeholder="What needs to get done?"
                                 rows={1}
-                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-44 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-36 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
@@ -1272,10 +1294,10 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => fileInputRef.current?.click()}
+                                        onClick={() => setShowAttachPrompt(true)}
                                         className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors"
-                                        title="Attach a file"
-                                        aria-label="Attach file"
+                                        title="Attach"
+                                        aria-label="Attach"
                                         data-testid="ai-attach-file-btn"
                                     >
                                         {(uploadingPaste)
@@ -1288,13 +1310,13 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                         className="hidden"
                                         multiple
                                         accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                                        onChange={handleAttachFiles}
+                                        onChange={async (e) => {
+                                            await handleAttachFiles(e);
+                                            setShowAttachPrompt(false);
+                                        }}
                                     />
                                 </div>
                                 <div className="flex items-center gap-2 pointer-events-auto">
-                                    <span className="hidden sm:inline text-[10px] text-slate-400 pr-1 select-none">
-                                        Enter to go
-                                    </span>
                                     <Button
                                         type="button"
                                         onClick={() => runPreview()}
@@ -1318,6 +1340,57 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                 />
                             </div>
                         )}
+
+                        <Dialog open={showAttachPrompt} onOpenChange={setShowAttachPrompt}>
+                            <DialogContent className="max-w-md rounded-2xl" data-testid="ai-attach-prompt">
+                                <DialogHeader>
+                                    <DialogTitle style={{ fontFamily: 'Outfit' }}>Add an attachment</DialogTitle>
+                                    <DialogDescription>
+                                        Paste a screenshot first, or choose a file from your device.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div
+                                    ref={pasteZoneRef}
+                                    tabIndex={0}
+                                    onPaste={handlePasteImage}
+                                    className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-10 text-center outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                                    data-testid="ai-paste-zone"
+                                >
+                                    <ImageIcon className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                                    <p className="text-sm font-medium text-slate-800">Paste screenshot</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '')
+                                            ? '⌘V'
+                                            : 'Ctrl+V'}
+                                        {' '}while this box is focused
+                                    </p>
+                                    {uploadingPaste && (
+                                        <p className="text-xs text-teal-700 mt-3 inline-flex items-center gap-1.5">
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="rounded-full"
+                                        onClick={() => setShowAttachPrompt(false)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="rounded-full"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        data-testid="ai-attach-choose-files"
+                                    >
+                                        <Paperclip className="w-4 h-4 mr-1.5" />
+                                        Choose files
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </div>
 
