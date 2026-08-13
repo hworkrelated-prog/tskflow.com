@@ -371,8 +371,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     return (
         <div
             className={`fixed z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
-                dockIntegrated
-                    ? 'right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom,0px))]'
+                    dockIntegrated
+                        ? 'right-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))]'
                     : 'safe-fab-br'
             }`}
             data-testid="voice-mode-widget"
@@ -508,11 +508,13 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 data-testid="voice-mode-fab"
                 onClick={() => (open ? closePanel() : openPanel())}
                 animate={wiggle ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.96 }}
                 transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
-                className={`relative overflow-hidden flex items-center justify-center transition-shadow ${
+                className={`relative flex items-center justify-center rounded-full ring-1 ring-white/60 ${
                     dockIntegrated
-                        ? 'h-12 w-12 rounded-[14px] shadow-lg shadow-slate-900/15'
-                        : 'h-14 w-14 rounded-[16px] shadow-xl'
+                        ? 'h-12 w-12 shadow-[0_10px_28px_rgba(13,148,136,0.32)]'
+                        : 'h-14 w-14 shadow-[0_12px_32px_rgba(13,148,136,0.35)]'
                 }`}
                 title="Jarvis — AI manager"
                 aria-label="Open Jarvis"

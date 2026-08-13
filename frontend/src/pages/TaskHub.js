@@ -38,6 +38,7 @@ const TaskHub = () => {
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
     const [drafts, setDrafts] = useState([]);
+    const [transcriptSessions, setTranscriptSessions] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [users, setUsers] = useState([]);
@@ -91,7 +92,7 @@ const TaskHub = () => {
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // AI Command Center dialog (primary flow for + New Task)
+    // Manual form is opened from the command bar (`/form`) or `?create=advanced`.
 
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
@@ -110,6 +111,16 @@ const TaskHub = () => {
     const isFreeUser = user?.subscription_tier === 'free';
     const showLightBanner = isFreeUser && activeTaskCount >= 10;
     const showPersistentBanner = isFreeUser && activeTaskCount >= 30;
+
+    React.useEffect(() => {
+        try {
+            const q = new URLSearchParams(window.location.search).get('q');
+            if (q) {
+                setSearchQuery(q);
+                setSearchOpen(true);
+            }
+        } catch { /* noop */ }
+    }, []);
 
     React.useEffect(() => {
         if (isFreeUser && activeTaskCount >= 20 && !upgradeModalShown) {
@@ -453,6 +464,12 @@ const TaskHub = () => {
             setDrafts(response.data.drafts || []);
         } catch (error) {
             console.error('Failed to fetch drafts');
+        }
+        try {
+            const res = await axios.get(`${API}/task-drafts`);
+            setTranscriptSessions(res.data.sessions || []);
+        } catch {
+            setTranscriptSessions([]);
         }
     };
 
@@ -1193,23 +1210,6 @@ const TaskHub = () => {
                                     <CheckSquare className="w-4 h-4" />
                                     <span className="hidden sm:inline">Select</span>
                                 </Button>
-                                <Button
-                                    data-testid="create-task-button"
-                                    onClick={() => {
-                                        window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
-                                        setTimeout(() => {
-                                            const dock = document.querySelector('[data-testid="ai-command-dock"]');
-                                            dock?.classList?.add('ai-dock-pulse');
-                                            setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
-                                            window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
-                                        }, 30);
-                                    }}
-                                    className="rounded-full gap-2"
-                                >
-                                    <Sparkles className="w-4 h-4" />
-                                    <span className="hidden sm:inline">New Task</span>
-                                    <span className="sm:hidden">New</span>
-                                </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader className="pr-8">
@@ -1602,14 +1602,35 @@ const TaskHub = () => {
                 </Dialog>
 
                 {/* Compact drafts pill — tucked away, one line, one tap to expand */}
-                {drafts.length > 0 && (
+                {(drafts.length > 0 || transcriptSessions.length > 0) && (
                     <details className="mb-4 group" data-testid="drafts-compact">
                         <summary className="cursor-pointer select-none inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100">
                             <FileText className="w-3.5 h-3.5" />
-                            <span className="font-medium">{drafts.length} unfinished {drafts.length === 1 ? 'draft' : 'drafts'}</span>
+                            <span className="font-medium">
+                                {drafts.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)} unfinished
+                                {' '}{(drafts.length + transcriptSessions.length) === 1 ? 'draft' : 'drafts'}
+                            </span>
                             <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
                         </summary>
                         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {transcriptSessions.map((s) => (
+                                <div
+                                    key={`ts-${s.id}`}
+                                    className="relative flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs cursor-pointer hover:bg-indigo-100"
+                                    onClick={() => navigate(`/transcript?session=${encodeURIComponent(s.id)}`)}
+                                    data-testid={`transcript-session-${s.id}`}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-semibold text-slate-900 truncate">Transcript · {s.top_title || 'Session'}</p>
+                                        <p className="text-[10px] text-indigo-700">
+                                            {s.remaining} left to knock out
+                                            {s.created_at && !isNaN(new Date(s.created_at).getTime())
+                                                ? ` · ${format(new Date(s.created_at), 'MMM dd, h:mm a')}`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
                             {drafts.map((draft) => (
                                 <div
                                     key={draft.id}

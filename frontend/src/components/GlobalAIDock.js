@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, X, ListChecks } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useAuth } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
-import { JarvisIcon } from '@/components/JarvisIcon';
 
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
 const LANDINGish = ['/', '/privacy', '/terms', '/contact'];
 
 /**
- * App-wide floating AI create bar (replaces per-page New Task FABs).
- * Jarvis sits beside the bar chrome; Escape / Clear exits an in-progress draft.
+ * Minimal app-wide command bar — create, search, navigate, ask.
  */
 const GlobalAIDock = () => {
     const { user } = useAuth();
@@ -96,10 +94,6 @@ const GlobalAIDock = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [active, clearFlow]);
 
-    const openJarvis = () => {
-        window.dispatchEvent(new CustomEvent('tskflow:open-assistant'));
-    };
-
     const openManual = (prefill) => {
         try {
             if (prefill) sessionStorage.setItem('tsk_manual_prefill', JSON.stringify(prefill));
@@ -114,51 +108,27 @@ const GlobalAIDock = () => {
 
     return (
         <div
-            className="fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,42rem)] bottom-3"
+            className="fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,40rem)] bottom-3"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"
         >
-            <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/15 p-3 sm:p-4 max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll">
-                <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
-                    <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5" style={{ fontFamily: 'Outfit' }}>
-                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                        Create a task
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                        {active && (
-                            <button
-                                type="button"
-                                onClick={clearFlow}
-                                className="text-[11px] text-slate-400 hover:text-slate-700 inline-flex items-center gap-1 px-2 py-1 rounded-full hover:bg-slate-100"
-                                data-testid="ai-dock-exit"
-                                title="Clear and exit (Esc)"
-                            >
-                                <X className="w-3 h-3" />
-                                Clear
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            className="text-[11px] text-slate-400 hover:text-slate-700 px-2 py-1 rounded-full hover:bg-slate-100 inline-flex items-center gap-1"
-                            onClick={() => openManual()}
-                            data-testid="ai-dock-manual-form"
-                        >
-                            <ListChecks className="w-3 h-3" />
-                            Manual form
-                        </button>
-                        <button
-                            type="button"
-                            onClick={openJarvis}
-                            className="group relative h-8 pl-1 pr-2.5 rounded-full bg-slate-900 text-white inline-flex items-center gap-1.5 shadow-sm hover:bg-slate-800 transition-colors"
-                            data-testid="ai-dock-jarvis"
-                            title="Ask Jarvis"
-                            aria-label="Ask Jarvis"
-                        >
-                            <JarvisIcon size={26} phase="idle" />
-                            <span className="text-[11px] font-semibold tracking-tight pr-0.5">Jarvis</span>
-                        </button>
-                    </div>
-                </div>
+            <div className={`relative max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll transition-[padding,border-radius] ${
+                active
+                    ? 'rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur-md shadow-lg shadow-slate-900/10 p-2 sm:p-2.5'
+                    : 'rounded-[22px] bg-transparent p-0'
+            }`}>
+                {active && (
+                    <button
+                        type="button"
+                        onClick={clearFlow}
+                        className="absolute top-2 right-2 z-10 h-7 w-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
+                        data-testid="ai-dock-exit"
+                        title="Clear (Esc)"
+                        aria-label="Clear"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                )}
 
                 {recordingPending && (
                     <p className="text-[11px] text-teal-800 bg-teal-50 border border-teal-100 rounded-xl px-2.5 py-1.5 mb-2" data-testid="ai-dock-recording-pending">

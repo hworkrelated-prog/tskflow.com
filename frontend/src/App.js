@@ -33,7 +33,6 @@ import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
-import GlobalFAB from '@/components/GlobalFAB';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import TeamSetupModal from '@/components/TeamSetupModal';
@@ -533,7 +532,6 @@ function App() {
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
                 </Routes>
                 <GlobalAIDock />
-                <GlobalFAB />
                 <TeamSetupModal />
                 <WhatsNewPrompt />
                 <VoiceMode dockIntegrated />
