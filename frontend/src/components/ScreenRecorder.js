@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, AlertCircle, Move } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
+import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
 
 const CtrlBtn = ({ onClick, title, active, danger, children, testId }) => (
     <button
@@ -410,6 +411,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
                 chunksRef.current = [];
                 stopAllTracks();
+                closeRecordingControlsOverlay();
                 try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
                 setPopupOpen(false);
                 if (wasDiscard) return;
@@ -424,7 +426,7 @@ export const ScreenRecorder = ({ onSaved }) => {
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-            openControlsPopup();
+            await openControlsPopup();
 
             const surf = settings.displaySurface;
             if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab — prefer Entire Screen.');
@@ -452,31 +454,29 @@ export const ScreenRecorder = ({ onSaved }) => {
         discardOnStopRef.current = false;
         try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); }
         catch { stopAllTracks(); }
+        closeRecordingControlsOverlay();
         try { controlsPopupRef.current?.close?.(); } catch { /* noop */ }
         setPopupOpen(false);
     };
 
-    const openControlsPopup = () => {
-        try {
-            const width = 420;
-            const height = 72;
-            const left = Math.max(0, (window.screen?.availWidth || 1200) - width - 24);
-            const top = 24;
-            const features = `popup=1,noopener=0,width=${width},height=${height},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0,resizable=1`;
-            const w = window.open('/recording/controls', 'tsk_recording_controls', features);
-            if (w) {
-                controlsPopupRef.current = w;
-                setPopupOpen(true);
-                const check = setInterval(() => {
-                    if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
-                        clearInterval(check);
-                        setPopupOpen(false);
-                    }
-                }, 500);
-            } else {
-                toast.info('Popup blocked — using the in-tab floating controls instead.');
+    const openControlsPopup = async () => {
+        const result = await openRecordingControlsOverlay();
+        if (result?.mode === 'none') {
+            toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
+            setPopupOpen(false);
+            return;
+        }
+        controlsPopupRef.current = result.win;
+        setPopupOpen(true);
+        if (result.mode === 'pip') {
+            toast.success('Floating controls opened — they stay on top while you present.');
+        }
+        const check = setInterval(() => {
+            if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
+                clearInterval(check);
+                setPopupOpen(false);
             }
-        } catch { /* silent */ }
+        }, 500);
     };
 
     const pauseResume = () => {
@@ -561,11 +561,11 @@ export const ScreenRecorder = ({ onSaved }) => {
 
             {recording && camOn && camStream && <WebcamBubble stream={camStream} />}
 
-            {recording && displaySurface === 'window' && (
+            {recording && displaySurface === 'window' && !popupOpen && (
                 <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2147483645 }}
                     className="max-w-xs bg-white border border-amber-300 shadow-xl rounded-2xl p-3 text-xs text-amber-800 flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>You&apos;re recording a separate window &mdash; controls won&apos;t appear there. Come back to this tab or use the browser Stop Sharing bar.</span>
+                    <span>You&apos;re recording a separate window. Use the floating controls window (or browser Stop sharing) if you can&apos;t see this tab.</span>
                 </div>
             )}
         </>
