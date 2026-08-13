@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Trash2, RotateCw } from 'lucide-react';
+import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Pause, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob } from '@/lib/upload';
+import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -27,6 +28,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     const fileInputRef = useRef(null);
     const [uploads, setUploads] = useState({});
     const [recording, setRecording] = useState(false);
+    const [paused, setPaused] = useState(false);
     const [showOptions, setShowOptions] = useState(false);
     const [starting, setStarting] = useState(false);
     const [seconds, setSeconds] = useState(0);
@@ -43,10 +45,13 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     const videoRefs = useRef({ screen: null, camera: null });
     const rafRef = useRef(null);
     const cameraPreviewRef = useRef(null);
+    const discardOnStopRef = useRef(false);
 
     useEffect(() => {
         return () => {
             cleanupStreams();
+            closeRecordingControlsOverlay();
+            try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
         };
     }, []);
 
@@ -61,6 +66,27 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         }
         return undefined;
     }, [recording]);
+
+    useEffect(() => {
+        window.__tskRecorderApi = {
+            getState: () => ({
+                recording,
+                paused,
+                seconds,
+                micOn: opts.mic,
+                camOn: opts.camera,
+            }),
+            stop: () => stopRecording(),
+            pauseResume: () => pauseResume(),
+            restart: () => restartRecording(),
+            toggleMic: () => toggleMic(),
+            toggleCam: () => toggleCam(),
+        };
+        return () => {
+            try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recording, paused, seconds, opts.mic, opts.camera]);
 
     const cleanupStreams = () => {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -174,9 +200,17 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 if (timerRef.current) clearInterval(timerRef.current);
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
                 setRecording(false);
+                setPaused(false);
                 setSeconds(0);
+                closeRecordingControlsOverlay();
+                const wasDiscard = discardOnStopRef.current;
+                discardOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
                 cleanupStreams();
+                if (wasDiscard) {
+                    setTimeout(() => { startRecording(); }, 350);
+                    return;
+                }
                 if (blob.size > 0) {
                     // Show preview instead of auto-uploading
                     setPreviewBlob(blob);
@@ -196,9 +230,16 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             });
             rec.start(1000);
             setRecording(true);
+            setPaused(false);
             setShowOptions(false);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+            const overlay = await openRecordingControlsOverlay();
+            if (overlay?.mode === 'pip') {
+                toast.success('Floating controls opened — they stay on top while you present.');
+            } else if (overlay?.mode === 'none') {
+                toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
+            }
             // Webcam preview is wired in the `recording` useEffect once the <video> mounts.
         } catch (e) {
             try {
@@ -220,7 +261,38 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     };
 
     const stopRecording = () => {
+        discardOnStopRef.current = false;
         if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+        closeRecordingControlsOverlay();
+    };
+
+    const pauseResume = () => {
+        const rec = recorderRef.current;
+        if (!rec) return;
+        if (rec.state === 'recording') { rec.pause(); setPaused(true); }
+        else if (rec.state === 'paused') { rec.resume(); setPaused(false); }
+    };
+
+    const restartRecording = () => {
+        discardOnStopRef.current = true;
+        try { if (recorderRef.current?.state !== 'inactive') recorderRef.current.stop(); } catch { /* noop */ }
+        chunksRef.current = [];
+    };
+
+    const toggleMic = () => {
+        setOpts((prev) => {
+            const on = !prev.mic;
+            streamsRef.current.mic?.getAudioTracks?.().forEach((t) => { t.enabled = on; });
+            return { ...prev, mic: on };
+        });
+    };
+
+    const toggleCam = () => {
+        setOpts((prev) => {
+            const on = !prev.camera;
+            streamsRef.current.camera?.getVideoTracks?.().forEach((t) => { t.enabled = on; });
+            return { ...prev, camera: on };
+        });
     };
 
     const handleSaveRecording = async () => {
@@ -312,8 +384,16 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                         className="fixed bottom-4 left-3 z-[2147483647] bg-slate-900/35 backdrop-blur-xl text-white rounded-full shadow-lg shadow-black/10 border border-white/20 flex items-center gap-2 pl-2.5 pr-1 py-1 select-none"
                         data-testid="attachment-recording-bar"
                     >
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                        <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-amber-300' : 'bg-rose-400 animate-pulse'}`} />
                         <span className="font-mono text-[11px] font-medium tabular-nums">{fmt(seconds)}</span>
+                        <button
+                            type="button"
+                            onClick={pauseResume}
+                            className="h-7 w-7 rounded-full text-white/90 hover:bg-white/15 inline-flex items-center justify-center"
+                            title={paused ? 'Resume' : 'Pause'}
+                        >
+                            {paused ? <Play className="w-3 h-3" fill="currentColor" /> : <Pause className="w-3 h-3" />}
+                        </button>
                         <button
                             type="button"
                             onClick={stopRecording}
