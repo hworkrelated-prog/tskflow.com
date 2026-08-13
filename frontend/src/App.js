@@ -116,7 +116,7 @@ const AuthProvider = ({ children }) => {
                         try {
                             const notif = new Notification('Catch up on your work', {
                                 body: parts.join(' · ') || 'You have updates waiting in TskFlow',
-                                icon: '/favicon.ico',
+                                icon: '/icon-192.png',
                                 tag: 'tsk-catch-up',
                             });
                             notif.onclick = () => {
@@ -142,7 +142,7 @@ const AuthProvider = ({ children }) => {
                     try {
                         const notif = new Notification(sanitize(n.title) || 'TskFlow', {
                             body: sanitize(n.body),
-                            icon: '/favicon.ico',
+                            icon: '/icon-192.png',
                             tag: n.id || n.task_id || 'tsk-live',
                         });
                         notif.onclick = () => {
