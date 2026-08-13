@@ -42,7 +42,16 @@ const getMentionState = (value, caret) => {
 
 const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
 
-const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false }) => {
+const AIQuickCreate = ({
+    onCreated,
+    onOpenAdvanced,
+    onSnapshot,
+    embedded = false,
+    externalAttachments = null,
+    onExternalAttachmentsConsumed,
+    registerAttachHandler,
+    onRequestExit,
+}) => {
     const [text, setText] = useState('');
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState(null);
@@ -645,7 +654,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         }
     };
 
-    const reset = () => {
+    const reset = useCallback(() => {
         setText('');
         setPreview(null);
         setAnswers({});
@@ -668,9 +677,47 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
         setMention(null);
         setShowNewPersonEmail(false);
         setNewPersonEmail('');
+        setAnswerMode(null);
         nudgeSentRef.current = false;
         focusInput();
-    };
+    }, [focusInput]);
+
+    useEffect(() => {
+        const onReset = () => reset();
+        window.addEventListener('tskflow:ai-dock-reset', onReset);
+        return () => window.removeEventListener('tskflow:ai-dock-reset', onReset);
+    }, [reset]);
+
+    useEffect(() => {
+        if (!Array.isArray(externalAttachments) || !externalAttachments.length) return;
+        setAttachments((prev) => {
+            const keys = new Set(prev.map((a) => a.id || a.storage_path));
+            const merged = [...prev];
+            externalAttachments.forEach((r) => {
+                const key = r?.id || r?.storage_path;
+                if (key && !keys.has(key)) merged.push(r);
+            });
+            return merged;
+        });
+        onExternalAttachmentsConsumed?.();
+        toast.success('Recording attached — describe the task and send');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [externalAttachments]);
+
+    useEffect(() => {
+        registerAttachHandler?.((refs) => {
+            if (!Array.isArray(refs) || !refs.length) return;
+            setAttachments((prev) => {
+                const keys = new Set(prev.map((a) => a.id || a.storage_path));
+                const merged = [...prev];
+                refs.forEach((r) => {
+                    const key = r?.id || r?.storage_path;
+                    if (key && !keys.has(key)) merged.push(r);
+                });
+                return merged;
+            });
+        });
+    }, [registerAttachHandler]);
 
     const flattenAssignees = () => {
         const targets = [];
@@ -884,8 +931,10 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
             editCriteria,
             sending,
             preview: !!preview,
+            answerMode: !!answerMode,
+            attachments,
         });
-    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, onSnapshot]);
+    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -1396,10 +1445,21 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
 
                 {answerMode && (
                     <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-4" data-testid="ai-qa-answer">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className="text-xs text-slate-500">You asked</p>
+                            <button
+                                type="button"
+                                onClick={() => { reset(); onRequestExit?.(); }}
+                                className="text-slate-400 hover:text-slate-700 rounded-full p-0.5"
+                                aria-label="Exit"
+                                data-testid="ai-qa-exit"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                         <div className="flex items-start gap-2">
                             <Sparkles className="w-4 h-4 text-slate-700 shrink-0 mt-0.5" />
                             <div className="min-w-0">
-                                <p className="text-xs text-slate-500 mb-1">You asked</p>
                                 <p className="text-sm font-medium text-slate-800 mb-3">{answerMode.question}</p>
                                 <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{answerMode.reply}</p>
                                 <button
@@ -1984,7 +2044,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                             </Button>
                                             <button
                                                 type="button"
-                                                onClick={reset}
+                                                onClick={() => { reset(); onRequestExit?.(); }}
                                                 className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 px-1"
                                                 data-testid="ai-preview-close"
                                             >
@@ -2005,7 +2065,7 @@ const AIQuickCreate = ({ onCreated, onOpenAdvanced, onSnapshot, embedded = false
                                     </span>
                                     <button
                                         type="button"
-                                        onClick={reset}
+                                        onClick={() => { reset(); onRequestExit?.(); }}
                                         className="text-slate-400 hover:text-slate-700 rounded-full p-1"
                                         title="Discard"
                                     >

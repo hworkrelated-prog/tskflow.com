@@ -111,7 +111,7 @@ const JarvisMark = ({ phase, size = 40, className = '' }) => (
     </div>
 );
 
-const VoiceMode = () => {
+const VoiceMode = ({ dockIntegrated = false }) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -362,7 +362,14 @@ const VoiceMode = () => {
     };
 
     return (
-        <div className="fixed safe-fab-br z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)]" data-testid="voice-mode-widget">
+        <div
+            className={`fixed z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
+                dockIntegrated
+                    ? 'right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(6.25rem+env(safe-area-inset-bottom,0px))]'
+                    : 'safe-fab-br'
+            }`}
+            data-testid="voice-mode-widget"
+        >
             <AnimatePresence>
                 {nudge && !open && (
                     <motion.button
@@ -371,7 +378,7 @@ const VoiceMode = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6 }}
                         onClick={openPanel}
-                        className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white border border-slate-200 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                        className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white/95 backdrop-blur border border-slate-200/80 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-white flex items-center gap-2.5"
                         data-testid="voice-nudge-bubble"
                     >
                         <JarvisMark phase="idle" size={28} />
@@ -489,17 +496,43 @@ const VoiceMode = () => {
                 )}
             </AnimatePresence>
 
+            {/* When dockIntegrated, primary Jarvis lives on the AI bar; keep a slim orb for quick reopen. */}
             <motion.button
                 type="button"
                 data-testid="voice-mode-fab"
                 onClick={() => (open ? closePanel() : openPanel())}
-                animate={wiggle ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                animate={wiggle ? { scale: [1, 1.06, 1] } : { scale: 1 }}
                 transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
-                className="h-14 w-14 rounded-full flex items-center justify-center shadow-xl ring-2 ring-white overflow-hidden"
+                className={`relative overflow-hidden flex items-center justify-center transition-shadow ${
+                    dockIntegrated
+                        ? 'h-12 w-12 rounded-2xl shadow-lg shadow-slate-900/15 border border-white/40'
+                        : 'h-14 w-14 rounded-full shadow-xl ring-2 ring-white'
+                }`}
+                style={{
+                    background: phase === 'listening'
+                        ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
+                        : 'linear-gradient(145deg,#0f766e 0%,#115e59 45%,#0f172a 100%)',
+                }}
                 title="Jarvis — AI manager"
                 aria-label="Open Jarvis"
             >
-                <JarvisMark phase={open && phase === 'idle' ? 'idle' : phase} size={56} />
+                <span
+                    className="absolute inset-0 opacity-30"
+                    style={{ background: 'radial-gradient(circle at 30% 25%, rgba(255,255,255,.55), transparent 55%)' }}
+                />
+                {phase === 'thinking' ? (
+                    <Loader2 className="w-5 h-5 text-white animate-spin relative" />
+                ) : (
+                    <span
+                        className="relative text-white font-semibold tracking-tight"
+                        style={{ fontFamily: 'Outfit, sans-serif', fontSize: dockIntegrated ? 15 : 18 }}
+                    >
+                        J
+                    </span>
+                )}
+                {(phase === 'listening' || phase === 'speaking') && (
+                    <span className="absolute inset-0 rounded-[inherit] ring-2 ring-white/40 animate-pulse" />
+                )}
             </motion.button>
         </div>
     );

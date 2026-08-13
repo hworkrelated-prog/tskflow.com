@@ -18,12 +18,12 @@ body {
     overflow-x: hidden;
 }
 
-/* Clear floating New Task + Voice controls across authenticated pages */
+/* Clear floating AI dock + Jarvis across authenticated pages */
 body.app-authenticated {
     padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Extra room for the persistent middle-bottom AI command bar on the hub */
+/* Room for the persistent middle-bottom AI command bar */
 body.app-authenticated.has-ai-dock {
     padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
 }

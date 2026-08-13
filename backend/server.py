@@ -4085,6 +4085,15 @@ class SetManagerRequest(BaseModel):
 class AddDirectReportRequest(BaseModel):
     user_id: str
 
+class ProposeTeamRequest(BaseModel):
+    """Claim people as your direct reports (they must accept / can dispute)."""
+    user_ids: Optional[List[str]] = None
+    emails: Optional[List[str]] = None
+
+class RespondTeamClaimRequest(BaseModel):
+    action: str  # accept | ignore | dispute
+    note: Optional[str] = None
+
 class DirectReportTaskMetrics(BaseModel):
     user_id: str
     name: str
@@ -4308,34 +4317,224 @@ async def set_manager(request: SetManagerRequest, current_user: dict = Depends(g
     else:
         return {"message": "Manager removed", "manager": None}
 
-@api_router.post("/team/add-direct-report")
-async def add_direct_report(request: AddDirectReportRequest, current_user: dict = Depends(get_current_user)):
-    """Add someone as your direct report (they will report to you)"""
+async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict], target_email: Optional[str]):
+    """Create a pending claim + notify the target (in-app + email when possible)."""
+    email = (target_email or (target_user or {}).get("email") or "").strip().lower()
+    if not email and not target_user:
+        return None
+    # Deduplicate pending
+    q = {"claimer_id": claimer["id"], "claim_type": "direct_report", "status": "pending"}
+    if target_user:
+        q["target_user_id"] = target_user["id"]
+    else:
+        q["target_email"] = email
+    existing = await db.team_claims.find_one(q, {"_id": 0})
+    if existing:
+        return existing
+
+    claim = {
+        "id": str(uuid.uuid4()),
+        "claimer_id": claimer["id"],
+        "claimer_name": claimer.get("name") or claimer.get("email"),
+        "claimer_email": claimer.get("email"),
+        "target_user_id": (target_user or {}).get("id"),
+        "target_email": email,
+        "target_name": (target_user or {}).get("name") or email.split("@")[0],
+        "claim_type": "direct_report",
+        "status": "pending",
+        "note": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "responded_at": None,
+        "company_domain": claimer.get("company_domain"),
+    }
+    await db.team_claims.insert_one(claim)
+
+    title = f"{claimer.get('name') or 'Someone'} listed you on their team"
+    body = (
+        f"{claimer.get('name') or claimer.get('email')} says you report to them in Tskflow. "
+        "Accept if that’s right, Ignore to dismiss, or Dispute if it’s a mistake."
+    )
+    if target_user:
+        await create_notification(
+            user_id=target_user["id"],
+            n_type="team_claim",
+            title=title,
+            body=body,
+            task_id=None,
+            meta={"claim_id": claim["id"]},
+            send_email=True,
+            email_to=target_user.get("email"),
+            email_subject=title,
+            email_html=_jarvis_email_shell(
+                f"<p>Hi {target_user.get('name') or ''},</p><p>{body}</p>",
+                cta_url=f"{APP_BASE_URL}/team?claims=1",
+                cta_label="Review team claim",
+            ),
+        )
+    elif email:
+        try:
+            await send_email_notification(
+                email,
+                title,
+                _jarvis_email_shell(
+                    f"<p>{body}</p><p>If you don’t have Tskflow yet, create an account with this email to respond.</p>",
+                    cta_url=f"{APP_BASE_URL}/register",
+                    cta_label="Open Tskflow",
+                ),
+            )
+        except Exception:
+            pass
+    return {k: v for k, v in claim.items() if k != "_id"}
+
+
+@api_router.post("/team/propose-reports")
+async def propose_reports(request: ProposeTeamRequest, current_user: dict = Depends(get_current_user)):
+    """Propose people as your direct reports. They are notified and can accept, ignore, or dispute."""
     if current_user["subscription_tier"] != "teams":
         raise HTTPException(status_code=403, detail="Teams subscription required")
-    
-    # Validate user exists and is in same domain
-    direct_report = await db.users.find_one({"id": request.user_id}, {"_id": 0})
-    if not direct_report:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if direct_report["company_domain"] != current_user["company_domain"]:
-        raise HTTPException(status_code=403, detail="Can only add direct reports from your organization")
-    
-    if direct_report["id"] == current_user["id"]:
-        raise HTTPException(status_code=400, detail="Cannot add yourself as direct report")
-    
-    # Prevent circular reporting
-    if current_user.get("reports_to") == direct_report["id"]:
-        raise HTTPException(status_code=400, detail="Circular reporting not allowed - you already report to this person")
-    
-    # Update the user's reports_to field to current user
-    await db.users.update_one(
-        {"id": request.user_id},
-        {"$set": {"reports_to": current_user["id"]}}
+
+    user_ids = list(dict.fromkeys(request.user_ids or []))
+    emails = []
+    for e in (request.emails or []):
+        e2 = (e or "").strip().lower()
+        if e2 and "@" in e2 and e2 not in emails:
+            emails.append(e2)
+
+    created = []
+    skipped = []
+    for uid in user_ids:
+        if uid == current_user["id"]:
+            skipped.append({"id": uid, "reason": "self"})
+            continue
+        target = await db.users.find_one({"id": uid}, {"_id": 0})
+        if not target:
+            skipped.append({"id": uid, "reason": "not_found"})
+            continue
+        if target.get("company_domain") != current_user.get("company_domain"):
+            skipped.append({"id": uid, "reason": "wrong_domain"})
+            continue
+        if current_user.get("reports_to") == target["id"]:
+            skipped.append({"id": uid, "reason": "circular"})
+            continue
+        if target.get("reports_to") == current_user["id"]:
+            skipped.append({"id": uid, "reason": "already_reports"})
+            continue
+        claim = await _create_direct_report_claim(current_user, target, target.get("email"))
+        if claim:
+            created.append(claim)
+
+    for email in emails:
+        if email == (current_user.get("email") or "").lower():
+            skipped.append({"email": email, "reason": "self"})
+            continue
+        target = await db.users.find_one({"email": email}, {"_id": 0})
+        if target:
+            if target.get("company_domain") != current_user.get("company_domain"):
+                skipped.append({"email": email, "reason": "wrong_domain"})
+                continue
+            if current_user.get("reports_to") == target["id"] or target.get("reports_to") == current_user["id"]:
+                skipped.append({"email": email, "reason": "invalid"})
+                continue
+            claim = await _create_direct_report_claim(current_user, target, email)
+        else:
+            claim = await _create_direct_report_claim(current_user, None, email)
+        if claim:
+            created.append(claim)
+
+    return {
+        "message": f"Sent {len(created)} team request{'s' if len(created) != 1 else ''}",
+        "created": created,
+        "skipped": skipped,
+    }
+
+
+@api_router.get("/team/claims")
+async def list_team_claims(current_user: dict = Depends(get_current_user), inbox: bool = True):
+    """Pending claims targeting you (inbox) or claims you sent."""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+    if inbox:
+        docs = await db.team_claims.find({
+            "status": "pending",
+            "$or": [
+                {"target_user_id": current_user["id"]},
+                {"target_email": (current_user.get("email") or "").lower()},
+            ],
+        }, {"_id": 0}).sort("created_at", -1).to_list(100)
+    else:
+        docs = await db.team_claims.find(
+            {"claimer_id": current_user["id"]},
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(100)
+    return {"claims": docs}
+
+
+@api_router.post("/team/claims/{claim_id}/respond")
+async def respond_team_claim(claim_id: str, request: RespondTeamClaimRequest, current_user: dict = Depends(get_current_user)):
+    action = (request.action or "").strip().lower()
+    if action not in ("accept", "ignore", "dispute"):
+        raise HTTPException(status_code=400, detail="action must be accept, ignore, or dispute")
+
+    claim = await db.team_claims.find_one({"id": claim_id}, {"_id": 0})
+    if not claim or claim.get("status") != "pending":
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    my_email = (current_user.get("email") or "").lower()
+    is_target = claim.get("target_user_id") == current_user["id"] or (claim.get("target_email") or "").lower() == my_email
+    if not is_target:
+        raise HTTPException(status_code=403, detail="Not your claim to respond to")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.team_claims.update_one(
+        {"id": claim_id},
+        {"$set": {
+            "status": "accepted" if action == "accept" else ("disputed" if action == "dispute" else "ignored"),
+            "note": (request.note or None),
+            "responded_at": now,
+            "target_user_id": current_user["id"],
+        }},
     )
-    
-    return {"message": f"{direct_report['name']} now reports to you"}
+
+    if action == "accept" and claim.get("claim_type") == "direct_report":
+        claimer_id = claim["claimer_id"]
+        if current_user.get("reports_to") != claimer_id:
+            # block circular
+            claimer = await db.users.find_one({"id": claimer_id}, {"_id": 0, "reports_to": 1, "name": 1})
+            if claimer and claimer.get("reports_to") != current_user["id"]:
+                await db.users.update_one(
+                    {"id": current_user["id"]},
+                    {"$set": {"reports_to": claimer_id}},
+                )
+
+    # Notify claimer of the outcome
+    outcome = {"accept": "accepted", "ignore": "ignored", "dispute": "disputed"}[action]
+    await create_notification(
+        user_id=claim["claimer_id"],
+        n_type="team_claim_response",
+        title=f"{current_user.get('name') or 'Someone'} {outcome} your team request",
+        body=(
+            f"{current_user.get('name') or current_user.get('email')} {outcome} being listed as reporting to you."
+            + (f" Note: {request.note}" if request.note else "")
+        ),
+        task_id=None,
+        meta={"claim_id": claim_id, "action": action},
+        send_email=False,
+    )
+
+    return {"message": f"Claim {outcome}", "action": action}
+
+
+@api_router.post("/team/add-direct-report")
+async def add_direct_report(request: AddDirectReportRequest, current_user: dict = Depends(get_current_user)):
+    """Propose someone as your direct report (they must accept)."""
+    if current_user["subscription_tier"] != "teams":
+        raise HTTPException(status_code=403, detail="Teams subscription required")
+
+    result = await propose_reports(
+        ProposeTeamRequest(user_ids=[request.user_id], emails=[]),
+        current_user,
+    )
+    return {"message": result.get("message") or "Team request sent", **result}
 
 @api_router.delete("/team/direct-report/{user_id}")
 async def remove_direct_report(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -6504,7 +6703,7 @@ async def websocket_endpoint(ws: WebSocket, token: str = None):
 
 
 # --- Notification helper (in-app center + optional email) ---
-IMPORTANT_EMAIL_EVENTS = {"task_assigned", "status_change", "task_completed", "important_response"}
+IMPORTANT_EMAIL_EVENTS = {"task_assigned", "status_change", "task_completed", "important_response", "team_claim"}
 
 def _can_manage_slack_webhook(user: dict) -> bool:
     """Slack Incoming Webhook may only be configured by Teams package admins (team owners)."""
@@ -6561,6 +6760,7 @@ async def create_notification(
     email_to: Optional[str] = None,
     email_subject: Optional[str] = None,
     email_html: Optional[str] = None,
+    meta: Optional[dict] = None,
 ):
     doc = {
         "id": str(uuid.uuid4()),
@@ -6574,6 +6774,11 @@ async def create_notification(
         "delivered": False,   # for live OS toast poll (recent non-reminders only)
         "read": False,        # for in-app bell
     }
+    if meta and isinstance(meta, dict):
+        # Persist small structured extras (e.g. claim_id) for actionable notifications
+        for k, v in meta.items():
+            if k not in doc and v is not None:
+                doc[k] = v
     await db.notifications.insert_one(doc)
     # Push over WebSocket if user is online
     try:

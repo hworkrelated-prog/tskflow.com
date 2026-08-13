@@ -32,7 +32,7 @@ import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import GlobalFAB from '@/components/GlobalFAB';
+import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import TeamSetupModal from '@/components/TeamSetupModal';
@@ -531,10 +531,10 @@ function App() {
                     <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
                 </Routes>
-                <GlobalFAB />
+                <GlobalAIDock />
                 <TeamSetupModal />
                 <WhatsNewPrompt />
-                <VoiceMode />
+                <VoiceMode dockIntegrated />
                 <CatchUpReview />
             </BrowserRouter>
             <Toaster position="top-right" />

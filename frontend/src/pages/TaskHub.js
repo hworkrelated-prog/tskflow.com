@@ -28,7 +28,6 @@ import RichTextEditor from '@/components/RichTextEditor';
 import StandaloneRecorder from '@/components/StandaloneRecorder';
 import ScreenRecorder from '@/components/ScreenRecorder';
 import RecurrenceEditor from '@/components/RecurrenceEditor';
-import AIQuickCreate from '@/components/AIQuickCreate';
 import GroupsManager from '@/components/GroupsManager';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
@@ -93,8 +92,6 @@ const TaskHub = () => {
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     // AI Command Center dialog (primary flow for + New Task)
-    const [showAIDialog, setShowAIDialog] = useState(false);
-    const aiQuickSnapRef = useRef(null);
 
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
@@ -166,33 +163,56 @@ const TaskHub = () => {
         registerPush();
     }, []);
 
-    // Listen for the Global FAB / deep-link to focus the always-on AI command bar
+    // Manual form + refresh hooks for the app-wide AI dock
     useEffect(() => {
-        const openAI = () => {
-            setShowAIDialog(true);
-            setTimeout(() => window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt')), 50);
+        const applyPrefill = (prefill) => {
+            if (!prefill) return;
+            setTaskForm((f) => ({
+                ...f,
+                title: prefill.title || f.title,
+                description: prefill.description || f.description,
+                due_date: prefill.due_date || f.due_date,
+                priority: prefill.priority || f.priority,
+                is_sales_task: prefill.is_sales_task || f.is_sales_task,
+                success_criteria: prefill.success_criteria || f.success_criteria || '',
+                requires_screen_recording: prefill.requires_screen_recording || f.requires_screen_recording,
+            }));
+            if (Array.isArray(prefill.attachments) && prefill.attachments.length) {
+                setAttachments(prefill.attachments);
+            }
         };
-        const openAdvanced = () => setShowCreateModal(true);
-        window.addEventListener('tskflow:open-ai-create', openAI);
-        // Backward-compat: old event name now opens AI create too
-        window.addEventListener('tskflow:open-create-task', openAI);
+        const openAdvanced = (e) => {
+            let prefill = e?.detail;
+            if (!prefill) {
+                try {
+                    const raw = sessionStorage.getItem('tsk_manual_prefill');
+                    if (raw) {
+                        prefill = JSON.parse(raw);
+                        sessionStorage.removeItem('tsk_manual_prefill');
+                    }
+                } catch { /* noop */ }
+            }
+            applyPrefill(prefill);
+            setShowCreateModal(true);
+        };
+        const onCreated = () => {
+            fetchDashboard();
+            fetchParentGroups();
+            fetchDrafts();
+        };
         window.addEventListener('tskflow:open-advanced-create', openAdvanced);
+        window.addEventListener('tskflow:task-created', onCreated);
         try {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('create') === '1') openAI();
+            if (params.get('create') === '1') {
+                window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+            }
             if (params.get('create') === 'advanced') setShowCreateModal(true);
         } catch (_) { /* noop */ }
         return () => {
-            window.removeEventListener('tskflow:open-ai-create', openAI);
-            window.removeEventListener('tskflow:open-create-task', openAI);
             window.removeEventListener('tskflow:open-advanced-create', openAdvanced);
+            window.removeEventListener('tskflow:task-created', onCreated);
         };
-    }, []);
-
-    // Extra bottom padding so the persistent AI bar doesn't cover task cards
-    useEffect(() => {
-        document.body.classList.add('has-ai-dock');
-        return () => document.body.classList.remove('has-ai-dock');
     }, []);
 
     // Flush offline draft queue when we come back online
@@ -1173,18 +1193,6 @@ const TaskHub = () => {
                                     <CheckSquare className="w-4 h-4" />
                                     <span className="hidden sm:inline">Select</span>
                                 </Button>
-                                <Button
-                                    data-testid="create-task-button"
-                                    onClick={() => {
-                                        setShowAIDialog(true);
-                                        setTimeout(() => window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt')), 30);
-                                    }}
-                                    className="rounded-full gap-2"
-                                >
-                                    <Sparkles className="w-4 h-4" />
-                                    <span className="hidden sm:inline">New Task</span>
-                                    <span className="sm:hidden">New</span>
-                                </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader className="pr-8">
@@ -1575,81 +1583,6 @@ const TaskHub = () => {
                         </div>
                     </DialogContent>
                 </Dialog>
-
-                {/* Persistent middle-bottom AI command bar — always available on the hub */}
-                <div
-                    className={`fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,42rem)] transition-[bottom,box-shadow] duration-200 ${
-                        showAIDialog || (aiQuickSnapRef.current?.preview) ? 'bottom-3' : 'bottom-3'
-                    }`}
-                    style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-                    data-testid="ai-command-dock"
-                >
-                    <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/15 p-3 sm:p-4 max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll">
-                        <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
-                            <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5" style={{ fontFamily: 'Outfit' }}>
-                                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                                Create a task
-                            </p>
-                            <button
-                                type="button"
-                                className="text-[11px] text-slate-400 hover:text-slate-700"
-                                onClick={() => setShowCreateModal(true)}
-                                data-testid="ai-dock-manual-form"
-                            >
-                                Manual form
-                            </button>
-                        </div>
-                        <AIQuickCreate
-                            embedded
-                            onSnapshot={(snap) => {
-                                aiQuickSnapRef.current = snap;
-                                if (snap?.preview || snap?.text?.trim()) setShowAIDialog(true);
-                            }}
-                            onCreated={() => {
-                                aiQuickSnapRef.current = null;
-                                fetchDashboard();
-                                fetchParentGroups();
-                                fetchDrafts();
-                                setShowAIDialog(false);
-                            }}
-                            onOpenAdvanced={(prefill) => {
-                                aiQuickSnapRef.current = null;
-                                if (prefill) {
-                                    setTaskForm((f) => ({
-                                        ...f,
-                                        title: prefill.title || f.title,
-                                        description: prefill.description || f.description,
-                                        due_date: prefill.due_date || f.due_date,
-                                        priority: prefill.priority || f.priority,
-                                        is_sales_task: prefill.is_sales_task || f.is_sales_task,
-                                        success_criteria: prefill.success_criteria || f.success_criteria || '',
-                                        requires_screen_recording: prefill.requires_screen_recording || f.requires_screen_recording,
-                                    }));
-                                    if (Array.isArray(prefill.attachments) && prefill.attachments.length) {
-                                        setAttachments(prefill.attachments);
-                                    }
-                                    if (Array.isArray(prefill.assignees) && prefill.assignees.length) {
-                                        const mapped = prefill.assignees.map((a) => {
-                                            if (a.id === 'self' || a.kind === 'self') return { type: 'self' };
-                                            if (a.kind === 'email' || (!a.id && a.email)) return { type: 'email', email: a.email, name: a.name || a.email };
-                                            if (a.kind === 'user' && a.id) return { type: 'user', id: a.id, name: a.name, email: a.email };
-                                            if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.emails)) {
-                                                return (a.emails || []).map((email) => ({ type: 'email', email, name: email.split('@')[0] }));
-                                            }
-                                            if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
-                                                return a.members.map((id) => ({ type: 'user', id, name: a.name }));
-                                            }
-                                            return null;
-                                        }).flat().filter(Boolean);
-                                        if (mapped.length) setSelectedAssignees(mapped);
-                                    }
-                                }
-                                setShowAIDialog(false);
-                                setShowCreateModal(true);
-                            }}
-                        />
-                    </div>
-                </div>
 
                 {/* Compact drafts pill — tucked away, one line, one tap to expand */}
                 {drafts.length > 0 && (
