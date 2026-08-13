@@ -117,7 +117,14 @@ const HelpCenter = () => {
     const navigate = useNavigate();
     const [q, setQ] = useState('');
     const [updates, setUpdates] = useState([]);
-    const [tab, setTab] = useState('docs');
+    const initialTab = (() => {
+        try {
+            const t = new URLSearchParams(window.location.search).get('tab');
+            if (t === 'whatsnew' || t === 'walkthrough' || t === 'docs') return t;
+        } catch { /* noop */ }
+        return 'docs';
+    })();
+    const [tab, setTab] = useState(initialTab);
 
     useEffect(() => {
         if (tab === 'whatsnew') {

@@ -127,76 +127,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             });
             streamsRef.current.screen = screenStream;
 
-            const useCamera = !!cameraStream;
-            let videoTrackForRecording;
-            let cameraVideoEl = null;
-            let screenVideoEl = null;
-            let canvas = null;
-
-            if (useCamera) {
-                screenVideoEl = document.createElement('video');
-                screenVideoEl.srcObject = screenStream;
-                screenVideoEl.muted = true;
-                await screenVideoEl.play().catch(() => {});
-                cameraVideoEl = document.createElement('video');
-                cameraVideoEl.srcObject = cameraStream;
-                cameraVideoEl.muted = true;
-                await cameraVideoEl.play().catch(() => {});
-
-                await new Promise((res) => {
-                    if (screenVideoEl.readyState >= 1) res();
-                    else screenVideoEl.onloadedmetadata = () => res();
-                });
-
-                canvas = document.createElement('canvas');
-                canvas.width = screenVideoEl.videoWidth || 1280;
-                canvas.height = screenVideoEl.videoHeight || 720;
-                canvasRef.current = canvas;
-                videoRefs.current = { screen: screenVideoEl, camera: cameraVideoEl };
-
-                const ctx = canvas.getContext('2d', { alpha: false }); // Fixed: disable alpha for better performance
-                let lastDrawTime = 0;
-                const targetFPS = 30;
-                const frameInterval = 1000 / targetFPS;
-
-                const draw = (currentTime) => {
-                    // Fixed: throttle drawing to exact 30fps to prevent lag
-                    if (currentTime - lastDrawTime < frameInterval) {
-                        rafRef.current = requestAnimationFrame(draw);
-                        return;
-                    }
-                    lastDrawTime = currentTime;
-
-                    try {
-                        ctx.drawImage(screenVideoEl, 0, 0, canvas.width, canvas.height);
-                        const bubbleD = Math.round(canvas.width * 0.18);
-                        const margin = Math.round(canvas.width * 0.02);
-                        const x = canvas.width - bubbleD - margin;
-                        const y = canvas.height - bubbleD - margin;
-                        ctx.save();
-                        ctx.beginPath();
-                        ctx.arc(x + bubbleD / 2, y + bubbleD / 2, bubbleD / 2, 0, Math.PI * 2);
-                        ctx.closePath();
-                        ctx.clip();
-                        const cw = cameraVideoEl.videoWidth || 640;
-                        const ch = cameraVideoEl.videoHeight || 480;
-                        const scale = Math.max(bubbleD / cw, bubbleD / ch);
-                        const dw = cw * scale;
-                        const dh = ch * scale;
-                        ctx.drawImage(cameraVideoEl, x + (bubbleD - dw) / 2, y + (bubbleD - dh) / 2, dw, dh);
-                        ctx.restore();
-                        ctx.beginPath();
-                        ctx.arc(x + bubbleD / 2, y + bubbleD / 2, bubbleD / 2, 0, Math.PI * 2);
-                        ctx.lineWidth = Math.max(2, Math.round(bubbleD * 0.03));
-                        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-                        ctx.stroke();
-                    } catch (_) { /* ignore per-frame errors */ }
-                    rafRef.current = requestAnimationFrame(draw);
-                };
-                draw(0);
-                videoTrackForRecording = canvas.captureStream(30).getVideoTracks()[0];
-            } else {
-                videoTrackForRecording = screenStream.getVideoTracks()[0];
+            // Always use the raw display track — canvas+rAF freezes when the tab is
+            // backgrounded (audio would keep going). Camera is optional preview only.
+            const videoTrackForRecording = screenStream.getVideoTracks()[0];
+            if (cameraStream) {
+                toast.message('Webcam preview is live — the file records your screen cleanly so it won’t freeze when you switch tabs.');
             }
 
             let audioTrack = null;

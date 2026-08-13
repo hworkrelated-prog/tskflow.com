@@ -166,9 +166,12 @@ const TaskHub = () => {
         registerPush();
     }, []);
 
-    // Listen for the Global FAB / deep-link to open AI create (advanced form is fallback only)
+    // Listen for the Global FAB / deep-link to focus the always-on AI command bar
     useEffect(() => {
-        const openAI = () => setShowAIDialog(true);
+        const openAI = () => {
+            setShowAIDialog(true);
+            setTimeout(() => window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt')), 50);
+        };
         const openAdvanced = () => setShowCreateModal(true);
         window.addEventListener('tskflow:open-ai-create', openAI);
         // Backward-compat: old event name now opens AI create too
@@ -176,7 +179,7 @@ const TaskHub = () => {
         window.addEventListener('tskflow:open-advanced-create', openAdvanced);
         try {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('create') === '1') setShowAIDialog(true);
+            if (params.get('create') === '1') openAI();
             if (params.get('create') === 'advanced') setShowCreateModal(true);
         } catch (_) { /* noop */ }
         return () => {
@@ -184,6 +187,12 @@ const TaskHub = () => {
             window.removeEventListener('tskflow:open-create-task', openAI);
             window.removeEventListener('tskflow:open-advanced-create', openAdvanced);
         };
+    }, []);
+
+    // Extra bottom padding so the persistent AI bar doesn't cover task cards
+    useEffect(() => {
+        document.body.classList.add('has-ai-dock');
+        return () => document.body.classList.remove('has-ai-dock');
     }, []);
 
     // Flush offline draft queue when we come back online
@@ -1166,7 +1175,10 @@ const TaskHub = () => {
                                 </Button>
                                 <Button
                                     data-testid="create-task-button"
-                                    onClick={() => setShowAIDialog(true)}
+                                    onClick={() => {
+                                        setShowAIDialog(true);
+                                        setTimeout(() => window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt')), 30);
+                                    }}
                                     className="rounded-full gap-2"
                                 >
                                     <Sparkles className="w-4 h-4" />
@@ -1564,116 +1576,80 @@ const TaskHub = () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* AI Command Center Dialog — primary flow for new tasks + Q&A + help */}
-                <Dialog
-                    open={showAIDialog}
-                    onOpenChange={async (open) => {
-                        if (!open) {
-                            // Persist in-progress quick-create so accidental dismiss doesn't lose work
-                            const snap = aiQuickSnapRef.current;
-                            if (snap && (snap.text?.trim() || snap.editTitle?.trim()) && !snap.sending) {
-                                try {
-                                    const a = (snap.editAssignees || [])[0];
-                                    const assigned = a?.id === 'self' ? 'self' : (a?.id || a?.email || '');
-                                    await axios.post(`${API}/tasks/drafts`, {
-                                        title: (snap.editTitle || snap.text || 'Untitled draft').trim().slice(0, 120),
-                                        description: snap.editDesc || snap.text || '',
-                                        due_date: snap.editDue || '',
-                                        priority: snap.editPriority || 'Medium',
-                                        assigned_to: assigned,
-                                        success_criteria: snap.editCriteria || undefined,
-                                    });
-                                    toast.message('Saved as draft', { description: 'You can resume it from Drafts below.' });
-                                    fetchDrafts();
-                                } catch (_) { /* silent */ }
-                            }
-                            aiQuickSnapRef.current = null;
-                        }
-                        setShowAIDialog(open);
-                    }}
+                {/* Persistent middle-bottom AI command bar — always available on the hub */}
+                <div
+                    className={`fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,42rem)] transition-[bottom,box-shadow] duration-200 ${
+                        showAIDialog || (aiQuickSnapRef.current?.preview) ? 'bottom-3' : 'bottom-3'
+                    }`}
+                    style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                    data-testid="ai-command-dock"
                 >
-                    <DialogContent
-                        className="max-w-2xl w-[min(96vw,42rem)] sm:w-full max-h-[88dvh] overflow-y-auto p-0 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] fixed left-1/2 bottom-3 top-auto translate-x-[-50%] translate-y-0 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4"
-                        // Portaled @mention / assignee pickers live on document.body — don't treat
-                        // those clicks as "outside" or the dialog closes and loses the task.
-                        onPointerDownOutside={(e) => {
-                            const t = e.target;
-                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
-                                e.preventDefault();
-                            }
-                        }}
-                        onInteractOutside={(e) => {
-                            const t = e.target;
-                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
-                                e.preventDefault();
-                            }
-                        }}
-                        onFocusOutside={(e) => {
-                            const t = e.target;
-                            if (t?.closest?.('[data-testid="clarify-people-dropdown"], [data-testid="mention-dropdown"], [data-testid="ai-inline-assignees"]')) {
-                                e.preventDefault();
-                            }
-                        }}
-                    >
-                        <div className="p-4 sm:p-5">
-                            <DialogHeader className="mb-2 pr-8">
-                                <DialogTitle className="flex items-center gap-2 text-lg" style={{ fontFamily: 'Outfit' }}>
-                                    <Sparkles className="w-4.5 h-4.5 text-slate-800" />
-                                    New task
-                                </DialogTitle>
-                                <DialogDescription className="sr-only">
-                                    Describe what needs to get done
-                                </DialogDescription>
-                            </DialogHeader>
-                            <AIQuickCreate
-                                embedded
-                                onSnapshot={(snap) => { aiQuickSnapRef.current = snap; }}
-                                onCreated={() => {
-                                    aiQuickSnapRef.current = null;
-                                    fetchDashboard();
-                                    fetchParentGroups();
-                                    fetchDrafts();
-                                    setShowAIDialog(false);
-                                }}
-                                onOpenAdvanced={(prefill) => {
-                                    aiQuickSnapRef.current = null;
-                                    if (prefill) {
-                                        setTaskForm((f) => ({
-                                            ...f,
-                                            title: prefill.title || f.title,
-                                            description: prefill.description || f.description,
-                                            due_date: prefill.due_date || f.due_date,
-                                            priority: prefill.priority || f.priority,
-                                            is_sales_task: prefill.is_sales_task || f.is_sales_task,
-                                            success_criteria: prefill.success_criteria || f.success_criteria || '',
-                                            requires_screen_recording: prefill.requires_screen_recording || f.requires_screen_recording,
-                                        }));
-                                        if (Array.isArray(prefill.attachments) && prefill.attachments.length) {
-                                            setAttachments(prefill.attachments);
-                                        }
-                                        if (Array.isArray(prefill.assignees) && prefill.assignees.length) {
-                                            const mapped = prefill.assignees.map((a) => {
-                                                if (a.id === 'self' || a.kind === 'self') return { type: 'self' };
-                                                if (a.kind === 'email' || (!a.id && a.email)) return { type: 'email', email: a.email, name: a.name || a.email };
-                                                if (a.kind === 'user' && a.id) return { type: 'user', id: a.id, name: a.name, email: a.email };
-                                                if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.emails)) {
-                                                    return (a.emails || []).map((email) => ({ type: 'email', email, name: email.split('@')[0] }));
-                                                }
-                                                if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
-                                                    return a.members.map((id) => ({ type: 'user', id, name: a.name }));
-                                                }
-                                                return null;
-                                            }).flat().filter(Boolean);
-                                            if (mapped.length) setSelectedAssignees(mapped);
-                                        }
-                                    }
-                                    setShowAIDialog(false);
-                                    setShowCreateModal(true);
-                                }}
-                            />
+                    <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/15 p-3 sm:p-4 max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll">
+                        <div className="flex items-center justify-between gap-2 mb-2 px-0.5">
+                            <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5" style={{ fontFamily: 'Outfit' }}>
+                                <Sparkles className="w-3.5 h-3.5" />
+                                What do you need done?
+                            </p>
+                            <button
+                                type="button"
+                                className="text-[11px] text-slate-400 hover:text-slate-700"
+                                onClick={() => setShowCreateModal(true)}
+                                data-testid="ai-dock-manual-form"
+                            >
+                                Manual form
+                            </button>
                         </div>
-                    </DialogContent>
-                </Dialog>
+                        <AIQuickCreate
+                            embedded
+                            onSnapshot={(snap) => {
+                                aiQuickSnapRef.current = snap;
+                                if (snap?.preview || snap?.text?.trim()) setShowAIDialog(true);
+                            }}
+                            onCreated={() => {
+                                aiQuickSnapRef.current = null;
+                                fetchDashboard();
+                                fetchParentGroups();
+                                fetchDrafts();
+                                setShowAIDialog(false);
+                            }}
+                            onOpenAdvanced={(prefill) => {
+                                aiQuickSnapRef.current = null;
+                                if (prefill) {
+                                    setTaskForm((f) => ({
+                                        ...f,
+                                        title: prefill.title || f.title,
+                                        description: prefill.description || f.description,
+                                        due_date: prefill.due_date || f.due_date,
+                                        priority: prefill.priority || f.priority,
+                                        is_sales_task: prefill.is_sales_task || f.is_sales_task,
+                                        success_criteria: prefill.success_criteria || f.success_criteria || '',
+                                        requires_screen_recording: prefill.requires_screen_recording || f.requires_screen_recording,
+                                    }));
+                                    if (Array.isArray(prefill.attachments) && prefill.attachments.length) {
+                                        setAttachments(prefill.attachments);
+                                    }
+                                    if (Array.isArray(prefill.assignees) && prefill.assignees.length) {
+                                        const mapped = prefill.assignees.map((a) => {
+                                            if (a.id === 'self' || a.kind === 'self') return { type: 'self' };
+                                            if (a.kind === 'email' || (!a.id && a.email)) return { type: 'email', email: a.email, name: a.name || a.email };
+                                            if (a.kind === 'user' && a.id) return { type: 'user', id: a.id, name: a.name, email: a.email };
+                                            if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.emails)) {
+                                                return (a.emails || []).map((email) => ({ type: 'email', email, name: email.split('@')[0] }));
+                                            }
+                                            if ((a.kind === 'group' || a.kind === 'team') && Array.isArray(a.members)) {
+                                                return a.members.map((id) => ({ type: 'user', id, name: a.name }));
+                                            }
+                                            return null;
+                                        }).flat().filter(Boolean);
+                                        if (mapped.length) setSelectedAssignees(mapped);
+                                    }
+                                }
+                                setShowAIDialog(false);
+                                setShowCreateModal(true);
+                            }}
+                        />
+                    </div>
+                </div>
 
                 {/* Compact drafts pill — tucked away, one line, one tap to expand */}
                 {drafts.length > 0 && (
