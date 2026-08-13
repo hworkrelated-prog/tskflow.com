@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, X, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, API } from '@/App';
+import { JarvisIcon } from '@/components/JarvisIcon';
 
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -87,29 +88,6 @@ const StatusDot = ({ phase }) => {
         </span>
     );
 };
-
-const JarvisMark = ({ phase, size = 40, className = '' }) => (
-    <div
-        className={`relative rounded-full flex items-center justify-center text-white font-semibold shrink-0 ${className}`}
-        style={{
-            width: size,
-            height: size,
-            fontFamily: 'Outfit, sans-serif',
-            fontSize: size * 0.38,
-            background:
-                phase === 'listening'
-                    ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
-                    : 'linear-gradient(145deg,#0f766e,#0f172a)',
-        }}
-        aria-hidden
-    >
-        {phase === 'thinking' ? (
-            <Loader2 className="animate-spin" style={{ width: size * 0.42, height: size * 0.42 }} />
-        ) : (
-            'J'
-        )}
-    </div>
-);
 
 const VoiceMode = ({ dockIntegrated = false }) => {
     const { user } = useAuth();
@@ -240,7 +218,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 : (Array.isArray(raw) ? raw.map((x) => x?.msg || JSON.stringify(x)).join('; ') : '');
             const looksLikeProxy = !status || status >= 502 || /cloudflare|origin web server|bad gateway|gateway time|<!doctype|<html/i.test(asText || '');
             const msg = looksLikeProxy
-                ? "The server didn't finish that one. Try “what's outstanding”, or use New Task on the left."
+                ? "The server didn't finish that one. Try “what's outstanding”, or type a task in the bar below."
                 : (asText || 'Sorry — I had trouble with that. Try again?').slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
@@ -381,7 +359,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white/95 backdrop-blur border border-slate-200/80 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-white flex items-center gap-2.5"
                         data-testid="voice-nudge-bubble"
                     >
-                        <JarvisMark phase="idle" size={28} />
+                        <JarvisIcon phase="idle" size={28} />
                         <span>{typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap to ask Jarvis.</span>
                     </motion.button>
                 )}
@@ -398,7 +376,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                     >
                         <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 bg-white">
                             <div className="flex items-center gap-2.5 min-w-0">
-                                <JarvisMark phase={phase} size={36} />
+                                <JarvisIcon phase={phase} size={36} />
                                 <div className="min-w-0">
                                     <p className="text-sm font-semibold text-slate-800 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                         Jarvis
@@ -496,7 +474,6 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 )}
             </AnimatePresence>
 
-            {/* When dockIntegrated, primary Jarvis lives on the AI bar; keep a slim orb for quick reopen. */}
             <motion.button
                 type="button"
                 data-testid="voice-mode-fab"
@@ -505,34 +482,17 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
                 className={`relative overflow-hidden flex items-center justify-center transition-shadow ${
                     dockIntegrated
-                        ? 'h-12 w-12 rounded-2xl shadow-lg shadow-slate-900/15 border border-white/40'
-                        : 'h-14 w-14 rounded-full shadow-xl ring-2 ring-white'
+                        ? 'h-12 w-12 rounded-[14px] shadow-lg shadow-slate-900/15'
+                        : 'h-14 w-14 rounded-[16px] shadow-xl'
                 }`}
-                style={{
-                    background: phase === 'listening'
-                        ? 'linear-gradient(145deg,#ef4444,#b91c1c)'
-                        : 'linear-gradient(145deg,#0f766e 0%,#115e59 45%,#0f172a 100%)',
-                }}
                 title="Jarvis — AI manager"
                 aria-label="Open Jarvis"
             >
-                <span
-                    className="absolute inset-0 opacity-30"
-                    style={{ background: 'radial-gradient(circle at 30% 25%, rgba(255,255,255,.55), transparent 55%)' }}
+                <JarvisIcon
+                    phase={open && phase === 'idle' ? 'idle' : phase}
+                    size={dockIntegrated ? 48 : 56}
+                    showRing
                 />
-                {phase === 'thinking' ? (
-                    <Loader2 className="w-5 h-5 text-white animate-spin relative" />
-                ) : (
-                    <span
-                        className="relative text-white font-semibold tracking-tight"
-                        style={{ fontFamily: 'Outfit, sans-serif', fontSize: dockIntegrated ? 15 : 18 }}
-                    >
-                        J
-                    </span>
-                )}
-                {(phase === 'listening' || phase === 'speaking') && (
-                    <span className="absolute inset-0 rounded-[inherit] ring-2 ring-white/40 animate-pulse" />
-                )}
             </motion.button>
         </div>
     );

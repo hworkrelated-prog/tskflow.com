@@ -59,7 +59,7 @@ const walkthroughs = {
             },
             {
                 title: "Create New Tasks",
-                description: "Click New Task and tell TskFlow what you need done in plain English. It figures out who, when, and priority — use the advanced form only if you want attachments or extras.",
+                description: "Use the floating bar at the bottom — or New Task — and tell TskFlow what you need done in plain English. It figures out who, when, and priority.",
                 icon: <Plus className="w-8 h-8" />
             }
         ]

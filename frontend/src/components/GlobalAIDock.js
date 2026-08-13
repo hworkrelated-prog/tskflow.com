@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, X, ListChecks } from 'lucide-react';
 import { useAuth } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
+import { JarvisIcon } from '@/components/JarvisIcon';
 
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
 const LANDINGish = ['/', '/privacy', '/terms', '/contact'];
@@ -37,7 +38,12 @@ const GlobalAIDock = () => {
         const markActive = () => setActive(true);
         const focusPrompt = () => {
             setActive(true);
-            setTimeout(() => window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt')), 40);
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
+                const dock = document.querySelector('[data-testid="ai-command-dock"]');
+                dock?.classList?.add('ai-dock-pulse');
+                setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
+            }, 40);
         };
         const onAttach = (e) => {
             const refs = e?.detail?.attachments;
@@ -143,21 +149,13 @@ const GlobalAIDock = () => {
                         <button
                             type="button"
                             onClick={openJarvis}
-                            className="group relative h-8 pl-1.5 pr-2.5 rounded-full bg-slate-900 text-white inline-flex items-center gap-1.5 shadow-sm hover:bg-slate-800 transition-colors"
+                            className="group relative h-8 pl-1 pr-2.5 rounded-full bg-slate-900 text-white inline-flex items-center gap-1.5 shadow-sm hover:bg-slate-800 transition-colors"
                             data-testid="ai-dock-jarvis"
                             title="Ask Jarvis"
                             aria-label="Ask Jarvis"
                         >
-                            <span
-                                className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-semibold"
-                                style={{
-                                    fontFamily: 'Outfit, sans-serif',
-                                    background: 'linear-gradient(145deg,#0f766e,#134e4a)',
-                                }}
-                            >
-                                J
-                            </span>
-                            <span className="text-[11px] font-semibold tracking-tight">Jarvis</span>
+                            <JarvisIcon size={26} phase="idle" />
+                            <span className="text-[11px] font-semibold tracking-tight pr-0.5">Jarvis</span>
                         </button>
                     </div>
                 </div>

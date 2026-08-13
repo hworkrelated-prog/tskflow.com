@@ -1193,6 +1193,23 @@ const TaskHub = () => {
                                     <CheckSquare className="w-4 h-4" />
                                     <span className="hidden sm:inline">Select</span>
                                 </Button>
+                                <Button
+                                    data-testid="create-task-button"
+                                    onClick={() => {
+                                        window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+                                        setTimeout(() => {
+                                            const dock = document.querySelector('[data-testid="ai-command-dock"]');
+                                            dock?.classList?.add('ai-dock-pulse');
+                                            setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
+                                            window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
+                                        }, 30);
+                                    }}
+                                    className="rounded-full gap-2"
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    <span className="hidden sm:inline">New Task</span>
+                                    <span className="sm:hidden">New</span>
+                                </Button>
                                 <Dialog open={showCreateModal} onOpenChange={handleModalChange}>
                                     <DialogContent className="rounded-2xl max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto">
                                         <DialogHeader className="pr-8">
