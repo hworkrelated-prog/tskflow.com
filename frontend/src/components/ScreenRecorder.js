@@ -439,14 +439,13 @@ export const ScreenRecorder = ({ onSaved }) => {
             if (camErr) toast.warning('Webcam not available — continuing without it.');
             if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
 
-            // Keep drawing alive if we had to use canvas (cam-in-file): switch to setInterval when hidden
+            // Tab capture can stall when backgrounded; warn (do not reference removed canvas composite vars).
             const onVis = () => {
-                if (document.visibilityState === 'hidden' && compositeStream && surf === 'browser') {
+                if (document.visibilityState === 'hidden' && surf === 'browser') {
                     toast.warning('This tab is in the background — video may freeze. Switch back or record Entire Screen.');
                 }
             };
             document.addEventListener('visibilitychange', onVis);
-            // Stash remover on the recorder for cleanup via stopAllTracks path
             try { window.__tskRecVisHandler = onVis; } catch { /* noop */ }
         } catch (e) {
             if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');

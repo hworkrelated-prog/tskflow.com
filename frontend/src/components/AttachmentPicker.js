@@ -50,6 +50,18 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         };
     }, []);
 
+    // Attach webcam preview after React commits the floating <video> (setRecording
+    // alone does not populate cameraPreviewRef synchronously).
+    useEffect(() => {
+        if (!recording) return undefined;
+        const cam = streamsRef.current.camera;
+        const el = cameraPreviewRef.current;
+        if (!cam || !el) return undefined;
+        el.srcObject = cam;
+        el.play().catch(() => {});
+        return undefined;
+    }, [recording]);
+
     const cleanupStreams = () => {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -191,13 +203,18 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             setShowOptions(false);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-
-            if (useCamera && cameraPreviewRef.current) {
-                cameraPreviewRef.current.srcObject = cameraStream;
-                cameraPreviewRef.current.play().catch(() => {});
-            }
+            // Webcam preview is wired in the `recording` useEffect once the <video> mounts.
         } catch (e) {
-            cleanupStreams();
+            // If MediaRecorder already started, stop it so onstop can finalize; otherwise tear down streams.
+            try {
+                if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+                    recorderRef.current.stop();
+                } else {
+                    cleanupStreams();
+                }
+            } catch (_) {
+                cleanupStreams();
+            }
             if (e && e.name !== 'NotAllowedError') {
                 console.error(e);
                 toast.error('Could not start screen recording');
