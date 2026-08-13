@@ -498,12 +498,15 @@ export const ScreenRecorder = ({ onSaved }) => {
     const openControlsPopup = async () => {
         const result = await openRecordingControlsOverlay();
         if (result?.mode === 'none') {
-            toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls.');
+            toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
             setPopupOpen(false);
             return;
         }
         controlsPopupRef.current = result.win;
         setPopupOpen(true);
+        if (result.mode === 'pip') {
+            toast.success('Floating controls opened — they stay on top while you present.');
+        }
         const check = setInterval(() => {
             if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
                 clearInterval(check);
@@ -603,11 +606,11 @@ export const ScreenRecorder = ({ onSaved }) => {
 
             {recording && camOn && camStream && <WebcamBubble stream={camStream} />}
 
-            {recording && displaySurface === 'window' && (
+            {recording && displaySurface === 'window' && !popupOpen && (
                 <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2147483645 }}
                     className="max-w-xs bg-white border border-amber-300 shadow-xl rounded-2xl p-3 text-xs text-amber-800 flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>You&apos;re recording a separate window &mdash; controls won&apos;t appear there. Come back to this tab or use the browser Stop Sharing bar.</span>
+                    <span>You&apos;re recording a separate window. Use the floating controls window (or browser Stop sharing) if you can&apos;t see this tab.</span>
                 </div>
             )}
         </>

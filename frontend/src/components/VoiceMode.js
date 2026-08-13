@@ -6,6 +6,7 @@ import { Mic, MicOff, X, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, API } from '@/App';
 import { JarvisIcon } from '@/components/JarvisIcon';
+import { captureVisibleScreenContext } from '@/lib/screenContext';
 
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -173,7 +174,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         }, 50);
     }, [voiceReady]);
 
-    const sendCommand = useCallback(async (text, { speakReply = true } = {}) => {
+    const sendCommand = useCallback(async (text, { speakReply = true, screenContext = null } = {}) => {
         const trimmed = (text || '').trim();
         if (!trimmed) return;
         const userMsg = { id: `${Date.now()}-u`, role: 'user', text: trimmed };
@@ -183,6 +184,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         setMessages((prev) => [...prev, userMsg]);
         setPhase('thinking');
         setOpen(true);
+        setNudge(false);
+        setWiggle(false);
 
         const applyReply = (replyText, action, executed) => {
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: replyText }]);
@@ -198,14 +201,29 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         };
 
         try {
+            const payload = { transcript: trimmed, history: historyPayload };
+            if (screenContext) payload.screen_context = screenContext;
             const res = await axios.post(
                 `${API}/voice/command`,
-                { transcript: trimmed, history: historyPayload },
+                payload,
                 { timeout: 20000 },
             );
             const { reply: r, action, executed } = res.data || {};
             applyReply(r || 'Okay.', action, executed);
         } catch (err) {
+            if (screenContext) {
+                const clarify = screenContext.clarifying_question;
+                const preview = screenContext.ai_preview_title;
+                const composer = screenContext.ai_composer;
+                const err0 = (screenContext.errors || [])[0];
+                let offlineHelp = "I can see your screen snapshot locally. Fill assignee and due date in the AI bar, then send — or tell me the field you're stuck on.";
+                if (clarify) offlineHelp = `Looks like you're stuck on: “${String(clarify).slice(0, 160)}”. Answer that in the AI bar, then continue.`;
+                else if (err0) offlineHelp = `I see an error: “${String(err0).slice(0, 140)}”. Fix that first, then try again.`;
+                else if (preview) offlineHelp = `You've got a draft titled “${String(preview).slice(0, 80)}”. Check assignee and due date, then hit Send task.`;
+                else if (composer) offlineHelp = `You've typed “${String(composer).slice(0, 100)}” — add @assignee and a due date, then create the task.`;
+                applyReply(offlineHelp, { type: 'assistant_answer' }, { type: 'assistant_answer', offline: true, screen_help: true });
+                return;
+            }
             const fallback = localJarvisReply(trimmed);
             if (fallback) {
                 applyReply(fallback.reply, fallback.action, { type: fallback.action?.type, offline: true });
@@ -278,6 +296,17 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         setWiggle(false);
         setTimeout(() => inputRef.current?.focus(), 80);
     }, []);
+
+    const askHelpFromScreen = useCallback(() => {
+        setNudge(false);
+        setWiggle(false);
+        setOpen(true);
+        let ctx = null;
+        try { ctx = captureVisibleScreenContext(); } catch { ctx = null; }
+        const prompt =
+            "I need help with what's on my screen right now. Figure out what I'm stuck on and give a concrete next step.";
+        sendCommand(prompt, { speakReply: true, screenContext: ctx });
+    }, [sendCommand]);
 
     const closePanel = useCallback(() => {
         stopListening();
@@ -355,12 +384,12 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         initial={{ opacity: 0, y: 6, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 6 }}
-                        onClick={openPanel}
+                        onClick={askHelpFromScreen}
                         className="max-w-[min(240px,calc(100vw-5.5rem))] text-left text-xs bg-white/95 backdrop-blur border border-slate-200/80 shadow-lg rounded-2xl px-3 py-2.5 text-slate-700 hover:bg-white flex items-center gap-2.5"
                         data-testid="voice-nudge-bubble"
                     >
                         <JarvisIcon phase="idle" size={28} />
-                        <span>{typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap to ask Jarvis.</span>
+                        <span>{typeof nudge === 'string' ? nudge : 'Need a hand?'} Tap for on-screen help.</span>
                     </motion.button>
                 )}
             </AnimatePresence>

@@ -6111,6 +6111,7 @@ class VoiceCommandRequest(BaseModel):
     transcript: Optional[str] = None
     text: Optional[str] = None  # alias for typed chat
     history: Optional[List[dict]] = None  # [{role, text}] prior turns while panel is open
+    screen_context: Optional[dict] = None  # DOM snapshot when user taps "Need a hand?"
 
 VOICE_SYSTEM_PROMPT = """You are Tskflow's voice assistant. You help a user manage tasks by voice.
 You will receive the user's spoken transcript plus JSON context (their outstanding tasks and known contacts).
@@ -6170,10 +6171,11 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
     if not transcript:
         raise HTTPException(status_code=400, detail="Empty transcript")
 
-    # Fast local intents first — never depends on LLM / never hangs the origin
-    local = _jarvis_local_intent(transcript)
-    if local:
-        return {**local, "executed": {"type": local["action"]["type"]}}
+    # Fast local intents first — skip when screen_context is present so LLM can diagnose the UI
+    if not req.screen_context:
+        local = _jarvis_local_intent(transcript)
+        if local:
+            return {**local, "executed": {"type": local["action"]["type"]}}
 
     outstanding = []
     context = {"my_name": current_user.get("name"), "outstanding_count": 0, "outstanding_tasks": [], "contacts": []}
@@ -6214,6 +6216,17 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
     except Exception as e:
         db_ok = False
         logging.error(f"Voice context load error: {e}")
+
+    if req.screen_context and isinstance(req.screen_context, dict):
+        # Cap payload size so Cloudflare / LLM stay happy
+        sc = dict(req.screen_context)
+        if isinstance(sc.get("visible_text"), str):
+            sc["visible_text"] = sc["visible_text"][:3500]
+        if isinstance(sc.get("labels"), list):
+            sc["labels"] = sc["labels"][:20]
+        if isinstance(sc.get("dialogs"), list):
+            sc["dialogs"] = sc["dialogs"][:4]
+        context["screen"] = sc
 
     low = transcript.lower()
     # Manager asks about a person's sheet metrics: "what is my AE Alex doing" / "how is Sarah doing today"
@@ -6299,8 +6312,15 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
                 system_message=VOICE_ASSISTANT_SYSTEM
             ).with_model("openai", "gpt-4o-mini")
             hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
+            screen_hint = ""
+            if context.get("screen"):
+                screen_hint = (
+                    "\nThe user tapped Need a hand / asked for on-screen help. "
+                    "Context JSON.screen is a snapshot of their UI. Diagnose what they are stuck on "
+                    "(clarify question, missing field, error, preview state) and give one concrete next step.\n"
+                )
             user_msg = UserMessage(
-                text=f"{hist_block}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
+                text=f"{hist_block}{screen_hint}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
             )
             raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=14.0)
         except asyncio.TimeoutError:
@@ -6312,6 +6332,27 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
 
     if raw is None:
         # Never return 5xx/hang — Cloudflare was turning those into incomplete responses
+        screen = context.get("screen") or {}
+        if screen:
+            clarify = (screen.get("clarifying_question") or "").strip()
+            preview = (screen.get("ai_preview_title") or "").strip()
+            composer = (screen.get("ai_composer") or "").strip()
+            errs = screen.get("errors") or []
+            if clarify:
+                reply = f"Looks like you're stuck on: “{clarify[:160]}”. Answer that in the AI bar, then continue."
+            elif errs:
+                reply = f"I see an error on screen: “{str(errs[0])[:140]}”. Fix that first, then try again."
+            elif preview:
+                reply = f"You've got a draft titled “{preview[:80]}”. Check assignee and due date, then hit Send task."
+            elif composer:
+                reply = f"You've typed “{composer[:100]}” in the create bar — hit Send / Create so I can turn it into a task, or add @assignee and a due date."
+            else:
+                reply = "I'm looking at your screen. Tell me the field you're stuck on, or fill assignee + due date in the AI bar and send."
+            return {
+                "reply": reply,
+                "action": {"type": "assistant_answer", "params": {}},
+                "executed": {"type": "assistant_answer", "degraded": True, "screen_help": True},
+            }
         hint = ""
         if outstanding:
             hint = f" You currently have {len(outstanding)} open task{'s' if len(outstanding) != 1 else ''}."
@@ -9085,10 +9126,12 @@ BEST PRACTICES
 
 VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
 When Context JSON includes daily_sheet_metrics, use those numbers to answer manager questions about what an AE/rep is doing today (calls, emails, Salesforce tasks, etc.). Prefer real metric values over guessing.
+When Context JSON includes screen (UI snapshot from Need a hand), prioritize diagnosing the on-screen state: clarifying questions, missing assignees/due dates, errors, AI bar preview, dialogs. Say what you see in plain language and give the single best next click/action. Prefer action.type="assistant_answer".
 You help with anything the user asks while they work:
 1) EXECUTE task commands ("create a task to X", "what's outstanding", "open analytics", etc.)
 2) ANSWER questions — product how-tos, what a status means, who to assign, deadlines, best practices, and follow-ups on the recent conversation.
 3) Keep continuity: if Recent conversation is provided, treat it as the same chat and answer follow-ups naturally.
+4) SCREEN HELP: when screen context is present, solve the stuck UI first before offering unrelated features.
 
 Return ONE JSON object ONLY (no markdown), shape:
 {

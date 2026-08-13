@@ -2250,18 +2250,6 @@ const AIQuickCreate = ({
                     </div>
                 )}
 
-                {embedded && !preview && !answerMode && (
-                    <div className="mt-2 flex justify-end">
-                        <button
-                            type="button"
-                            onClick={() => onOpenAdvanced?.()}
-                            className="text-xs text-slate-500 hover:text-slate-800"
-                            data-testid="ai-advanced-btn-embedded"
-                        >
-                            Manual form
-                        </button>
-                    </div>
-                )}
             </div>
 
             <Dialog open={!!previewAttachment} onOpenChange={(o) => { if (!o) setPreviewAttachment(null); }}>
