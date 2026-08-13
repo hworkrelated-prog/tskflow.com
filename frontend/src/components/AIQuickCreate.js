@@ -2,13 +2,14 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { API } from '@/App';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip } from 'lucide-react';
+import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -28,6 +29,47 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quota|deals?|opportunit(?:y|ies)|demos?|discovery|pitch(?:es)?|proposals?|quotes?|crm|hubspot|salesforce|sdrs?|bdrs?|cold[-\s]?calls?|outbound|renewals?|\barr\b|\bmrr\b|poc|leads?|rfps?|(?:customer|client|prospect|buyer)s?\s+(?:call|meeting|demo|follow[-\s]?up)|(?:follow[-\s]?up|call|meet(?:ing)?)\s+(?:with\s+)?(?:a\s+)?(?:customer|client|prospect)s?)\b/i;
 
 const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
+
+const COMMAND_ROUTES = [
+    { keys: ['analytics', 'metrics', 'reports', 'report'], re: /\b(analytics|metrics|reports?)\b/i, path: '/analytics', label: 'Analytics' },
+    { keys: ['settings', 'preferences'], re: /\b(settings|preferences)\b/i, path: '/settings', label: 'Settings' },
+    { keys: ['team', 'org chart', 'direct reports'], re: /\b(team|org chart|direct reports)\b/i, path: '/team', label: 'Team' },
+    { keys: ['help'], re: /\b(help|how to)\b/i, path: '/help', label: 'Help' },
+    { keys: ['recording', 'recordings'], re: /\brecordings?\b/i, path: '/recordings', label: 'Recordings' },
+    { keys: ['recurring'], re: /\brecurring\b/i, path: '/recurring', label: 'Recurring' },
+    { keys: ['transcript', 'meeting notes'], re: /\b(transcript|meeting notes)\b/i, path: '/transcript', label: 'Transcript' },
+    { keys: ['lead', 'leads'], re: /\b(leads?)\b/i, path: '/leads', label: 'Leads' },
+    { keys: ['dashboard', 'home', 'hub'], re: /\b(dashboard|home|hub)\b/i, path: '/dashboard', label: 'Dashboard' },
+    { keys: ['activity', 'activity log'], re: /\bactivity\b/i, path: '/activity', label: 'Activity log' },
+];
+
+const tryLocalCommand = (raw) => {
+    const t = (raw || '').trim();
+    if (!t) return null;
+    const low = t.toLowerCase().replace(/^\/+/, '');
+    if (/^(go to|open|show|take me to|jump to)\b/i.test(t) || t.startsWith('/')) {
+        const body = t.replace(/^[/]/, '').replace(/^(go to|open|show|take me to|jump to)\s+/i, '');
+        for (const c of COMMAND_ROUTES) {
+            if (c.re.test(body) || c.re.test(t)) return { type: 'navigate', path: c.path, label: c.label };
+        }
+    }
+    const exact = COMMAND_ROUTES.find((c) => c.keys.includes(low));
+    if (exact) return { type: 'navigate', path: exact.path, label: exact.label };
+    if (/^(from transcript|import transcript|extract tasks from)/i.test(t)) {
+        return { type: 'navigate', path: '/transcript', label: 'Transcript' };
+    }
+    if (/^(start|new)\s+record(ing)?\b/i.test(t) || /^record(ing)?$/i.test(t)) {
+        return { type: 'navigate', path: '/recordings', label: 'Recordings' };
+    }
+    const search = t.match(/^(search|find|look up)\s+(.+)/i);
+    if (search) {
+        return { type: 'search', query: search[2].trim() };
+    }
+    if (/^\/form\b/i.test(t) || /^manual form\b/i.test(t)) {
+        return { type: 'manual' };
+    }
+    return null;
+};
 
 /** Detect an @mention token just before the caret (supports multi-word group names). */
 const getMentionState = (value, caret) => {
@@ -71,6 +113,7 @@ const AIQuickCreate = ({
     const [mentionPos, setMentionPos] = useState(null); // fixed coords for portal menu
     const [newPersonEmail, setNewPersonEmail] = useState('');
     const [showNewPersonEmail, setShowNewPersonEmail] = useState(false);
+    const [composerFocused, setComposerFocused] = useState(false);
     const inputRef = useRef(null);
     const composerRef = useRef(null);
     const clarifyRef = useRef(null);
@@ -96,6 +139,7 @@ const AIQuickCreate = ({
     const [editingField, setEditingField] = useState(null);
     const fileInputRef = useRef(null);
     const pasteZoneRef = useRef(null);
+    const navigate = useNavigate();
 
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus(), 30);
@@ -106,7 +150,7 @@ const AIQuickCreate = ({
         const el = inputRef.current;
         if (!el) return;
         el.style.height = 'auto';
-        const next = Math.min(Math.max(el.scrollHeight, 76), 220);
+        const next = Math.min(Math.max(el.scrollHeight, 48), 220);
         el.style.height = `${next}px`;
         el.style.overflowY = el.scrollHeight > 220 ? 'auto' : 'hidden';
     }, []);
@@ -117,7 +161,12 @@ const AIQuickCreate = ({
 
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+            const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+            if (e.key === '/' && !typing) {
+                e.preventDefault();
+                focusInput();
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
                 focusInput();
             }
@@ -125,10 +174,6 @@ const AIQuickCreate = ({
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [focusInput]);
-
-    useEffect(() => {
-        if (embedded) focusInput();
-    }, [embedded, focusInput]);
 
     useEffect(() => {
         const onFocus = () => focusInput();
@@ -570,11 +615,31 @@ const AIQuickCreate = ({
 
     const runPreview = async (overrideText, overrideAnswers) => {
         const t = (overrideText ?? text).trim();
-        if (!t || t.length < 4) {
+        if (!t || t.length < 2) {
             toast.error('Type a bit more so I can understand what you need.');
             return;
         }
-        const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does)\b/i.test(t) && /\?$/.test(t);
+        const cmd = tryLocalCommand(t);
+        if (cmd?.type === 'navigate') {
+            toast.success(`Opening ${cmd.label}`);
+            setText('');
+            navigate(cmd.path);
+            onRequestExit?.();
+            return;
+        }
+        if (cmd?.type === 'search') {
+            navigate(`/dashboard?q=${encodeURIComponent(cmd.query)}`);
+            toast.success(`Searching “${cmd.query}”`);
+            setText('');
+            onRequestExit?.();
+            return;
+        }
+        if (cmd?.type === 'manual') {
+            setText('');
+            onOpenAdvanced?.();
+            return;
+        }
+        const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does|who)\b/i.test(t) && (/\?$/.test(t) || t.split(' ').length < 12);
         if (looksLikeQuestion) {
             setAnswerMode(null);
             setPreview(null);
@@ -1046,6 +1111,8 @@ const AIQuickCreate = ({
                             <Textarea
                                 ref={inputRef}
                                 value={text}
+                                onFocus={() => setComposerFocused(true)}
+                                onBlur={() => setTimeout(() => setComposerFocused(false), 180)}
                                 onChange={(e) => {
                                     const val = e.target.value;
                                     const caret = e.target.selectionStart ?? val.length;
@@ -1091,9 +1158,9 @@ const AIQuickCreate = ({
                                         runPreview();
                                     }
                                 }}
-                                placeholder="What needs to get done?"
+                                placeholder="Create, search, or go to…"
                                 rows={1}
-                                className="min-h-[76px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-36 pt-3 pb-12 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[48px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-36 pt-2.5 pb-11 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading}
                             />
@@ -1353,6 +1420,16 @@ const AIQuickCreate = ({
                                             ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                             : <Paperclip className="w-3.5 h-3.5" strokeWidth={1.75} />}
                                     </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate('/transcript')}
+                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-indigo-700 hover:bg-indigo-50/80 flex items-center justify-center transition-colors"
+                                        title="From transcript"
+                                        aria-label="From transcript"
+                                        data-testid="ai-transcript-btn"
+                                    >
+                                        <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                    </button>
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -1442,6 +1519,28 @@ const AIQuickCreate = ({
                         </Dialog>
                     </div>
                 </div>
+
+                {embedded && !preview && !answerMode && !text.trim() && composerFocused && (
+                    <div className="mt-1.5 flex flex-wrap gap-1 px-0.5" data-testid="ai-command-chips">
+                        {[
+                            { label: 'Outstanding', cmd: "What's outstanding?" },
+                            { label: 'Analytics', cmd: 'go to analytics' },
+                            { label: 'Transcript', cmd: 'from transcript' },
+                            { label: 'Team', cmd: 'go to team' },
+                            { label: 'Settings', cmd: 'go to settings' },
+                        ].map((c) => (
+                            <button
+                                key={c.label}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => runPreview(c.cmd)}
+                                className="text-[11px] px-2 py-1 rounded-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                            >
+                                {c.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 {answerMode && (
                     <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-4" data-testid="ai-qa-answer">

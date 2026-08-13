@@ -7487,17 +7487,28 @@ async def create_drafts_from_transcript(
             from emergentintegrations.llm.chat import LlmChat, UserMessage
             import json as _json
             prompt = (
-                "You are Jarvis, a meeting-notes → action-items assistant. Extract concrete tasks from the transcript below. "
-                "For each task, return JSON with fields: title (short), description (one paragraph), "
-                "assignee_hint (name or role as mentioned, or null), due_date_hint (natural-language or null), "
-                "priority (High/Medium/Low), ambiguities (array of clarification questions if anything is unclear — assignee, deadline, scope).\n"
-                "Reply ONLY with a JSON object like {\"tasks\": [ ... ]}. No prose.\n\n"
+                "You are Jarvis, a meeting-notes → action-items assistant. Extract concrete tasks from the transcript. "
+                "Rank the most important / blocking items first. For each task return JSON fields:\n"
+                "- title (short, verb-led)\n"
+                "- description (one paragraph)\n"
+                "- assignee_hint (best person name/role mentioned, or null)\n"
+                "- due_date_hint (natural language as spoken)\n"
+                "- due_date (ISO YYYY-MM-DDTHH:MM if you can infer date AND time; default 17:00 if time missing; null if unknown)\n"
+                "- priority (Urgent/High/Medium/Low)\n"
+                "- importance (integer 1-10, 10 = most critical)\n"
+                "- ambiguities (array of short clarification questions if needed)\n"
+                "Reply ONLY with {\"tasks\": [ ... ]}. No prose.\n\n"
                 "TRANSCRIPT:\n" + text
             )
-            chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
-            resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=25.0)
-            raw = resp.content.strip()
-            # Strip markdown fences if any
+            chat = LlmChat(
+                api_key=key,
+                session_id=f"transcript_{current_user['id']}",
+                system_message="Extract ranked action items as JSON only.",
+            ).with_model("openai", "gpt-4o-mini")
+            raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=28.0)
+            if not isinstance(raw, str):
+                raw = str(raw)
+            raw = raw.strip()
             raw = re.sub(r"^```(json)?", "", raw).strip()
             raw = re.sub(r"```$", "", raw).strip()
             parsed = _json.loads(raw)
@@ -7519,29 +7530,126 @@ async def create_drafts_from_transcript(
             })
 
     created = []
+    session_id = str(uuid.uuid4())
+    now = get_pst_now()
+    source_preview = (text or "")[:400]
+    pri_rank = {"Urgent": 4, "High": 3, "Medium": 2, "Low": 1}
+
+    enriched = []
     for d in drafts_data:
+        title = (d.get("title") or "Untitled").strip()[:200]
+        hint = d.get("assignee_hint")
+        due_iso = d.get("due_date")
+        if due_iso and not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", str(due_iso)):
+            due_iso = None
+        if not due_iso:
+            due_iso = _fallback_parse_date_expression(d.get("due_date_hint") or title or "", now)
+        if not due_iso:
+            due_iso = (now + timedelta(days=1)).replace(hour=17, minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M")
+        assigned_to = None
+        assigned_to_name = None
+        assigned_to_email = None
+        assignee_candidates = []
+        if hint:
+            try:
+                resolution = await _resolve_assignee_hints([str(hint)], current_user)
+                resolved = resolution.get("resolved") or []
+                if resolved and resolved[0].get("kind") == "user" and resolved[0].get("id"):
+                    assigned_to = resolved[0]["id"]
+                    assigned_to_name = resolved[0].get("name")
+                    assigned_to_email = resolved[0].get("email")
+                amb = resolution.get("ambiguous") or []
+                if amb and amb[0].get("candidates"):
+                    assignee_candidates = amb[0]["candidates"][:5]
+                    if not assigned_to and assignee_candidates:
+                        top = assignee_candidates[0]
+                        assigned_to = top.get("id")
+                        assigned_to_name = top.get("name")
+                        assigned_to_email = top.get("email")
+            except Exception as e:
+                logging.warning(f"Transcript assignee resolve failed: {e}")
+        try:
+            importance = int(d.get("importance") or 5)
+        except (TypeError, ValueError):
+            importance = 5
+        importance = max(1, min(10, importance))
+        priority = d.get("priority") or "Medium"
+        if priority not in ("Urgent", "High", "Medium", "Low"):
+            priority = "Medium"
+        enriched.append({
+            "title": title,
+            "description": (d.get("description") or "").strip()[:2000],
+            "assignee_hint": hint,
+            "due_date_hint": d.get("due_date_hint"),
+            "due_date": due_iso,
+            "priority": priority,
+            "importance": importance,
+            "ambiguities": d.get("ambiguities") or [],
+            "assigned_to": assigned_to,
+            "assigned_to_name": assigned_to_name,
+            "assigned_to_email": assigned_to_email,
+            "assignee_candidates": assignee_candidates,
+            "_sort": (importance, pri_rank.get(priority, 2)),
+        })
+
+    enriched.sort(key=lambda x: (-x["_sort"][0], -x["_sort"][1]))
+
+    for idx, d in enumerate(enriched):
+        d.pop("_sort", None)
         doc = {
             "id": str(uuid.uuid4()),
             "created_by": current_user["id"],
-            "title": (d.get("title") or "Untitled").strip()[:200],
-            "description": (d.get("description") or "").strip()[:2000],
-            "assignee_hint": d.get("assignee_hint"),
-            "due_date_hint": d.get("due_date_hint"),
-            "priority": d.get("priority") or "Medium",
-            "ambiguities": d.get("ambiguities") or [],
+            "session_id": session_id,
+            "source_preview": source_preview,
+            "source_url": (body.url or "").strip() or None,
+            "rank": idx + 1,
             "source": "transcript",
-            "created_at": get_pst_now().isoformat(),
+            "created_at": now.isoformat(),
             "status": "Draft",
+            **d,
         }
         await db.transcript_drafts.insert_one(doc)
         created.append({k: v for k, v in doc.items() if k != "_id"})
-    return {"drafts": created}
+    return {"drafts": created, "session_id": session_id}
 
 
 @api_router.get("/task-drafts")
-async def list_task_drafts(current_user: dict = Depends(get_current_user)):
-    docs = await db.transcript_drafts.find({"created_by": current_user["id"], "status": "Draft"}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return {"drafts": docs}
+async def list_task_drafts(current_user: dict = Depends(get_current_user), session_id: Optional[str] = None):
+    q = {"created_by": current_user["id"], "status": "Draft"}
+    if session_id:
+        q["session_id"] = session_id
+    docs = await db.transcript_drafts.find(q, {"_id": 0}).to_list(200)
+    pri_rank = {"Urgent": 4, "High": 3, "Medium": 2, "Low": 1}
+
+    def sort_key(d):
+        return (
+            -(int(d.get("importance") or 5)),
+            -(pri_rank.get(d.get("priority") or "Medium", 2)),
+            int(d.get("rank") or 99),
+        )
+
+    docs.sort(key=sort_key)
+
+    sessions_map = {}
+    all_pending = await db.transcript_drafts.find(
+        {"created_by": current_user["id"], "status": "Draft"}, {"_id": 0}
+    ).to_list(200)
+    all_pending.sort(key=sort_key)
+    for d in all_pending:
+        sid = d.get("session_id") or "legacy"
+        bucket = sessions_map.setdefault(sid, {
+            "id": sid,
+            "created_at": d.get("created_at"),
+            "remaining": 0,
+            "preview": d.get("source_preview") or d.get("title"),
+            "source_url": d.get("source_url"),
+            "top_title": d.get("title"),
+        })
+        bucket["remaining"] += 1
+        if d.get("created_at") and (not bucket.get("created_at") or d["created_at"] > bucket["created_at"]):
+            bucket["created_at"] = d["created_at"]
+    sessions = sorted(sessions_map.values(), key=lambda s: s.get("created_at") or "", reverse=True)
+    return {"drafts": docs, "sessions": sessions}
 
 
 @api_router.delete("/task-drafts/{draft_id}")
