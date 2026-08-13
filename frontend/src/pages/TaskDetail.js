@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video, Ban } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video, Ban, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -57,6 +57,9 @@ const TaskDetail = () => {
     const [newComment, setNewComment] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
+    const [sideTab, setSideTab] = useState('chatter'); // chatter | reminders
+    const [reminderActivity, setReminderActivity] = useState([]);
+    const [reminderLoading, setReminderLoading] = useState(false);
     const [aiSummary, setAiSummary] = useState(null);
     const [loadingAiSummary, setLoadingAiSummary] = useState(false);
     // Chatter mention state
@@ -73,15 +76,23 @@ const TaskDetail = () => {
         if (taskId) fetchComments();
     }, [taskId, token]);
 
+    useEffect(() => {
+        if (sideTab === 'reminders' && (task?.id || taskId)) fetchReminderActivity();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sideTab, task?.id, taskId]);
+
     // Real-time chatter — refresh when server pushes a new_comment for this task
     useEffect(() => {
         const handler = (e) => {
-            if (e.detail?.task_id === (task?.id || taskId)) fetchComments();
+            if (e.detail?.task_id === (task?.id || taskId)) {
+                fetchComments();
+                if (sideTab === 'reminders') fetchReminderActivity();
+            }
         };
         window.addEventListener('tskflow:new_comment', handler);
         return () => window.removeEventListener('tskflow:new_comment', handler);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [task?.id, taskId]);
+    }, [task?.id, taskId, sideTab]);
 
     // Mark task viewed by assignee on open (populates the "Viewed" status column)
     useEffect(() => {
@@ -226,6 +237,21 @@ const TaskDetail = () => {
             setComments(response.data.comments || []);
         } catch (error) {
             console.error('Failed to fetch comments', error);
+        }
+    };
+
+    const fetchReminderActivity = async () => {
+        const id = task?.id || taskId;
+        if (!id) return;
+        setReminderLoading(true);
+        try {
+            const response = await axios.get(`${API}/tasks/${id}/activity`, { params: { kind: 'reminders' } });
+            setReminderActivity(response.data.activity || []);
+        } catch (error) {
+            console.error('Failed to fetch reminder activity', error);
+            setReminderActivity([]);
+        } finally {
+            setReminderLoading(false);
         }
     };
 
@@ -1329,56 +1355,119 @@ const TaskDetail = () => {
                     </Card>
                 </motion.div>
 
-                {/* Comments panel (single unified section — was "Chatter") — visible on desktop as a sticky sidebar, and inline below the main card on mobile */}
+                {/* Chatter / Reminders sidebar */}
                 <aside className="block lg:sticky lg:top-24" data-testid="comments-panel">
                     <Card className="border-2 rounded-2xl">
                         <CardContent className="pt-6">
-                            <div className="flex items-center gap-2 mb-4">
-                                <MessageSquare className="w-5 h-5 text-teal-600" />
-                                <h3 className="font-semibold">Comments</h3>
-                                <span className="ml-auto text-xs text-muted-foreground">{comments.length} message{comments.length === 1 ? '' : 's'}</span>
+                            <div className="flex items-center gap-1 p-1 mb-4 rounded-full bg-gray-100" data-testid="chatter-reminders-toggle">
+                                <button
+                                    type="button"
+                                    onClick={() => setSideTab('chatter')}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'chatter' ? 'bg-white text-teal-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    data-testid="tab-chatter"
+                                >
+                                    <MessageSquare className="w-4 h-4" />
+                                    Chatter
+                                    <span className="text-xs text-muted-foreground">{comments.length}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSideTab('reminders')}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'reminders' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    data-testid="tab-reminders"
+                                >
+                                    <Bell className="w-4 h-4" />
+                                    Reminders
+                                    <span className="text-xs text-muted-foreground">{reminderActivity.length}</span>
+                                </button>
                             </div>
-                            <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
-                                {comments.map((c) => (
-                                    <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="font-semibold text-sm">{c.user_name}</span>
-                                            <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
-                                        </div>
-                                        <p className="text-sm whitespace-pre-wrap">{c.content}</p>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="relative">
-                                <Textarea
-                                    ref={commentTextareaRef}
-                                    placeholder="Start the conversation... (type @ to mention someone)"
-                                    value={newComment}
-                                    onChange={onCommentChange}
-                                    onKeyDown={onCommentKeyDown}
-                                    rows={3}
-                                    className="rounded-lg"
-                                />
-                                {showMentionSuggest && filteredMentionUsers.length > 0 && (
-                                    <div className="absolute bottom-full mb-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
-                                        {filteredMentionUsers.map((u, idx) => (
-                                            <button key={u.id} type="button"
-                                                onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
-                                                onMouseEnter={() => setMentionHighlight(idx)}
-                                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${idx === mentionHighlight ? 'bg-teal-50 text-teal-900' : 'hover:bg-gray-50'}`}
-                                            >
-                                                <span className="font-medium truncate">{u.name}</span>
-                                                <span className="text-xs text-gray-500 truncate ml-2">{u.email}</span>
-                                            </button>
+
+                            {sideTab === 'chatter' ? (
+                                <>
+                                    <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
+                                        {comments.length === 0 && (
+                                            <p className="text-sm text-muted-foreground text-center py-6">Tag people with @ to start a conversation.</p>
+                                        )}
+                                        {comments.map((c) => (
+                                            <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="font-semibold text-sm">{c.user_name}</span>
+                                                    <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
+                                                </div>
+                                                <p className="text-sm whitespace-pre-wrap">{c.content}</p>
+                                            </div>
                                         ))}
                                     </div>
-                                )}
-                                <div className="flex justify-end mt-2">
-                                    <Button size="sm" onClick={handleAddComment} disabled={commentLoading || !newComment.trim()} className="rounded-full">
-                                        {commentLoading ? 'Posting...' : 'Post'}
-                                    </Button>
+                                    <div className="relative">
+                                        <Textarea
+                                            ref={commentTextareaRef}
+                                            placeholder="Start the conversation... (type @ to mention someone)"
+                                            value={newComment}
+                                            onChange={onCommentChange}
+                                            onKeyDown={onCommentKeyDown}
+                                            rows={3}
+                                            className="rounded-lg"
+                                        />
+                                        {showMentionSuggest && filteredMentionUsers.length > 0 && (
+                                            <div className="absolute bottom-full mb-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
+                                                {filteredMentionUsers.map((u, idx) => (
+                                                    <button key={u.id} type="button"
+                                                        onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
+                                                        onMouseEnter={() => setMentionHighlight(idx)}
+                                                        className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between ${idx === mentionHighlight ? 'bg-teal-50 text-teal-900' : 'hover:bg-gray-50'}`}
+                                                    >
+                                                        <span className="font-medium truncate">{u.name}</span>
+                                                        <span className="text-xs text-gray-500 truncate ml-2">{u.email}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex justify-end mt-2">
+                                            <Button size="sm" onClick={handleAddComment} disabled={commentLoading || !newComment.trim()} className="rounded-full">
+                                                {commentLoading ? 'Posting...' : 'Post'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto" data-testid="reminders-activity-list">
+                                    {reminderLoading && (
+                                        <p className="text-sm text-muted-foreground text-center py-6">Loading reminders…</p>
+                                    )}
+                                    {!reminderLoading && reminderActivity.length === 0 && (
+                                        <p className="text-sm text-muted-foreground text-center py-6">
+                                            No reminders logged yet. Email, Slack, and in-app nudges for this person show up here.
+                                        </p>
+                                    )}
+                                    {!reminderLoading && reminderActivity.map((a) => (
+                                        <div key={a.id} className="bg-amber-50/70 border border-amber-100 p-3 rounded-lg">
+                                            <div className="flex items-center justify-between mb-1 gap-2">
+                                                <span className="font-semibold text-sm text-amber-950 truncate">
+                                                    {a.title || (a.event_type === 'nudge' ? 'Nudge' : 'Reminder')}
+                                                </span>
+                                                <span className="text-xs text-amber-800/70 shrink-0">
+                                                    {a.created_at && format(new Date(a.created_at), 'MMM d, h:mm a')}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                                <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                                                    {(a.channel || 'in_app').replace('_', ' ')}
+                                                </Badge>
+                                                {a.event_type === 'nudge' && (
+                                                    <Badge variant="outline" className="text-[10px]">nudge</Badge>
+                                                )}
+                                                {a.actor_name && (
+                                                    <span className="text-xs text-muted-foreground">from {a.actor_name}</span>
+                                                )}
+                                            </div>
+                                            {a.body && <p className="text-sm text-amber-950/80 whitespace-pre-wrap">{a.body}</p>}
+                                            {a.recipient_name && (
+                                                <p className="text-xs text-muted-foreground mt-1">To: {a.recipient_name}</p>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
-                            </div>
+                            )}
                         </CardContent>
                     </Card>
 

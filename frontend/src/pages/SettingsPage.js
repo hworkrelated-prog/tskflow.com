@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, Sparkles, Table2, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
@@ -40,14 +40,53 @@ const SettingsPage = () => {
         missed: true,
         manager_snapshot: true,
         suggested_plan: true,
+        sheet_metrics: true,
     });
     const [eodSaving, setEodSaving] = React.useState(false);
     const [eodPreviewing, setEodPreviewing] = React.useState(false);
     const [hierarchyReviewFrequency, setHierarchyReviewFrequency] = React.useState('monthly');
     const [savingTeamChanges, setSavingTeamChanges] = React.useState(false);
+    const [sheetConnected, setSheetConnected] = React.useState(false);
+    const [sheetConfig, setSheetConfig] = React.useState(null);
+    const [sheetForm, setSheetForm] = React.useState({
+        spreadsheet_url: '',
+        sheet_name: 'Sheet1',
+        person_column: 'A',
+        date_column: 'B',
+        metrics: [
+            { label: 'Calls', column: 'C', daily_target: 75 },
+            { label: 'Emails', column: 'D', daily_target: 45 },
+            { label: 'Salesforce tasks', column: 'E', daily_target: 10 },
+        ],
+    });
+    const [savingSheet, setSavingSheet] = React.useState(false);
+    const [syncingSheet, setSyncingSheet] = React.useState(false);
+
+    const loadSheetConfig = React.useCallback(async () => {
+        try {
+            const res = await axios.get(`${API}/sheets/config`);
+            setSheetConnected(!!res.data.connected);
+            const cfg = (res.data.configs || [])[0] || null;
+            setSheetConfig(cfg);
+            if (cfg) {
+                setSheetForm({
+                    spreadsheet_url: cfg.spreadsheet_url || cfg.spreadsheet_id || '',
+                    sheet_name: cfg.sheet_name || 'Sheet1',
+                    person_column: cfg.person_column || 'A',
+                    date_column: cfg.date_column || 'B',
+                    metrics: (cfg.metrics || []).map((m) => ({
+                        label: m.label || m.key,
+                        column: m.column,
+                        daily_target: m.daily_target ?? '',
+                    })),
+                });
+            }
+        } catch (_) { /* silent */ }
+    }, []);
 
     React.useEffect(() => {
         fetchPreferences();
+        loadSheetConfig();
         if (user?.name) setDisplayName(user.name);
     }, [user]);
 
@@ -67,6 +106,7 @@ const SettingsPage = () => {
                 missed: true,
                 manager_snapshot: true,
                 suggested_plan: true,
+                sheet_metrics: true,
                 ...(response.data.eod_sections || {}),
             });
             setHierarchyReviewFrequency(response.data.hierarchy_review_frequency || 'monthly');
@@ -440,6 +480,228 @@ const SettingsPage = () => {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Google Sheets daily metrics */}
+                                <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-3" data-testid="google-sheets-sync">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <Table2 className="w-5 h-5 text-emerald-700" />
+                                            <div>
+                                                <h4 className="font-semibold text-emerald-900">Google Sheets activity sync</h4>
+                                                <p className="text-xs text-emerald-800/80">Map AE daily stats (calls, emails, SF tasks…) for EOD + Jarvis answers</p>
+                                            </div>
+                                        </div>
+                                        {sheetConnected || user?.google_sheets_connected ? (
+                                            <Button
+                                                onClick={async () => {
+                                                    try {
+                                                        await axios.delete(`${API}/auth/google/sheets/disconnect`);
+                                                        toast.success('Sheets disconnected');
+                                                        setSheetConnected(false);
+                                                        refreshUser();
+                                                        loadSheetConfig();
+                                                    } catch (e) {
+                                                        toast.error('Failed to disconnect');
+                                                    }
+                                                }}
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-full border-green-500 text-green-700 shrink-0"
+                                            >
+                                                <Check className="w-4 h-4 mr-1" /> Connected
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await axios.get(`${API}/auth/google/sheets/connect`);
+                                                        window.location.href = res.data.auth_url;
+                                                    } catch (e) {
+                                                        toast.error('Failed to connect Sheets');
+                                                    }
+                                                }}
+                                                size="sm"
+                                                className="rounded-full bg-emerald-600 hover:bg-emerald-700 shrink-0"
+                                            >
+                                                Connect Sheets
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {(sheetConnected || user?.google_sheets_connected) && (
+                                        <div className="space-y-3 pt-2 border-t border-emerald-200/80">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <div className="sm:col-span-2">
+                                                    <Label className="text-xs">Spreadsheet URL or ID</Label>
+                                                    <Input
+                                                        value={sheetForm.spreadsheet_url}
+                                                        onChange={(e) => setSheetForm((f) => ({ ...f, spreadsheet_url: e.target.value }))}
+                                                        placeholder="https://docs.google.com/spreadsheets/d/…"
+                                                        className="rounded-lg mt-1"
+                                                        data-testid="sheet-url-input"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs">Tab name</Label>
+                                                    <Input
+                                                        value={sheetForm.sheet_name}
+                                                        onChange={(e) => setSheetForm((f) => ({ ...f, sheet_name: e.target.value }))}
+                                                        className="rounded-lg mt-1"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <Label className="text-xs">Person col</Label>
+                                                        <Input
+                                                            value={sheetForm.person_column}
+                                                            onChange={(e) => setSheetForm((f) => ({ ...f, person_column: e.target.value }))}
+                                                            className="rounded-lg mt-1"
+                                                            placeholder="A"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <Label className="text-xs">Date col</Label>
+                                                        <Input
+                                                            value={sheetForm.date_column}
+                                                            onChange={(e) => setSheetForm((f) => ({ ...f, date_column: e.target.value }))}
+                                                            className="rounded-lg mt-1"
+                                                            placeholder="B"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-xs">Metric columns</Label>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 text-xs"
+                                                        onClick={() => setSheetForm((f) => ({
+                                                            ...f,
+                                                            metrics: [...f.metrics, { label: '', column: '', daily_target: '' }],
+                                                        }))}
+                                                    >
+                                                        <Plus className="w-3 h-3 mr-1" /> Add metric
+                                                    </Button>
+                                                </div>
+                                                {sheetForm.metrics.map((m, idx) => (
+                                                    <div key={idx} className="grid grid-cols-[1fr_60px_80px_32px] gap-1.5 items-end">
+                                                        <Input
+                                                            placeholder="Label (e.g. Calls)"
+                                                            value={m.label}
+                                                            onChange={(e) => {
+                                                                const metrics = [...sheetForm.metrics];
+                                                                metrics[idx] = { ...metrics[idx], label: e.target.value };
+                                                                setSheetForm((f) => ({ ...f, metrics }));
+                                                            }}
+                                                            className="rounded-lg"
+                                                        />
+                                                        <Input
+                                                            placeholder="Col"
+                                                            value={m.column}
+                                                            onChange={(e) => {
+                                                                const metrics = [...sheetForm.metrics];
+                                                                metrics[idx] = { ...metrics[idx], column: e.target.value };
+                                                                setSheetForm((f) => ({ ...f, metrics }));
+                                                            }}
+                                                            className="rounded-lg"
+                                                        />
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="Target"
+                                                            value={m.daily_target}
+                                                            onChange={(e) => {
+                                                                const metrics = [...sheetForm.metrics];
+                                                                metrics[idx] = { ...metrics[idx], daily_target: e.target.value };
+                                                                setSheetForm((f) => ({ ...f, metrics }));
+                                                            }}
+                                                            className="rounded-lg"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-9 w-9 text-red-500"
+                                                            onClick={() => setSheetForm((f) => ({
+                                                                ...f,
+                                                                metrics: f.metrics.filter((_, i) => i !== idx),
+                                                            }))}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    className="rounded-full bg-emerald-600 hover:bg-emerald-700"
+                                                    disabled={savingSheet}
+                                                    data-testid="sheet-save-mapping"
+                                                    onClick={async () => {
+                                                        setSavingSheet(true);
+                                                        try {
+                                                            const payload = {
+                                                                ...sheetForm,
+                                                                metrics: sheetForm.metrics
+                                                                    .filter((m) => m.label && m.column)
+                                                                    .map((m) => ({
+                                                                        label: m.label,
+                                                                        column: m.column,
+                                                                        daily_target: m.daily_target === '' ? null : Number(m.daily_target),
+                                                                    })),
+                                                            };
+                                                            const res = await axios.post(`${API}/sheets/config`, payload);
+                                                            setSheetConfig(res.data.config);
+                                                            toast.success('Sheet mapping saved');
+                                                        } catch (e) {
+                                                            toast.error(getErrorMessage(e, 'Failed to save mapping'));
+                                                        } finally {
+                                                            setSavingSheet(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    {savingSheet ? 'Saving…' : 'Save mapping'}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="rounded-full"
+                                                    disabled={syncingSheet}
+                                                    data-testid="sheet-sync-now"
+                                                    onClick={async () => {
+                                                        setSyncingSheet(true);
+                                                        try {
+                                                            const res = await axios.post(`${API}/sheets/sync`);
+                                                            toast.success(`Synced ${res.data.synced || 0} row(s)`);
+                                                            loadSheetConfig();
+                                                        } catch (e) {
+                                                            toast.error(getErrorMessage(e, 'Sync failed'));
+                                                        } finally {
+                                                            setSyncingSheet(false);
+                                                        }
+                                                    }}
+                                                >
+                                                    <RefreshCw className={`w-4 h-4 mr-1 ${syncingSheet ? 'animate-spin' : ''}`} />
+                                                    {syncingSheet ? 'Syncing…' : 'Sync now'}
+                                                </Button>
+                                            </div>
+                                            {sheetConfig?.last_synced_at && (
+                                                <p className="text-xs text-emerald-800/70">
+                                                    Last sync: {new Date(sheetConfig.last_synced_at).toLocaleString()}
+                                                    {sheetConfig.last_sync_count != null ? ` · ${sheetConfig.last_sync_count} rows` : ''}
+                                                </p>
+                                            )}
+                                            {sheetConfig?.last_sync_error && (
+                                                <p className="text-xs text-red-600">{sheetConfig.last_sync_error}</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                                 {(user?.subscription_tier === 'teams' || user?.subscription_tier === 'pro') && (
                                     <Button
                                         onClick={() => navigate('/team')}
@@ -670,6 +932,7 @@ const SettingsPage = () => {
                                                 { key: 'missed', label: 'Missed due dates' },
                                                 { key: 'manager_snapshot', label: 'Manager snapshot' },
                                                 { key: 'suggested_plan', label: 'Suggested follow-ups' },
+                                                { key: 'sheet_metrics', label: 'Sheet activity metrics' },
                                             ].map((s) => (
                                                 <label
                                                     key={s.key}

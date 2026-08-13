@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2 } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, ScrollText } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1064,6 +1064,9 @@ const TaskHub = () => {
                             <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics & Leaderboards">
                                 <BarChart3 className="w-5 h-5" />
                             </Button>
+                            <Button data-testid="activity-log-button" variant="outline" size="icon" onClick={() => navigate('/activity')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Activity & data log">
+                                <ScrollText className="w-5 h-5" />
+                            </Button>
                             <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
                                 <Settings className="w-5 h-5" />
                             </Button>
@@ -1089,6 +1092,9 @@ const TaskHub = () => {
                                 )}
                                 <DropdownMenuItem onClick={() => navigate('/analytics')}>
                                     <BarChart3 className="w-4 h-4 mr-2" /> Analytics
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate('/activity')}>
+                                    <ScrollText className="w-4 h-4 mr-2" /> Activity log
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => navigate('/recordings')} data-testid="recording-library-button-mobile">
                                     <Library className="w-4 h-4 mr-2" /> Recordings
