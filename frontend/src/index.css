@@ -25,7 +25,7 @@ body.app-authenticated {
 
 /* Room for the persistent middle-bottom AI command bar */
 body.app-authenticated.has-ai-dock {
-    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* Tap targets feel snappier on mobile without 300ms delay leftovers */
@@ -206,7 +206,7 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0.5rem 0;
 }
 
-/* Brief attention pulse when New Task focuses the AI dock */
+/* Brief attention pulse when the AI bar is focused */
 @keyframes ai-dock-pulse-kf {
     0% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4); }
     70% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
@@ -216,7 +216,6 @@ h1, h2, h3, h4, h5, h6 {
     animation: ai-dock-pulse-kf 0.85s ease-out;
 }
 
-/* Keep bottom-left New Task clear of the center AI dock */
 body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }

@@ -16,11 +16,11 @@ const topics = [
         body: (
             <ol className="list-decimal ml-5 space-y-2 text-sm">
                 <li>Sign in and open your dashboard. You’ll see three columns: <strong>Assigned to Me</strong>, <strong>Self-Assigned</strong>, and <strong>Delegated</strong>.</li>
-                <li>Use the floating task bar at the bottom (or the <strong>New Task</strong> button) and describe what you need in plain English.</li>
+                <li>Use the floating bar at the bottom to create a task, search, or jump to any page — type in plain English, or press <kbd className="px-1.5 py-0.5 border rounded text-xs">/</kbd> / <kbd className="px-1.5 py-0.5 border rounded text-xs">⌘K</kbd>.</li>
                 <li>Tell TskFlow what you need done in plain English — e.g. &ldquo;Have Sarah email the Q3 update by tomorrow 3pm.&rdquo;</li>
                 <li>Confirm the summary (or answer one clarifying question if something critical is missing), then send.</li>
                 <li>Use <strong>Advanced create</strong> only when you need attachments, groups, or recurrence extras.</li>
-                <li>Ready for more? Try <strong>Voice Mode</strong> (the mic at bottom-right) — tap and say &ldquo;What’s outstanding?&rdquo;</li>
+                <li>Ready for more? Tap the <strong>J</strong> orb at the bottom-right and ask Jarvis — say &ldquo;What’s outstanding?&rdquo;</li>
             </ol>
         )
     },
@@ -196,10 +196,10 @@ const HelpCenter = () => {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {[
-                                { step: '1', title: 'Create your first task', body: 'Use the floating bar at the bottom (or New Task) and describe what you need in plain English. Confirm and send.' },
+                                { step: '1', title: 'Create your first task', body: 'Use the floating bar at the bottom — create, search, or go to any page in plain English. Confirm and send.' },
                                 { step: '2', title: 'Turn a routine into recurring', body: 'Open Advanced Options in Create Task. Pick a frequency, set an end (or never). TskFlow keeps future occurrences pre-filled.' },
                                 { step: '3', title: 'Delegate to your team', body: 'Type an email or search a teammate. Assign to multiple people to create a group task with a live leaderboard.' },
-                                { step: '4', title: 'Ask Voice Mode', body: 'Tap the mic bottom-right. Say &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; — it does both.' },
+                                { step: '4', title: 'Ask Jarvis', body: 'Tap the J orb bottom-right. Say &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; — it does both.' },
                                 { step: '5', title: 'Turn on Smart Reminders', body: 'Settings → Reminders. Set triggers, frequency, and channels so nothing important goes cold.' },
                             ].map((s) => (
                                 <div key={s.step} className="flex gap-4">
@@ -235,7 +235,7 @@ const HelpCenter = () => {
 
                 <div className="mt-10 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-sm text-teal-900 flex items-center gap-3">
                     <HelpCircle className="w-5 h-5 text-teal-500" />
-                    <div>Can’t find what you need? Tap the mic (bottom-right) and just ask Voice Mode — it knows every feature.</div>
+                    <div>Can’t find what you need? Type in the floating bar, or tap the J orb (bottom-right) and ask Jarvis.</div>
                 </div>
             </main>
         </div>
