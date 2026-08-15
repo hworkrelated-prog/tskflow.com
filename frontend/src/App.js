@@ -28,6 +28,7 @@ import AdminPage from '@/pages/AdminPage';
 import LeadsPage from '@/pages/LeadsPage';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
+import LegalPage from '@/pages/LegalPage';
 import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
@@ -455,6 +456,7 @@ function App() {
                     <Route path="/leads" element={<LeadsPage />} />
                     <Route path="/privacy" element={<PrivacyPolicy />} />
                     <Route path="/terms" element={<TermsOfService />} />
+                    <Route path="/legal" element={<LegalPage />} />
                     <Route path="/contact" element={<ContactPage />} />
                     <Route
                         path="/dashboard"
