@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Target } from 'lucide-react';
+import { LegalEntityNotice } from '@/components/LegalEntityNotice';
 
 const PrivacyPolicy = () => {
     return (
@@ -18,11 +19,12 @@ const PrivacyPolicy = () => {
 
             <main className="container mx-auto px-6 py-12 max-w-3xl">
                 <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Privacy Policy</h1>
-                <p className="text-muted-foreground mb-8">Last updated: August 8, 2026</p>
+                <p className="text-muted-foreground mb-8">Last updated: August 15, 2026</p>
 
                 <div className="prose prose-slate max-w-none space-y-6 text-slate-700 leading-relaxed">
+                    <LegalEntityNotice />
                     <section>
-                        <p>This Privacy Policy explains how Tskflow (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) collects, uses, and protects your information when you use our task management application at tskflow.com (the &quot;Service&quot;).</p>
+                        <p>This Privacy Policy explains how Unbiassly, Inc., doing business as TskFlow (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), collects, uses, and protects your information when you use the TskFlow task management application at tskflow.com (the &quot;Service&quot;).</p>
                     </section>
 
                     <section>
@@ -81,11 +83,12 @@ const PrivacyPolicy = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">8. Contact Us</h2>
-                        <p>If you have any questions about this Privacy Policy, contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
+                        <p>If you have any questions about this Privacy Policy, contact Unbiassly, Inc. at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>
 
                 <div className="mt-12 pt-6 border-t">
+                    <Link to="/legal" className="text-indigo-600 hover:underline mr-6">Legal</Link>
                     <Link to="/terms" className="text-indigo-600 hover:underline mr-6">Terms of Service</Link>
                     <Link to="/" className="text-indigo-600 hover:underline">Back to Home</Link>
                 </div>

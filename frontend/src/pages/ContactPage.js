@@ -159,7 +159,7 @@ const ContactPage = () => {
                                             className="mt-0.5"
                                         />
                                         <Label htmlFor="smsConsent" className="text-sm font-normal leading-snug cursor-pointer text-slate-700">
-                                            By checking, you agree to receive <strong>transactional/informational SMS communications</strong> regarding your inquiry from <strong>TskFlow</strong>. Message frequency varies. <strong>Message and data rates may apply</strong>. Reply <strong>HELP</strong> for help or <strong>STOP</strong> to opt-out.
+                                            By checking, you agree to receive <strong>transactional/informational SMS communications</strong> regarding your inquiry from <strong>Unbiassly, Inc.</strong> doing business as <strong>TskFlow</strong>. Message frequency varies. <strong>Message and data rates may apply</strong>. Reply <strong>HELP</strong> for help or <strong>STOP</strong> to opt-out.
                                         </Label>
                                     </div>
                                     <Button
@@ -176,6 +176,7 @@ const ContactPage = () => {
                     </Card>
 
                     <div className="mt-12 pt-6 border-t">
+                        <Link to="/legal" className="text-indigo-600 hover:underline mr-6">Legal</Link>
                         <Link to="/privacy" className="text-indigo-600 hover:underline mr-6">Privacy Policy</Link>
                         <Link to="/terms" className="text-indigo-600 hover:underline mr-6">Terms of Service</Link>
                         <Link to="/" className="text-indigo-600 hover:underline">Back to Home</Link>

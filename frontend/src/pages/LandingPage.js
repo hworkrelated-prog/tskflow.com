@@ -308,9 +308,13 @@ const LandingPage = () => {
 
             <footer className="relative border-t border-slate-900/10 py-10">
                 <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm text-slate-600">
-                    <span className="font-semibold text-slate-800" style={{ fontFamily: 'Outfit, sans-serif' }}>TskFlow</span>
+                    <span className="text-slate-700">
+                        <span className="font-semibold text-slate-800" style={{ fontFamily: 'Outfit, sans-serif' }}>TskFlow</span>
+                        {' '}is a trade name of Unbiassly, Inc.
+                    </span>
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
                         <Link to="/contact" className="hover:text-slate-900">Contact</Link>
+                        <Link to="/legal" className="hover:text-slate-900">Legal</Link>
                         <Link to="/privacy" className="hover:text-slate-900">Privacy Policy</Link>
                         <Link to="/terms" className="hover:text-slate-900">Terms of Service</Link>
                     </div>

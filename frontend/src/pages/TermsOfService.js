@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Target } from 'lucide-react';
+import { LegalEntityNotice } from '@/components/LegalEntityNotice';
 
 const TermsOfService = () => {
     return (
@@ -18,11 +19,12 @@ const TermsOfService = () => {
 
             <main className="container mx-auto px-6 py-12 max-w-3xl">
                 <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Terms of Service</h1>
-                <p className="text-muted-foreground mb-8">Last updated: August 8, 2026</p>
+                <p className="text-muted-foreground mb-8">Last updated: August 15, 2026</p>
 
                 <div className="prose prose-slate max-w-none space-y-6 text-slate-700 leading-relaxed">
+                    <LegalEntityNotice />
                     <section>
-                        <p>These Terms of Service (&quot;Terms&quot;) govern your access to and use of Tskflow (the &quot;Service&quot;) at tskflow.com. By creating an account or using the Service, you agree to these Terms.</p>
+                        <p>These Terms of Service (&quot;Terms&quot;) are an agreement between you and Unbiassly, Inc. They govern your access to and use of TskFlow (the &quot;Service&quot;) at tskflow.com. By creating an account or using the Service, you agree to these Terms.</p>
                     </section>
 
                     <section>
@@ -57,7 +59,7 @@ const TermsOfService = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">7. Disclaimer & Limitation of Liability</h2>
-                        <p>The Service is provided &quot;as is&quot; without warranties of any kind. To the maximum extent permitted by law, Tskflow is not liable for any indirect, incidental, or consequential damages arising from your use of the Service.</p>
+                        <p>The Service is provided &quot;as is&quot; without warranties of any kind. To the maximum extent permitted by law, Unbiassly, Inc. (TskFlow) is not liable for any indirect, incidental, or consequential damages arising from your use of the Service.</p>
                     </section>
 
                     <section>
@@ -67,16 +69,17 @@ const TermsOfService = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">9. SMS Communications</h2>
-                        <p>Tskflow SMS Program: If you opt in via our Contact Us form, you will receive informational SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can cancel at any time by texting STOP. For help, text HELP or contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>. Carriers are not liable for delayed or undelivered messages. See our <Link to="/privacy" className="text-indigo-600 underline">Privacy Policy</Link> for details on how we handle your information.</p>
+                        <p>TskFlow SMS Program (provided by Unbiassly, Inc.): If you opt in via our Contact Us form, you will receive informational SMS messages related to your inquiry. Message frequency varies. Message and data rates may apply. You can cancel at any time by texting STOP. For help, text HELP or contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>. Carriers are not liable for delayed or undelivered messages. See our <Link to="/privacy" className="text-indigo-600 underline">Privacy Policy</Link> for details on how we handle your information.</p>
                     </section>
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">10. Contact Us</h2>
-                        <p>Questions about these Terms? Contact us at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
+                        <p>Questions about these Terms? Contact Unbiassly, Inc. at <a href="mailto:hashim@tskflow.com" className="text-indigo-600 underline">hashim@tskflow.com</a>.</p>
                     </section>
                 </div>
 
                 <div className="mt-12 pt-6 border-t">
+                    <Link to="/legal" className="text-indigo-600 hover:underline mr-6">Legal</Link>
                     <Link to="/privacy" className="text-indigo-600 hover:underline mr-6">Privacy Policy</Link>
                     <Link to="/" className="text-indigo-600 hover:underline">Back to Home</Link>
                 </div>
