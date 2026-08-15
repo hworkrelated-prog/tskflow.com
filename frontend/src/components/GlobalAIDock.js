@@ -108,14 +108,14 @@ const GlobalAIDock = () => {
 
     return (
         <div
-            className="fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,40rem)] bottom-3"
+            className="fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,40rem)] bottom-4"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"
         >
-            <div className={`relative max-h-[min(78dvh,720px)] overflow-y-auto clean-scroll transition-[padding,border-radius] ${
+            <div className={`relative max-h-[min(78dvh,720px)] transition-[padding,border-radius,background-color,box-shadow] ${
                 active
-                    ? 'rounded-2xl border border-slate-200/80 bg-white/90 backdrop-blur-md shadow-lg shadow-slate-900/10 p-2 sm:p-2.5'
-                    : 'rounded-[22px] bg-transparent p-0'
+                    ? 'overflow-y-auto clean-scroll rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-md shadow-lg shadow-slate-900/10 p-2 sm:p-2.5'
+                    : 'overflow-visible rounded-none bg-transparent p-0'
             }`}>
                 {active && (
                     <button
