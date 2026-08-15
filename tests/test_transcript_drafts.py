@@ -117,9 +117,12 @@ def test_speaker_ill_owns_task_named_person_does_not_steal():
     assert drafts[0]["assignee_hint"] in ("Bob Martinez", "Bob")
 
 
+def test_ill_mentions_teammate_stays_with_importer():
+    hint = guess_owner_hint("I'll ping Alice about the contract tomorrow.", ROSTER, IMPORTER)
+    assert hint == "Pat Owner"
+
+
 def test_guess_owner_from_named_commitment():
-    hint = guess_owner_hint("Alice will send the proposal by Friday.", ROSTER, IMPORTER)
-    assert hint == "Alice Chen"
     hint = guess_owner_hint("Alice will send the proposal by Friday.", ROSTER, IMPORTER)
     assert hint == "Alice Chen"
 

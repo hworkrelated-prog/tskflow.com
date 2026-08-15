@@ -243,17 +243,13 @@ def guess_owner_hint(text: str, roster: List[dict], importer: dict, speaker: Opt
             return hits[0].get("name")
         return named
 
-    hits = _roster_name_hits(t, roster)
-    if len(hits) == 1:
-        return hits[0].get("name")
-    if hits and FIRST_PERSON.search(t):
-        # "I'll ping Alice" → speaker/importer owns it, not Alice
-        pass
-    elif hits:
-        return hits[0].get("name")
-
+    # "I'll ping Alice" belongs to the speaker/importer, not Alice
     if FIRST_PERSON.search(t):
-        return (importer.get("name") or "me") if not speaker else (speaker.strip() or importer.get("name") or "me")
+        return (importer.get("name") or "me")
+
+    hits = _roster_name_hits(t, roster)
+    if hits:
+        return hits[0].get("name")
 
     return (importer.get("name") or "me")
 
