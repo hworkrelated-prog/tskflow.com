@@ -1103,8 +1103,8 @@ const AIQuickCreate = ({
                         )}
                         <div
                             ref={composerRef}
-                            className={`relative flex flex-col rounded-2xl border shadow-sm transition-[box-shadow,border-color] focus-within:border-teal-400/70 focus-within:shadow-md focus-within:ring-2 focus-within:ring-teal-200/50 ${
-                                embedded ? 'bg-white border-slate-200' : 'bg-slate-50/80 border-slate-200'
+                            className={`ai-composer-shell relative flex flex-col ${
+                                embedded ? '' : 'ai-composer-shell--inset'
                             }`}
                             data-testid="ai-quick-composer"
                         >
