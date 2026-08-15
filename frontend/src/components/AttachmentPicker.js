@@ -3,8 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Pause, Trash2, RotateCw } from 'lucide-react';
-import { uploadBlob } from '@/lib/upload';
+import { uploadBlob, fileUrl } from '@/lib/upload';
 import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
+import { openRecordingCameraOverlay, closeRecordingCameraOverlay, setCameraOverlayVisible } from '@/lib/recordingCameraOverlay';
+import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
+import { saveRecordingBlob } from '@/lib/recordingStore';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -36,6 +39,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     const [permissionState, setPermissionState] = useState({ mic: null, camera: null });
     const [showPreview, setShowPreview] = useState(false);
     const [previewBlob, setPreviewBlob] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState('');
+    const [savedAttachment, setSavedAttachment] = useState(null);
+    const [savingPreview, setSavingPreview] = useState(false);
+    const [camOverlayOpen, setCamOverlayOpen] = useState(false);
+    const [replaySrc, setReplaySrc] = useState('');
 
     const recorderRef = useRef(null);
     const streamsRef = useRef({ screen: null, mic: null, camera: null, composed: null });
@@ -51,6 +59,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         return () => {
             cleanupStreams();
             closeRecordingControlsOverlay();
+            closeRecordingCameraOverlay();
             try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
         };
     }, []);
@@ -66,6 +75,18 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         }
         return undefined;
     }, [recording]);
+
+    useEffect(() => {
+        if (!previewBlob) {
+            setPreviewUrl('');
+            return undefined;
+        }
+        const url = URL.createObjectURL(previewBlob);
+        setPreviewUrl(url);
+        return () => {
+            try { URL.revokeObjectURL(url); } catch { /* noop */ }
+        };
+    }, [previewBlob]);
 
     useEffect(() => {
         window.__tskRecorderApi = {
@@ -105,8 +126,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 setUploads((u) => ({ ...u, [tempId]: { name: filename, progress: p } }));
             });
             setAttachments((prev) => [...prev, ref]);
+            return ref;
         } catch (e) {
-            toast.error(`Failed to upload ${filename}`);
+            const detail = e?.response?.data?.detail || e?.message || `Failed to upload ${filename}`;
+            toast.error(typeof detail === 'string' ? detail : `Failed to upload ${filename}`);
+            return null;
         } finally {
             setUploads((u) => {
                 const next = { ...u };
@@ -164,6 +188,9 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 audio: opts.systemAudio,
             });
             streamsRef.current.screen = screenStream;
+            const settings = screenStream.getVideoTracks()[0]?.getSettings?.() || {};
+            const screens = await listScreens();
+            const matched = matchScreenToCapture(settings, screens);
 
             // Always use the raw display track — canvas+rAF freezes when the tab is
             // backgrounded (audio would keep going). Camera is optional preview only.
@@ -203,6 +230,8 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 setPaused(false);
                 setSeconds(0);
                 closeRecordingControlsOverlay();
+                closeRecordingCameraOverlay();
+                setCamOverlayOpen(false);
                 const wasDiscard = discardOnStopRef.current;
                 discardOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
@@ -212,9 +241,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                     return;
                 }
                 if (blob.size > 0) {
-                    // Show preview instead of auto-uploading
+                    setSavedAttachment(null);
+                    setReplaySrc('');
                     setPreviewBlob(blob);
                     setShowPreview(true);
+                    try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
                 } else {
                     toast.error('Recording was empty — try again');
                 }
@@ -234,13 +265,25 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             setShowOptions(false);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-            const overlay = await openRecordingControlsOverlay();
+            if (cameraStream) {
+                const camOverlay = await openRecordingCameraOverlay({
+                    stream: cameraStream,
+                    trackSettings: settings,
+                });
+                setCamOverlayOpen(camOverlay.mode !== 'none');
+                if (camOverlay.placedOnOtherDisplay) {
+                    toast.success('Camera moved to the screen you are recording.');
+                } else if (camOverlay.mode === 'popup' && screens.length > 1) {
+                    toast.info('Drag the camera onto the screen you are recording if it landed on the wrong display.');
+                }
+            }
+
+            const overlay = await openRecordingControlsOverlay({ screen: matched.screen });
             if (overlay?.mode === 'pip') {
                 toast.success('Floating controls opened — they stay on top while you present.');
             } else if (overlay?.mode === 'none') {
                 toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
             }
-            // Webcam preview is wired in the `recording` useEffect once the <video> mounts.
         } catch (e) {
             try {
                 if (recorderRef.current && recorderRef.current.state !== 'inactive') {
@@ -264,6 +307,8 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         discardOnStopRef.current = false;
         if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
         closeRecordingControlsOverlay();
+        closeRecordingCameraOverlay();
+        setCamOverlayOpen(false);
     };
 
     const pauseResume = () => {
@@ -291,29 +336,48 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         setOpts((prev) => {
             const on = !prev.camera;
             streamsRef.current.camera?.getVideoTracks?.().forEach((t) => { t.enabled = on; });
+            setCameraOverlayVisible(on);
             return { ...prev, camera: on };
         });
     };
 
     const handleSaveRecording = async () => {
-        if (previewBlob) {
-            await doUpload(previewBlob, `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`, 'video/webm');
-            setShowPreview(false);
-            setPreviewBlob(null);
-            toast.success('Recording saved!');
+        if (!previewBlob || savingPreview) return;
+        setSavingPreview(true);
+        try {
+            const filename = `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`;
+            const ref = await doUpload(previewBlob, filename, 'video/webm');
+            if (!ref) return;
+            setSavedAttachment(ref);
+            toast.success('Recording saved — play it again below, or close when you’re done.');
+        } finally {
+            setSavingPreview(false);
         }
     };
 
     const handleDiscardRecording = () => {
         setShowPreview(false);
         setPreviewBlob(null);
+        setSavedAttachment(null);
+        setReplaySrc('');
         toast.info('Recording discarded');
     };
 
     const handleRecordAgain = () => {
         setShowPreview(false);
         setPreviewBlob(null);
+        setSavedAttachment(null);
+        setReplaySrc('');
         startRecording();
+    };
+
+    const replayAttachment = (att) => {
+        if (att?.storage_path) {
+            setReplaySrc(fileUrl(att.storage_path));
+        } else if (previewUrl) {
+            setReplaySrc('');
+        }
+        setShowPreview(true);
     };
 
     const removeAttachment = (id) => setAttachments((prev) => prev.filter((a) => a.id !== id));
@@ -402,7 +466,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                             <Square className="w-3 h-3" fill="currentColor" /> Stop
                         </button>
                     </div>
-                    {opts.camera && (
+                    {opts.camera && !camOverlayOpen && (
                         <div className="fixed top-4 right-4 z-[2147483646] w-20 h-20 rounded-full overflow-hidden border-2 border-white/70 shadow-lg bg-black/80">
                             <video
                                 ref={cameraPreviewRef}
@@ -420,25 +484,35 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
                 <DialogContent className="max-w-3xl">
                     <DialogHeader>
-                        <DialogTitle>Preview Your Recording</DialogTitle>
+                        <DialogTitle>{savedAttachment ? 'Recording saved' : 'Preview your recording'}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                        {previewBlob && (
+                        {(replaySrc || previewUrl) && (
                             <video
-                                src={URL.createObjectURL(previewBlob)}
+                                key={replaySrc || previewUrl}
+                                src={replaySrc || previewUrl}
                                 controls
+                                autoPlay
                                 className="w-full rounded-lg bg-black"
+                                data-testid="recording-preview-video"
                             />
                         )}
+                        {savedAttachment && (
+                            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                                Saved to this task. You can play it again here or from the attachment list.
+                            </p>
+                        )}
                         <div className="flex gap-3 justify-end">
-                            <Button
-                                variant="outline"
-                                onClick={handleDiscardRecording}
-                                className="rounded-full"
-                            >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Discard
-                            </Button>
+                            {!savedAttachment && (
+                                <Button
+                                    variant="outline"
+                                    onClick={handleDiscardRecording}
+                                    className="rounded-full"
+                                >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Discard
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 onClick={handleRecordAgain}
@@ -447,13 +521,25 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                                 <RotateCw className="w-4 h-4 mr-2" />
                                 Record Again
                             </Button>
-                            <Button
-                                onClick={handleSaveRecording}
-                                className="rounded-full bg-green-600 hover:bg-green-700"
-                            >
-                                <Play className="w-4 h-4 mr-2" />
-                                Save Recording
-                            </Button>
+                            {savedAttachment ? (
+                                <Button
+                                    onClick={() => setShowPreview(false)}
+                                    className="rounded-full bg-teal-700 hover:bg-teal-800"
+                                    data-testid="recording-preview-done"
+                                >
+                                    Done
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={handleSaveRecording}
+                                    disabled={savingPreview || !previewBlob}
+                                    className="rounded-full bg-green-600 hover:bg-green-700"
+                                    data-testid="save-recording-btn"
+                                >
+                                    {savingPreview ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                                    {savingPreview ? 'Saving…' : 'Save Recording'}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </DialogContent>
@@ -477,7 +563,25 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                         <div key={att.id} className="flex items-center justify-between gap-2 bg-teal-50 border border-teal-200 p-2 rounded-xl text-sm">
                             <div className="flex items-center gap-2 min-w-0">
                                 {iconFor(att.kind)}
-                                <span className="truncate">{att.filename}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => replayAttachment(att)}
+                                    className="truncate text-left hover:underline"
+                                    title="Play recording"
+                                >
+                                    {att.original_filename || att.filename || 'Recording'}
+                                </button>
+                                {att.kind === 'video' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => replayAttachment(att)}
+                                        className="shrink-0 text-teal-700 hover:bg-teal-100 rounded-full p-1"
+                                        title="Play again"
+                                        data-testid="replay-recording-btn"
+                                    >
+                                        <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
                             <button type="button" onClick={() => removeAttachment(att.id)} className="text-red-500 hover:bg-red-100 rounded-full p-1 shrink-0">
                                 <X className="w-4 h-4" />

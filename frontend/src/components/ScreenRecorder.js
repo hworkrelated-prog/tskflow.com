@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import { uploadBlob } from '@/lib/upload';
 import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
+import { openRecordingCameraOverlay, closeRecordingCameraOverlay, setCameraOverlayVisible } from '@/lib/recordingCameraOverlay';
+import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 
 const CtrlBtn = ({ onClick, title, active, danger, children, testId }) => (
     <button
@@ -138,6 +140,7 @@ export const ScreenRecorder = ({ onSaved }) => {
     const [seconds, setSeconds] = useState(0);
     const [displaySurface, setDisplaySurface] = useState(null);
     const [camStream, setCamStream] = useState(null);
+    const [camOverlayOpen, setCamOverlayOpen] = useState(false);
     const [popupOpen, setPopupOpen] = useState(false);
     const controlsPopupRef = useRef(null);
 
@@ -178,6 +181,8 @@ export const ScreenRecorder = ({ onSaved }) => {
         screenVideoElRef.current = null;
         camVideoElRef.current = null;
         setCamStream(null);
+        setCamOverlayOpen(false);
+        closeRecordingCameraOverlay();
     };
 
     const mixAudioTracks = (displayStream, micStream, includeMic) => {
@@ -375,6 +380,23 @@ export const ScreenRecorder = ({ onSaved }) => {
             displayStreamRef.current = display;
             const settings = display.getVideoTracks()[0]?.getSettings?.() || {};
             setDisplaySurface(settings.displaySurface || null);
+            const screens = await listScreens();
+            const matched = matchScreenToCapture(settings, screens);
+
+            // Open follow-screen windows now — still inside the picker gesture.
+            if (camStreamRef.current) {
+                const camOverlay = await openRecordingCameraOverlay({
+                    stream: camStreamRef.current,
+                    trackSettings: settings,
+                });
+                setCamOverlayOpen(camOverlay.mode !== 'none');
+                if (camOverlay.placedOnOtherDisplay) {
+                    toast.success('Camera moved to the screen you are recording.');
+                } else if (camOverlay.mode === 'popup' && screens.length > 1) {
+                    toast.info('Drag the camera onto the screen you are recording if it landed on the wrong display.');
+                }
+            }
+            await openControlsPopup(matched.screen);
 
             // Loom-style 3-2-1 after the user picks a surface
             for (let n = 3; n >= 1; n -= 1) {
@@ -435,8 +457,6 @@ export const ScreenRecorder = ({ onSaved }) => {
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
-            await openControlsPopup();
-
             const surf = settings.displaySurface;
             if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab — prefer Entire Screen.');
 
@@ -495,8 +515,8 @@ export const ScreenRecorder = ({ onSaved }) => {
         stop();
     };
 
-    const openControlsPopup = async () => {
-        const result = await openRecordingControlsOverlay();
+    const openControlsPopup = async (screen) => {
+        const result = await openRecordingControlsOverlay({ screen });
         if (result?.mode === 'none') {
             toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
             setPopupOpen(false);
@@ -541,6 +561,7 @@ export const ScreenRecorder = ({ onSaved }) => {
         setCamOn((v) => {
             const on = !v;
             camStreamRef.current?.getVideoTracks?.().forEach((t) => { t.enabled = on; });
+            setCameraOverlayVisible(on);
             return on;
         });
     };
@@ -604,7 +625,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </FloatingBar>
             )}
 
-            {recording && camOn && camStream && <WebcamBubble stream={camStream} />}
+            {recording && camOn && camStream && !camOverlayOpen && <WebcamBubble stream={camStream} />}
 
             {recording && displaySurface === 'window' && !popupOpen && (
                 <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2147483645 }}

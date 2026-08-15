@@ -1,7 +1,10 @@
 /**
  * Always-on-top recording controls for when the user is presenting another tab/window.
- * Prefers Document Picture-in-Picture (Chrome), then a small popup window.
+ * Prefers Document Picture-in-Picture (Chrome), then a small popup window
+ * placed on the captured display when we know which one that is.
  */
+
+import { popupBoxOnScreen, fallbackScreens } from '@/lib/recordingDisplay';
 
 const POPUP_NAME = 'tsk_recording_controls';
 
@@ -86,8 +89,9 @@ const wirePipDocument = (doc) => {
 
 /**
  * Open always-on-top controls. Returns { mode: 'pip'|'popup'|'none', win }.
+ * Pass `screen` (from matchScreenToCapture) to park the popup on that display.
  */
-export async function openRecordingControlsOverlay() {
+export async function openRecordingControlsOverlay({ screen } = {}) {
     // 1) Document Picture-in-Picture — floats over other tabs/apps in Chromium
     try {
         if (window.documentPictureInPicture?.requestWindow) {
@@ -105,14 +109,16 @@ export async function openRecordingControlsOverlay() {
         console.warn('Document PiP controls unavailable', e);
     }
 
-    // 2) Classic popup window
+    // 2) Classic popup window — on the captured display when we know it
     try {
-        const width = 420;
-        const height = 72;
-        const left = Math.max(0, (window.screen?.availWidth || 1200) - width - 24);
-        const top = 24;
-        const features = `popup=1,noopener=0,width=${width},height=${height},left=${left},top=${top},toolbar=0,menubar=0,location=0,status=0,resizable=1`;
-        const w = window.open('/recording/controls', POPUP_NAME, features);
+        const target = screen || fallbackScreens()[0];
+        const box = popupBoxOnScreen(target, {
+            width: 420,
+            height: 72,
+            corner: 'top-right',
+            margin: 24,
+        });
+        const w = window.open('/recording/controls', POPUP_NAME, box.features);
         if (w) {
             try { window.__tskRecControlsWin = w; } catch { /* noop */ }
             try { w.focus(); } catch { /* noop */ }
