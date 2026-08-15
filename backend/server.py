@@ -29,6 +29,13 @@ load_dotenv(ROOT_DIR / '.env')
 
 from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
+from transcript_helpers import (
+    apply_owner_and_due_guesses,
+    build_transcript_extract_prompt,
+    fallback_extract_action_items,
+    filter_clear_identified_tasks,
+    next_business_day_17,
+)
 from sheets_helpers import (
     SHEETS_SCOPES,
     extract_spreadsheet_id,
@@ -7444,6 +7451,7 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
 class TranscriptImportRequest(BaseModel):
     text: Optional[str] = None
     url: Optional[str] = None  # public Google Doc
+    transcript: Optional[str] = None  # alias used by some clients/tests
 
 async def _fetch_google_doc_text(url: str) -> str:
     """Best-effort fetch of a public Google Doc as plain text."""
@@ -7469,7 +7477,7 @@ async def create_drafts_from_transcript(
     current_user: dict = Depends(get_current_user),
 ):
     """Parse a transcript into candidate task drafts. Nothing goes live automatically."""
-    text = (body.text or "").strip()
+    text = (body.text or body.transcript or "").strip()
     if not text and body.url:
         try:
             text = (await _fetch_google_doc_text(body.url)).strip()
@@ -7480,30 +7488,29 @@ async def create_drafts_from_transcript(
     if len(text) > 60000:
         text = text[:60000]
 
+    now = get_pst_now()
+    roster: List[dict] = []
+    email = current_user.get("email") or ""
+    domain = email.split("@")[-1] if "@" in email else ""
+    if domain:
+        roster = await db.users.find(
+            {"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}},
+            {"_id": 0, "id": 1, "name": 1, "email": 1},
+        ).to_list(200)
+    if not roster:
+        roster = [{"id": current_user.get("id"), "name": current_user.get("name"), "email": email}]
+
     key = os.getenv("EMERGENT_LLM_KEY")
     drafts_data: List[dict] = []
     if key:
         try:
             from emergentintegrations.llm.chat import LlmChat, UserMessage
             import json as _json
-            prompt = (
-                "You are Jarvis, a meeting-notes → action-items assistant. Extract concrete tasks from the transcript. "
-                "Rank the most important / blocking items first. For each task return JSON fields:\n"
-                "- title (short, verb-led)\n"
-                "- description (one paragraph)\n"
-                "- assignee_hint (best person name/role mentioned, or null)\n"
-                "- due_date_hint (natural language as spoken)\n"
-                "- due_date (ISO YYYY-MM-DDTHH:MM if you can infer date AND time; default 17:00 if time missing; null if unknown)\n"
-                "- priority (Urgent/High/Medium/Low)\n"
-                "- importance (integer 1-10, 10 = most critical)\n"
-                "- ambiguities (array of short clarification questions if needed)\n"
-                "Reply ONLY with {\"tasks\": [ ... ]}. No prose.\n\n"
-                "TRANSCRIPT:\n" + text
-            )
+            prompt = build_transcript_extract_prompt(text, roster, current_user, now)
             chat = LlmChat(
                 api_key=key,
                 session_id=f"transcript_{current_user['id']}",
-                system_message="Extract ranked action items as JSON only.",
+                system_message="Extract only clearly identified action items as JSON. Always guess owner and deadline.",
             ).with_model("openai", "gpt-4o-mini")
             raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=28.0)
             if not isinstance(raw, str):
@@ -7516,36 +7523,30 @@ async def create_drafts_from_transcript(
         except Exception as e:
             logging.warning(f"Transcript parse failed: {e}")
 
+    drafts_data = filter_clear_identified_tasks(drafts_data)
     if not drafts_data:
-        # Simple fallback: split on lines starting with "-" or numbered items
-        lines = [ln.strip("-*• 	").strip() for ln in text.splitlines() if ln.strip().startswith(("-", "*", "•")) or re.match(r"^\d+[\.)]", ln.strip())]
-        for ln in lines[:20]:
-            drafts_data.append({
-                "title": ln[:100],
-                "description": ln,
-                "assignee_hint": None,
-                "due_date_hint": None,
-                "priority": "Medium",
-                "ambiguities": ["Who should this be assigned to?", "When is this due?"],
-            })
+        drafts_data = fallback_extract_action_items(
+            text, now, roster, current_user, parse_date=_fallback_parse_date_expression
+        )
 
     created = []
     session_id = str(uuid.uuid4())
-    now = get_pst_now()
     source_preview = (text or "")[:400]
     pri_rank = {"Urgent": 4, "High": 3, "Medium": 2, "Low": 1}
 
     enriched = []
-    for d in drafts_data:
+    for raw in drafts_data:
+        d = apply_owner_and_due_guesses(
+            raw,
+            transcript=text,
+            roster=roster,
+            importer=current_user,
+            now=now,
+            parse_date=_fallback_parse_date_expression,
+        )
         title = (d.get("title") or "Untitled").strip()[:200]
         hint = d.get("assignee_hint")
-        due_iso = d.get("due_date")
-        if due_iso and not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", str(due_iso)):
-            due_iso = None
-        if not due_iso:
-            due_iso = _fallback_parse_date_expression(d.get("due_date_hint") or title or "", now)
-        if not due_iso:
-            due_iso = (now + timedelta(days=1)).replace(hour=17, minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M")
+        due_iso = d.get("due_date") or next_business_day_17(now)
         assigned_to = None
         assigned_to_name = None
         assigned_to_email = None
@@ -7568,6 +7569,10 @@ async def create_drafts_from_transcript(
                         assigned_to_email = top.get("email")
             except Exception as e:
                 logging.warning(f"Transcript assignee resolve failed: {e}")
+        if not assigned_to:
+            assigned_to = current_user.get("id")
+            assigned_to_name = current_user.get("name")
+            assigned_to_email = current_user.get("email")
         try:
             importance = int(d.get("importance") or 5)
         except (TypeError, ValueError):
@@ -7589,6 +7594,8 @@ async def create_drafts_from_transcript(
             "assigned_to_name": assigned_to_name,
             "assigned_to_email": assigned_to_email,
             "assignee_candidates": assignee_candidates,
+            "owner_source": d.get("owner_source") or "guessed",
+            "due_source": d.get("due_source") or "guessed",
             "_sort": (importance, pri_rank.get(priority, 2)),
         })
 

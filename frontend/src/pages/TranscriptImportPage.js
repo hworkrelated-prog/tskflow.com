@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, Upload, Link2, Sparkles, AlertCircle, Send, Trash2, Search, SkipForward, ChevronRight } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Link2, Sparkles, AlertCircle, Send, Trash2, Search, SkipForward, ChevronRight, Plus } from 'lucide-react';
 import DateTimePicker from '@/components/DateTimePicker';
 import { format, parseISO } from 'date-fns';
 
@@ -15,6 +15,7 @@ const TranscriptImportPage = () => {
     const navigate = useNavigate();
     const [params, setParams] = useSearchParams();
     const sessionFilter = params.get('session') || '';
+    const reviewing = Boolean(sessionFilter);
     const [text, setText] = useState('');
     const [url, setUrl] = useState('');
     const [drafts, setDrafts] = useState([]);
@@ -60,10 +61,10 @@ const TranscriptImportPage = () => {
         try {
             const res = await axios.post(`${API}/task-drafts/from-transcript`, { text, url });
             const n = (res.data.drafts || []).length;
-            toast.success(`Extracted ${n} draft${n === 1 ? '' : 's'} — knock them out one by one`);
+            toast.success(n ? `Extracted ${n} draft${n === 1 ? '' : 's'} — review owner and deadline, then publish` : 'No clearly identified tasks in that transcript');
             setText('');
             setUrl('');
-            if (res.data.session_id) {
+            if (res.data.session_id && n > 0) {
                 setParams({ session: res.data.session_id });
             } else {
                 fetchDrafts();
@@ -109,130 +110,175 @@ const TranscriptImportPage = () => {
         setCursor((i) => (i + 1) % remaining.length);
     };
 
+    const openNewTranscript = () => {
+        setQuery('');
+        setCursor(0);
+        setParams({});
+    };
+
     return (
         <div className="min-h-screen bg-white">
             <header className="border-b bg-white sticky top-0 z-10">
                 <div className="container mx-auto px-6 py-4">
                     <Button variant="ghost" onClick={() => navigate('/dashboard')} className="mb-2"><ArrowLeft className="w-4 h-4 mr-2" /> Back</Button>
-                    <div className="flex items-center gap-2">
-                        <FileText className="w-6 h-6 text-indigo-600" />
-                        <h1 className="text-2xl font-semibold">Meet Transcript → Tasks</h1>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <FileText className="w-6 h-6 text-indigo-600" />
+                            <h1 className="text-2xl font-semibold">
+                                {reviewing ? 'Review & execute drafts' : 'Meet Transcript → Tasks'}
+                            </h1>
+                        </div>
+                        {reviewing && (
+                            <Button variant="outline" onClick={openNewTranscript} className="rounded-full" data-testid="transcript-new-btn">
+                                <Plus className="w-4 h-4 mr-1" /> New transcript
+                            </Button>
+                        )}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">Paste, upload, or link a Google Doc. Knock out the most important tasks first — nothing goes live without your review.</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        {reviewing
+                            ? 'Owner and deadline are best guesses from the transcript. Confirm or edit, then publish — nothing goes live until you do.'
+                            : 'Paste, upload, or link a Google Doc. Jarvis pulls only the clearly identified action items and guesses owner + deadline.'}
+                    </p>
                 </div>
             </header>
             <main className="container mx-auto px-6 py-8 max-w-4xl space-y-6">
-                <Card className="border-2 rounded-2xl">
-                    <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" /> Import a transcript</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <div>
-                            <label className="text-sm font-medium mb-1 block flex items-center gap-2"><Link2 className="w-4 h-4" /> Public Google Doc URL</label>
-                            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/document/d/..." className="rounded-xl" />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium mb-1 block flex items-center gap-2"><Upload className="w-4 h-4" /> Upload .txt / .md file</label>
-                            <input type="file" accept=".txt,.md,.docx,text/*" onChange={handleFile} className="block w-full text-sm text-gray-600" />
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium mb-1 block">Or paste transcript text</label>
-                            <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the full meeting transcript here..." className="rounded-xl" />
-                        </div>
-                        <Button disabled={loading} onClick={importTranscript} className="rounded-full">
-                            {loading ? 'Extracting...' : 'Extract Tasks with Jarvis'}
-                        </Button>
-                    </CardContent>
-                </Card>
+                {!reviewing && (
+                    <div data-testid="transcript-import-panel" className="space-y-6">
+                        <Card className="border-2 rounded-2xl">
+                            <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-indigo-600" /> New transcript</CardTitle></CardHeader>
+                            <CardContent className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium mb-1 block flex items-center gap-2"><Link2 className="w-4 h-4" /> Public Google Doc URL</label>
+                                    <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://docs.google.com/document/d/..." className="rounded-xl" />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-1 block flex items-center gap-2"><Upload className="w-4 h-4" /> Upload .txt / .md file</label>
+                                    <input type="file" accept=".txt,.md,.docx,text/*" onChange={handleFile} className="block w-full text-sm text-gray-600" />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium mb-1 block">Or paste transcript text</label>
+                                    <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the full meeting transcript here..." className="rounded-xl" />
+                                </div>
+                                <Button disabled={loading} onClick={importTranscript} className="rounded-full">
+                                    {loading ? 'Extracting...' : 'Extract Tasks with Jarvis'}
+                                </Button>
+                            </CardContent>
+                        </Card>
 
-                {sessions.length > 0 && (
-                    <div data-testid="transcript-sessions">
-                        <h2 className="text-sm font-semibold text-slate-600 mb-2">Transcript sessions</h2>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setParams({})}
-                                className={`text-xs rounded-full px-3 py-1.5 border ${!sessionFilter ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                            >
-                                All ({sessions.reduce((n, s) => n + (s.remaining || 0), 0)})
-                            </button>
-                            {sessions.map((s) => (
-                                <button
-                                    key={s.id}
-                                    type="button"
-                                    onClick={() => setParams({ session: s.id })}
-                                    className={`text-left text-xs rounded-full px-3 py-1.5 border max-w-[240px] truncate ${
-                                        sessionFilter === s.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                    }`}
-                                    title={s.preview}
-                                >
-                                    {s.top_title || 'Session'} · {s.remaining}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
-                        <h2 className="text-lg font-semibold flex-1">Knock out drafts ({remaining.length})</h2>
-                        <div className="relative sm:w-64">
-                            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <Input
-                                value={query}
-                                onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
-                                placeholder="Search drafts…"
-                                className="rounded-full pl-8 h-9 text-sm"
-                                data-testid="transcript-search"
-                            />
-                        </div>
-                    </div>
-
-                    {remaining.length === 0 ? (
-                        <div className="text-sm text-muted-foreground border rounded-xl p-6 text-center">
-                            {drafts.length === 0 ? 'No drafts yet — import a transcript above.' : 'No drafts match that search.'}
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {current && (
-                                <DraftCard
-                                    key={current.id}
-                                    draft={current}
-                                    users={users}
-                                    index={cursor}
-                                    total={remaining.length}
-                                    onPublish={publishDraft}
-                                    onDelete={deleteDraft}
-                                    onSkip={skipCurrent}
-                                />
-                            )}
-                            {remaining.length > 1 && (
-                                <div className="rounded-2xl border border-slate-200 p-3 space-y-1.5" data-testid="transcript-up-next">
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-1">Up next</p>
-                                    {remaining.filter((_, idx) => idx !== cursor).slice(0, 6).map((d) => (
+                        {sessions.length > 0 && (
+                            <div data-testid="transcript-sessions">
+                                <h2 className="text-sm font-semibold text-slate-600 mb-2">Continue reviewing</h2>
+                                <p className="text-xs text-slate-500 mb-2">Open a session to review and execute drafted tasks — separate from this new transcript window.</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {sessions.map((s) => (
                                         <button
-                                            key={d.id}
+                                            key={s.id}
                                             type="button"
-                                            onClick={() => setCursor(remaining.findIndex((x) => x.id === d.id))}
-                                            className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 text-sm"
+                                            onClick={() => setParams({ session: s.id })}
+                                            className="text-left text-xs rounded-full px-3 py-1.5 border max-w-[240px] truncate bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                            title={s.preview}
                                         >
-                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                                                d.priority === 'Urgent' || d.priority === 'High'
-                                                    ? 'bg-rose-50 text-rose-700'
-                                                    : 'bg-slate-100 text-slate-600'
-                                            }`}>{d.priority || 'Medium'}</span>
-                                            <span className="truncate flex-1">{d.title}</span>
-                                            <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{d.assigned_to_name || d.assignee_hint || ''}</span>
-                                            <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                                            {s.top_title || 'Session'} · {s.remaining}
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {reviewing && (
+                    <div data-testid="transcript-review-panel" className="space-y-6">
+                        {sessions.length > 0 && (
+                            <div data-testid="transcript-sessions">
+                                <h2 className="text-sm font-semibold text-slate-600 mb-2">Transcript sessions</h2>
+                                <div className="flex flex-wrap gap-2">
+                                    {sessions.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => { setCursor(0); setParams({ session: s.id }); }}
+                                            className={`text-left text-xs rounded-full px-3 py-1.5 border max-w-[240px] truncate ${
+                                                sessionFilter === s.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                            }`}
+                                            title={s.preview}
+                                        >
+                                            {s.top_title || 'Session'} · {s.remaining}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                                <h2 className="text-lg font-semibold flex-1">Review & execute ({remaining.length})</h2>
+                                <div className="relative sm:w-64">
+                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <Input
+                                        value={query}
+                                        onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
+                                        placeholder="Search drafts…"
+                                        className="rounded-full pl-8 h-9 text-sm"
+                                        data-testid="transcript-search"
+                                    />
+                                </div>
+                            </div>
+
+                            {remaining.length === 0 ? (
+                                <div className="text-sm text-muted-foreground border rounded-xl p-6 text-center space-y-3">
+                                    <p>{drafts.length === 0 ? 'All drafts in this session are done.' : 'No drafts match that search.'}</p>
+                                    <Button variant="outline" onClick={openNewTranscript} className="rounded-full">
+                                        <Plus className="w-4 h-4 mr-1" /> New transcript
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {current && (
+                                        <DraftCard
+                                            key={current.id}
+                                            draft={current}
+                                            users={users}
+                                            index={cursor}
+                                            total={remaining.length}
+                                            onPublish={publishDraft}
+                                            onDelete={deleteDraft}
+                                            onSkip={skipCurrent}
+                                        />
+                                    )}
+                                    {remaining.length > 1 && (
+                                        <div className="rounded-2xl border border-slate-200 p-3 space-y-1.5" data-testid="transcript-up-next">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-1">Up next</p>
+                                            {remaining.filter((_, idx) => idx !== cursor).slice(0, 6).map((d) => (
+                                                <button
+                                                    key={d.id}
+                                                    type="button"
+                                                    onClick={() => setCursor(remaining.findIndex((x) => x.id === d.id))}
+                                                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 text-sm"
+                                                >
+                                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                                        d.priority === 'Urgent' || d.priority === 'High'
+                                                            ? 'bg-rose-50 text-rose-700'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}>{d.priority || 'Medium'}</span>
+                                                    <span className="truncate flex-1">{d.title}</span>
+                                                    <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{d.assigned_to_name || d.assignee_hint || ''}</span>
+                                                    <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </main>
         </div>
     );
 };
+
+const guessLabel = (source) => (source === 'spoken' ? 'from transcript' : 'best guess');
 
 const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) => {
     const bestId = draft.assigned_to || '';
@@ -284,6 +330,14 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
         try { return format(parseISO(iso), "EEE MMM d 'at' h:mm a"); } catch { return iso; }
     };
 
+    const ownerName = draft.assigned_to_name || draft.assignee_hint;
+    const ownerNote = ownerName
+        ? `${guessLabel(draft.owner_source)}: ${ownerName}`
+        : 'best guess needed';
+    const dueNote = draft.due_date_hint
+        ? `said: ${draft.due_date_hint}`
+        : (draft.due_date ? `${guessLabel(draft.due_source)}: ${fmtDue(draft.due_date)}` : 'best guess needed');
+
     return (
         <div className="border-2 border-indigo-100 rounded-2xl p-4 shadow-sm bg-white" data-testid="transcript-knockout-card">
             <div className="flex items-center justify-between gap-2 mb-3">
@@ -310,8 +364,7 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
                 </div>
                 <div className="space-y-2">
                     <label className="text-xs font-medium text-gray-600">
-                        Assignee {draft.assigned_to_name && <span className="text-teal-700">(best match: {draft.assigned_to_name})</span>}
-                        {!draft.assigned_to_name && draft.assignee_hint && <span className="text-gray-400">(hint: {draft.assignee_hint})</span>}
+                        Owner <span className="text-teal-700">({ownerNote})</span>
                     </label>
                     <Input
                         value={peopleQ}
@@ -324,7 +377,7 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
                         {filteredUsers.map((u) => (<option key={u.id} value={u.id}>{u.name} &lt;{u.email}&gt;</option>))}
                     </select>
                     <label className="text-xs font-medium text-gray-600">
-                        Due date & time {draft.due_date_hint && <span className="text-gray-400">(said: {draft.due_date_hint})</span>}
+                        Expected deadline <span className="text-gray-400">({dueNote})</span>
                     </label>
                     <DateTimePicker value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} testId="transcript-due" />
                     <label className="text-xs font-medium text-gray-600">Priority</label>
