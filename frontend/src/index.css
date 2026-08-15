@@ -216,6 +216,41 @@ h1, h2, h3, h4, h5, h6 {
     animation: ai-dock-pulse-kf 0.85s ease-out;
 }
 
+/* Command bar chrome: one shadow-as-border so rounded edges stay smooth
+   (a 1px CSS border + ring stacks and looks clipped/jagged on the curves). */
+.ai-composer-shell {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background: #fff;
+    box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.08),
+        0 10px 28px -12px rgba(15, 23, 42, 0.22);
+    transition: box-shadow 150ms ease;
+}
+.ai-composer-shell--inset {
+    background: rgba(248, 250, 252, 0.9);
+}
+.ai-composer-shell:focus-within {
+    box-shadow:
+        0 0 0 1px rgba(13, 148, 136, 0.42),
+        0 12px 32px -12px rgba(15, 23, 42, 0.24);
+}
+
+[data-theme="dark"] .ai-composer-shell {
+    background: #1a1a1a;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 10px 28px -12px rgba(0, 0, 0, 0.55);
+}
+[data-theme="dark"] .ai-composer-shell--inset {
+    background: #141414;
+}
+[data-theme="dark"] .ai-composer-shell:focus-within {
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, 0.45),
+        0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
 body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }

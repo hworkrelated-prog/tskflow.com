@@ -10,6 +10,36 @@ from datetime import datetime, timedelta
 from typing import Callable, List, Optional
 
 MAX_TRANSCRIPT_TASKS = 10
+LEGACY_SESSION_ID = "legacy"
+ALL_SESSIONS_ID = "all"
+
+
+def transcript_session_mongo_filter(session_id: Optional[str]) -> dict:
+    """Match drafts for a session chip, including pre-session (legacy) rows."""
+    sid = (session_id or "").strip()
+    if not sid or sid == ALL_SESSIONS_ID:
+        return {}
+    if sid == LEGACY_SESSION_ID:
+        return {
+            "$or": [
+                {"session_id": {"$exists": False}},
+                {"session_id": None},
+                {"session_id": ""},
+                {"session_id": LEGACY_SESSION_ID},
+            ]
+        }
+    return {"session_id": sid}
+
+
+def draft_matches_session(draft: dict, session_id: Optional[str]) -> bool:
+    """Client-equivalent of transcript_session_mongo_filter for a single draft."""
+    sid = (session_id or "").strip()
+    if not sid or sid == ALL_SESSIONS_ID:
+        return True
+    raw = draft.get("session_id") if isinstance(draft, dict) else None
+    if sid == LEGACY_SESSION_ID:
+        return not raw
+    return raw == sid
 
 ACTION_CUE = re.compile(
     r"\b("

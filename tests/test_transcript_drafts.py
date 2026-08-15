@@ -7,10 +7,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from transcript_helpers import (  # noqa: E402
     apply_owner_and_due_guesses,
+    draft_matches_session,
     fallback_extract_action_items,
     filter_clear_identified_tasks,
     guess_owner_hint,
     next_business_day_17,
+    transcript_session_mongo_filter,
 )
 
 NOW = datetime(2026, 8, 14, 10, 0, 0)  # Friday
@@ -158,3 +160,21 @@ def test_apply_guesses_defaults_deadline_when_none_spoken():
 def test_next_business_day_skips_weekend():
     saturday = datetime(2026, 8, 15, 9, 0, 0)
     assert next_business_day_17(saturday).startswith("2026-08-17T17:00")
+
+
+def test_legacy_session_filter_matches_missing_session_id():
+    q = transcript_session_mongo_filter("legacy")
+    assert "$or" in q
+    assert {"session_id": {"$exists": False}} in q["$or"]
+    assert {"session_id": None} in q["$or"]
+    assert draft_matches_session({"title": "King Dynasty demo"}, "legacy")
+    assert draft_matches_session({"session_id": None, "title": "x"}, "legacy")
+    assert not draft_matches_session({"session_id": "abc", "title": "x"}, "legacy")
+
+
+def test_named_session_filter_is_exact():
+    assert transcript_session_mongo_filter("sess-1") == {"session_id": "sess-1"}
+    assert draft_matches_session({"session_id": "sess-1"}, "sess-1")
+    assert not draft_matches_session({"session_id": "sess-2"}, "sess-1")
+    assert transcript_session_mongo_filter("all") == {}
+    assert transcript_session_mongo_filter("") == {}
