@@ -25,9 +25,11 @@ const TranscriptImportPage = () => {
     const [query, setQuery] = useState('');
     const [cursor, setCursor] = useState(0);
 
-    const fetchDrafts = async (sid = sessionFilter) => {
+    const fetchDrafts = async () => {
         try {
-            const res = await axios.get(`${API}/task-drafts`, { params: sid ? { session_id: sid } : {} });
+            // Always load every pending draft so a missing/legacy session_id
+            // cannot empty the review list while the dashboard still shows them.
+            const res = await axios.get(`${API}/task-drafts`);
             setDrafts(res.data.drafts || []);
             setSessions(res.data.sessions || []);
         } catch (_) { /* silent */ }
@@ -75,14 +77,25 @@ const TranscriptImportPage = () => {
         } finally { setLoading(false); }
     };
 
+    const sessionDrafts = useMemo(() => {
+        if (!sessionFilter || sessionFilter === 'all') return drafts;
+        const match = drafts.filter((d) => {
+            const sid = d.session_id || 'legacy';
+            return sid === sessionFilter;
+        });
+        // If the chip/URL does not match stored ids, still show the drafts
+        // the dashboard counted — do not render an empty review by mistake.
+        return match.length > 0 ? match : drafts;
+    }, [drafts, sessionFilter]);
+
     const remaining = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return drafts.filter((d) => {
+        return sessionDrafts.filter((d) => {
             if (!q) return true;
             const hay = `${d.title || ''} ${d.description || ''} ${d.assignee_hint || ''} ${d.assigned_to_name || ''} ${d.priority || ''}`.toLowerCase();
             return hay.includes(q);
         });
-    }, [drafts, query]);
+    }, [sessionDrafts, query]);
 
     useEffect(() => {
         if (cursor >= remaining.length) setCursor(0);
@@ -193,6 +206,15 @@ const TranscriptImportPage = () => {
                             <div data-testid="transcript-sessions">
                                 <h2 className="text-sm font-semibold text-slate-600 mb-2">Transcript sessions</h2>
                                 <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setCursor(0); setParams({ session: 'all' }); }}
+                                        className={`text-xs rounded-full px-3 py-1.5 border ${
+                                            sessionFilter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        All ({sessions.reduce((n, s) => n + (s.remaining || 0), 0)})
+                                    </button>
                                     {sessions.map((s) => (
                                         <button
                                             key={s.id}
@@ -227,7 +249,7 @@ const TranscriptImportPage = () => {
 
                             {remaining.length === 0 ? (
                                 <div className="text-sm text-muted-foreground border rounded-xl p-6 text-center space-y-3">
-                                    <p>{drafts.length === 0 ? 'All drafts in this session are done.' : 'No drafts match that search.'}</p>
+                                    <p>{sessionDrafts.length === 0 ? 'All drafts in this session are done.' : 'No drafts match that search.'}</p>
                                     <Button variant="outline" onClick={openNewTranscript} className="rounded-full">
                                         <Plus className="w-4 h-4 mr-1" /> New transcript
                                     </Button>

@@ -35,6 +35,7 @@ from transcript_helpers import (
     fallback_extract_action_items,
     filter_clear_identified_tasks,
     next_business_day_17,
+    transcript_session_mongo_filter,
 )
 from sheets_helpers import (
     SHEETS_SCOPES,
@@ -7623,8 +7624,7 @@ async def create_drafts_from_transcript(
 @api_router.get("/task-drafts")
 async def list_task_drafts(current_user: dict = Depends(get_current_user), session_id: Optional[str] = None):
     q = {"created_by": current_user["id"], "status": "Draft"}
-    if session_id:
-        q["session_id"] = session_id
+    q.update(transcript_session_mongo_filter(session_id))
     docs = await db.transcript_drafts.find(q, {"_id": 0}).to_list(200)
     pri_rank = {"Urgent": 4, "High": 3, "Medium": 2, "Low": 1}
 
