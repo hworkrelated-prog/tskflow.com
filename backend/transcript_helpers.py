@@ -107,6 +107,22 @@ GENERIC_TITLES = {
     "discussion", "update", "notes", "agenda", "introductions", "parking lot",
 }
 
+SURFACE_PREFIX = re.compile(
+    r"^(commitment made to|a commitment (?:was )?made to|we (?:agreed|committed|decided) to|"
+    r"agreed to|decision to|it was (?:agreed|decided)(?: that)?(?: we)?(?: will)?)\s+",
+    re.I,
+)
+
+SURFACE_TOPIC = re.compile(
+    r"^(commitment made|we (?:discussed|talked|covered)|discussed|talked about|parking lot)\b",
+    re.I,
+)
+
+WHO_WHEN_Q = re.compile(
+    r"(who should this be assigned|who is (?:the )?owner|when is this due|what(?:'s| is) the deadline)",
+    re.I,
+)
+
 
 def next_business_day_17(now: datetime) -> str:
     """Default expected deadline when the transcript has no date cue."""
@@ -146,17 +162,21 @@ def build_transcript_extract_prompt(text: str, roster: List[dict], importer: dic
         f"Return at most {MAX_TRANSCRIPT_TASKS} tasks. Prefer 1–6. Empty tasks[] is allowed if nothing is a real action.\n"
         "For EVERY task you do return, always make a best guess for owner AND expected deadline "
         "from the transcript (never leave them blank):\n"
+        "- title: 6–12 words, verb-led and specific (Send, Schedule, Draft, Reduce…). "
+        "Never copy a transcript sentence. Never start with “Commitment made”, “Discussed”, or “Talked about”. "
+        "Do not truncate mid-phrase (no ending on “like”).\n"
+        "- description: 2–4 sentences that are NOT the title. Say what done looks like and any constraint from the meeting.\n"
         "- assignee_hint: the person who volunteered, was asked, or is the logical owner. "
         "Match a KNOWN TEAMMATE name when possible. If the speaker said I/I'll, use that speaker "
-        "if labeled, otherwise the IMPORTER. If still unclear, use the IMPORTER.\n"
+        "if labeled, otherwise the IMPORTER. If still unclear, use the IMPORTER. Never leave this null.\n"
         "- due_date_hint: the deadline as spoken (or null).\n"
         "- due_date: ISO YYYY-MM-DDTHH:MM in America/Los_Angeles. Convert relative dates using TODAY. "
-        "If a date is spoken without a time, use 17:00. If no deadline is spoken, guess the next business day at 17:00.\n"
+        "If a date is spoken without a time, use 17:00. If no deadline is spoken, guess the next business day at 17:00. Never leave this null.\n"
         "- owner_source: \"spoken\" if the owner was named/volunteered, else \"guessed\".\n"
         "- due_source: \"spoken\" if a date/time was stated, else \"guessed\".\n"
         "- is_clear_action: true only if this is a real commitment/ask (required).\n"
-        "Other fields: title (short, verb-led), description (one paragraph), "
-        "priority (Urgent/High/Medium/Low), importance (1-10), ambiguities (clarifying questions, may be empty).\n"
+        "- ambiguities: only material unknowns AFTER those guesses. Do not ask who/when if you already guessed.\n"
+        "Other fields: priority (Urgent/High/Medium/Low), importance (1-10).\n"
         "Reply ONLY with {\"tasks\": [ ... ]}. No prose.\n\n"
         f"TODAY (America/Los_Angeles): {today}\n"
         f"{roster_block}\n\n"
@@ -174,6 +194,83 @@ def _looks_like_question_only(text: str) -> bool:
 def _title_is_generic(title: str) -> bool:
     t = re.sub(r"[^a-z0-9 ]+", "", (title or "").lower()).strip()
     return (not t) or t in GENERIC_TITLES or len(t) < 6
+
+
+def polish_title(title: str, description: str = "") -> str:
+    """Turn a raw transcript fragment into a short verb-led task title."""
+    t = re.sub(r"\s+", " ", (title or "").strip()).rstrip(".,;: ")
+    t = SURFACE_PREFIX.sub("", t).strip()
+    t = re.sub(r"\s+like$", "", t, flags=re.I).strip()
+    desc = re.sub(r"\s+", " ", (description or "").strip())
+    desc_core = SURFACE_PREFIX.sub("", desc).strip()
+    # Truncated titles (“… distractions like”) — finish from the description.
+    if desc_core and (
+        t.lower().endswith(" like")
+        or len(t) < 28
+        or (t and desc_core.lower().startswith(t.lower()))
+    ):
+        clause = re.split(r"[.!?]", desc_core, 1)[0].strip()
+        clause = re.sub(r"\s+like$", "", clause, flags=re.I).strip()
+        if len(clause) > len(t):
+            t = clause
+    t = t.rstrip(".,;: ")
+    if t:
+        t = t[0].upper() + t[1:]
+    if len(t) > 72:
+        t = t[:72].rsplit(" ", 1)[0]
+    return t
+
+
+def polish_description(title: str, description: str = "", source_preview: str = "") -> str:
+    """Write a done-oriented description that is not just the title repeated."""
+    raw = re.sub(r"\s+", " ", (description or title or "").strip())
+    tit = polish_title(title, description)
+    body = SURFACE_PREFIX.sub("", raw).strip()
+    if body and body[0].islower():
+        body = body[0].upper() + body[1:]
+    if body and not body.endswith("."):
+        body += "."
+    if not body:
+        body = f"{tit}."
+    # If body is the title (or a slight extension), add an outcome line.
+    compact = re.sub(r"[^a-z0-9]+", "", body.lower())
+    tcompact = re.sub(r"[^a-z0-9]+", "", tit.lower())
+    if tcompact and (compact == tcompact or compact.startswith(tcompact)):
+        body = f"From the meeting: {body} Mark done when this is in place and the owner has confirmed."
+    elif "mark done" not in body.lower():
+        body = f"{body} Mark done when this is in place and the owner has confirmed."
+    if source_preview and len(body) < 80:
+        body = f"{body}"
+    return body[:2000]
+
+
+def strip_resolved_ambiguities(ambiguities, has_owner: bool, has_due: bool) -> list:
+    out = []
+    for a in ambiguities or []:
+        if not a:
+            continue
+        if has_owner and re.search(r"\bwho\b", a, re.I) and re.search(r"assign|owner", a, re.I):
+            continue
+        if has_due and WHO_WHEN_Q.search(a):
+            continue
+        if has_due and re.search(r"\bwhen\b", a, re.I) and re.search(r"due|deadline", a, re.I):
+            continue
+        out.append(a)
+    return out
+
+
+def polish_task_copy(task: dict) -> dict:
+    d = dict(task)
+    title = polish_title(d.get("title") or "", d.get("description") or "")
+    desc = polish_description(title, d.get("description") or "", d.get("source_preview") or "")
+    d["title"] = title
+    d["description"] = desc
+    d["ambiguities"] = strip_resolved_ambiguities(
+        d.get("ambiguities"),
+        has_owner=bool(d.get("assignee_hint") or d.get("assigned_to")),
+        has_due=bool(d.get("due_date") or d.get("due_date_hint")),
+    )
+    return d
 
 
 def is_clear_action_text(text: str) -> bool:
@@ -208,6 +305,8 @@ def filter_clear_identified_tasks(tasks: List[dict]) -> List[dict]:
         desc = (raw.get("description") or "").strip()
         blob = f"{title} {desc}".strip()
         if _title_is_generic(title):
+            continue
+        if SURFACE_TOPIC.search(title) and not NAME_WILL.search(blob) and not FIRST_PERSON.search(blob):
             continue
         flag = raw.get("is_clear_action")
         if flag is False:
@@ -319,8 +418,8 @@ def fallback_extract_action_items(
         body = (body or "").strip()
         if not is_clear_action_text(body):
             return
-        title = _clean_title(body)
-        if _title_is_generic(title):
+        title = polish_title(_clean_title(body), body)
+        if _title_is_generic(title) or SURFACE_TOPIC.search(title):
             return
         key = title.lower()
         if key in seen:
@@ -342,7 +441,7 @@ def fallback_extract_action_items(
         spoken_owner = bool(speaker) or bool(NAME_WILL.search(body)) or bool(_roster_name_hits(body, roster))
         drafts.append({
             "title": title[:200],
-            "description": body[:2000],
+            "description": polish_description(title, body)[:2000],
             "assignee_hint": hint,
             "due_date_hint": due_hint,
             "due_date": due_iso,
@@ -417,4 +516,22 @@ def apply_owner_and_due_guesses(
         d["due_source"] = "spoken" if d.get("due_date_hint") else "guessed"
     if not d.get("owner_source"):
         d["owner_source"] = "spoken"
-    return d
+    return polish_task_copy(d)
+
+
+def draft_needs_review_hydrate(draft: dict) -> bool:
+    """True when a stored draft would show empty owner/due or surface-level copy."""
+    title = (draft.get("title") or "").strip()
+    desc = (draft.get("description") or "").strip()
+    if not draft.get("assigned_to"):
+        return True
+    if not draft.get("due_date"):
+        return True
+    if SURFACE_PREFIX.search(title) or SURFACE_TOPIC.search(title):
+        return True
+    if title and desc and (title.lower() == desc.lower() or desc.lower().startswith(title.lower())):
+        return True
+    ambs = draft.get("ambiguities") or []
+    if any(WHO_WHEN_Q.search(a or "") for a in ambs):
+        return True
+    return False

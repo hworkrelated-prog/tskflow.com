@@ -302,13 +302,32 @@ const TranscriptImportPage = () => {
 
 const guessLabel = (source) => (source === 'spoken' ? 'from transcript' : 'best guess');
 
+const nextBusinessDay17 = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T17:00`;
+};
+
+const visibleAmbiguities = (draft) => {
+    const hasOwner = Boolean(draft.assigned_to || draft.assignee_hint);
+    const hasDue = Boolean(draft.due_date || draft.due_date_hint);
+    return (draft.ambiguities || []).filter((a) => {
+        const low = (a || '').toLowerCase();
+        if (hasOwner && /\bwho\b/.test(low) && /assign|owner/.test(low)) return false;
+        if (hasDue && /\bwhen\b/.test(low) && /due|deadline/.test(low)) return false;
+        return true;
+    });
+};
+
 const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) => {
     const bestId = draft.assigned_to || '';
     const [form, setForm] = useState({
         title: draft.title || '',
         description: draft.description || '',
         assigned_to: bestId,
-        due_date: draft.due_date || '',
+        due_date: draft.due_date || nextBusinessDay17(),
         priority: draft.priority || 'Medium',
         is_sales_task: false,
     });
@@ -319,12 +338,22 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
             title: draft.title || '',
             description: draft.description || '',
             assigned_to: draft.assigned_to || '',
-            due_date: draft.due_date || '',
+            due_date: draft.due_date || nextBusinessDay17(),
             priority: draft.priority || 'Medium',
             is_sales_task: false,
         });
         setPeopleQ('');
     }, [draft.id]);
+
+    useEffect(() => {
+        if (form.assigned_to || !(users || []).length) return;
+        const hint = (draft.assigned_to_name || draft.assignee_hint || '').toLowerCase();
+        const match = hint
+            ? users.find((u) => (u.name || '').toLowerCase() === hint || (u.name || '').toLowerCase().includes(hint) || (u.email || '').toLowerCase() === hint)
+            : null;
+        const pick = draft.assigned_to || match?.id;
+        if (pick) setForm((f) => (f.assigned_to ? f : { ...f, assigned_to: pick }));
+    }, [users, draft.id, draft.assigned_to, draft.assigned_to_name, draft.assignee_hint, form.assigned_to]);
 
     const filteredUsers = useMemo(() => {
         const q = peopleQ.trim().toLowerCase();
@@ -371,10 +400,10 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
                     <p className="text-[11px] text-slate-500">{fmtDue(draft.due_date)}</p>
                 )}
             </div>
-            {draft.ambiguities?.length > 0 && (
+            {visibleAmbiguities(draft).length > 0 && (
                 <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
                     <div className="flex items-center gap-1 font-semibold mb-1"><AlertCircle className="w-4 h-4" /> Needs clarification</div>
-                    <ul className="list-disc pl-5">{draft.ambiguities.map((a, i) => <li key={i}>{a}</li>)}</ul>
+                    <ul className="list-disc pl-5">{visibleAmbiguities(draft).map((a, i) => <li key={i}>{a}</li>)}</ul>
                 </div>
             )}
             <div className="grid md:grid-cols-2 gap-3">

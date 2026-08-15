@@ -32,6 +32,7 @@ from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
 from transcript_helpers import (
     apply_owner_and_due_guesses,
     build_transcript_extract_prompt,
+    draft_needs_review_hydrate,
     fallback_extract_action_items,
     filter_clear_identified_tasks,
     next_business_day_17,
@@ -7621,11 +7622,81 @@ async def create_drafts_from_transcript(
     return {"drafts": created, "session_id": session_id}
 
 
+async def _hydrate_transcript_draft(doc: dict, current_user: dict, roster: List[dict], now) -> dict:
+    """Backfill owner, deadline, and copy so review is never an empty form."""
+    if not draft_needs_review_hydrate(doc):
+        return doc
+    guessed = apply_owner_and_due_guesses(
+        doc,
+        transcript=doc.get("source_preview") or "",
+        roster=roster,
+        importer=current_user,
+        now=now,
+        parse_date=_fallback_parse_date_expression,
+    )
+    assigned_to = doc.get("assigned_to") or guessed.get("assigned_to")
+    assigned_to_name = doc.get("assigned_to_name") or guessed.get("assigned_to_name")
+    assigned_to_email = doc.get("assigned_to_email")
+    hint = guessed.get("assignee_hint")
+    if not assigned_to and hint:
+        try:
+            resolution = await _resolve_assignee_hints([str(hint)], current_user)
+            resolved = resolution.get("resolved") or []
+            if resolved and resolved[0].get("kind") == "user" and resolved[0].get("id"):
+                assigned_to = resolved[0]["id"]
+                assigned_to_name = resolved[0].get("name")
+                assigned_to_email = resolved[0].get("email")
+        except Exception as e:
+            logging.warning(f"Transcript draft hydrate resolve failed: {e}")
+    if not assigned_to:
+        assigned_to = current_user.get("id")
+        assigned_to_name = current_user.get("name")
+        assigned_to_email = current_user.get("email")
+    due_iso = guessed.get("due_date") or next_business_day_17(now)
+    patch = {
+        "title": guessed.get("title") or doc.get("title"),
+        "description": guessed.get("description") or doc.get("description"),
+        "assignee_hint": hint,
+        "due_date": due_iso,
+        "due_date_hint": guessed.get("due_date_hint") or doc.get("due_date_hint"),
+        "assigned_to": assigned_to,
+        "assigned_to_name": assigned_to_name,
+        "assigned_to_email": assigned_to_email,
+        "owner_source": guessed.get("owner_source") or "guessed",
+        "due_source": guessed.get("due_source") or "guessed",
+        "ambiguities": guessed.get("ambiguities") or [],
+    }
+    doc.update(patch)
+    try:
+        await db.transcript_drafts.update_one(
+            {"id": doc.get("id"), "created_by": current_user["id"]},
+            {"$set": patch},
+        )
+    except Exception as e:
+        logging.warning(f"Transcript draft hydrate persist failed: {e}")
+    return doc
+
+
 @api_router.get("/task-drafts")
 async def list_task_drafts(current_user: dict = Depends(get_current_user), session_id: Optional[str] = None):
     q = {"created_by": current_user["id"], "status": "Draft"}
     q.update(transcript_session_mongo_filter(session_id))
     docs = await db.transcript_drafts.find(q, {"_id": 0}).to_list(200)
+    now = get_pst_now()
+    email = current_user.get("email") or ""
+    domain = email.split("@")[-1] if "@" in email else ""
+    roster: List[dict] = []
+    if domain:
+        roster = await db.users.find(
+            {"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}},
+            {"_id": 0, "id": 1, "name": 1, "email": 1},
+        ).to_list(200)
+    if not roster:
+        roster = [{"id": current_user.get("id"), "name": current_user.get("name"), "email": email}]
+    hydrated = []
+    for d in docs:
+        hydrated.append(await _hydrate_transcript_draft(d, current_user, roster, now))
+    docs = hydrated
     pri_rank = {"Urgent": 4, "High": 3, "Medium": 2, "Low": 1}
 
     def sort_key(d):
