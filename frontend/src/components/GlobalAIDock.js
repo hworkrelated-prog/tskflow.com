@@ -15,6 +15,7 @@ const GlobalAIDock = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const [active, setActive] = useState(false);
+    const [focused, setFocused] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState([]);
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
@@ -77,6 +78,7 @@ const GlobalAIDock = () => {
 
     const clearFlow = useCallback(() => {
         setActive(false);
+        setFocused(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
@@ -85,14 +87,21 @@ const GlobalAIDock = () => {
 
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape' && active) {
+            if (e.key === 'Escape' && (active || focused)) {
                 e.preventDefault();
-                clearFlow();
+                if (active) {
+                    clearFlow();
+                } else {
+                    setFocused(false);
+                    if (document.activeElement instanceof HTMLElement) {
+                        document.activeElement.blur();
+                    }
+                }
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [active, clearFlow]);
+    }, [active, focused, clearFlow]);
 
     const openManual = (prefill) => {
         try {
@@ -106,29 +115,27 @@ const GlobalAIDock = () => {
 
     if (!visible) return null;
 
+    const open = active || focused || recordingPending;
+
     return (
         <div
-            className="fixed left-1/2 -translate-x-1/2 z-40 w-[min(96vw,40rem)] bottom-4"
+            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"
         >
-            <div className={`relative max-h-[min(78dvh,720px)] transition-[padding,border-radius,background-color,box-shadow] ${
-                active
-                    ? 'overflow-y-auto clean-scroll rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-md shadow-lg shadow-slate-900/10 p-2 sm:p-2.5'
-                    : 'overflow-visible rounded-none bg-transparent p-0'
-            }`}>
-                {active && (
-                    <button
-                        type="button"
-                        onClick={clearFlow}
-                        className="absolute top-2 right-2 z-10 h-7 w-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
-                        data-testid="ai-dock-exit"
-                        title="Clear (Esc)"
-                        aria-label="Clear"
-                    >
-                        <X className="w-3.5 h-3.5" />
-                    </button>
-                )}
+            <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
+                <button
+                    type="button"
+                    onClick={clearFlow}
+                    className={`ai-dock-exit absolute top-2 right-2 z-10 h-7 w-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center${active ? ' is-visible' : ''}`}
+                    data-testid="ai-dock-exit"
+                    title="Clear (Esc)"
+                    aria-label="Clear"
+                    tabIndex={active ? 0 : -1}
+                    aria-hidden={!active}
+                >
+                    <X className="w-3.5 h-3.5" />
+                </button>
 
                 {recordingPending && (
                     <p className="text-[11px] text-teal-800 bg-teal-50 border border-teal-100 rounded-xl px-2.5 py-1.5 mb-2" data-testid="ai-dock-recording-pending">
@@ -143,6 +150,7 @@ const GlobalAIDock = () => {
                     registerAttachHandler={(fn) => { attachHandlerRef.current = fn; }}
                     onSnapshot={(snap) => {
                         snapRef.current = snap;
+                        setFocused(!!snap?.focused);
                         if (snap?.preview || snap?.text?.trim() || snap?.answerMode || (snap?.attachments || []).length) {
                             setActive(true);
                         } else if (!recordingPending) {
@@ -152,6 +160,7 @@ const GlobalAIDock = () => {
                     onCreated={() => {
                         snapRef.current = null;
                         setActive(false);
+                        setFocused(false);
                         setPendingAttachments([]);
                         setRecordingPending(false);
                         window.dispatchEvent(new CustomEvent('tskflow:task-created'));

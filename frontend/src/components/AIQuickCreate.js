@@ -142,7 +142,7 @@ const AIQuickCreate = ({
     const navigate = useNavigate();
 
     const focusInput = useCallback(() => {
-        setTimeout(() => inputRef.current?.focus(), 30);
+        setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 30);
     }, []);
 
     // Grow like a chat composer: start compact, expand with content, then scroll.
@@ -998,8 +998,9 @@ const AIQuickCreate = ({
             preview: !!preview,
             answerMode: !!answerMode,
             attachments,
+            focused: composerFocused,
         });
-    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, onSnapshot]);
+    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, composerFocused, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -1063,6 +1064,7 @@ const AIQuickCreate = ({
         }
     };
 
+    const showCommandChips = embedded && !preview && !answerMode && !text.trim() && composerFocused;
     const personCount = editAssignees.reduce((n, a) => n + (a.member_count || a.members?.length || 1), 0);
 
     const priorityColor = {
@@ -1101,6 +1103,35 @@ const AIQuickCreate = ({
                                 </button>
                             </div>
                         )}
+                        {embedded && (
+                            <div
+                                className={`ai-command-chips-wrap${showCommandChips ? ' is-open' : ''}`}
+                                data-testid="ai-command-chips"
+                                aria-hidden={!showCommandChips}
+                            >
+                                <div className="ai-command-chips-inner">
+                                    <div className="flex flex-wrap gap-1 px-0.5">
+                                        {[
+                                            { label: 'Outstanding', cmd: "What's outstanding?" },
+                                            { label: 'Analytics', cmd: 'go to analytics' },
+                                            { label: 'Transcript', cmd: 'from transcript' },
+                                            { label: 'Team', cmd: 'go to team' },
+                                            { label: 'Settings', cmd: 'go to settings' },
+                                        ].map((c) => (
+                                            <button
+                                                key={c.label}
+                                                type="button"
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => runPreview(c.cmd)}
+                                                className="text-[11px] px-2 py-1 rounded-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                                            >
+                                                {c.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div
                             ref={composerRef}
                             className={`ai-composer-shell relative flex flex-col ${
@@ -1111,7 +1142,16 @@ const AIQuickCreate = ({
                             <Textarea
                                 ref={inputRef}
                                 value={text}
-                                onFocus={() => setComposerFocused(true)}
+                                onFocus={() => {
+                                    const x = window.scrollX;
+                                    const y = window.scrollY;
+                                    setComposerFocused(true);
+                                    requestAnimationFrame(() => {
+                                        if (window.scrollX !== x || window.scrollY !== y) {
+                                            window.scrollTo(x, y);
+                                        }
+                                    });
+                                }}
                                 onBlur={() => setTimeout(() => setComposerFocused(false), 180)}
                                 onChange={(e) => {
                                     const val = e.target.value;
@@ -1519,28 +1559,6 @@ const AIQuickCreate = ({
                         </Dialog>
                     </div>
                 </div>
-
-                {embedded && !preview && !answerMode && !text.trim() && composerFocused && (
-                    <div className="mt-1.5 flex flex-wrap gap-1 px-0.5" data-testid="ai-command-chips">
-                        {[
-                            { label: 'Outstanding', cmd: "What's outstanding?" },
-                            { label: 'Analytics', cmd: 'go to analytics' },
-                            { label: 'Transcript', cmd: 'from transcript' },
-                            { label: 'Team', cmd: 'go to team' },
-                            { label: 'Settings', cmd: 'go to settings' },
-                        ].map((c) => (
-                            <button
-                                key={c.label}
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => runPreview(c.cmd)}
-                                className="text-[11px] px-2 py-1 rounded-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                            >
-                                {c.label}
-                            </button>
-                        ))}
-                    </div>
-                )}
 
                 {answerMode && (
                     <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-4" data-testid="ai-qa-answer">
