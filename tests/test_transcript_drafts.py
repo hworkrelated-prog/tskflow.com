@@ -8,10 +8,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from transcript_helpers import (  # noqa: E402
     apply_owner_and_due_guesses,
     draft_matches_session,
+    draft_needs_review_hydrate,
     fallback_extract_action_items,
     filter_clear_identified_tasks,
     guess_owner_hint,
     next_business_day_17,
+    polish_description,
+    polish_title,
+    strip_resolved_ambiguities,
     transcript_session_mongo_filter,
 )
 
@@ -178,3 +182,62 @@ def test_named_session_filter_is_exact():
     assert not draft_matches_session({"session_id": "sess-2"}, "sess-1")
     assert transcript_session_mongo_filter("all") == {}
     assert transcript_session_mongo_filter("") == {}
+
+
+def test_polish_title_is_verb_led_not_transcript_echo():
+    title = polish_title(
+        "Commitment made to minimize external distractions like",
+        "Commitment made to minimize external distractions like Slack and manual note-taking during meetings to maintain focus.",
+    )
+    assert not title.lower().startswith("commitment made")
+    assert "slack" in title.lower() or "distract" in title.lower()
+    assert not title.lower().endswith("like")
+    desc = polish_description(title, "Commitment made to minimize external distractions like Slack and manual note-taking during meetings to maintain focus.")
+    assert desc.lower() != title.lower()
+    assert "mark done" in desc.lower()
+
+
+def test_surface_commitment_without_owner_is_dropped():
+    kept = filter_clear_identified_tasks([
+        {
+            "title": "Commitment made to minimize external distractions like",
+            "description": "Commitment made to minimize external distractions like Slack",
+        },
+        {
+            "title": "Send the Q4 proposal",
+            "description": "Alice will send the Q4 proposal by Friday",
+            "is_clear_action": True,
+        },
+    ])
+    assert len(kept) == 1
+    assert "proposal" in kept[0]["title"].lower()
+
+
+def test_hydrate_needed_for_empty_owner_due_and_who_when_questions():
+    assert draft_needs_review_hydrate({
+        "title": "Commitment made to minimize external distractions like",
+        "description": "Commitment made to minimize external distractions like Slack",
+        "ambiguities": ["Who should this be assigned to?", "When is this due?"],
+    })
+    filled = apply_owner_and_due_guesses(
+        {
+            "title": "Commitment made to minimize external distractions like",
+            "description": "Commitment made to minimize external distractions like Slack and manual note-taking during meetings to maintain focus.",
+            "ambiguities": ["Who should this be assigned to?", "When is this due?"],
+        },
+        transcript="",
+        roster=ROSTER,
+        importer=IMPORTER,
+        now=NOW,
+        parse_date=_parse_friday_or_week,
+    )
+    assert filled["assignee_hint"] == "Pat Owner"
+    assert filled["due_date"]
+    assert filled["ambiguities"] == []
+    assert not filled["title"].lower().startswith("commitment made")
+    leftover = strip_resolved_ambiguities(
+        ["Who should this be assigned to?", "When is this due?", "Which Slack channel?"],
+        has_owner=True,
+        has_due=True,
+    )
+    assert leftover == ["Which Slack channel?"]
