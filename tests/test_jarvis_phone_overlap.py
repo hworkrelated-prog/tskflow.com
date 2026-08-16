@@ -12,15 +12,17 @@ def test_prompt_and_jarvis_share_a_bottom_stage():
     assert 'data-testid="ai-bottom-stage"' in APP
     assert "<VoiceMode dockIntegrated />" in APP
     assert "<GlobalAIDock />" in APP
-    # Jarvis is first in the DOM so column-reverse puts the prompt on the bottom.
+    # Jarvis is first in the DOM so a normal column puts it above the prompt.
     assert APP.index("<VoiceMode dockIntegrated />") < APP.index("<GlobalAIDock />")
     assert ".ai-bottom-stage" in CSS
-    assert "flex-direction: column-reverse" in CSS
+    assert "flex-direction: column" in CSS
+    assert "column-reverse" not in CSS
     assert "pointer-events: none" in CSS
 
 
 def test_phone_stacks_jarvis_above_the_bar():
-    assert "column-reverse" in CSS
+    assert "flex-direction: column" in CSS
+    assert "align-self: stretch" in CSS
     assert "gap: 0.75rem" in CSS
     # No guessed offset that used to cover the Go button.
     assert "7.5rem" not in VOICE
