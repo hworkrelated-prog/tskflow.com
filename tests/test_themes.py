@@ -55,8 +55,8 @@ def test_sales_badge_is_readable_in_dark_mode():
     detail = _read("pages", "TaskDetail.js")
     assert ".sales-badge" in css
     dark = css.split("[data-theme=\"dark\"] .sales-badge")[1].split("}")[0]
-    assert "#6ee7b7" in dark
-    assert "#12332f" in dark
+    assert "#f0fdfa" in dark
+    assert "#0f766e" in dark
     assert "text-emerald-800" in css
     assert 'className="sales-badge"' in card
     assert "sales-badge" in group

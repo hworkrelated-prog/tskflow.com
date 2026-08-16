@@ -339,8 +339,8 @@
     padding: 0.125rem 0.375rem;
 }
 [data-theme="dark"] .sales-badge {
-    background: #12332f !important;
-    color: #6ee7b7 !important;
+    background: #0f766e !important;
+    color: #f0fdfa !important;
     border-color: #2dd4bf !important;
 }
 
