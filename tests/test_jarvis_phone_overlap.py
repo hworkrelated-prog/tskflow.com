@@ -14,37 +14,36 @@ def _eval_anchor(width, height, left, top, right, bottom):
     size = int(re.search(r"export const JARVIS_SIZE = (\d+)", ANCHOR).group(1))
     gap = int(re.search(r"export const JARVIS_GAP = (\d+)", ANCHOR).group(1))
     from_right = max(0, width - right)
-    from_bottom = max(0, height - bottom)
     beside = from_right >= size + gap + 8
     if beside:
-        return "beside", max(8, from_right - size - gap), max(8, from_bottom)
-    return "above", max(8, from_right), max(8, height - top + gap)
+        return "beside", right + gap, max(8, bottom - size)
+    return "above", max(8, right - size), max(8, top - gap - size)
 
 
 def test_phone_parks_jarvis_above_the_bar():
     # 390×844 phone, 96vw bar centered (~8px side gutters), ~120px tall bar.
-    placement, right, bottom = _eval_anchor(390, 844, 8, 708, 382, 828)
+    placement, left, top = _eval_anchor(390, 844, 8, 708, 382, 828)
     assert placement == "above"
-    assert right == 8
-    assert bottom >= 844 - 708 + 10
-    # Orb sits above the bar, not on the Go button.
-    assert bottom > 844 - 708
+    assert left == 382 - 44
+    # Orb sits fully above the bar with a gap — not on the Go button.
+    assert top + 44 <= 708
+    assert 708 - (top + 44) >= 10
 
 
 def test_wide_desktop_sits_jarvis_beside_the_bar():
     # 1280×800, 40rem bar centered, plenty of side room.
-    placement, right, bottom = _eval_anchor(1280, 800, 320, 680, 960, 784)
+    placement, left, top = _eval_anchor(1280, 800, 320, 680, 960, 784)
     assert placement == "beside"
-    assert right > 8
-    assert bottom == 16
+    assert left == 960 + 16
+    assert top == 784 - 44
 
 
 def test_dock_publishes_measured_anchor():
     assert "jarvisAnchorFromDock" in DOCK
     assert "ResizeObserver" in DOCK
     assert "dockRef" in DOCK
-    assert "--ai-jarvis-right" in ANCHOR
-    assert "--ai-jarvis-bottom" in ANCHOR
+    assert "--ai-jarvis-left" in ANCHOR
+    assert "--ai-jarvis-top" in ANCHOR
 
 
 def test_voice_widget_uses_anchor_instead_of_guessed_offset():
@@ -53,3 +52,4 @@ def test_voice_widget_uses_anchor_instead_of_guessed_offset():
     assert "ai-jarvis-orb" in VOICE
     assert ".ai-jarvis-anchor" in CSS
     assert "html.ai-jarvis-above" in CSS
+    assert "html.ai-jarvis-beside" in CSS

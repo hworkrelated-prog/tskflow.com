@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { X } from 'lucide-react';
@@ -36,7 +36,7 @@ const GlobalAIDock = () => {
         return () => document.body.classList.remove('has-ai-dock');
     }, [visible]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!visible) {
             clearJarvisAnchor(document.documentElement);
             return undefined;
@@ -47,8 +47,8 @@ const GlobalAIDock = () => {
             applyJarvisAnchor(
                 document.documentElement,
                 jarvisAnchorFromDock(el.getBoundingClientRect(), {
-                    width: window.innerWidth,
-                    height: window.innerHeight,
+                    width: document.documentElement.clientWidth,
+                    height: document.documentElement.clientHeight,
                 }),
             );
         };
