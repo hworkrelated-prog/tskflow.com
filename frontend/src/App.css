@@ -91,89 +91,49 @@
     max-width: 320px;
 }
 
-/* Dark Theme */
-[data-theme="dark"] {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 173 50% 42%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 70%;
-    --accent: 173 30% 18%;
-    --accent-foreground: 168 40% 90%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 20%;
-    --input: 0 0% 15%;
-    --ring: 173 50% 42%;
-}
-
+/* Dark Theme — surfaces follow tokens; do not force font-weight colors
+   (that painted light text onto leftover light cards). */
 [data-theme="dark"] body,
 [data-theme="dark"] .min-h-screen {
-    background: #111111 !important;
-    color: #f0f0f0 !important;
+    background: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] .glass-header {
-    background: rgba(17, 17, 17, 0.95) !important;
-    border-color: #2a2a2a !important;
+    background: hsl(var(--background) / 0.92) !important;
+    border-color: hsl(var(--border)) !important;
 }
 
 [data-theme="dark"] .bg-gradient-to-br {
-    background: #111111 !important;
+    background: hsl(var(--background)) !important;
 }
 
-/* Cards */
+[data-theme="dark"] .min-h-screen.bg-white,
+[data-theme="dark"] .min-h-screen.bg-gray-50,
+[data-theme="dark"] .min-h-screen.bg-slate-50,
+[data-theme="dark"] .min-h-screen.bg-slate-100 {
+    background: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+}
+
 [data-theme="dark"] [class*="Card"],
 [data-theme="dark"] .rounded-2xl.border-2,
 [data-theme="dark"] .border-2.shadow-soft {
-    background: #1a1a1a !important;
-    border-color: #2a2a2a !important;
+    background: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--card-foreground));
 }
 
-/* Text */
 [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
 [data-theme="dark"] .text-foreground,
-[data-theme="dark"] .font-semibold,
-[data-theme="dark"] .font-bold,
-[data-theme="dark"] .font-medium,
 [data-theme="dark"] [class*="CardTitle"] {
-    color: #f0f0f0 !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] .text-muted-foreground,
 [data-theme="dark"] [class*="CardDescription"],
 [data-theme="dark"] .text-gray-600 {
-    color: #a0a0a0 !important;
-}
-
-/* Empty state text */
-[data-theme="dark"] .text-center.text-muted-foreground {
-    color: #888888 !important;
-}
-
-/* Filter pills */
-[data-theme="dark"] .bg-gray-100 {
-    background: #1a1a1a !important;
-}
-
-[data-theme="dark"] button.bg-white,
-[data-theme="dark"] .bg-white.border {
-    background: #252525 !important;
-    border-color: #3a3a3a !important;
-    color: #d0d0d0 !important;
-}
-
-[data-theme="dark"] button.bg-white:hover,
-[data-theme="dark"] .bg-white.border:hover {
-    background: #303030 !important;
-    border-color: #2dd4bf !important;
+    color: hsl(var(--muted-foreground)) !important;
 }
 
 [data-theme="dark"] .bg-teal-600,
@@ -183,123 +143,124 @@
     color: #ffffff !important;
 }
 
-/* Buttons */
 [data-theme="dark"] button[class*="outline"] {
-    border-color: #3a3a3a !important;
-    color: #d0d0d0 !important;
-    background: transparent !important;
+    border-color: hsl(222 10% 38%) !important;
+    color: hsl(var(--foreground)) !important;
+    background: hsl(var(--input)) !important;
 }
 
 [data-theme="dark"] button[class*="outline"]:hover {
-    background: #252525 !important;
-    border-color: #2dd4bf !important;
-    color: #ffffff !important;
+    background: hsl(var(--muted)) !important;
+    border-color: hsl(var(--ring)) !important;
 }
 
 [data-theme="dark"] button[class*="ghost"] {
-    color: #d0d0d0 !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] button[class*="ghost"]:hover {
-    background: #252525 !important;
-    color: #ffffff !important;
+    background: hsl(var(--muted)) !important;
 }
 
-/* Inputs */
 [data-theme="dark"] input,
 [data-theme="dark"] textarea,
 [data-theme="dark"] select,
 [data-theme="dark"] [class*="SelectTrigger"] {
-    background: #1a1a1a !important;
-    border-color: #3a3a3a !important;
-    color: #f0f0f0 !important;
+    background: hsl(var(--input)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
 }
 
-/* Task cards */
 [data-theme="dark"] .task-card {
-    background: #1a1a1a !important;
-    border-color: #2a2a2a !important;
+    background: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
 }
 
 [data-theme="dark"] .task-card:hover {
-    border-color: #2dd4bf !important;
+    border-color: hsl(var(--ring)) !important;
 }
 
-[data-theme="dark"] .task-card h3,
-[data-theme="dark"] .task-card .font-semibold {
-    color: #f0f0f0 !important;
-}
-
-[data-theme="dark"] .task-card .text-sm,
-[data-theme="dark"] .task-card .text-xs {
-    color: #a0a0a0 !important;
-}
-
-/* Dialogs */
-[data-theme="dark"] [class*="DialogContent"] {
-    background: #1a1a1a !important;
-    border-color: #2a2a2a !important;
+[data-theme="dark"] [class*="DialogContent"],
+[data-theme="dark"] [class*="DropdownMenuContent"],
+[data-theme="dark"] [class*="SelectContent"] {
+    background: hsl(var(--popover)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--popover-foreground)) !important;
 }
 
 [data-theme="dark"] [class*="DialogTitle"] {
-    color: #f0f0f0 !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] [class*="DialogDescription"] {
-    color: #a0a0a0 !important;
-}
-
-/* Dropdowns */
-[data-theme="dark"] [class*="DropdownMenuContent"],
-[data-theme="dark"] [class*="SelectContent"] {
-    background: #1a1a1a !important;
-    border-color: #2a2a2a !important;
+    color: hsl(var(--muted-foreground)) !important;
 }
 
 [data-theme="dark"] [class*="DropdownMenuItem"],
 [data-theme="dark"] [class*="SelectItem"] {
-    color: #d0d0d0 !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] [class*="DropdownMenuItem"]:hover,
 [data-theme="dark"] [class*="SelectItem"]:hover {
-    background: #252525 !important;
+    background: hsl(var(--muted)) !important;
 }
 
-/* Dark mode: ensure text on colored/light backgrounds stays readable */
+/* Hardcoded light surfaces used across settings / lists */
 [data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-white\/50,
+[data-theme="dark"] .bg-white\/70,
+[data-theme="dark"] .bg-white\/80,
+[data-theme="dark"] .bg-white\/90,
+[data-theme="dark"] .bg-white\/95,
 [data-theme="dark"] .bg-gray-50,
 [data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .bg-slate-50\/50,
+[data-theme="dark"] .bg-slate-50\/80,
 [data-theme="dark"] .bg-zinc-50,
 [data-theme="dark"] .bg-neutral-50 {
-    background: #1e1e1e !important;
-    color: #e6e6e6 !important;
+    background-color: hsl(var(--card)) !important;
+    color: hsl(var(--card-foreground)) !important;
 }
 
-[data-theme="dark"] .text-white {
-    /* leave true white text alone — it's usually on a bold color */
-    color: #ffffff !important;
+[data-theme="dark"] button.bg-white,
+[data-theme="dark"] .bg-white.border {
+    background: hsl(var(--secondary)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--foreground)) !important;
 }
 
-/* Force dark text on light utility bg helpers to render readable */
+[data-theme="dark"] button.bg-white:hover,
+[data-theme="dark"] .bg-white.border:hover {
+    background: hsl(var(--muted)) !important;
+    border-color: hsl(var(--ring)) !important;
+}
+
+/* Toggle knobs stay white so they remain visible on the track */
+[data-theme="dark"] .theme-toggle-knob,
+[data-theme="dark"] span.w-5.h-5.bg-white.rounded-full {
+    background: #ffffff !important;
+    color: transparent !important;
+}
+
 [data-theme="dark"] .text-gray-900,
 [data-theme="dark"] .text-gray-800,
 [data-theme="dark"] .text-slate-900,
 [data-theme="dark"] .text-slate-800,
 [data-theme="dark"] .text-black {
-    color: #f0f0f0 !important;
+    color: hsl(var(--foreground)) !important;
 }
 
 [data-theme="dark"] .text-gray-700,
 [data-theme="dark"] .text-slate-700 {
-    color: #d0d0d0 !important;
+    color: hsl(210 16% 84%) !important;
 }
 
 [data-theme="dark"] .text-gray-500,
 [data-theme="dark"] .text-slate-500,
 [data-theme="dark"] .text-gray-400,
 [data-theme="dark"] .text-slate-400 {
-    color: #a0a0a0 !important;
+    color: hsl(var(--muted-foreground)) !important;
 }
 
 /* Toned bg pastels in dark mode become subtle dark tints (readable) */
@@ -322,12 +283,12 @@
 [data-theme="dark"] .bg-gray-200 { background: #262626 !important; color: #e0e0e0 !important; }
 
 /* Gradients — flatten to a single dark tone so text stays readable */
-[data-theme="dark"] .bg-gradient-to-r,
-[data-theme="dark"] .bg-gradient-to-l,
-[data-theme="dark"] .bg-gradient-to-tr,
-[data-theme="dark"] .bg-gradient-to-tl,
-[data-theme="dark"] .bg-gradient-to-b {
-    background: #1e1e1e !important;
+[data-theme="dark"] .bg-gradient-to-r:not(.bg-clip-text),
+[data-theme="dark"] .bg-gradient-to-l:not(.bg-clip-text),
+[data-theme="dark"] .bg-gradient-to-tr:not(.bg-clip-text),
+[data-theme="dark"] .bg-gradient-to-tl:not(.bg-clip-text),
+[data-theme="dark"] .bg-gradient-to-b:not(.bg-clip-text) {
+    background: hsl(var(--card)) !important;
 }
 
 /* Deep colored text on dark mode gets a lighter variant */

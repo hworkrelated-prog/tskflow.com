@@ -20,7 +20,7 @@ const UpdatesPage = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-white">
+        <div className="page-shell">
             <header className="border-b bg-white sticky top-0 z-10">
                 <div className="container mx-auto px-6 py-4">
                     <Button variant="ghost" onClick={() => navigate('/dashboard')} className="mb-2">

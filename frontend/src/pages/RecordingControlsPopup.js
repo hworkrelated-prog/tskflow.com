@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Square, Pause, Play, Mic, MicOff, Camera, CameraOff, RotateCcw } from 'lucide-react';
 
 /*
- * Loom-style recording controls popup — compact OS window that floats above
- * the recorded surface. Driven by window.opener.__tskRecorderApi.
+ * Fallback route if a controls window is opened. Styled as a full-bleed
+ * toolbar — not a pill sitting inside a tiny Chrome tab.
  */
 const RecordingControlsPopup = () => {
     const [seconds, setSeconds] = useState(0);
@@ -22,10 +22,10 @@ const RecordingControlsPopup = () => {
     };
 
     useEffect(() => {
-        document.title = 'Recording';
+        document.title = ' ';
         try {
-            document.documentElement.style.background = '#0f172a';
-            document.body.style.background = '#0f172a';
+            document.documentElement.style.background = '#111827';
+            document.body.style.background = '#111827';
             document.body.style.margin = '0';
             document.body.style.overflow = 'hidden';
         } catch { /* noop */ }
@@ -67,8 +67,8 @@ const RecordingControlsPopup = () => {
             onClick={onClick}
             title={title}
             data-testid={testId}
-            className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                active ? 'bg-white/20 text-white' : 'text-white/85 hover:bg-white/15'
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                active ? 'bg-white/20 text-white' : 'text-white/90 hover:bg-white/10'
             }`}
         >
             {children}
@@ -76,10 +76,10 @@ const RecordingControlsPopup = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white select-none flex items-center px-2" data-testid="recording-controls-popup">
-            <div className="w-full flex items-center gap-1.5 rounded-full bg-slate-950/60 border border-white/10 px-2 py-1.5 shadow-xl">
-                <div className="flex items-center gap-2 pr-2.5 border-r border-white/10 mr-0.5 min-w-[88px]">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
+        <div className="h-screen w-screen bg-gray-900 text-white select-none flex items-center px-2" data-testid="recording-controls-popup">
+            <div className="w-full flex items-center gap-1" data-testid="recording-controls-toolbar">
+                <div className="flex items-center gap-2 pr-2 min-w-[72px]">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${paused ? 'bg-amber-400' : 'bg-rose-500 animate-pulse'}`} />
                     <div className="leading-tight">
                         <div className="text-[9px] uppercase tracking-wider text-white/45">{paused ? 'Paused' : 'Rec'}</div>
                         <div className="font-mono font-semibold text-sm tabular-nums" data-testid="popup-timer">{fmt(seconds)}</div>
@@ -102,7 +102,7 @@ const RecordingControlsPopup = () => {
                 <button
                     type="button"
                     onClick={handleTask}
-                    className="ml-1 h-9 px-3 rounded-full bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold inline-flex items-center gap-1.5"
+                    className="ml-1 h-8 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold"
                     data-testid="popup-task-btn"
                     title="Create a task with this recording"
                 >
@@ -111,7 +111,7 @@ const RecordingControlsPopup = () => {
                 <button
                     type="button"
                     onClick={handleStop}
-                    className="ml-0.5 h-9 px-3.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white text-sm font-semibold inline-flex items-center gap-1.5"
+                    className="ml-0.5 h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold inline-flex items-center gap-1.5"
                     data-testid="popup-stop-btn"
                 >
                     <Square className="w-3.5 h-3.5" fill="currentColor" /> Stop

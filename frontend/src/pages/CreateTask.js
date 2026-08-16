@@ -133,7 +133,7 @@ const CreateTask = () => {
     };
 
     return (
-        <div data-testid="create-task-page" className="min-h-screen bg-white">
+        <div data-testid="create-task-page" className="page-shell">
             {/* Header */}
             <header className="border-b bg-white">
                 <div className="container mx-auto px-6 py-4">

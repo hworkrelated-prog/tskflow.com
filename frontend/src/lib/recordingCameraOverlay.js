@@ -120,12 +120,14 @@ export async function openRecordingCameraOverlay({ stream, trackSettings } = {})
     const { screen, reason } = matchScreenToCapture(trackSettings || {}, screens);
     const placedOnOtherDisplay = !!(screen && !screen.isCurrent);
 
-    // Prefer a real popup so we can place it on the captured monitor.
-    // Document PiP cannot be positioned and would steal the controls PiP.
-    const popup = openCameraPopup(screen);
-    if (popup) {
-        try { window.__tskCameraOverlayWin = popup.win; } catch { /* noop */ }
-        return { ...popup, placedOnOtherDisplay, reason };
+    // Only open a separate window when the camera must sit on another monitor.
+    // A same-display popup looks like a tiny Chrome tab; the in-tab bubble is enough.
+    if (placedOnOtherDisplay) {
+        const popup = openCameraPopup(screen);
+        if (popup) {
+            try { window.__tskCameraOverlayWin = popup.win; } catch { /* noop */ }
+            return { ...popup, placedOnOtherDisplay, reason };
+        }
     }
 
     const pip = await tryCameraPip();

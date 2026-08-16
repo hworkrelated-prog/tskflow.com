@@ -38,6 +38,16 @@ const TeamManagementPage = () => {
     const [selectedManager, setSelectedManager] = useState('');
     const [addingReport, setAddingReport] = useState(false);
     const [settingManager, setSettingManager] = useState(false);
+    const [orgRole, setOrgRole] = useState('ic');
+    const [orgRoles, setOrgRoles] = useState([
+        { id: 'ic', label: 'Individual Contributor' },
+        { id: 'manager', label: 'Manager' },
+        { id: 'sr_manager', label: 'Sr Manager / Regional Director' },
+        { id: 'director', label: 'Director' },
+        { id: 'avp', label: 'Area Vice President' },
+    ]);
+    const [teamCount, setTeamCount] = useState(0);
+    const [savingRole, setSavingRole] = useState(false);
     
     // Performance Analytics State
     const [performance, setPerformance] = useState(null);
@@ -53,7 +63,7 @@ const TeamManagementPage = () => {
             navigate('/settings');
             return;
         }
-        if (user.subscription_tier === 'teams') {
+        if (user.subscription_tier === 'teams' || user.subscription_tier === 'pro') {
             fetchAllData();
         } else {
             setLoading(false);
@@ -63,17 +73,28 @@ const TeamManagementPage = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [reports, potential, manager, perf] = await Promise.allSettled([
+            const [reports, potential, manager, perf, hierarchy] = await Promise.allSettled([
                 axios.get(`${API}/team/direct-reports`),
                 axios.get(`${API}/team/potential-reports`),
                 axios.get(`${API}/team/my-manager`),
-                axios.get(`${API}/team/performance`)
+                axios.get(`${API}/team/performance`),
+                axios.get(`${API}/team/hierarchy`),
             ]);
 
             if (reports.status === 'fulfilled') setDirectReports(reports.value.data);
             if (potential.status === 'fulfilled') setPotentialReports(potential.value.data);
             if (manager.status === 'fulfilled') setMyManager(manager.value.data.manager);
             if (perf.status === 'fulfilled') setPerformance(perf.value.data);
+            if (hierarchy.status === 'fulfilled') {
+                const h = hierarchy.value.data || {};
+                if (h.org_role) setOrgRole(h.org_role);
+                if (Array.isArray(h.roles) && h.roles.length) setOrgRoles(h.roles);
+                if (h.manager) setMyManager(h.manager);
+                if (typeof h.team_count === 'number') setTeamCount(h.team_count);
+                if (Array.isArray(h.direct_reports) && !directReports.length) {
+                    /* keep existing reports list if the dedicated endpoint already filled it */
+                }
+            }
 
             if (user?.is_team_owner) {
                 const [mem, bill] = await Promise.allSettled([
@@ -155,6 +176,21 @@ const TeamManagementPage = () => {
         }
     };
 
+    const handleSaveRole = async (role) => {
+        setOrgRole(role);
+        setSavingRole(true);
+        try {
+            const res = await axios.put(`${API}/team/hierarchy`, { org_role: role });
+            if (res.data?.org_role) setOrgRole(res.data.org_role);
+            if (typeof res.data?.team_count === 'number') setTeamCount(res.data.team_count);
+            toast.success('Role saved');
+        } catch (error) {
+            toast.error(getErrorMessage(error, 'Failed to save role'));
+        } finally {
+            setSavingRole(false);
+        }
+    };
+
     const handleSetManager = async () => {
         setSettingManager(true);
         
@@ -183,7 +219,7 @@ const TeamManagementPage = () => {
     }
 
     return (
-        <div data-testid="team-management-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
+        <div data-testid="team-management-page" className="page-shell">
             <header className="glass-header border-b">
                 <div className="container mx-auto px-6 py-4">
                     <Button
@@ -212,14 +248,20 @@ const TeamManagementPage = () => {
                         </h1>
                     </div>
 
-                    <Tabs defaultValue={isPro ? 'groups' : 'direct-reports'} className="w-full">
+                    <Tabs defaultValue={isPro ? 'my-hierarchy' : 'direct-reports'} className="w-full">
                         <TabsList className={`grid w-full mb-8 ${
                             isPro
-                                ? 'grid-cols-1 max-w-xs'
+                                ? 'grid-cols-2 max-w-md'
                                 : isOwner
                                     ? 'grid-cols-2 sm:grid-cols-5'
                                     : 'grid-cols-2 sm:grid-cols-4'
                         }`}>
+                            {(isTeams || isPro) && (
+                                <TabsTrigger value="my-hierarchy" className="rounded-full">
+                                    <UserCheck className="w-4 h-4 mr-2" />
+                                    My Hierarchy
+                                </TabsTrigger>
+                            )}
                             {isTeams && (
                                 <>
                                     <TabsTrigger value="direct-reports" className="rounded-full">
@@ -229,10 +271,6 @@ const TeamManagementPage = () => {
                                     <TabsTrigger value="performance" className="rounded-full">
                                         <CheckCircle2 className="w-4 h-4 mr-2" />
                                         Performance
-                                    </TabsTrigger>
-                                    <TabsTrigger value="my-hierarchy" className="rounded-full">
-                                        <UserCheck className="w-4 h-4 mr-2" />
-                                        My Hierarchy
                                     </TabsTrigger>
                                 </>
                             )}
@@ -524,130 +562,144 @@ const TeamManagementPage = () => {
                             </Card>
                         </TabsContent>
 
-                        {/* My Hierarchy Tab */}
+                        </>
+                        )}
+
+                        {(isTeams || isPro) && (
                         <TabsContent value="my-hierarchy">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Who I Report To */}
-                                <Card className="border-2 shadow-soft rounded-2xl">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl flex items-center gap-2">
-                                            <ChevronRight className="w-5 h-5 rotate-[-90deg]" />
-                                            Who I Report To
-                                        </CardTitle>
-                                        <CardDescription>Your manager in the organization</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
+                            <Card className="border-2 shadow-soft rounded-2xl" data-testid="hierarchy-editor">
+                                <CardHeader>
+                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <GitBranch className="w-6 h-6" />
+                                        My Hierarchy
+                                    </CardTitle>
+                                    <CardDescription>
+                                        IC → Manager → Sr Manager / Regional Director → Director → Area Vice President.
+                                        “My team” includes everyone under you. “My direct reports” is just the people who report to you.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    <div className="space-y-2">
+                                        <Label>What&apos;s your role?</Label>
+                                        <Select value={orgRole} onValueChange={handleSaveRole} disabled={savingRole}>
+                                            <SelectTrigger className="rounded-xl" data-testid="hierarchy-role">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {orgRoles.map((r) => (
+                                                    <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Who reports to you?</Label>
+                                        <p className="text-sm text-muted-foreground" data-testid="hierarchy-team-counts">
+                                            {directReports.length} direct report{directReports.length === 1 ? '' : 's'}
+                                            {teamCount > directReports.length ? ` and ${teamCount - directReports.length} people on their teams` : ''}
+                                            {teamCount > 0 ? ` · ${teamCount} total on your team` : ''}
+                                        </p>
+                                        {directReports.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {directReports.map((r) => (
+                                                    <Badge key={r.user_id || r.id} className="bg-teal-50 text-teal-800 border border-teal-200">
+                                                        {r.name}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {isTeams && (
+                                            <Dialog open={showAddReportDialog} onOpenChange={setShowAddReportDialog}>
+                                                <DialogTrigger asChild>
+                                                    <Button variant="outline" className="rounded-full">
+                                                        <UserPlus className="w-4 h-4 mr-2" />
+                                                        Add or adjust direct reports
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto">
+                                                    <DialogHeader>
+                                                        <DialogTitle>Who reports to you?</DialogTitle>
+                                                        <DialogDescription>
+                                                            Select teammates or paste emails. They can accept, ignore, or dispute.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className="space-y-4 pt-2">
+                                                        <TeamPeoplePicker
+                                                            people={potentialReports}
+                                                            selectedIds={selectedReportIds}
+                                                            selectedEmails={selectedReportEmails}
+                                                            excludeIds={[user?.id]}
+                                                            onChange={({ userIds, emails }) => {
+                                                                setSelectedReportIds(userIds);
+                                                                setSelectedReportEmails(emails);
+                                                            }}
+                                                        />
+                                                        <div className="flex gap-2 justify-end">
+                                                            <Button variant="outline" onClick={() => setShowAddReportDialog(false)} className="rounded-full">Cancel</Button>
+                                                            <Button onClick={handleAddDirectReport} disabled={addingReport} className="rounded-full">
+                                                                {addingReport ? 'Sending...' : 'Send requests'}
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Who is your manager?</Label>
                                         {myManager ? (
-                                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
-                                                        <span className="font-semibold text-teal-700 text-lg">
-                                                            {myManager.name.charAt(0).toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-semibold">{myManager.name}</p>
-                                                        <p className="text-sm text-muted-foreground">{myManager.email}</p>
-                                                    </div>
+                                            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                                <div>
+                                                    <p className="font-semibold">{myManager.name}</p>
+                                                    <p className="text-sm text-muted-foreground">{myManager.email}</p>
                                                 </div>
                                                 <Badge className="bg-teal-100 text-teal-700">Manager</Badge>
                                             </div>
                                         ) : (
-                                            <div className="text-center py-8">
-                                                <UserCheck className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                                                <p className="text-muted-foreground">No manager set</p>
-                                            </div>
+                                            <p className="text-sm text-muted-foreground">No manager set yet</p>
                                         )}
-                                        
                                         <Dialog open={showSetManagerDialog} onOpenChange={setShowSetManagerDialog}>
                                             <DialogTrigger asChild>
-                                                <Button variant="outline" className="w-full mt-4 rounded-full">
-                                                    {myManager ? 'Change Manager' : 'Set Manager'}
+                                                <Button variant="outline" className="rounded-full" data-testid="hierarchy-set-manager">
+                                                    {myManager ? 'Change manager' : 'Name your manager'}
                                                 </Button>
                                             </DialogTrigger>
                                             <DialogContent className="rounded-2xl">
                                                 <DialogHeader>
-                                                    <DialogTitle>Set Your Manager</DialogTitle>
-                                                    <DialogDescription>
-                                                        Choose who you report to in the organization
-                                                    </DialogDescription>
+                                                    <DialogTitle>Who is your manager?</DialogTitle>
+                                                    <DialogDescription>Name the person you report to</DialogDescription>
                                                 </DialogHeader>
                                                 <div className="space-y-4 pt-4">
-                                                    <div className="space-y-2">
-                                                        <Label>Select Manager</Label>
-                                                        <Select value={selectedManager} onValueChange={setSelectedManager}>
-                                                            <SelectTrigger className="rounded-xl">
-                                                                <SelectValue placeholder="Choose your manager" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="__none__">
-                                                                    <span className="text-muted-foreground">No manager (remove)</span>
+                                                    <Select value={selectedManager} onValueChange={setSelectedManager}>
+                                                        <SelectTrigger className="rounded-xl">
+                                                            <SelectValue placeholder="Choose your manager" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="__none__">
+                                                                <span className="text-muted-foreground">No manager (remove)</span>
+                                                            </SelectItem>
+                                                            {potentialReports.map((p) => (
+                                                                <SelectItem key={p.id} value={p.id}>
+                                                                    {p.name} ({p.email})
                                                                 </SelectItem>
-                                                                {potentialReports.map((p) => (
-                                                                    <SelectItem key={p.id} value={p.id}>
-                                                                        {p.name} ({p.email})
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                     <div className="flex gap-2 justify-end">
-                                                        <Button
-                                                            variant="outline"
-                                                            onClick={() => setShowSetManagerDialog(false)}
-                                                            className="rounded-full"
-                                                        >
-                                                            Cancel
-                                                        </Button>
-                                                        <Button
-                                                            onClick={handleSetManager}
-                                                            disabled={settingManager}
-                                                            className="rounded-full"
-                                                        >
+                                                        <Button variant="outline" onClick={() => setShowSetManagerDialog(false)} className="rounded-full">Cancel</Button>
+                                                        <Button onClick={handleSetManager} disabled={settingManager} className="rounded-full">
                                                             {settingManager ? 'Saving...' : 'Save'}
                                                         </Button>
                                                     </div>
                                                 </div>
                                             </DialogContent>
                                         </Dialog>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Summary Card */}
-                                <Card className="border-2 shadow-soft rounded-2xl">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl flex items-center gap-2">
-                                            <GitBranch className="w-5 h-5" />
-                                            My Team Summary
-                                        </CardTitle>
-                                        <CardDescription>Overview of your position</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 bg-teal-50 rounded-xl text-center">
-                                                <p className="text-3xl font-bold text-teal-700" style={{ fontFamily: 'Outfit' }}>
-                                                    {directReports.length}
-                                                </p>
-                                                <p className="text-sm text-muted-foreground">Direct Reports</p>
-                                            </div>
-                                            <div className="p-4 bg-emerald-50 rounded-xl text-center">
-                                                <p className="text-3xl font-bold text-emerald-700" style={{ fontFamily: 'Outfit' }}>
-                                                    {directReports.reduce((sum, dr) => sum + dr.tasks_from_you_pending, 0)}
-                                                </p>
-                                                <p className="text-sm text-muted-foreground">Pending Tasks Assigned</p>
-                                            </div>
-                                        </div>
-                                        <div className="p-4 bg-gray-50 rounded-xl">
-                                            <p className="text-sm text-muted-foreground mb-1">Reports to</p>
-                                            <p className="font-semibold">
-                                                {myManager ? myManager.name : 'No manager set'}
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </TabsContent>
-                        </>
                         )}
 
                         {/* Team Admin Tab (Team Owners Only) */}
