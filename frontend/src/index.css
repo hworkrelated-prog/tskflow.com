@@ -311,6 +311,11 @@ h1, h2, h3, h4, h5, h6 {
         0 0 0 1px rgba(13, 148, 136, 0.42),
         0 12px 32px -12px rgba(15, 23, 42, 0.24);
 }
+.ai-composer-shell.is-listening {
+    box-shadow:
+        0 0 0 1px rgba(239, 68, 68, 0.5),
+        0 12px 32px -12px rgba(15, 23, 42, 0.24);
+}
 
 [data-theme="dark"] .ai-composer-shell {
     background: #1a1a1a;
@@ -324,6 +329,11 @@ h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .ai-composer-shell:focus-within {
     box-shadow:
         0 0 0 1px rgba(45, 212, 191, 0.45),
+        0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .ai-composer-shell.is-listening {
+    box-shadow:
+        0 0 0 1px rgba(248, 113, 113, 0.55),
         0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 

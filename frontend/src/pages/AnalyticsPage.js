@@ -16,6 +16,13 @@ import { getErrorMessage } from '@/lib/utils';
 import { ActivityLogTab } from '@/pages/ActivityLogPage';
 
 // Return YYYY-MM-DD in local time (no TZ drift from toISOString)
+const formatAvgResponse = (hours) => {
+    if (hours === null || hours === undefined) return null;
+    if (hours < 1) return `${Math.round(hours * 60)}m`;
+    if (hours < 24) return `${hours}h`;
+    return `${(hours / 24).toFixed(1)}d`;
+};
+
 const toDateStr = (d) => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -361,7 +368,7 @@ const AnalyticsPage = () => {
                             {analytics.assignee_breakdown && analytics.assignee_breakdown.length > 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl">
                                     <CardHeader>
-                                        <div className="flex items-center justify-between gap-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                             <div>
                                                 <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
                                                     <TrendingUp className="w-6 h-6" />
@@ -382,124 +389,178 @@ const AnalyticsPage = () => {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        {/* Table Header — sticky when scrolling. Offset by page header height so it never gets hidden. */}
-                                        <div className="grid grid-cols-14 gap-3 px-3 py-3 bg-white rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-[68px] z-20 border shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }} data-testid="analytics-table-header">
-                                            <div>Team Member</div>
-                                            <div className="text-center">Assigned</div>
-                                            <div className="text-center">Completed</div>
-                                            <div className="text-center">Pending</div>
-                                            <div className="text-center">Completion</div>
-                                            <div className="text-center">Response Rate</div>
-                                            <div className="text-center">Avg Response</div>
+                                        <div className="hidden md:block">
+                                            <div className="grid gap-3 px-3 py-3 bg-white rounded-xl mb-4 text-xs font-semibold text-muted-foreground sticky top-[68px] z-20 border shadow-sm" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }} data-testid="analytics-table-header">
+                                                <div>Team Member</div>
+                                                <div className="text-center">Assigned</div>
+                                                <div className="text-center">Completed</div>
+                                                <div className="text-center">Pending</div>
+                                                <div className="text-center">Completion</div>
+                                                <div className="text-center">Response Rate</div>
+                                                <div className="text-center">Avg Response</div>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                {analytics.assignee_breakdown.map((assignee, index) => (
+                                                    <motion.div
+                                                        key={assignee.email}
+                                                        initial={{ opacity: 0, x: -20 }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        transition={{ duration: 0.2, delay: index * 0.05 }}
+                                                    >
+                                                        <Card className="border rounded-xl hover:shadow-md transition-shadow">
+                                                            <CardContent className="p-4">
+                                                                <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
+                                                                            <span className="font-semibold text-teal-700">
+                                                                                {assignee.name.charAt(0).toUpperCase()}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="font-semibold truncate">{assignee.name}</p>
+                                                                            <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="text-center">
+                                                                        <Badge variant="secondary" className="px-2.5 py-1">
+                                                                            {assignee.tasks_assigned}
+                                                                        </Badge>
+                                                                    </div>
+
+                                                                    <div className="text-center">
+                                                                        <Badge className="bg-green-100 text-green-700 px-2.5 py-1">
+                                                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                                                            {assignee.tasks_completed}
+                                                                        </Badge>
+                                                                    </div>
+
+                                                                    <div className="text-center">
+                                                                        {assignee.tasks_pending > 0 ? (
+                                                                            <Badge className="bg-amber-100 text-amber-700 px-2.5 py-1">
+                                                                                <Clock className="w-3.5 h-3.5 mr-1" />
+                                                                                {assignee.tasks_pending}
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Badge className="bg-gray-100 text-gray-500 px-2.5 py-1">
+                                                                                0
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <div className="flex flex-col items-center">
+                                                                            <span className={`text-base font-bold ${
+                                                                                assignee.completion_rate >= 80 ? 'text-green-600' :
+                                                                                assignee.completion_rate >= 50 ? 'text-amber-600' :
+                                                                                'text-red-600'
+                                                                            }`}>
+                                                                                {assignee.completion_rate}%
+                                                                            </span>
+                                                                            <Progress
+                                                                                value={assignee.completion_rate}
+                                                                                className="h-2 w-full mt-1"
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <div className="flex flex-col items-center">
+                                                                            <span className={`text-base font-bold ${
+                                                                                (assignee.response_rate || 0) >= 80 ? 'text-green-600' :
+                                                                                (assignee.response_rate || 0) >= 50 ? 'text-amber-600' :
+                                                                                'text-red-600'
+                                                                            }`}>
+                                                                                {assignee.response_rate || 0}%
+                                                                            </span>
+                                                                            <Progress
+                                                                                value={assignee.response_rate || 0}
+                                                                                className="h-2 w-full mt-1"
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="text-center">
+                                                                        {formatAvgResponse(assignee.avg_response_hours) ? (
+                                                                            <span className="text-sm font-medium">
+                                                                                {formatAvgResponse(assignee.avg_response_hours)}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-sm text-muted-foreground">—</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
                                         </div>
 
-                                        {/* Table Rows */}
-                                        <div className="space-y-3">
-                                            {analytics.assignee_breakdown.map((assignee, index) => (
-                                                <motion.div
-                                                    key={assignee.email}
-                                                    initial={{ opacity: 0, x: -20 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ duration: 0.2, delay: index * 0.05 }}
-                                                >
-                                                    <Card className="border rounded-xl hover:shadow-md transition-shadow">
-                                                        <CardContent className="p-4">
-                                                            <div className="grid gap-3 items-center" style={{ gridTemplateColumns: 'minmax(0, 2.5fr) repeat(6, minmax(0, 1fr))' }}>
-                                                                {/* Name & Email */}
-                                                                <div className="flex items-center gap-3 min-w-0">
-                                                                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
-                                                                        <span className="font-semibold text-teal-700">
-                                                                            {assignee.name.charAt(0).toUpperCase()}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="min-w-0">
-                                                                        <p className="font-semibold truncate">{assignee.name}</p>
-                                                                        <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
-                                                                    </div>
+                                        <div className="md:hidden space-y-3" data-testid="analytics-assignee-mobile">
+                                            {analytics.assignee_breakdown.map((assignee) => {
+                                                const avg = formatAvgResponse(assignee.avg_response_hours);
+                                                return (
+                                                    <Card key={assignee.email} className="border rounded-xl">
+                                                        <CardContent className="p-3.5 space-y-3">
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center shrink-0">
+                                                                    <span className="font-semibold text-teal-700">
+                                                                        {assignee.name.charAt(0).toUpperCase()}
+                                                                    </span>
                                                                 </div>
-
-                                                                {/* Tasks Assigned */}
-                                                                <div className="text-center">
-                                                                    <Badge variant="secondary" className="px-2.5 py-1">
-                                                                        {assignee.tasks_assigned}
-                                                                    </Badge>
+                                                                <div className="min-w-0">
+                                                                    <p className="font-semibold truncate">{assignee.name}</p>
+                                                                    <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
                                                                 </div>
-
-                                                                {/* Tasks Completed */}
-                                                                <div className="text-center">
-                                                                    <Badge className="bg-green-100 text-green-700 px-2.5 py-1">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                                                        {assignee.tasks_completed}
-                                                                    </Badge>
+                                                            </div>
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                <div className="rounded-lg bg-slate-50 px-2 py-2 text-center">
+                                                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Assigned</p>
+                                                                    <p className="text-sm font-semibold mt-0.5">{assignee.tasks_assigned}</p>
                                                                 </div>
-
-                                                                {/* Tasks Pending */}
-                                                                <div className="text-center">
-                                                                    {assignee.tasks_pending > 0 ? (
-                                                                        <Badge className="bg-amber-100 text-amber-700 px-2.5 py-1">
-                                                                            <Clock className="w-3.5 h-3.5 mr-1" />
-                                                                            {assignee.tasks_pending}
-                                                                        </Badge>
-                                                                    ) : (
-                                                                        <Badge className="bg-gray-100 text-gray-500 px-2.5 py-1">
-                                                                            0
-                                                                        </Badge>
-                                                                    )}
+                                                                <div className="rounded-lg bg-green-50 px-2 py-2 text-center">
+                                                                    <p className="text-[10px] uppercase tracking-wide text-green-700">Done</p>
+                                                                    <p className="text-sm font-semibold mt-0.5 text-green-700">{assignee.tasks_completed}</p>
                                                                 </div>
-
-                                                                {/* Completion Rate */}
+                                                                <div className="rounded-lg bg-amber-50 px-2 py-2 text-center">
+                                                                    <p className="text-[10px] uppercase tracking-wide text-amber-700">Pending</p>
+                                                                    <p className="text-sm font-semibold mt-0.5 text-amber-800">{assignee.tasks_pending}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-2">
                                                                 <div>
-                                                                    <div className="flex flex-col items-center">
-                                                                        <span className={`text-base font-bold ${
+                                                                    <div className="flex items-center justify-between text-xs mb-1">
+                                                                        <span className="text-muted-foreground">Completion</span>
+                                                                        <span className={`font-semibold ${
                                                                             assignee.completion_rate >= 80 ? 'text-green-600' :
                                                                             assignee.completion_rate >= 50 ? 'text-amber-600' :
                                                                             'text-red-600'
-                                                                        }`}>
-                                                                            {assignee.completion_rate}%
-                                                                        </span>
-                                                                        <Progress 
-                                                                            value={assignee.completion_rate} 
-                                                                            className="h-2 w-full mt-1"
-                                                                        />
+                                                                        }`}>{assignee.completion_rate}%</span>
                                                                     </div>
+                                                                    <Progress value={assignee.completion_rate} className="h-1.5" />
                                                                 </div>
-
-                                                                {/* Response Rate */}
                                                                 <div>
-                                                                    <div className="flex flex-col items-center">
-                                                                        <span className={`text-base font-bold ${
+                                                                    <div className="flex items-center justify-between text-xs mb-1">
+                                                                        <span className="text-muted-foreground">Response</span>
+                                                                        <span className={`font-semibold ${
                                                                             (assignee.response_rate || 0) >= 80 ? 'text-green-600' :
                                                                             (assignee.response_rate || 0) >= 50 ? 'text-amber-600' :
                                                                             'text-red-600'
-                                                                        }`}>
-                                                                            {assignee.response_rate || 0}%
-                                                                        </span>
-                                                                        <Progress 
-                                                                            value={assignee.response_rate || 0} 
-                                                                            className="h-2 w-full mt-1"
-                                                                        />
+                                                                        }`}>{assignee.response_rate || 0}%</span>
                                                                     </div>
+                                                                    <Progress value={assignee.response_rate || 0} className="h-1.5" />
                                                                 </div>
-
-                                                                {/* Avg Response Hours */}
-                                                                <div className="text-center">
-                                                                    {assignee.avg_response_hours !== null && assignee.avg_response_hours !== undefined ? (
-                                                                        <span className="text-sm font-medium">
-                                                                            {assignee.avg_response_hours < 1
-                                                                                ? `${Math.round(assignee.avg_response_hours * 60)}m`
-                                                                                : assignee.avg_response_hours < 24
-                                                                                    ? `${assignee.avg_response_hours}h`
-                                                                                    : `${(assignee.avg_response_hours / 24).toFixed(1)}d`}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-sm text-muted-foreground">—</span>
-                                                                    )}
+                                                                <div className="flex items-center justify-between text-xs pt-0.5">
+                                                                    <span className="text-muted-foreground">Avg response</span>
+                                                                    <span className="font-semibold">{avg || '—'}</span>
                                                                 </div>
                                                             </div>
                                                         </CardContent>
                                                     </Card>
-                                                </motion.div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </CardContent>
                                 </Card>

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText } from 'lucide-react';
+import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -84,6 +84,19 @@ const getMentionState = (value, caret) => {
 
 const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
 
+const getSpeechRecognition = () => {
+    const SR = typeof window !== 'undefined'
+        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+        : null;
+    if (!SR) return null;
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    return rec;
+};
+
 const AIQuickCreate = ({
     onCreated,
     onOpenAdvanced,
@@ -137,8 +150,13 @@ const AIQuickCreate = ({
     const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
+    const [listening, setListening] = useState(false);
     const fileInputRef = useRef(null);
     const pasteZoneRef = useRef(null);
+    const recRef = useRef(null);
+    const voiceFinalRef = useRef('');
+    const voiceSeedRef = useRef('');
+    const runPreviewRef = useRef(null);
     const navigate = useNavigate();
 
     const focusInput = useCallback(() => {
@@ -150,7 +168,7 @@ const AIQuickCreate = ({
         const el = inputRef.current;
         if (!el) return;
         el.style.height = 'auto';
-        const next = Math.min(Math.max(el.scrollHeight, 48), 220);
+        const next = Math.min(Math.max(el.scrollHeight, 40), 220);
         el.style.height = `${next}px`;
         el.style.overflowY = el.scrollHeight > 220 ? 'auto' : 'hidden';
     }, []);
@@ -666,6 +684,73 @@ const AIQuickCreate = ({
         }
     };
 
+    runPreviewRef.current = runPreview;
+
+    const stopVoice = useCallback(() => {
+        try { recRef.current?.stop(); } catch { /* already stopped */ }
+    }, []);
+
+    const startVoice = useCallback(() => {
+        const rec = getSpeechRecognition();
+        if (!rec) {
+            toast.error('Voice isn’t available in this browser. Try Chrome or Safari.');
+            return;
+        }
+        try { recRef.current?.abort(); } catch { /* noop */ }
+        voiceSeedRef.current = (inputRef.current?.value || '').trim();
+        voiceFinalRef.current = '';
+        rec.onresult = (event) => {
+            let interim = '';
+            let finalText = '';
+            for (let i = 0; i < event.results.length; i += 1) {
+                const piece = event.results[i][0]?.transcript || '';
+                if (event.results[i].isFinal) finalText += piece;
+                else interim += piece;
+            }
+            voiceFinalRef.current = finalText.trim();
+            const spoken = [voiceFinalRef.current, interim].filter(Boolean).join(' ').trim();
+            const shown = [voiceSeedRef.current, spoken].filter(Boolean).join(' ');
+            if (shown) setText(shown);
+        };
+        rec.onerror = (event) => {
+            if (event.error === 'not-allowed') {
+                toast.error('Microphone permission is needed for voice.');
+            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+                toast.error('Couldn’t hear that — try again.');
+            }
+            setListening(false);
+        };
+        rec.onend = () => {
+            recRef.current = null;
+            setListening(false);
+            const spoken = voiceFinalRef.current.trim();
+            const full = [voiceSeedRef.current, spoken].filter(Boolean).join(' ').trim();
+            if (full.length >= 2) {
+                runPreviewRef.current?.(full);
+            }
+        };
+        recRef.current = rec;
+        setComposerFocused(true);
+        setListening(true);
+        try {
+            rec.start();
+        } catch {
+            setListening(false);
+            recRef.current = null;
+            toast.error('Couldn’t start the microphone.');
+        }
+    }, []);
+
+    const toggleVoice = useCallback(() => {
+        if (listening) stopVoice();
+        else startVoice();
+    }, [listening, startVoice, stopVoice]);
+
+    useEffect(() => () => {
+        try { recRef.current?.abort(); } catch { /* noop */ }
+        recRef.current = null;
+    }, []);
+
     const removeAssignee = (idx) => {
         setEditAssignees((prev) => prev.filter((_, i) => i !== idx));
     };
@@ -998,9 +1083,9 @@ const AIQuickCreate = ({
             preview: !!preview,
             answerMode: !!answerMode,
             attachments,
-            focused: composerFocused,
+            focused: composerFocused || listening,
         });
-    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, composerFocused, onSnapshot]);
+    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, composerFocused, listening, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -1136,7 +1221,7 @@ const AIQuickCreate = ({
                             ref={composerRef}
                             className={`ai-composer-shell relative flex flex-col ${
                                 embedded ? '' : 'ai-composer-shell--inset'
-                            }`}
+                            }${listening ? ' is-listening' : ''}`}
                             data-testid="ai-quick-composer"
                         >
                             <Textarea
@@ -1198,11 +1283,11 @@ const AIQuickCreate = ({
                                         runPreview();
                                     }
                                 }}
-                                placeholder="Create, search, or go to…"
+                                placeholder={listening ? 'Listening…' : 'Create, search, or go to…'}
                                 rows={1}
-                                className="min-h-[48px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent pl-3.5 pr-28 sm:pr-36 pt-2.5 pb-11 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[40px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
-                                disabled={loading || sending || answerLoading}
+                                disabled={loading || sending || answerLoading || listening}
                             />
 
                             {mention && mentionPos && createPortal(
@@ -1378,7 +1463,7 @@ const AIQuickCreate = ({
                             )}
 
                             {(editAssignees.length > 0 || attachments.length > 0) && !preview && (
-                                <div className="flex flex-wrap gap-1.5 px-3 pb-11">
+                                <div className="flex flex-wrap gap-1.5 px-3 pb-1">
                                     {editAssignees.map((a, i) => (
                                         <span
                                             key={`${a.id || a.email || a.name}-${i}`}
@@ -1436,8 +1521,8 @@ const AIQuickCreate = ({
                                 </div>
                             )}
 
-                            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 pointer-events-none">
-                                <div className="flex items-center gap-0.5 pointer-events-auto">
+                            <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
+                                <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"
                                         onClick={() => setShowRecordPicker((v) => !v)}
@@ -1482,11 +1567,29 @@ const AIQuickCreate = ({
                                         }}
                                     />
                                 </div>
-                                <div className="flex items-center gap-2 pointer-events-auto">
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={toggleVoice}
+                                        disabled={loading || sending || answerLoading}
+                                        className={`h-10 w-10 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-colors ${
+                                            listening
+                                                ? 'bg-red-500 text-white animate-pulse'
+                                                : 'text-slate-500 hover:text-teal-800 hover:bg-teal-50'
+                                        }`}
+                                        data-testid="ai-prompt-voice-btn"
+                                        aria-label={listening ? 'Stop and send' : 'Speak to send'}
+                                        aria-pressed={listening}
+                                        title={listening ? 'Tap to send now' : 'Speak — sends when you finish'}
+                                    >
+                                        {listening
+                                            ? <MicOff className="w-4 h-4" />
+                                            : <Mic className="w-4 h-4" />}
+                                    </button>
                                     <Button
                                         type="button"
                                         onClick={() => runPreview()}
-                                        disabled={loading || sending || answerLoading || !text.trim()}
+                                        disabled={loading || sending || answerLoading || listening || !text.trim()}
                                         className="rounded-xl bg-slate-900 hover:bg-slate-800 h-10 sm:h-9 px-3.5 gap-1.5"
                                         data-testid="ai-quick-preview-btn"
                                     >
