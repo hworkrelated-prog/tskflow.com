@@ -16,6 +16,7 @@ import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
+import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -154,6 +155,7 @@ const AIQuickCreate = ({
     const [newPersonEmail, setNewPersonEmail] = useState('');
     const [showNewPersonEmail, setShowNewPersonEmail] = useState(false);
     const [composerFocused, setComposerFocused] = useState(false);
+    const [exampleIndex, setExampleIndex] = useState(0);
     const inputRef = useRef(null);
     const composerRef = useRef(null);
     const clarifyRef = useRef(null);
@@ -1241,6 +1243,17 @@ const AIQuickCreate = ({
     };
 
     const showCommandChips = embedded && !preview && !answerMode && !text.trim() && composerFocused;
+    const showPromptExample = !text.trim() && !preview && !answerMode && !listening;
+    const promptExample = PROMPT_EXAMPLES[exampleIndex] || PROMPT_EXAMPLES[0];
+
+    useEffect(() => {
+        if (!showPromptExample) return undefined;
+        const id = setInterval(() => {
+            setExampleIndex((i) => nextPromptExampleIndex(i));
+        }, PROMPT_EXAMPLE_INTERVAL_MS);
+        return () => clearInterval(id);
+    }, [showPromptExample]);
+
     const personCount = editAssignees.reduce((n, a) => n + (a.member_count || a.members?.length || 1), 0);
 
     const priorityColor = {
@@ -1344,6 +1357,18 @@ const AIQuickCreate = ({
                                     <List className="w-3.5 h-3.5" />
                                 </button>
                             </div>
+                            <div className="relative">
+                            {showPromptExample && (
+                                <div
+                                    className="ai-prompt-placeholder"
+                                    data-testid="ai-prompt-placeholder"
+                                    aria-hidden
+                                >
+                                    <span key={exampleIndex} className="ai-prompt-placeholder-fade">
+                                        {promptExample}
+                                    </span>
+                                </div>
+                            )}
                             <Textarea
                                 ref={inputRef}
                                 value={text}
@@ -1403,12 +1428,14 @@ const AIQuickCreate = ({
                                         runPreview();
                                     }
                                 }}
-                                placeholder={listening ? 'Listening…' : 'Create, search, or go to…'}
+                                placeholder={listening ? 'Listening…' : ''}
+                                aria-label="Create, search, or go to"
                                 rows={1}
                                 className="min-h-[40px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading || listening}
                             />
+                            </div>
 
                             {mention && mentionPos && createPortal(
                                 <div

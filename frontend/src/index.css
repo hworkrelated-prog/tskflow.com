@@ -465,3 +465,41 @@ h1, h2, h3, h4, h5, h6 {
 body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }
+
+.ai-prompt-placeholder {
+    pointer-events: none;
+    position: absolute;
+    left: 0.875rem;
+    right: 7rem;
+    top: 0.625rem;
+    color: rgb(148 163 184);
+    font-size: 1rem;
+    line-height: 1.625;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+@media (min-width: 640px) {
+    .ai-prompt-placeholder {
+        right: 9rem;
+        font-size: 0.875rem;
+    }
+}
+.ai-prompt-placeholder-fade {
+    display: block;
+    animation: ai-placeholder-in 420ms ease;
+}
+@keyframes ai-placeholder-in {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ai-prompt-placeholder-fade {
+        animation: none;
+    }
+}
+[data-theme="dark"] .ai-prompt-placeholder {
+    color: rgb(148 163 184);
+}
