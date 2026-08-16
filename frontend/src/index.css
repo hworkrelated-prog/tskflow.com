@@ -243,6 +243,8 @@ h1, h2, h3, h4, h5, h6 {
     --glow-strength: 0.42;
     isolation: isolate;
     overflow: visible;
+    padding: 2px;
+    box-sizing: border-box;
 }
 .ai-bar-glow {
     position: absolute;
@@ -408,14 +410,13 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-/* Command bar chrome: one shadow-as-border so rounded edges stay smooth
-   (a 1px CSS border + ring stacks and looks clipped/jagged on the curves). */
+/* Command bar chrome: inset ring so a side never vanishes when a parent clips. */
 .ai-composer-shell {
     overflow: hidden;
     border-radius: 1.5rem;
     background: #fff;
     box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.08),
+        inset 0 0 0 1px rgba(15, 23, 42, 0.14),
         0 10px 28px -12px rgba(15, 23, 42, 0.22);
     transition: box-shadow 280ms ease;
 }
@@ -424,19 +425,19 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ai-composer-shell:focus-within {
     box-shadow:
-        0 0 0 1px rgba(13, 148, 136, 0.42),
+        inset 0 0 0 1.5px rgba(13, 148, 136, 0.62),
         0 12px 32px -12px rgba(15, 23, 42, 0.24);
 }
 .ai-composer-shell.is-listening {
     box-shadow:
-        0 0 0 1px rgba(239, 68, 68, 0.5),
+        inset 0 0 0 1.5px rgba(239, 68, 68, 0.55),
         0 12px 32px -12px rgba(15, 23, 42, 0.24);
 }
 
 [data-theme="dark"] .ai-composer-shell {
     background: #1a1a1a;
     box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.1),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.16),
         0 10px 28px -12px rgba(0, 0, 0, 0.55);
 }
 [data-theme="dark"] .ai-composer-shell--inset {
@@ -444,12 +445,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 [data-theme="dark"] .ai-composer-shell:focus-within {
     box-shadow:
-        0 0 0 1px rgba(45, 212, 191, 0.45),
+        inset 0 0 0 1.5px rgba(45, 212, 191, 0.55),
         0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 [data-theme="dark"] .ai-composer-shell.is-listening {
     box-shadow:
-        0 0 0 1px rgba(248, 113, 113, 0.55),
+        inset 0 0 0 1.5px rgba(248, 113, 113, 0.6),
         0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 [data-theme="dark"] .ai-composer-shell textarea,
@@ -463,7 +464,7 @@ h1, h2, h3, h4, h5, h6 {
 [data-theme="minimal"] .ai-composer-shell {
     background: #fff;
     box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.08),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.12),
         0 10px 28px -12px rgba(0, 0, 0, 0.12);
 }
 
@@ -475,10 +476,13 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 .ai-bottom-stage {
     position: fixed;
     z-index: 40;
-    left: 50%;
+    left: 0.75rem;
+    right: 0.75rem;
     bottom: 1rem;
-    transform: translateX(-50%);
-    width: min(96vw, 40rem);
+    width: auto;
+    max-width: 40rem;
+    margin-left: auto;
+    margin-right: auto;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     display: flex;
     flex-direction: column;
@@ -506,8 +510,11 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 }
 @media (max-width: 51.99rem) {
     .ai-command-dock {
-        overflow: hidden;
+        overflow: visible;
         --glow-strength: 0.2;
+    }
+    .ai-command-chips-wrap {
+        display: none;
     }
     .ai-bar-glow {
         inset: -4px;
@@ -524,7 +531,10 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 }
 @media (min-width: 52rem) {
     .ai-bottom-stage {
-        width: min(96vw, calc(40rem + 3.75rem));
+        left: 0.75rem;
+        right: 0.75rem;
+        width: auto;
+        max-width: calc(40rem + 3.75rem);
         flex-direction: row-reverse;
         align-items: flex-end;
         gap: 1rem;

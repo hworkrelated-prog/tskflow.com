@@ -182,6 +182,7 @@ const AIQuickCreate = ({
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
     const [listening, setListening] = useState(false);
+    const [formatOpen, setFormatOpen] = useState(false);
     const fileInputRef = useRef(null);
     const pasteZoneRef = useRef(null);
     const recRef = useRef(null);
@@ -948,6 +949,7 @@ const AIQuickCreate = ({
         const selected = text.slice(start, end) || 'text';
         const next = `${text.slice(0, start)}${before}${selected}${after}${text.slice(end)}`;
         setText(next);
+        setFormatOpen(true);
         setTimeout(() => {
             if (!el) return;
             el.focus();
@@ -963,6 +965,7 @@ const AIQuickCreate = ({
         const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
         const next = `${text.slice(0, lineStart)}${prefix}${text.slice(lineStart)}`;
         setText(next);
+        setFormatOpen(true);
         setTimeout(() => {
             if (!el) return;
             el.focus();
@@ -1328,6 +1331,7 @@ const AIQuickCreate = ({
                             }${listening ? ' is-listening' : ''}`}
                             data-testid="ai-quick-composer"
                         >
+                            {formatOpen ? (
                             <div className="flex items-center gap-0.5 px-1.5 pt-1.5" data-testid="ai-format-toolbar">
                                 <button
                                     type="button"
@@ -1357,6 +1361,7 @@ const AIQuickCreate = ({
                                     <List className="w-3.5 h-3.5" />
                                 </button>
                             </div>
+                            ) : null}
                             <div className="ai-prompt-field relative">
                             {showPromptExample && (
                                 <div
@@ -1390,8 +1395,23 @@ const AIQuickCreate = ({
                                     syncMentionFromCaret(val, caret);
                                 }}
                                 onPaste={handlePasteImage}
-                                onClick={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
-                                onKeyUp={(e) => syncMentionFromCaret(e.target.value, e.target.selectionStart)}
+                                onClick={(e) => {
+                                    syncMentionFromCaret(e.target.value, e.target.selectionStart);
+                                    const start = e.target.selectionStart ?? 0;
+                                    const end = e.target.selectionEnd ?? 0;
+                                    setFormatOpen(end > start);
+                                }}
+                                onSelect={(e) => {
+                                    const start = e.target.selectionStart ?? 0;
+                                    const end = e.target.selectionEnd ?? 0;
+                                    setFormatOpen(end > start);
+                                }}
+                                onKeyUp={(e) => {
+                                    syncMentionFromCaret(e.target.value, e.target.selectionStart);
+                                    const start = e.target.selectionStart ?? 0;
+                                    const end = e.target.selectionEnd ?? 0;
+                                    setFormatOpen(end > start);
+                                }}
                                 onKeyDown={(e) => {
                                     if (mention && mentionOptions.length > 0) {
                                         if (e.key === 'ArrowDown') {
@@ -1422,6 +1442,16 @@ const AIQuickCreate = ({
                                             if (opt) applyMentionOption(opt);
                                             return;
                                         }
+                                    }
+                                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+                                        e.preventDefault();
+                                        wrapSelection('**', '**');
+                                        return;
+                                    }
+                                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
+                                        e.preventDefault();
+                                        wrapSelection('_', '_');
+                                        return;
                                     }
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
