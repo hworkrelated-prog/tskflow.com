@@ -19,10 +19,18 @@ def test_examples_include_team_outreach_and_cycle():
 
 def test_composer_uses_rotating_placeholder():
     src = _read("components", "AIQuickCreate.js")
+    css = _read("index.css")
     assert "PROMPT_EXAMPLES" in src
     assert 'data-testid="ai-prompt-placeholder"' in src
     assert "nextPromptExampleIndex" in src
     assert 'placeholder="Create, search, or go to…"' not in src
+    assert "ai-prompt-field" in src
+    # Overlay stays inside the field so it cannot paint over attach/Go.
+    assert ".ai-prompt-field" in css
+    assert "text-overflow: ellipsis" in css
+    assert "white-space: nowrap" in css
+    assert "-webkit-line-clamp: 2" not in css
+    assert "right: 7rem" not in css
 
 
 def test_next_example_index_wraps():
