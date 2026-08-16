@@ -4,7 +4,7 @@ import { Video, Square, Pause, Play, RotateCcw, Mic, MicOff, Camera, CameraOff, 
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import { uploadBlob } from '@/lib/upload';
-import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
+import { openRecordingControlsOverlay, closeRecordingControlsOverlay, recordingOverlayNeeded } from '@/lib/recordingControlsOverlay';
 import { openRecordingCameraOverlay, closeRecordingCameraOverlay, setCameraOverlayVisible } from '@/lib/recordingCameraOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 
@@ -396,7 +396,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                     toast.info('Drag the camera onto the screen you are recording if it landed on the wrong display.');
                 }
             }
-            await openControlsPopup(matched.screen);
+            await openControlsPopup(matched.screen, settings.displaySurface);
 
             // Loom-style 3-2-1 after the user picks a surface
             for (let n = 3; n >= 1; n -= 1) {
@@ -515,18 +515,15 @@ export const ScreenRecorder = ({ onSaved }) => {
         stop();
     };
 
-    const openControlsPopup = async (screen) => {
-        const result = await openRecordingControlsOverlay({ screen });
+    const openControlsPopup = async (screen, displaySurface) => {
+        const needed = recordingOverlayNeeded(displaySurface, screen);
+        const result = await openRecordingControlsOverlay({ needed });
         if (result?.mode === 'none') {
-            toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
             setPopupOpen(false);
             return;
         }
         controlsPopupRef.current = result.win;
         setPopupOpen(true);
-        if (result.mode === 'pip') {
-            toast.success('Floating controls opened — they stay on top while you present.');
-        }
         const check = setInterval(() => {
             if (!controlsPopupRef.current || controlsPopupRef.current.closed) {
                 clearInterval(check);
@@ -631,7 +628,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2147483645 }}
                     className="max-w-xs bg-white border border-amber-300 shadow-xl rounded-2xl p-3 text-xs text-amber-800 flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>You&apos;re recording a separate window. Use the floating controls window (or browser Stop sharing) if you can&apos;t see this tab.</span>
+                    <span>You&apos;re recording a separate window. Use the toolbar on this tab, or Chrome&apos;s Stop sharing bar, if the overlay isn&apos;t visible.</span>
                 </div>
             )}
         </>

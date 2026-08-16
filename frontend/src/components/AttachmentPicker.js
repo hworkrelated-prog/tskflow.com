@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Pause, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob, fileUrl } from '@/lib/upload';
-import { openRecordingControlsOverlay, closeRecordingControlsOverlay } from '@/lib/recordingControlsOverlay';
+import { openRecordingControlsOverlay, closeRecordingControlsOverlay, recordingOverlayNeeded } from '@/lib/recordingControlsOverlay';
 import { openRecordingCameraOverlay, closeRecordingCameraOverlay, setCameraOverlayVisible } from '@/lib/recordingCameraOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import { saveRecordingBlob } from '@/lib/recordingStore';
@@ -278,11 +278,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 }
             }
 
-            const overlay = await openRecordingControlsOverlay({ screen: matched.screen });
-            if (overlay?.mode === 'pip') {
-                toast.success('Floating controls opened — they stay on top while you present.');
-            } else if (overlay?.mode === 'none') {
-                toast.info('Using in-tab controls — allow popups or use Chrome for always-on-top controls while presenting.');
+            const overlay = await openRecordingControlsOverlay({
+                needed: recordingOverlayNeeded(settings.displaySurface, matched.screen),
+            });
+            if (overlay?.mode === 'none' && recordingOverlayNeeded(settings.displaySurface, matched.screen)) {
+                toast.info('Using the in-tab toolbar — Chrome can also show a Stop sharing bar.');
             }
         } catch (e) {
             try {
