@@ -127,6 +127,7 @@ class UserResponse(BaseModel):
     preferences: Optional[dict] = None
     reports_to: Optional[str] = None
     company_domain: Optional[str] = None
+    org_role: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -585,6 +586,7 @@ async def verify_email(request: EmailVerifyRequest):
             preferences=user.get("preferences") or {},
             reports_to=user.get("reports_to"),
             company_domain=user.get("company_domain"),
+            org_role=user.get("org_role") or "ic",
         )
     )
 
@@ -666,6 +668,7 @@ async def login(user: UserLogin):
             preferences=db_user.get("preferences") or {},
             reports_to=db_user.get("reports_to"),
             company_domain=db_user.get("company_domain"),
+            org_role=db_user.get("org_role") or "ic",
         )
     )
 
@@ -684,6 +687,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         preferences=current_user.get("preferences") or {},
         reports_to=current_user.get("reports_to"),
         company_domain=current_user.get("company_domain"),
+        org_role=current_user.get("org_role") or "ic",
     )
 
 class UpdateProfileRequest(BaseModel):
@@ -1493,7 +1497,7 @@ async def get_dashboard(
     
     # Apply status filter
     if status_filter == "active":
-        query_filter["status"] = {"$ne": "Completed"}
+        query_filter["status"] = {"$nin": ["Completed", "Draft"]}
     elif status_filter == "completed":
         query_filter["status"] = "Completed"
     # "all" means no status filter
@@ -4117,6 +4121,19 @@ class TeamMemberResponse(BaseModel):
 class SetManagerRequest(BaseModel):
     manager_id: Optional[str] = None  # None to remove manager
 
+ORG_ROLE_VALUES = ("ic", "manager", "sr_manager", "director", "avp")
+ORG_ROLE_LABELS = {
+    "ic": "Individual Contributor",
+    "manager": "Manager",
+    "sr_manager": "Sr Manager / Regional Director",
+    "director": "Director",
+    "avp": "Area Vice President",
+}
+
+class HierarchyUpdateRequest(BaseModel):
+    org_role: Optional[str] = None
+    manager_id: Optional[str] = None  # omit to leave unchanged; "" / "__none__" clears
+
 class AddDirectReportRequest(BaseModel):
     user_id: str
 
@@ -4351,6 +4368,93 @@ async def set_manager(request: SetManagerRequest, current_user: dict = Depends(g
         return {"message": f"Now reporting to {manager['name']}", "manager": manager}
     else:
         return {"message": "Manager removed", "manager": None}
+
+
+async def _all_subordinates(root_id: str) -> List[dict]:
+    """Everyone under this person, not just direct reports."""
+    if not root_id:
+        return []
+    seen = {root_id}
+    frontier = [root_id]
+    all_subs = []
+    while frontier:
+        next_frontier = []
+        reports = await db.users.find(
+            {"reports_to": {"$in": frontier}},
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "org_role": 1},
+        ).to_list(500)
+        for u in reports:
+            if u["id"] in seen:
+                continue
+            seen.add(u["id"])
+            all_subs.append(u)
+            next_frontier.append(u["id"])
+        frontier = next_frontier
+    return all_subs
+
+
+async def _hierarchy_payload(current_user: dict) -> dict:
+    reports_to = current_user.get("reports_to")
+    manager = None
+    if reports_to:
+        manager = await db.users.find_one(
+            {"id": reports_to},
+            {"_id": 0, "id": 1, "name": 1, "email": 1, "org_role": 1},
+        )
+    directs = await db.users.find(
+        {"reports_to": current_user["id"]},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "org_role": 1},
+    ).to_list(200)
+    team = await _all_subordinates(current_user["id"])
+    role = current_user.get("org_role") or "ic"
+    if role not in ORG_ROLE_VALUES:
+        role = "ic"
+    return {
+        "org_role": role,
+        "org_role_label": ORG_ROLE_LABELS.get(role, ORG_ROLE_LABELS["ic"]),
+        "roles": [{"id": k, "label": ORG_ROLE_LABELS[k]} for k in ORG_ROLE_VALUES],
+        "manager": manager,
+        "direct_reports": directs,
+        "direct_count": len(directs),
+        "team_count": len(team),
+        "indirect_count": max(0, len(team) - len(directs)),
+    }
+
+
+@api_router.get("/team/hierarchy")
+async def get_my_hierarchy(current_user: dict = Depends(get_current_user)):
+    """Role, manager, directs, and full team size for the My Hierarchy editor."""
+    return await _hierarchy_payload(current_user)
+
+
+@api_router.put("/team/hierarchy")
+async def update_my_hierarchy(request: HierarchyUpdateRequest, current_user: dict = Depends(get_current_user)):
+    """Save org role and/or manager from the My Hierarchy questions."""
+    updates = {}
+    if request.org_role is not None:
+        role = (request.org_role or "").strip().lower()
+        if role not in ORG_ROLE_VALUES:
+            raise HTTPException(status_code=400, detail="Unknown role")
+        updates["org_role"] = role
+    if request.manager_id is not None:
+        mid = request.manager_id
+        if mid in ("", "__none__", "none"):
+            updates["reports_to"] = None
+        else:
+            manager = await db.users.find_one({"id": mid}, {"_id": 0})
+            if not manager:
+                raise HTTPException(status_code=404, detail="Manager not found")
+            if manager["id"] == current_user["id"]:
+                raise HTTPException(status_code=400, detail="Cannot report to yourself")
+            if current_user.get("company_domain") and manager.get("company_domain") != current_user.get("company_domain"):
+                raise HTTPException(status_code=403, detail="Can only report to someone in your organization")
+            if manager.get("reports_to") == current_user["id"]:
+                raise HTTPException(status_code=400, detail="Circular reporting not allowed")
+            updates["reports_to"] = mid
+    if updates:
+        await db.users.update_one({"id": current_user["id"]}, {"$set": updates})
+        current_user = {**current_user, **updates}
+    return await _hierarchy_payload(current_user)
 
 async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict], target_email: Optional[str]):
     """Create a pending claim + notify the target (in-app + email when possible)."""
@@ -7827,8 +7931,9 @@ async def get_product_updates(current_user: dict = Depends(get_current_user)):
     updates = [
         {"id": "u19", "area": "AI Command Bar", "change": "A persistent bottom prompt bar — type what you need, paste a screenshot, attach a recording, @assign, and send. Recurring, sales, and reminders are inferred automatically.", "was": "Task creation lived only inside a modal and felt like a long Q&A."},
         {"id": "u20", "area": "Screen Recording", "change": "Loom-style controls stay on the bottom-left and stay draggable. Capture uses the raw screen track so video no longer freezes when you switch tabs.", "was": "Recording could freeze after leaving the tab even though audio kept going."},
-        {"id": "u21", "area": "Smart Assignment", "change": "“My team” resolves direct reports vs everyone under you, @groups work with multi-word names, and duplicate name picks are cleaned up.", "was": "Team phrases often failed; clicking a name could add duplicates."},
-        {"id": "u22", "area": "Assignee-facing tasks", "change": "Manager prompts like “ask my team to send me…” are rewritten into clear steps for the person doing the work.", "was": "Raw manager wording was sometimes shown to assignees."},
+        {"id": "u23", "area": "Conversational create", "change": "Name someone and TskFlow assigns them — confirm is a chat message with clickable chips, not a form. Exited prompts save as drafts in the header.", "was": "The AI kept asking who even after you named Harold, then showed a labeled form."},
+        {"id": "u21", "area": "Smart Assignment", "change": "“My team” means everyone under you; “my direct reports” means directs only. Hierarchy roles (IC → AVP) are editable in My Hierarchy.", "was": "“My team” only resolved direct reports and there was no org-role editor."},
+        {"id": "u22", "area": "Assignee-facing tasks", "change": "Delegated asks are rewritten with Dale Carnegie-style clarity: a simple request plus numbered next steps for the person doing the work.", "was": "Raw manager wording was sometimes shown to assignees."},
         {"id": "u14", "area": "Slack Bridge", "change": "Paste your Slack Incoming Webhook in Settings to cross-post mentions, assignments, and EOD summaries into a Slack channel.", "was": "No Slack integration \u2014 mentions could get missed if you lived in Slack."},
         {"id": "u15", "area": "Screen Recording (robust)", "change": "Screen picker now lets you pick tab / window / entire screen freely; webcam preview is requested first and reliably renders in the recording bubble.", "was": "Was forced to current tab and the webcam bubble often didn\u2019t appear."},
         {"id": "u16", "area": "Unified Task View", "change": "Group tasks now open the same detail page as single tasks, with a collapsible Participants section (unfinished on top, top 5 visible, Show more).", "was": "Group tasks opened a separate stripped-down page."},
@@ -8352,9 +8457,10 @@ ASSIGNEE HINTS:
 - Extract explicit @mentions (strip @ prefix)
 - Extract first names/full names that appear in a "for X", "to X", "assign to X", "have X", "tell X", "@X", "I want X to..." pattern
 - Extract team/group names like "sales team", "managers", "engineering", "@Sales team"
-- If speaker refers to "my team" or "the team" or "our team", include the literal string "my team"
-- If they say "my direct reports" or "my reports" include the literal string "my reports"
+- If speaker refers to "my team" or "the team" or "our team", include the literal string "my team" (everyone under them)
+- If they say "my direct reports" or "my reports" include the literal string "my direct reports"
 - If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
+- A first name is enough ("have Harold…", "ask Sarah to…") — put that name in assignee_hints. Do not ask who.
 - NEVER invent assignees. If none found, return empty array.
 
 INTENT DETECTION:
@@ -8368,7 +8474,7 @@ CLARIFYING QUESTIONS:
 - Never ask about title, description, priority, category, or success criteria if you can infer them.
 - Never ask about success criteria / expectations — those are optional.
 - Ask about due_date only if truly missing/ambiguous AND assignee is already clear.
-- Ask about assignees only if no usable hint was found (do not invent names).
+- Ask about assignees only if no usable hint was found (do not invent names). If the sentence already names a person, do not ask who.
 
 TITLE RULES:
 - Crisp imperative 3–7 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
@@ -8380,8 +8486,10 @@ TITLE RULES:
   person name → assignee_hints; work → title like "Send EOD report". Never leave speech debris in the title.
 
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
-- Distill the manager's request into clear, actionable steps the assignee should follow.
+- Distill the manager's request into a Dale Carnegie-style ask: clear, simple, respectful, and easy to act on.
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…").
+- Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
+- Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
 - NEVER paste manager-centric or broken speech phrasing like "Ask my team to…", "Please can you Mahmood…", "I want them to…" as-is.
   Rewrite into assignee-facing instructions, e.g. "Please send your manager an end-of-day report…".
 - If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
@@ -8583,14 +8691,76 @@ def _fuzzy_name_score(haystack: str, needle: str) -> int:
     return -1
 
 
+_DIRECT_HINTS = {"my reports", "my direct reports", "direct reports"}
+_TEAM_HINTS = {"my team", "the team", "our team", "team"}
+_EVERYONE_HINTS = {
+    "everyone under me", "everyone reporting to me", "my whole team",
+    "whole team", "all my reports", "indirect reports", "all reports",
+}
+_HAVE_NAME_RE = re.compile(
+    r"\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+"
+    r"([A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,2})\s+"
+    r"(?:to|go|do|review|send|look|check|update|through)",
+    re.I,
+)
+_NAME_STOP = {
+    "my", "the", "our", "this", "that", "them", "him", "her", "me", "us", "it",
+    "a", "an", "your", "their", "someone", "anyone", "everyone", "team",
+}
+
+
+def _classify_team_hint(low: str) -> Optional[str]:
+    """direct = reports_to me; team/everyone = full subtree."""
+    if low in _DIRECT_HINTS:
+        return "direct"
+    if low in _TEAM_HINTS or low in _EVERYONE_HINTS:
+        return "team"
+    return None
+
+
+def _hints_from_answers(answers: Optional[dict]) -> List[str]:
+    if not answers:
+        return []
+    out = []
+    for k, v in answers.items():
+        val = str(v or "").strip()
+        if not val:
+            continue
+        key = str(k or "")
+        if re.search(r"who|own|assign", key, re.I):
+            out.append(val)
+        elif re.match(r"^[A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,2}$", val):
+            out.append(val)
+    return out
+
+
+def _name_hints_from_text(text: str) -> List[str]:
+    """Pull first/full names from 'have Harold…' / 'ask Sarah to…' even if lowercase."""
+    if not text:
+        return []
+    found = []
+    for m in _HAVE_NAME_RE.finditer(text):
+        name = (m.group(1) or "").strip()
+        first = name.split()[0].lower() if name else ""
+        if first in _NAME_STOP:
+            continue
+        if name and name not in found:
+            found.append(name)
+    return found
+
+
+def _resolved_user_chip(u: dict) -> dict:
+    uid = u.get("id")
+    email = (u.get("email") or "").strip()
+    if uid and str(uid).startswith("email_"):
+        return {"kind": "email", "id": uid, "name": u.get("name") or email.split("@")[0], "email": email}
+    return {"kind": "user", "id": uid, "name": u.get("name"), "email": email}
+
+
 async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     """
-    Match each raw hint against real users (same company_domain) and groups.
-    Also handles special tokens: 'my team' / 'the team' / 'our team' → the manager's direct reports.
-    Returns:
-      { 'resolved': [ {kind, id, name, email, members?:[user_ids], member_count} ],
-        'ambiguous': [ {hint, candidates: [{id,name,email}] } ],
-        'unresolved': [hint, ...] }
+    Match each raw hint against same-domain users, saved contacts, and groups.
+    'my team' → everyone under the user. 'my direct reports' → directs only.
     """
     if not hints:
         return {"resolved": [], "ambiguous": [], "unresolved": []}
@@ -8599,13 +8769,37 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     users = []
     if domain:
         users = await db.users.find({"company_domain": domain}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(500)
+    by_email = {(u.get("email") or "").lower(): u for u in users if u.get("email")}
+
+    contacts = []
+    if current_user.get("id"):
+        contacts = await db.user_contacts.find(
+            {"user_id": current_user["id"]},
+            {"_id": 0, "contact_name": 1, "contact_email": 1},
+        ).to_list(200)
+    for c in contacts:
+        email = (c.get("contact_email") or "").strip().lower()
+        name = (c.get("contact_name") or "").strip() or (email.split("@")[0] if email else "")
+        if not email and not name:
+            continue
+        if email and email in by_email:
+            continue
+        chip = {
+            "id": f"email_{email}" if email else f"name_{name.lower()}",
+            "name": name or email.split("@")[0],
+            "email": email,
+            "is_invited": True,
+        }
+        users.append(chip)
+        if email:
+            by_email[email] = chip
+
     groups = []
     g_query = {"owner_id": current_user.get("id")}
     if domain:
         g_query = {"$or": [{"company_domain": domain}, {"owner_id": current_user.get("id")}]}
     groups = await db.user_groups.find(g_query, {"_id": 0}).to_list(200)
 
-    # Preload direct reports (for 'my team') — hierarchy uses reports_to
     my_reports = []
     if current_user.get("id"):
         my_reports = await db.users.find(
@@ -8613,27 +8807,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             {"_id": 0, "id": 1, "name": 1, "email": 1},
         ).to_list(200)
 
-    # Preload FULL transitive subordinates (direct reports of direct reports, ...)
-    async def _all_subordinates(root_id: str) -> List[dict]:
-        seen = {root_id}
-        frontier = [root_id]
-        all_subs = []
-        while frontier:
-            next_frontier = []
-            reports = await db.users.find(
-                {"reports_to": {"$in": frontier}},
-                {"_id": 0, "id": 1, "name": 1, "email": 1},
-            ).to_list(500)
-            for u in reports:
-                if u["id"] in seen:
-                    continue
-                seen.add(u["id"])
-                all_subs.append(u)
-                next_frontier.append(u["id"])
-            frontier = next_frontier
-        return all_subs
     everyone_under_me = await _all_subordinates(current_user["id"]) if current_user.get("id") else []
-    has_indirect = len(everyone_under_me) > len(my_reports)
 
     resolved = []
     ambiguous = []
@@ -8653,79 +8827,32 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                 seen_ids.add(current_user["id"])
             continue
 
-        # Special: my team / the team / our team → direct reports (if any) else all same-domain users
-        if low in ("my team", "the team", "our team", "team", "my reports", "my direct reports", "direct reports"):
-            targets = my_reports or [u for u in users if u["id"] != current_user["id"]]
-            member_ids = [u["id"] for u in targets]
+        # Special: my team = everyone under you; my direct reports = directs only
+        scope = _classify_team_hint(low)
+        if scope:
+            if scope == "direct":
+                targets = my_reports
+                chip_id = "my-direct-reports"
+                chip_name = f"Direct reports ({len(my_reports)})" if my_reports else "Direct reports"
+            else:
+                targets = everyone_under_me or my_reports or [u for u in users if u.get("id") != current_user.get("id") and not str(u.get("id") or "").startswith("email_")]
+                chip_id = "everyone-under-me" if everyone_under_me else "my-team"
+                chip_name = (
+                    f"My team ({len(everyone_under_me)})" if everyone_under_me
+                    else (f"Direct reports ({len(my_reports)})" if my_reports else (f"Everyone in {domain}" if domain else "My team"))
+                )
+            member_ids = [u["id"] for u in targets if u.get("id")]
             if member_ids:
-                # Provide alternates so frontend can show a subtle scope picker
-                alternates = []
-                if my_reports and has_indirect:
-                    needs_team_scope = True
-                    alternates.append({
-                        "kind": "team", "id": "everyone-under-me",
-                        "name": f"Everyone under me ({len(everyone_under_me)})",
-                        "members": [u["id"] for u in everyone_under_me],
-                        "member_count": len(everyone_under_me),
-                        "member_names": [u["name"] for u in everyone_under_me],
-                    })
-                elif everyone_under_me and not my_reports:
-                    # No direct reports recorded but transitive graph exists
-                    targets = everyone_under_me
-                    member_ids = [u["id"] for u in targets]
-                domain_flat = [u for u in users if u["id"] != current_user["id"]]
-                if domain_flat and len(domain_flat) != len(member_ids):
-                    alternates.append({
-                        "kind": "team", "id": "everyone-in-domain",
-                        "name": f"Everyone in {domain}" if domain else "Everyone",
-                        "members": [u["id"] for u in domain_flat],
-                        "member_count": len(domain_flat),
-                        "member_names": [u["name"] for u in domain_flat],
-                    })
-                # Also surface named groups as quick alternates
-                for g in groups[:5]:
-                    g_emails = g.get("emails") or []
-                    g_member_ids = []
-                    g_names = []
-                    for em in g_emails:
-                        u = next((x for x in users if x["email"].lower() == em.lower()), None)
-                        if u:
-                            g_member_ids.append(u["id"])
-                            g_names.append(u["name"])
-                    if g_emails:
-                        alternates.append({
-                            "kind": "group",
-                            "id": g["id"],
-                            "name": g["name"],
-                            "members": g_member_ids,
-                            "emails": g_emails,
-                            "member_count": len(g_emails),
-                            "member_names": g_names,
-                        })
                 resolved.append({
                     "kind": "team",
-                    "id": "my-team",
-                    "name": f"Direct reports ({len(my_reports)})" if my_reports else (f"Everyone in {domain}" if domain else "Everyone"),
+                    "id": chip_id,
+                    "name": chip_name,
                     "email": None,
                     "members": member_ids,
                     "member_count": len(member_ids),
-                    "member_names": [u["name"] for u in targets],
-                    "alternates": alternates,
-                    "needs_scope_pick": needs_team_scope,
-                })
-            continue
-
-        # Special: everyone under me → transitive
-        if low in ("everyone under me", "everyone reporting to me", "my whole team", "whole team", "all my reports", "indirect reports", "all reports"):
-            if everyone_under_me:
-                resolved.append({
-                    "kind": "team",
-                    "id": "everyone-under-me",
-                    "name": f"Everyone under me ({len(everyone_under_me)})",
-                    "email": None,
-                    "members": [u["id"] for u in everyone_under_me],
-                    "member_count": len(everyone_under_me),
-                    "member_names": [u["name"] for u in everyone_under_me],
+                    "member_names": [u.get("name") for u in targets],
+                    "alternates": [],
+                    "needs_scope_pick": False,
                 })
             continue
 
@@ -8734,7 +8861,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
             match = next((u for u in users if u["email"].lower() == low), None)
             if match:
                 if match["id"] not in seen_ids:
-                    resolved.append({"kind": "user", "id": match["id"], "name": match["name"], "email": match["email"]})
+                    resolved.append(_resolved_user_chip(match))
                     seen_ids.add(match["id"])
             else:
                 # Unresolved email → keep as an email address for bulk-create
@@ -8785,7 +8912,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
         elif len(user_candidates) == 1 or user_candidates[0][0] < user_candidates[1][0]:
             u = user_candidates[0][1]
             if u["id"] not in seen_ids:
-                resolved.append({"kind": "user", "id": u["id"], "name": u["name"], "email": u["email"]})
+                resolved.append(_resolved_user_chip(u))
                 seen_ids.add(u["id"])
         else:
             # Ambiguous — top score tied with next
@@ -8900,6 +9027,35 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
             s = "Please " + s[0].lower() + s[1:] if len(s) > 1 else "Please " + s
 
     return s.strip()
+
+
+def _infer_next_steps(desc: str, title: str = "") -> List[str]:
+    blob = f"{title} {desc}".strip()
+    steps = []
+    if re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
+        steps.append("Review the material and note anything that needs a decision.")
+    if re.search(r"(?i)\b(update|report|eod|summary)\b", blob):
+        steps.append(f"Send a short update to {('your manager')} with what you found and any blockers.")
+    if re.search(r"(?i)\b(call|meet|talk)\b", blob):
+        steps.append("Complete the conversation and capture the outcome.")
+    if not steps:
+        steps.append("Complete the ask above.")
+        steps.append("Reply with a brief update when you are done.")
+    return steps[:3]
+
+
+def _carnegie_format_description(desc: str, title: str = "", manager_name: Optional[str] = None) -> str:
+    """Clear ask + numbered next steps (Dale Carnegie: make the request easy to act on)."""
+    s = (desc or "").strip()
+    if not s:
+        return s
+    if re.search(r"(?i)next steps?:", s) or re.search(r"(?m)^\s*1[\.\)]\s", s):
+        return s
+    steps = _infer_next_steps(s, title)
+    if manager_name:
+        steps = [st.replace("your manager", manager_name) for st in steps]
+    numbered = "\n".join(f"{i + 1}. {st}" for i, st in enumerate(steps))
+    return f"{s.rstrip()}\n\nNext steps:\n{numbered}"
 
 
 def _assignee_name_list(parsed: dict) -> List[str]:
@@ -9048,10 +9204,19 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
             desc = cleaned
 
     # Always present the task the way the assignee should read it
+    title_for_steps = str(parsed.get("title") or title or "")
     if desc:
-        parsed["description"] = _rewrite_description_for_assignee(desc, manager_name)
+        parsed["description"] = _carnegie_format_description(
+            _rewrite_description_for_assignee(desc, manager_name),
+            title=title_for_steps,
+            manager_name=manager_name,
+        )
     elif repaired:
-        parsed["description"] = _rewrite_description_for_assignee(repaired, manager_name)
+        parsed["description"] = _carnegie_format_description(
+            _rewrite_description_for_assignee(repaired, manager_name),
+            title=title_for_steps,
+            manager_name=manager_name,
+        )
     if actions:
         parsed["action_items"] = [
             _rewrite_description_for_assignee(a, manager_name) for a in actions
@@ -9230,6 +9395,11 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             hints.append(token)
             hint_keys.add(token)
             break
+    for name in _name_hints_from_text(text or ""):
+        key = name.lower()
+        if key not in hint_keys:
+            hints.append(name)
+            hint_keys.add(key)
     parsed["assignee_hints"] = hints
 
     # Resolve assignees before title scrub so known names can be removed from title/description
@@ -9252,8 +9422,8 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     if req.resolve:
         ar = parsed.get("assignee_resolution") or {}
         needs_team_scope = bool(ar.get("needs_team_scope"))
-        # Ask who only when we have no resolved assignees and no ambiguous candidates to pick from
-        if not ar.get("resolved") and not ar.get("ambiguous"):
+        # Ask who only when nothing was named and nothing resolved
+        if not ar.get("resolved") and not ar.get("ambiguous") and not parsed.get("assignee_hints"):
             needs_who = True
 
     single_q = None
@@ -9285,13 +9455,32 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
     """One-shot: parse + resolve → returns a ready-to-confirm task preview + clarifying questions."""
     # If answers were provided, append them to the text so the LLM has more context
     text = req.text or ""
+    extra_hints = _hints_from_answers(req.answers)
     if req.answers:
         add = " ".join([f"{k}: {v}" for k, v in req.answers.items() if v])
         if add:
             text = f"{text}. Additional info: {add}"
+        for h in extra_hints:
+            if h and f"assign to {h.lower()}" not in text.lower():
+                text = f"{text}. Assign to {h}."
 
     parse_req = SmartParseRequest(text=text, resolve=True)
     parsed = await smart_parse_task(parse_req, current_user)
+    if extra_hints:
+        hints = list(parsed.get("assignee_hints") or [])
+        keys = {str(h).strip().lstrip("@").lower() for h in hints}
+        for h in extra_hints:
+            if h and h.strip().lstrip("@").lower() not in keys:
+                hints.append(h)
+                keys.add(h.strip().lstrip("@").lower())
+        parsed["assignee_hints"] = hints
+        parsed["assignee_resolution"] = await _resolve_assignee_hints(hints, current_user)
+        ar = parsed.get("assignee_resolution") or {}
+        if ar.get("resolved") or ar.get("ambiguous"):
+            parsed["clarifying_questions"] = [
+                q for q in (parsed.get("clarifying_questions") or [])
+                if not re.search(r"who|own|assign", q or "", re.I)
+            ]
     # Ready when due + assignee are known and no clarifying question remains
     ar = parsed.get("assignee_resolution", {"resolved": [], "ambiguous": [], "unresolved": []})
     parsed["ready_to_confirm"] = (

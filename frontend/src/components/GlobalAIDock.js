@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { X } from 'lucide-react';
-import { useAuth } from '@/App';
+import { useAuth, API } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
 
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
@@ -68,22 +69,44 @@ const GlobalAIDock = () => {
         window.addEventListener('tskflow:focus-ai-prompt', markActive);
         window.addEventListener('tskflow:attach-to-ai-create', onAttach);
         window.addEventListener('tskflow:start-task-from-recording', onRecordingTask);
+        window.addEventListener('tskflow:resume-ai-draft', focusPrompt);
         return () => {
             window.removeEventListener('tskflow:open-ai-create', focusPrompt);
             window.removeEventListener('tskflow:focus-ai-prompt', markActive);
             window.removeEventListener('tskflow:attach-to-ai-create', onAttach);
             window.removeEventListener('tskflow:start-task-from-recording', onRecordingTask);
+            window.removeEventListener('tskflow:resume-ai-draft', focusPrompt);
         };
     }, []);
 
+    const persistDraftFromSnap = useCallback(async (snap) => {
+        const raw = (snap?.text || '').trim();
+        if (!raw || snap?.sending) return;
+        try {
+            const first = raw.split('\n')[0].replace(/^#+\s*/, '').trim();
+            await axios.post(`${API}/tasks/drafts`, {
+                title: (snap.editTitle || first || 'Untitled draft').slice(0, 80),
+                description: snap.editDesc || raw,
+                due_date: snap.editDue || '',
+                priority: snap.editPriority || 'Medium',
+                assigned_to: snap.editAssignees?.[0]?.id || snap.editAssignees?.[0]?.email || '',
+            });
+            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
+        } catch {
+            /* draft save is best-effort */
+        }
+    }, []);
+
     const clearFlow = useCallback(() => {
+        const snap = snapRef.current;
+        persistDraftFromSnap(snap);
         setActive(false);
         setFocused(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
         window.dispatchEvent(new CustomEvent('tskflow:ai-dock-reset'));
-    }, []);
+    }, [persistDraftFromSnap]);
 
     useEffect(() => {
         const onKey = (e) => {

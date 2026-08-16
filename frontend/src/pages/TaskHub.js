@@ -241,7 +241,11 @@ const TaskHub = () => {
     useEffect(() => {
         const handler = () => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); };
         window.addEventListener('tskflow:voice-executed', handler);
-        return () => window.removeEventListener('tskflow:voice-executed', handler);
+        window.addEventListener('tskflow:drafts-changed', handler);
+        return () => {
+            window.removeEventListener('tskflow:voice-executed', handler);
+            window.removeEventListener('tskflow:drafts-changed', handler);
+        };
     }, []);
 
     // Auto-save draft inside the create modal (debounced)
@@ -344,22 +348,8 @@ const TaskHub = () => {
 
     // Resume a draft — open modal and populate
     const resumeDraft = async (draft) => {
-        setShowCreateModal(true);
-        setDraftInModal({ id: draft.id, status: 'saved' });
-        setTaskForm({
-            title: draft.title || '',
-            description: draft.description || '',
-            due_date: draft.due_date || '',
-            priority: draft.priority || 'Medium',
-            is_sales_task: draft.is_sales_task || false,
-            requires_screen_recording: draft.requires_screen_recording || false,
-            success_criteria: draft.success_criteria || '',
-        });
-        setAttachments(draft.attachments || []);
-        // Best-effort restore of assignee
-        if (draft.assigned_to === 'self') setSelectedAssignees([{ type: 'self' }]);
-        else if (draft.assigned_to && draft.assigned_to.includes('@')) setSelectedAssignees([{ type: 'email', email: draft.assigned_to }]);
-        else if (draft.assigned_to) setSelectedAssignees([{ type: 'user', id: draft.assigned_to, name: draft.assigned_to_email || 'User', email: draft.assigned_to_email || '' }]);
+        window.dispatchEvent(new CustomEvent('tskflow:resume-ai-draft', { detail: draft }));
+        window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
     };
 
     // Auto-refresh polling with sound notification for new tasks
@@ -964,6 +954,7 @@ const TaskHub = () => {
         } else if (dateFilter === 'today_overdue') {
             filtered = filterTodayAndOverdue(filtered);
         }
+        filtered = filtered.filter((t) => t.status !== 'Draft');
         filtered = filtered.filter(matchesSearch);
         if (salesOnly) {
             filtered = filtered.filter(
@@ -1165,6 +1156,67 @@ const TaskHub = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                        {(drafts.length > 0 || transcriptSessions.length > 0) && (
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="rounded-full bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                                        data-testid="drafts-compact"
+                                    >
+                                        <FileText className="w-4 h-4 mr-1.5" />
+                                        Drafts
+                                        <span className="ml-1.5 text-[11px] font-semibold">
+                                            {drafts.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)}
+                                        </span>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="end" className="w-80 p-2" data-testid="drafts-popover">
+                                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                        {transcriptSessions.map((s) => (
+                                            <div
+                                                key={`ts-${s.id}`}
+                                                className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs cursor-pointer hover:bg-indigo-100"
+                                                onClick={() => navigate(`/transcript?session=${encodeURIComponent(s.id)}`)}
+                                                data-testid={`transcript-session-${s.id}`}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-semibold text-slate-900 truncate">Transcript · {s.top_title || 'Session'}</p>
+                                                    <p className="text-[10px] text-indigo-700">{s.remaining} left to knock out</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {drafts.map((draft) => (
+                                            <div
+                                                key={draft.id}
+                                                className="relative flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs cursor-pointer hover:bg-amber-100 group/draft"
+                                                onClick={() => resumeDraft(draft)}
+                                                data-testid={`draft-card-${draft.id}`}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-semibold text-slate-900 truncate">{draft.title || 'Untitled draft'}</p>
+                                                    <p className="text-[10px] text-amber-700">
+                                                        {draft.created_at && !isNaN(new Date(draft.created_at).getTime())
+                                                            ? format(new Date(draft.created_at), 'MMM dd, h:mm a')
+                                                            : 'Recent'}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => deleteDraft(draft.id, e)}
+                                                    className="opacity-0 group-hover/draft:opacity-100 text-red-500 hover:bg-red-50 rounded-full p-1"
+                                                    title="Delete draft"
+                                                    data-testid={`delete-draft-${draft.id}`}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        )}
                         {/* AI Summary and Bulk Approve */}
                         <Button
                             variant="outline"
@@ -1600,66 +1652,6 @@ const TaskHub = () => {
                         </div>
                     </DialogContent>
                 </Dialog>
-
-                {/* Compact drafts pill — tucked away, one line, one tap to expand */}
-                {(drafts.length > 0 || transcriptSessions.length > 0) && (
-                    <details className="mb-4 group" data-testid="drafts-compact">
-                        <summary className="cursor-pointer select-none inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100">
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="font-medium">
-                                {drafts.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)} unfinished
-                                {' '}{(drafts.length + transcriptSessions.length) === 1 ? 'draft' : 'drafts'}
-                            </span>
-                            <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
-                        </summary>
-                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                            {transcriptSessions.map((s) => (
-                                <div
-                                    key={`ts-${s.id}`}
-                                    className="relative flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs cursor-pointer hover:bg-indigo-100"
-                                    onClick={() => navigate(`/transcript?session=${encodeURIComponent(s.id)}`)}
-                                    data-testid={`transcript-session-${s.id}`}
-                                >
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-semibold text-slate-900 truncate">Transcript · {s.top_title || 'Session'}</p>
-                                        <p className="text-[10px] text-indigo-700">
-                                            {s.remaining} left to knock out
-                                            {s.created_at && !isNaN(new Date(s.created_at).getTime())
-                                                ? ` · ${format(new Date(s.created_at), 'MMM dd, h:mm a')}`
-                                                : ''}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                            {drafts.map((draft) => (
-                                <div
-                                    key={draft.id}
-                                    className="relative flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs cursor-pointer hover:bg-amber-100 group/draft"
-                                    onClick={() => resumeDraft(draft)}
-                                    data-testid={`draft-card-${draft.id}`}
-                                >
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-semibold text-slate-900 truncate">{draft.title || 'Untitled draft'}</p>
-                                        <p className="text-[10px] text-amber-700">
-                                            {draft.created_at && !isNaN(new Date(draft.created_at).getTime())
-                                                ? format(new Date(draft.created_at), 'MMM dd, h:mm a')
-                                                : 'Recent'}
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => deleteDraft(draft.id, e)}
-                                        className="opacity-0 group-hover/draft:opacity-100 text-red-500 hover:bg-red-50 rounded-full p-1"
-                                        title="Delete draft"
-                                        data-testid={`delete-draft-${draft.id}`}
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </details>
-                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-start">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
