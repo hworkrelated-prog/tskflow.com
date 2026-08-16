@@ -27,6 +27,11 @@ body.app-authenticated {
 body.app-authenticated.has-ai-dock {
     padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
 }
+@media (max-width: 51.99rem) {
+    body.app-authenticated.has-ai-dock {
+        padding-bottom: calc(11rem + env(safe-area-inset-bottom, 0px));
+    }
+}
 
 /* Tap targets feel snappier on mobile without 300ms delay leftovers */
 button,
@@ -232,12 +237,12 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Bottom bar stays planted; open/close eases instead of snapping. */
 .ai-command-dock {
+    width: 100%;
     --glow-x: 50%;
     --glow-y: 70%;
     --glow-strength: 0.42;
     isolation: isolate;
     overflow: visible;
-    transform: translateX(-50%);
 }
 .ai-bar-glow {
     position: absolute;
@@ -464,6 +469,55 @@ h1, h2, h3, h4, h5, h6 {
 
 body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Prompt + Jarvis share one bottom stage so the orb never covers the bar. */
+.ai-bottom-stage {
+    position: fixed;
+    z-index: 40;
+    left: 50%;
+    bottom: 1rem;
+    transform: translateX(-50%);
+    width: min(96vw, 40rem);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+    pointer-events: none;
+}
+.ai-bottom-stage > * {
+    pointer-events: auto;
+}
+.ai-bottom-stage .ai-command-dock {
+    align-self: stretch;
+    width: 100%;
+}
+.ai-bottom-stage .ai-jarvis-anchor {
+    position: relative;
+    z-index: 45;
+    width: auto;
+    max-width: 100%;
+}
+.ai-bottom-stage .ai-jarvis-orb {
+    height: 2.5rem;
+    width: 2.5rem;
+}
+@media (min-width: 52rem) {
+    .ai-bottom-stage {
+        width: min(96vw, calc(40rem + 3.75rem));
+        flex-direction: row-reverse;
+        align-items: flex-end;
+        gap: 1rem;
+    }
+    .ai-bottom-stage .ai-command-dock {
+        flex: 1 1 auto;
+        max-width: 40rem;
+    }
+    .ai-bottom-stage .ai-jarvis-orb {
+        height: 3rem;
+        width: 3rem;
+    }
 }
 
 .ai-prompt-placeholder {

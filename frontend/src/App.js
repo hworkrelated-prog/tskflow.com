@@ -34,6 +34,7 @@ import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
+import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
 import TeamSetupModal from '@/components/TeamSetupModal';
@@ -446,6 +447,7 @@ function App() {
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
+                    <Route path="/updates" element={<ProtectedRoute><UpdatesPage /></ProtectedRoute>} />
                     <Route path="/" element={
                         <PublicRoute>
                             <LandingPage />
@@ -538,7 +540,10 @@ function App() {
                     <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
                 </Routes>
-                <GlobalAIDock />
+                <div className="ai-bottom-stage" data-testid="ai-bottom-stage">
+                    <VoiceMode dockIntegrated />
+                    <GlobalAIDock />
+                </div>
                 <TeamSetupModal />
                 <WhatsNewPrompt />
                 <CatchUpReview />

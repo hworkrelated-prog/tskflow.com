@@ -168,8 +168,7 @@ const GlobalAIDock = () => {
     return (
         <div
             ref={dockRef}
-            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
-            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+            className={`ai-command-dock${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
             data-testid="ai-command-dock"
             onPointerMove={setGlowPoint}
             onPointerEnter={(e) => {

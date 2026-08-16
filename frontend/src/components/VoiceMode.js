@@ -370,10 +370,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     return (
         <div
-            className={`fixed z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
-                    dockIntegrated
-                        ? 'right-3 bottom-[calc(7.5rem+env(safe-area-inset-bottom,0px))]'
-                    : 'safe-fab-br'
+            className={`ai-jarvis-anchor flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)]${
+                dockIntegrated ? '' : ' fixed z-[45] safe-fab-br'
             }`}
             data-testid="voice-mode-widget"
         >
@@ -400,7 +398,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         initial={{ opacity: 0, y: 12, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 12, scale: 0.96 }}
-                        className="w-[360px] max-w-[94vw] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col"
+                        className="ai-jarvis-panel w-[min(24rem,calc(100vw-1.5rem))] bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col"
                         data-testid="voice-chat-panel"
                     >
                         <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 bg-white">
@@ -511,9 +509,9 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.96 }}
                 transition={wiggle ? { duration: 0.45 } : { duration: 0.15 }}
-                className={`relative flex items-center justify-center rounded-full ring-1 ring-white/60 ${
+                className={`ai-jarvis-orb relative flex items-center justify-center rounded-full ring-1 ring-white/70 ${
                     dockIntegrated
-                        ? 'h-12 w-12 shadow-[0_10px_28px_rgba(13,148,136,0.32)]'
+                        ? 'h-11 w-11 shadow-[0_8px_22px_rgba(13,148,136,0.28)]'
                         : 'h-14 w-14 shadow-[0_12px_32px_rgba(13,148,136,0.35)]'
                 }`}
                 title="Jarvis — AI manager"
@@ -521,7 +519,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             >
                 <JarvisIcon
                     phase={open && phase === 'idle' ? 'idle' : phase}
-                    size={dockIntegrated ? 48 : 56}
+                    size={dockIntegrated ? 44 : 56}
                     showRing
                 />
             </motion.button>

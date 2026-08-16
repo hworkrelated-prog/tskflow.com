@@ -50,5 +50,11 @@ def test_settings_eod_card_uses_semantic_surfaces():
 
 def test_voice_fab_sits_above_command_bar():
     src = _read("components", "VoiceMode.js")
-    assert "7.5rem" in src
+    css = _read("index.css")
+    # Shared bottom stage replaces the guessed 7.5rem FAB offset.
+    assert "ai-jarvis-anchor" in src
+    assert "dockIntegrated" in src
     assert "4.75rem" not in src
+    assert "7.5rem" not in src
+    assert ".ai-bottom-stage" in css
+    assert "flex-direction: column" in css

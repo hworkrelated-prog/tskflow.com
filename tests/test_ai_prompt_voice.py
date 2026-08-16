@@ -26,8 +26,16 @@ def test_composer_has_voice_mic_that_auto_sends():
 
 def test_voice_fab_does_not_overlap_prompt():
     app = _read("App.js")
-    assert "VoiceMode" not in app
+    voice = _read("components", "VoiceMode.js")
+    css = (ROOT / "frontend/src/index.css").read_text(encoding="utf-8")
+    # Prompt mic from #32 is in the composer; Jarvis stays in the shared stage
+    # (this PR) instead of a fixed FAB sitting on Go.
+    assert "<VoiceMode dockIntegrated />" in app
+    assert 'data-testid="ai-bottom-stage"' in app
     assert "voice-mode-fab" not in app
+    assert "fixed z-[45] safe-fab-br" in voice
+    assert "dockIntegrated" in voice
+    assert ".ai-bottom-stage" in css
 
 
 def test_analytics_metrics_stack_on_mobile():
