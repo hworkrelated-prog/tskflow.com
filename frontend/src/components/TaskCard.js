@@ -130,7 +130,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                                 <span className={getPriorityClass(task.priority)}>{task.priority}</span>
                                 {task.is_sales_task && (
                                     <span
-                                        className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded"
+                                        className="sales-badge"
                                         data-testid={`sales-badge-${task.id}`}
                                     >
                                         Sales

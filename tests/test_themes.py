@@ -48,6 +48,23 @@ def test_settings_eod_card_uses_semantic_surfaces():
     assert "theme-option-${t.id}" in src or 'theme-option-dark' in src
 
 
+def test_sales_badge_is_readable_in_dark_mode():
+    css = _read("App.css")
+    card = _read("components", "TaskCard.js")
+    group = _read("components", "ParentTaskGroup.js")
+    detail = _read("pages", "TaskDetail.js")
+    assert ".sales-badge" in css
+    dark = css.split("[data-theme=\"dark\"] .sales-badge")[1].split("}")[0]
+    assert "#6ee7b7" in dark
+    assert "#12332f" in dark
+    assert "text-emerald-800" in css
+    assert 'className="sales-badge"' in card
+    assert "sales-badge" in group
+    assert "sales-badge" in detail
+    assert "bg-emerald-50 text-emerald-800" not in card
+    assert "bg-emerald-50 text-emerald-800" not in group.split("sales-badge")[1][:400]
+
+
 def test_dark_composer_field_stays_flush_with_shell():
     css = _read("index.css")
     app = _read("App.css")
