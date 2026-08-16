@@ -411,7 +411,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 [data-theme="dark"] .ai-composer-shell textarea::placeholder,
 [data-theme="dark"] .ai-composer-shell input::placeholder {
-    color: hsl(215 12% 64%);
+    color: hsl(215 14% 72%);
 }
 [data-theme="dark"] .ai-composer-icon-btn {
     color: hsl(215 14% 72%);
@@ -423,8 +423,8 @@ h1, h2, h3, h4, h5, h6 {
     background: rgba(255, 255, 255, 0.08) !important;
 }
 [data-theme="dark"] .ai-composer-send {
-    background: rgba(255, 255, 255, 0.14) !important;
-    color: rgba(255, 255, 255, 0.55) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+    color: rgba(255, 255, 255, 0.72) !important;
     opacity: 1 !important;
 }
 [data-theme="dark"] .ai-composer-send.is-ready {
@@ -573,5 +573,5 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     }
 }
 [data-theme="dark"] .ai-prompt-placeholder {
-    color: hsl(215 12% 64%);
+    color: hsl(215 14% 72%);
 }

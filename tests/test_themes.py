@@ -62,10 +62,10 @@ def test_dark_composer_field_stays_flush_with_shell():
     assert "#f4f4f5" in send
     assert "#111111" in send
     idle = css.split("[data-theme=\"dark\"] .ai-composer-send {")[1].split("}")[0]
-    assert "rgba(255, 255, 255, 0.14)" in idle
+    assert "rgba(255, 255, 255, 0.18)" in idle
     placeholder = css.split("[data-theme=\"dark\"] .ai-prompt-placeholder")[1].split("}")[0]
     assert "rgb(148 163 184)" not in placeholder
-    assert "hsl(215 12% 64%)" in placeholder
+    assert "hsl(215 14% 72%)" in placeholder
 
 
 def test_voice_fab_sits_above_command_bar():
