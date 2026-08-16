@@ -34,7 +34,6 @@ import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
-import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
 import TeamSetupModal from '@/components/TeamSetupModal';
@@ -542,7 +541,6 @@ function App() {
                 <GlobalAIDock />
                 <TeamSetupModal />
                 <WhatsNewPrompt />
-                <VoiceMode dockIntegrated />
                 <CatchUpReview />
             </BrowserRouter>
             <Toaster position="top-right" />
