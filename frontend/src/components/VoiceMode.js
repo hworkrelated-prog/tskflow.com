@@ -317,6 +317,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     useEffect(() => {
         const onNudge = (e) => {
+            window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
             if (open) return;
             const reason = e?.detail?.reason || 'Need a hand?';
             setNudge(reason);
@@ -327,7 +328,10 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 setNudge(false);
             }, 6000);
         };
-        const onOpen = () => openPanel();
+        const onOpen = () => {
+            window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
+            if (!dockIntegrated) openPanel();
+        };
         window.addEventListener('tskflow:nudge-assistant', onNudge);
         window.addEventListener('tskflow:open-assistant', onOpen);
         return () => {
@@ -341,6 +345,9 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         const onKey = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
                 e.preventDefault();
+                window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
+                window.dispatchEvent(new CustomEvent('tskflow:start-prompt-voice'));
+                if (dockIntegrated) return;
                 if (open && phase === 'listening') stopListening();
                 else if (open) startListening();
                 else openPanel();
@@ -348,7 +355,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [open, phase, openPanel, startListening, stopListening]);
+    }, [open, phase, openPanel, startListening, stopListening, dockIntegrated]);
 
     if (!user) return null;
     const hiddenPaths = ['/login', '/register', '/verify-email', '/forgot-password'];
@@ -367,6 +374,11 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         setTextInput('');
         sendCommand(t, { speakReply: false });
     };
+
+    // Jarvis lives in the prompt bar. This shell only keeps shortcuts + nudges.
+    if (dockIntegrated) {
+        return null;
+    }
 
     return (
         <div

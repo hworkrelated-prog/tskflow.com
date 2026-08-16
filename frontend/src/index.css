@@ -238,103 +238,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Bottom bar stays planted; open/close eases instead of snapping. */
 .ai-command-dock {
     width: 100%;
-    --glow-x: 50%;
-    --glow-y: 70%;
-    --glow-strength: 0.42;
-    isolation: isolate;
     overflow: visible;
-    padding: 2px;
     box-sizing: border-box;
-}
-.ai-bar-glow {
-    position: absolute;
-    inset: -28px -22px -20px;
-    border-radius: 2.25rem;
-    pointer-events: none;
-    z-index: -1;
-    overflow: visible;
-    background:
-        radial-gradient(
-            200px 90px at var(--glow-x) var(--glow-y),
-            rgba(13, 148, 136, calc(var(--glow-strength) * 0.5)),
-            transparent 64%
-        );
-    box-shadow:
-        0 0 0 1px rgba(13, 148, 136, calc(var(--glow-strength) * 0.28)),
-        0 0 22px 3px rgba(13, 148, 136, calc(var(--glow-strength) * 0.16)),
-        0 14px 36px -8px rgba(13, 148, 136, calc(var(--glow-strength) * 0.32));
-    opacity: 0.86;
-    transition:
-        opacity 280ms ease,
-        box-shadow 280ms ease,
-        background 280ms ease;
-    animation: ai-bar-breathe 5.2s ease-in-out infinite;
-}
-.ai-bar-glow-spot {
-    position: absolute;
-    width: 240px;
-    height: 150px;
-    left: var(--glow-x);
-    top: var(--glow-y);
-    transform: translate(-50%, -50%);
-    border-radius: 999px;
-    pointer-events: none;
-    z-index: -1;
-    background: radial-gradient(
-        circle,
-        rgba(13, 148, 136, calc(var(--glow-strength) * 0.55)) 0%,
-        transparent 72%
-    );
-    filter: blur(14px);
-}
-.ai-command-dock.is-hover,
-.ai-command-dock.is-focused {
-    --glow-strength: 0.62;
-}
-.ai-command-dock.is-hover .ai-bar-glow,
-.ai-command-dock.is-focused .ai-bar-glow {
-    opacity: 1;
-    animation: none;
-}
-.ai-command-dock.is-typing {
-    --glow-strength: 0.82;
-}
-.ai-command-dock.is-typing .ai-bar-glow {
-    opacity: 1;
-    animation: none;
-    box-shadow:
-        0 0 0 1px rgba(13, 148, 136, 0.34),
-        0 0 28px 6px rgba(13, 148, 136, 0.22),
-        0 16px 40px -6px rgba(13, 148, 136, 0.4);
-}
-@keyframes ai-bar-breathe {
-    0%, 100% { opacity: 0.68; }
-    50% { opacity: 0.96; }
-}
-[data-theme="dark"] .ai-bar-glow {
-    background:
-        radial-gradient(
-            200px 90px at var(--glow-x) var(--glow-y),
-            rgba(45, 212, 191, calc(var(--glow-strength) * 0.4)),
-            transparent 64%
-        );
-    box-shadow:
-        0 0 0 1px rgba(45, 212, 191, calc(var(--glow-strength) * 0.26)),
-        0 0 22px 3px rgba(45, 212, 191, calc(var(--glow-strength) * 0.14)),
-        0 14px 36px -8px rgba(45, 212, 191, calc(var(--glow-strength) * 0.28));
-}
-[data-theme="dark"] .ai-bar-glow-spot {
-    background: radial-gradient(
-        circle,
-        rgba(45, 212, 191, calc(var(--glow-strength) * 0.5)) 0%,
-        transparent 72%
-    );
-}
-[data-theme="dark"] .ai-command-dock.is-typing .ai-bar-glow {
-    box-shadow:
-        0 0 0 1px rgba(45, 212, 191, 0.34),
-        0 0 28px 6px rgba(45, 212, 191, 0.2),
-        0 16px 40px -6px rgba(45, 212, 191, 0.36);
 }
 .ai-dock-panel {
     padding: 0;
@@ -349,19 +254,19 @@ h1, h2, h3, h4, h5, h6 {
         box-shadow 280ms ease;
 }
 .ai-dock-panel.is-active {
-    padding: 0.5rem 0.625rem;
-    border-radius: 1.5rem;
+    padding: 0.5rem 0.5rem 0.35rem;
+    border-radius: 1.25rem;
     background: #fff;
     box-shadow:
-        0 0 0 1px rgba(226, 232, 240, 0.7),
-        0 10px 15px -3px rgba(15, 23, 42, 0.1);
+        0 0 0 1px rgba(15, 23, 42, 0.08),
+        0 18px 40px -18px rgba(15, 23, 42, 0.28);
     overflow-y: auto;
 }
 [data-theme="dark"] .ai-dock-panel.is-active {
     background: #1a1a1a;
     box-shadow:
         0 0 0 1px rgba(255, 255, 255, 0.1),
-        0 10px 15px -3px rgba(0, 0, 0, 0.45);
+        0 18px 40px -18px rgba(0, 0, 0, 0.55);
 }
 .ai-dock-exit {
     opacity: 0;
@@ -403,8 +308,7 @@ h1, h2, h3, h4, h5, h6 {
 @media (prefers-reduced-motion: reduce) {
     .ai-dock-panel,
     .ai-dock-exit,
-    .ai-command-chips-wrap,
-    .ai-bar-glow {
+    .ai-command-chips-wrap {
         transition: none;
         animation: none;
     }
@@ -485,7 +389,7 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Prompt + Jarvis share one bottom stage so the orb never covers the bar. */
+/* Prompt bar sits alone at the bottom — Jarvis lives inside it. */
 .ai-bottom-stage {
     position: fixed;
     z-index: 40;
@@ -499,8 +403,7 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     padding-bottom: env(safe-area-inset-bottom, 0px);
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 1rem;
+    align-items: stretch;
     pointer-events: none;
 }
 .ai-bottom-stage > * {
@@ -510,55 +413,63 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     align-self: stretch;
     width: 100%;
 }
-.ai-bottom-stage .ai-jarvis-anchor {
-    position: relative;
-    z-index: 45;
-    width: auto;
-    max-width: 100%;
+.ai-jarvis-mark {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
 }
-.ai-bottom-stage .ai-jarvis-orb {
-    height: 2.5rem;
-    width: 2.5rem;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+.ai-jarvis-mark:hover {
+    opacity: 0.92;
+}
+.ai-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-height: min(52dvh, 28rem);
+    overflow-y: auto;
+    padding: 0.25rem 0.25rem 0.75rem;
+}
+.ai-thread-thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: rgb(100 116 139);
+    font-size: 0.8125rem;
+}
+.ai-thread-user,
+.ai-thread-assistant {
+    max-width: 92%;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+.ai-thread-user {
+    margin-left: auto;
+    border-radius: 1.15rem 1.15rem 0.35rem 1.15rem;
+    background: #0f172a;
+    color: #fff;
+    padding: 0.5rem 0.85rem;
+}
+.ai-thread-assistant {
+    margin-right: auto;
+    border-radius: 1.15rem 1.15rem 1.15rem 0.35rem;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 0.5rem 0.85rem;
+    border: 1px solid rgb(226 232 240);
+}
+[data-theme="dark"] .ai-thread-assistant {
+    background: #141414;
+    color: hsl(var(--foreground));
+    border-color: rgba(255, 255, 255, 0.1);
 }
 @media (max-width: 51.99rem) {
     .ai-command-dock {
         overflow: visible;
-        --glow-strength: 0.2;
     }
     .ai-command-chips-wrap {
         display: none;
-    }
-    .ai-bar-glow {
-        inset: -4px;
-        opacity: 0.45;
-        animation: none;
-        background: none;
-        box-shadow:
-            0 0 0 1px rgba(13, 148, 136, 0.14),
-            0 8px 16px -12px rgba(13, 148, 136, 0.28);
-    }
-    .ai-bar-glow-spot {
-        display: none;
-    }
-}
-@media (min-width: 52rem) {
-    .ai-bottom-stage {
-        left: 0.75rem;
-        right: 0.75rem;
-        width: auto;
-        max-width: calc(40rem + 3.75rem);
-        flex-direction: row-reverse;
-        align-items: flex-end;
-        gap: 1rem;
-    }
-    .ai-bottom-stage .ai-command-dock {
-        flex: 1 1 auto;
-        max-width: 40rem;
-    }
-    .ai-bottom-stage .ai-jarvis-orb {
-        height: 3rem;
-        width: 3rem;
     }
 }
 

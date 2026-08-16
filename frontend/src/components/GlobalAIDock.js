@@ -22,7 +22,6 @@ const GlobalAIDock = () => {
     const snapRef = useRef(null);
     const attachHandlerRef = useRef(null);
     const dockRef = useRef(null);
-    const typingTimer = useRef(null);
 
     const visible =
         !!user
@@ -128,8 +127,6 @@ const GlobalAIDock = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [active, focused, clearFlow]);
 
-    useEffect(() => () => window.clearTimeout(typingTimer.current), []);
-
     const openManual = (prefill) => {
         try {
             if (prefill) sessionStorage.setItem('tsk_manual_prefill', JSON.stringify(prefill));
@@ -144,49 +141,12 @@ const GlobalAIDock = () => {
 
     const open = active || focused || recordingPending;
 
-    const setGlowPoint = (e) => {
-        const el = dockRef.current;
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        if (!r.width || !r.height) return;
-        const x = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
-        const y = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
-        el.style.setProperty('--glow-x', `${x}%`);
-        el.style.setProperty('--glow-y', `${y}%`);
-    };
-
-    const markTyping = () => {
-        const el = dockRef.current;
-        if (!el) return;
-        el.classList.add('is-typing');
-        window.clearTimeout(typingTimer.current);
-        typingTimer.current = window.setTimeout(() => {
-            dockRef.current?.classList.remove('is-typing');
-        }, 720);
-    };
-
     return (
         <div
             ref={dockRef}
             className={`ai-command-dock${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
             data-testid="ai-command-dock"
-            onPointerMove={setGlowPoint}
-            onPointerEnter={(e) => {
-                dockRef.current?.classList.add('is-hover');
-                setGlowPoint(e);
-            }}
-            onPointerLeave={() => dockRef.current?.classList.remove('is-hover')}
-            onFocusCapture={() => dockRef.current?.classList.add('is-focused')}
-            onBlurCapture={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget)) {
-                    dockRef.current?.classList.remove('is-focused');
-                }
-            }}
-            onInput={markTyping}
-            onKeyDown={markTyping}
         >
-            <div className="ai-bar-glow" aria-hidden data-testid="ai-bar-glow" />
-            <span className="ai-bar-glow-spot" aria-hidden />
             <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
                 <button
                     type="button"
@@ -215,16 +175,13 @@ const GlobalAIDock = () => {
                     onSnapshot={(snap) => {
                         snapRef.current = snap;
                         setFocused(!!snap?.focused);
-                        if (snap?.preview || snap?.text?.trim() || snap?.answerMode || (snap?.attachments || []).length) {
+                        if (snap?.preview || snap?.text?.trim() || snap?.answerMode || snap?.thread || (snap?.attachments || []).length) {
                             setActive(true);
                         } else if (!recordingPending) {
                             setActive(false);
                         }
                     }}
                     onCreated={() => {
-                        snapRef.current = null;
-                        setActive(false);
-                        setFocused(false);
                         setPendingAttachments([]);
                         setRecordingPending(false);
                         window.dispatchEvent(new CustomEvent('tskflow:task-created'));

@@ -15,6 +15,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { JarvisIcon } from '@/components/JarvisIcon';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
@@ -144,6 +145,8 @@ const AIQuickCreate = ({
     const [showDetails, setShowDetails] = useState(false);
     const [answerMode, setAnswerMode] = useState(null);
     const [answerLoading, setAnswerLoading] = useState(false);
+    const [thread, setThread] = useState([]);
+    const [activePrompt, setActivePrompt] = useState('');
     const [clarifyAnswer, setClarifyAnswer] = useState('');
     const [people, setPeople] = useState([]);
     const [groups, setGroups] = useState([]);
@@ -192,6 +195,9 @@ const AIQuickCreate = ({
     const voiceFinalRef = useRef('');
     const voiceSeedRef = useRef('');
     const runPreviewRef = useRef(null);
+    const threadEndRef = useRef(null);
+    const threadRef = useRef([]);
+    const activePromptRef = useRef('');
     const navigate = useNavigate();
 
     const focusInput = useCallback(() => {
@@ -215,6 +221,14 @@ const AIQuickCreate = ({
     useEffect(() => {
         editAssigneesRef.current = editAssignees;
     }, [editAssignees]);
+
+    useEffect(() => {
+        threadRef.current = thread;
+    }, [thread]);
+
+    useEffect(() => {
+        threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, [thread, loading, answerLoading, preview, sending]);
 
     useEffect(() => {
         const onResume = (e) => {
@@ -676,53 +690,106 @@ const AIQuickCreate = ({
         }
     };
 
-    const runQA = async (question) => {
+    const appendThread = (msg) => {
+        const entry = {
+            id: msg.id || `${Date.now()}-${msg.role}-${Math.random().toString(36).slice(2, 6)}`,
+            role: msg.role,
+            text: msg.text,
+        };
+        setThread((prev) => {
+            const next = [...prev, entry];
+            threadRef.current = next;
+            return next;
+        });
+        return entry;
+    };
+
+    const runQA = async (question, { alreadyLogged } = {}) => {
+        const q = (question || '').trim();
+        if (!q) return;
         setAnswerLoading(true);
+        setAnswerMode(null);
+        setPreview(null);
+        if (!alreadyLogged) {
+            appendThread({ role: 'user', text: q });
+            setText('');
+            setActivePrompt(q);
+            activePromptRef.current = q;
+        }
+        const history = threadRef.current.slice(-12).map((m) => ({ role: m.role, text: m.text }));
         try {
-            const res = await axios.post(`${API}/voice/command`, { transcript: question, text: question });
+            const res = await axios.post(`${API}/voice/command`, { transcript: q, text: q, history }, { timeout: 20000 });
             const reply = res?.data?.reply || res?.data?.answer || 'I can help with that.';
-            setAnswerMode({ question, reply });
+            appendThread({ role: 'assistant', text: reply });
+            const action = res?.data?.action;
+            if (action?.type === 'navigate' && action?.params?.target) {
+                const routes = {
+                    dashboard: '/dashboard', analytics: '/analytics', team: '/team', settings: '/settings',
+                    leads: '/leads', help: '/help', recordings: '/recordings', recurring: '/recurring',
+                };
+                const route = routes[action.params.target];
+                if (route) setTimeout(() => navigate(route), 400);
+            }
         } catch (err) {
-            setAnswerMode({ question, reply: err?.response?.data?.detail || 'Sorry, I could not answer that right now.' });
+            const fallback =
+                "I can still help from here. Type an assignment like “Ask Alice to send the Q3 recap by Friday” and I’ll send it, follow up if they go quiet, and open Slack if they ignore two pings. Or ask what’s outstanding.";
+            const detail = err?.response?.data?.detail;
+            appendThread({
+                role: 'assistant',
+                text: typeof detail === 'string' && detail.length < 180 ? detail : fallback,
+            });
         } finally {
             setAnswerLoading(false);
         }
     };
 
-    const runPreview = async (overrideText, overrideAnswers) => {
+    const runPreview = async (overrideText, overrideAnswers, opts = {}) => {
         const t = (overrideText ?? text).trim();
         if (!t || t.length < 2) {
             toast.error('Type a bit more so I can understand what you need.');
             return;
         }
-        const cmd = tryLocalCommand(t);
-        if (cmd?.type === 'navigate') {
-            toast.success(`Opening ${cmd.label}`);
+        if (!opts.skipThreadUser) {
+            const cmd = tryLocalCommand(t);
+            if (cmd?.type === 'navigate') {
+                toast.success(`Opening ${cmd.label}`);
+                setText('');
+                navigate(cmd.path);
+                onRequestExit?.();
+                return;
+            }
+            if (cmd?.type === 'search') {
+                navigate(`/dashboard?q=${encodeURIComponent(cmd.query)}`);
+                toast.success(`Searching “${cmd.query}”`);
+                setText('');
+                onRequestExit?.();
+                return;
+            }
+            if (cmd?.type === 'manual') {
+                setText('');
+                onOpenAdvanced?.();
+                return;
+            }
+            const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does|who)\b/i.test(t) && (/\?$/.test(t) || t.split(' ').length < 12);
+            appendThread({ role: 'user', text: t });
+            setActivePrompt(t);
+            activePromptRef.current = t;
             setText('');
-            navigate(cmd.path);
-            onRequestExit?.();
-            return;
-        }
-        if (cmd?.type === 'search') {
-            navigate(`/dashboard?q=${encodeURIComponent(cmd.query)}`);
-            toast.success(`Searching “${cmd.query}”`);
-            setText('');
-            onRequestExit?.();
-            return;
-        }
-        if (cmd?.type === 'manual') {
-            setText('');
-            onOpenAdvanced?.();
-            return;
-        }
-        const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does|who)\b/i.test(t) && (/\?$/.test(t) || t.split(' ').length < 12);
-        if (looksLikeQuestion) {
             setAnswerMode(null);
+            if (looksLikeQuestion) {
+                setPreview(null);
+                await runQA(t, { alreadyLogged: true });
+                return;
+            }
+            const pendingQs = preview?.clarifying_questions || [];
+            if (preview && pendingQs.length > 0) {
+                answerClarify(pendingQs[0], t, { alreadyLogged: true });
+                return;
+            }
             setPreview(null);
-            await runQA(t);
-            return;
+        } else {
+            setPreview(null);
         }
-        setAnswerMode(null);
         if (promptMeansSelfAssign(t)) {
             editAssigneesRef.current = [SELF_CHIP];
             setEditAssignees([SELF_CHIP]);
@@ -743,7 +810,7 @@ const AIQuickCreate = ({
             });
             const p = res.data;
             if (p.intent === 'question') {
-                await runQA(t);
+                await runQA(t, { alreadyLogged: true });
                 return;
             }
             applyPreview(p);
@@ -815,6 +882,12 @@ const AIQuickCreate = ({
         else startVoice();
     }, [listening, startVoice, stopVoice]);
 
+    useEffect(() => {
+        const onStartVoice = () => startVoice();
+        window.addEventListener('tskflow:start-prompt-voice', onStartVoice);
+        return () => window.removeEventListener('tskflow:start-prompt-voice', onStartVoice);
+    }, [startVoice]);
+
     useEffect(() => () => {
         try { recRef.current?.abort(); } catch { /* noop */ }
         recRef.current = null;
@@ -824,14 +897,18 @@ const AIQuickCreate = ({
         setEditAssignees((prev) => prev.filter((_, i) => i !== idx));
     };
 
-    const answerClarify = (question, value) => {
+    const answerClarify = (question, value, opts = {}) => {
         const v = (value || '').trim();
         if (!v) return;
+        if (!opts.alreadyLogged) {
+            appendThread({ role: 'user', text: v });
+        }
         const next = { ...answers, [question]: v };
         setAnswers(next);
         setClarifyAnswer('');
         setPeopleSearch('');
-        runPreview(text, next);
+        const prompt = activePromptRef.current || activePrompt || text;
+        runPreview(prompt, next, { skipThreadUser: true });
     };
 
     const pickPerson = (person) => {
@@ -877,7 +954,7 @@ const AIQuickCreate = ({
         }
     };
 
-    const reset = useCallback(() => {
+    const reset = useCallback((opts = {}) => {
         setText('');
         setPreview(null);
         setAnswers({});
@@ -903,6 +980,12 @@ const AIQuickCreate = ({
         setShowNewPersonEmail(false);
         setNewPersonEmail('');
         setAnswerMode(null);
+        if (!opts.keepThread) {
+            setThread([]);
+            threadRef.current = [];
+        }
+        setActivePrompt('');
+        activePromptRef.current = '';
         nudgeSentRef.current = false;
         focusInput();
     }, [focusInput]);
@@ -1187,7 +1270,12 @@ const AIQuickCreate = ({
                 toast.success(`Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
             }
             writeLastAssignees(editAssignees);
-            reset();
+            const names = editAssignees.map((a) => a.name).filter(Boolean).join(', ') || 'your team';
+            appendThread({
+                role: 'assistant',
+                text: `Sent to ${names}. I’ll follow up if they go quiet — and if they ignore two pings, I’ll Slack them with you in the loop.`,
+            });
+            reset({ keepThread: true });
             onCreated?.();
         } catch (err) {
             toast.error(err?.response?.data?.detail || 'Failed to create task');
@@ -1226,11 +1314,12 @@ const AIQuickCreate = ({
             editCriteria,
             sending,
             preview: !!preview,
-            answerMode: !!answerMode,
+            answerMode: !!answerMode || thread.length > 0,
+            thread: thread.length,
             attachments,
             focused: composerFocused || listening,
         });
-    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, attachments, composerFocused, listening, onSnapshot]);
+    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, thread, attachments, composerFocused, listening, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -1294,8 +1383,8 @@ const AIQuickCreate = ({
         }
     };
 
-    const showCommandChips = embedded && !preview && !answerMode && !text.trim() && composerFocused;
-    const showPromptExample = !text.trim() && !preview && !answerMode && !listening;
+    const showCommandChips = embedded && !preview && !answerMode && thread.length === 0 && !text.trim() && composerFocused;
+    const showPromptExample = !text.trim() && !preview && !answerMode && thread.length === 0 && !listening;
     const promptExample = PROMPT_EXAMPLES[exampleIndex] || PROMPT_EXAMPLES[0];
 
     useEffect(() => {
@@ -1344,6 +1433,760 @@ const AIQuickCreate = ({
                                 </button>
                             </div>
                         )}
+                        {(thread.length > 0 || preview || loading || answerLoading) && (
+                            <div className="ai-thread" data-testid="ai-chat-thread">
+                                {thread.map((m) => (
+                                    <div
+                                        key={m.id}
+                                        className={m.role === 'user' ? 'ai-thread-user' : 'ai-thread-assistant'}
+                                        data-testid={m.role === 'user' ? 'ai-thread-user' : 'ai-thread-assistant'}
+                                    >
+                                        {m.text}
+                                    </div>
+                                ))}
+                        {preview && (
+                            <div className="space-y-2" data-testid="ai-preview-card">
+                                <div className="space-y-2">
+                                    {teamScopePrompt && (
+                                        <div className="flex justify-start" data-testid="ai-team-scope">
+                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-teal-50 border border-teal-200 px-3.5 py-3 space-y-2">
+                                                <p className="text-sm font-medium text-teal-950">Who should this go to?</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(teamScopePrompt.options || []).map((opt) => (
+                                                        <button
+                                                            key={opt.id || opt.label}
+                                                            type="button"
+                                                            onClick={() => pickTeamScope(opt)}
+                                                            className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:bg-teal-100 transition-colors"
+                                                            data-testid={`team-scope-${opt.id}`}
+                                                        >
+                                                            <Users className="w-3.5 h-3.5" />
+                                                            {opt.label || opt.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {clarifying.length > 0 && (
+                                        <div className="flex justify-start" data-testid="ai-clarifying">
+                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
+                                                <div className="flex items-start gap-2">
+                                                    <MessageCircleQuestion className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                                                    <p className="text-sm font-medium text-amber-950">{clarifying[0]}</p>
+                                                </div>
+
+                                                {/scope|direct reports|everyone under/i.test(clarifying[0] || '') && teamScopePrompt ? (
+                                                    <div className="flex flex-wrap gap-2 ml-6">
+                                                        {(teamScopePrompt.options || []).map((opt) => (
+                                                            <button
+                                                                key={`q-${opt.id || opt.label}`}
+                                                                type="button"
+                                                                onClick={() => pickTeamScope(opt)}
+                                                                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100"
+                                                            >
+                                                                <Users className="w-3.5 h-3.5" />
+                                                                {opt.label || opt.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : isWhoClarify ? (
+                                                    <div className="relative ml-6" ref={peopleAnchorRef}>
+                                                        <Input
+                                                            ref={clarifyRef}
+                                                            value={peopleSearch}
+                                                            onChange={(e) => {
+                                                                const v = e.target.value;
+                                                                setPeopleSearch(v);
+                                                                setShowPeopleDrop(true);
+                                                            }}
+                                                            onFocus={() => setShowPeopleDrop(true)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Escape') {
+                                                                    e.preventDefault();
+                                                                    setShowPeopleDrop(false);
+                                                                }
+                                                            }}
+                                                            placeholder="Search people or type @name"
+                                                            className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                            data-testid="clarify-people-search"
+                                                            disabled={loading || sending}
+                                                            autoComplete="off"
+                                                        />
+                                                        {showPeopleDrop && peopleDropPos && createPortal(
+                                                            <div
+                                                                style={{
+                                                                    position: 'fixed',
+                                                                    left: peopleDropPos.left,
+                                                                    width: peopleDropPos.width,
+                                                                    top: peopleDropPos.openUp ? undefined : peopleDropPos.top,
+                                                                    bottom: peopleDropPos.openUp ? peopleDropPos.bottom : undefined,
+                                                                    maxHeight: peopleDropPos.maxHeight,
+                                                                    zIndex: 220,
+                                                                }}
+                                                                className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10 py-1.5 px-1.5 clean-scroll"
+                                                                data-testid="clarify-people-dropdown"
+                                                                role="listbox"
+                                                                onPointerDown={(e) => e.stopPropagation()}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                            >
+                                                                {filteredPeople.length === 0 && groups.filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)).length === 0 && (
+                                                                    <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email or group</p>
+                                                                )}
+                                                                {groups
+                                                                    .filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery))
+                                                                    .slice(0, 4)
+                                                                    .map((g) => (
+                                                                        <button
+                                                                            key={`cg-${g.id}`}
+                                                                            type="button"
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                addAssigneeChip({
+                                                                                    kind: 'group',
+                                                                                    id: g.id,
+                                                                                    name: g.name,
+                                                                                    emails: g.emails || [],
+                                                                                    members: g.emails || [],
+                                                                                    member_count: (g.emails || []).length,
+                                                                                });
+                                                                                setShowPeopleDrop(false);
+                                                                                setPeopleSearch('');
+                                                                                const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
+                                                                                    || 'Who should own this task?';
+                                                                                const nextAnswers = { ...answers, [whoQ]: g.name };
+                                                                                setAnswers(nextAnswers);
+                                                                                setPreview((p) => {
+                                                                                    if (!p) return p;
+                                                                                    const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
+                                                                                    return { ...p, clarifying_questions: qs };
+                                                                                });
+                                                                                if (editDue || preview?.due_date) runPreview(text, nextAnswers);
+                                                                            }}
+                                                                            className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
+                                                                            role="option"
+                                                                            data-testid={`clarify-pick-group-${g.id}`}
+                                                                        >
+                                                                            <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                                                                                <Users className="w-3.5 h-3.5" />
+                                                                            </span>
+                                                                            <span className="min-w-0 flex-1">
+                                                                                <span className="text-sm font-medium text-slate-800 block truncate">{g.name}</span>
+                                                                                <span className="text-[11px] text-slate-500">Group · {(g.emails || []).length}</span>
+                                                                            </span>
+                                                                        </button>
+                                                                    ))}
+                                                                {filteredPeople.map((u) => (
+                                                                    <button
+                                                                        key={u.id || u.email}
+                                                                        type="button"
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            pickPerson(u);
+                                                                        }}
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                        }}
+                                                                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
+                                                                        role="option"
+                                                                        data-testid={`clarify-pick-${u.id || u.email}`}
+                                                                    >
+                                                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                                                            u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-slate-100 text-slate-600'
+                                                                        }`}>
+                                                                            {u.id === 'self' ? 'Me' : <UserIcon className="w-3.5 h-3.5" />}
+                                                                        </span>
+                                                                        <span className="min-w-0 flex-1">
+                                                                            <span className="text-sm font-medium text-slate-800 block truncate">{u.name}</span>
+                                                                            {u.email ? <span className="text-[11px] text-slate-500 truncate block">{u.email}</span> : null}
+                                                                        </span>
+                                                                    </button>
+                                                                ))}
+                                                                {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault();
+                                                                            const email = peopleSearch.replace(/^@/, '').trim();
+                                                                            pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
+                                                                        }}
+                                                                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-50 text-sm text-slate-700 mt-0.5 flex items-center gap-2.5"
+                                                                    >
+                                                                        <span className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                                                                            <Plus className="w-3.5 h-3.5" />
+                                                                        </span>
+                                                                        <span className="min-w-0">
+                                                                            <span className="font-medium block truncate">Assign {peopleSearch.replace(/^@/, '').trim()}</span>
+                                                                            <span className="text-[11px] text-slate-500">Invite by email</span>
+                                                                        </span>
+                                                                    </button>
+                                                                )}
+                                                            </div>,
+                                                            document.body
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2 ml-6">
+                                                        <Input
+                                                            ref={clarifyRef}
+                                                            value={clarifyAnswer}
+                                                            onChange={(e) => setClarifyAnswer(e.target.value)}
+                                                            placeholder={isWhenClarify ? 'e.g. Friday 5pm' : 'Your answer…'}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && clarifyAnswer.trim()) {
+                                                                    e.preventDefault();
+                                                                    answerClarify(clarifying[0], clarifyAnswer);
+                                                                }
+                                                            }}
+                                                            className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                            data-testid="clarify-answer-0"
+                                                            disabled={loading || sending}
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            onClick={() => answerClarify(clarifying[0], clarifyAnswer)}
+                                                            disabled={loading || sending || !clarifyAnswer.trim()}
+                                                            className="rounded-lg bg-amber-700 hover:bg-amber-800"
+                                                        >
+                                                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reply'}
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {ambiguous.length > 0 && clarifying.length === 0 && editAssignees.length === 0 && (
+                                        <div className="flex justify-start">
+                                            <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
+                                                <p className="text-sm font-medium text-amber-950">Who did you mean?</p>
+                                                {ambiguous.map((amb, i) => {
+                                                    // Deduplicate identical name/email candidates
+                                                    const seen = new Set();
+                                                    const unique = (amb.candidates || []).filter((c) => {
+                                                        const key = `${(c.email || '').toLowerCase()}|${(c.name || '').toLowerCase()}|${c.id}`;
+                                                        if (seen.has(key) || seen.has(c.id)) return false;
+                                                        seen.add(key);
+                                                        seen.add(c.id);
+                                                        return true;
+                                                    });
+                                                    // If still same display name, show email to distinguish
+                                                    const nameCounts = unique.reduce((m, c) => {
+                                                        const n = (c.name || '').toLowerCase();
+                                                        m[n] = (m[n] || 0) + 1;
+                                                        return m;
+                                                    }, {});
+                                                    return (
+                                                        <div key={i} className="flex flex-wrap items-center gap-1.5">
+                                                            {unique.map((c) => (
+                                                                <button
+                                                                    key={c.id}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        addAssigneeChip({ kind: 'user', id: c.id, name: c.name, email: c.email });
+                                                                        // Clear ambiguous so re-clicks don't stack duplicates
+                                                                        setPreview((prev) => (prev ? {
+                                                                            ...prev,
+                                                                            assignee_resolution: {
+                                                                                ...(prev.assignee_resolution || {}),
+                                                                                ambiguous: [],
+                                                                                resolved: [
+                                                                                    ...((prev.assignee_resolution?.resolved) || []),
+                                                                                    { kind: 'user', id: c.id, name: c.name, email: c.email },
+                                                                                ],
+                                                                            },
+                                                                        } : prev));
+                                                                    }}
+                                                                    className="rounded-full bg-white border border-amber-300 hover:bg-amber-100 px-2.5 py-1 text-xs"
+                                                                    data-testid={`ambiguous-pick-${c.id}`}
+                                                                >
+                                                                    {c.name}
+                                                                    {nameCounts[(c.name || '').toLowerCase()] > 1 && c.email
+                                                                        ? ` · ${c.email}`
+                                                                        : ''}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {readyToConfirm && (
+                                        <div className="flex justify-start">
+                                            <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
+                                                {attachments.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2" data-testid="ai-confirm-attachments">
+                                                        {attachments.map((att, i) => {
+                                                            const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
+                                                            const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
+                                                            const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
+                                                            return (
+                                                                <button
+                                                                    key={att.id || att.storage_path || i}
+                                                                    type="button"
+                                                                    onClick={() => setPreviewAttachment(att)}
+                                                                    className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-white hover:ring-2 hover:ring-teal-300"
+                                                                    title="View attachment"
+                                                                >
+                                                                    {thumb ? (
+                                                                        <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <span className="w-full h-full flex items-center justify-center text-slate-500">
+                                                                            {isVideo ? <Video className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                <p className="text-[15px] leading-7 text-slate-800" data-testid="ai-confirm-message">
+                                                    I&apos;ll ask{' '}
+                                                    {editAssignees.map((a, i) => (
+                                                        <span key={`${a.kind}-${a.id || a.email || i}`}>
+                                                            {i > 0 ? (i === editAssignees.length - 1 ? ' and ' : ', ') : ''}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEditingField(editingField === 'assignees' ? null : 'assignees')}
+                                                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium border align-baseline ${chipColor(a.kind)} hover:opacity-90`}
+                                                                data-testid={`ai-chip-assignee-${i}`}
+                                                                title="Change assignee"
+                                                            >
+                                                                {a.name}
+                                                                <span
+                                                                    role="button"
+                                                                    tabIndex={0}
+                                                                    onClick={(e) => { e.stopPropagation(); removeAssignee(i); }}
+                                                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeAssignee(i); } }}
+                                                                    className="opacity-60 hover:opacity-100"
+                                                                    aria-label="Remove assignee"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </span>
+                                                            </button>
+                                                        </span>
+                                                    ))}
+                                                    {' '}to{' '}
+                                                    {editingField === 'title' ? (
+                                                        <Input
+                                                            autoFocus
+                                                            value={editTitle}
+                                                            onChange={(e) => setEditTitle(e.target.value)}
+                                                            onBlur={() => setEditingField(null)}
+                                                            onKeyDown={(e) => { if (e.key === 'Enter') setEditingField(null); }}
+                                                            className="h-8 text-sm rounded-lg inline-flex w-auto min-w-[160px] max-w-full"
+                                                            data-testid="ai-inline-title"
+                                                        />
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingField('title')}
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            data-testid="ai-chip-title"
+                                                            title="Edit task"
+                                                        >
+                                                            {editTitle || 'Untitled'}
+                                                        </button>
+                                                    )}
+                                                    {editDue ? ' by ' : ''}
+                                                    {editingField === 'due' ? (
+                                                        <span className="inline-block min-w-[200px] align-middle" data-testid="ai-inline-due">
+                                                            <DateTimePicker
+                                                                value={editDue}
+                                                                onChange={(v) => { setEditDue(v); setEditingField(null); }}
+                                                            />
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingField('due')}
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            data-testid="ai-chip-due"
+                                                        >
+                                                            {formatDue(editDue) || 'Pick a date'}
+                                                        </button>
+                                                    )}
+                                                    {'. '}
+                                                    {editingField === 'priority' ? (
+                                                        <Select value={editPriority} onValueChange={(v) => { setEditPriority(v); setEditingField(null); }}>
+                                                            <SelectTrigger className={`h-7 w-[120px] rounded-lg inline-flex ${priorityColor}`} data-testid="ai-inline-priority">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="Low">Low</SelectItem>
+                                                                <SelectItem value="Medium">Medium</SelectItem>
+                                                                <SelectItem value="High">High</SelectItem>
+                                                                <SelectItem value="Urgent">Urgent</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingField('priority')}
+                                                            className={`font-semibold rounded-full px-2 py-0.5 text-xs align-baseline ${priorityColor}`}
+                                                            data-testid="ai-chip-priority"
+                                                        >
+                                                            {editPriority}
+                                                        </button>
+                                                    )}
+                                                </p>
+                                                {editDesc ? (
+                                                    <div
+                                                        className="text-[14px] leading-6 text-slate-700 whitespace-pre-wrap"
+                                                        data-testid="ai-confirm-assignee-ask"
+                                                    >
+                                                        {editDesc}
+                                                    </div>
+                                                ) : null}
+
+                                                {editingField === 'assignees' && (
+                                                    <div className="rounded-xl border border-slate-200 bg-white p-2 space-y-2" data-testid="ai-inline-assignees">
+                                                        <Input
+                                                            autoFocus
+                                                            value={peopleSearch}
+                                                            onChange={(e) => setPeopleSearch(e.target.value)}
+                                                            placeholder="Search people or type an email…"
+                                                            className="h-8 text-sm rounded-lg"
+                                                            data-testid="ai-inline-assignee-search"
+                                                        />
+                                                        <div className="max-h-36 overflow-y-auto space-y-0.5">
+                                                            {filteredPeople.map((u) => {
+                                                                const selected = editAssignees.some((a) => a.id === u.id || (u.email && a.email === u.email));
+                                                                return (
+                                                                    <button
+                                                                        key={u.id || u.email}
+                                                                        type="button"
+                                                                        disabled={selected}
+                                                                        onClick={() => pickPerson(u)}
+                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
+                                                                    >
+                                                                        <span className="font-medium">{u.name}</span>
+                                                                        {u.email ? <span className="text-slate-500 ml-1">{u.email}</span> : null}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                            {isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const email = peopleSearch.trim();
+                                                                        setEditAssignees((prev) => [...prev, { kind: 'email', email, name: email }]);
+                                                                        setPeopleSearch('');
+                                                                    }}
+                                                                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-50"
+                                                                >
+                                                                    Add email <span className="font-medium">{peopleSearch.trim()}</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <button type="button" onClick={() => setEditingField(null)} className="text-[11px] text-slate-500 underline">Done</button>
+                                                    </div>
+                                                )}
+
+                                                {showDetails && (
+                                                    <div className="space-y-2 text-sm">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingField(editingField === 'desc' ? null : 'desc')}
+                                                            className="text-left text-slate-600 w-full rounded-md px-1.5 py-0.5 hover:bg-white"
+                                                            data-testid="ai-chip-desc"
+                                                        >
+                                                            {editDesc || <span className="text-slate-400 italic">Add a note for them (optional)</span>}
+                                                        </button>
+                                                        {editingField === 'desc' && (
+                                                            <Textarea
+                                                                autoFocus
+                                                                value={editDesc}
+                                                                onChange={(e) => setEditDesc(e.target.value)}
+                                                                onBlur={() => setEditingField(null)}
+                                                                className="rounded-lg text-sm min-h-[56px]"
+                                                                rows={3}
+                                                                data-testid="ai-inline-desc"
+                                                            />
+                                                        )}
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {preview.recurring?.is_recurring && (
+                                                                <Badge className="bg-slate-200 text-slate-800">
+                                                                    Recurring · {preview.recurring.frequency}
+                                                                </Badge>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEditSales((v) => !v)}
+                                                                className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-wide font-semibold border ${
+                                                                    editSales
+                                                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                                        : 'bg-white text-slate-500 border-slate-200'
+                                                                }`}
+                                                                data-testid="ai-chip-sales"
+                                                            >
+                                                                {editSales ? 'Sales' : 'Mark as sales'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEditScreenRecording((v) => !v)}
+                                                                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold border ${
+                                                                    editScreenRecording
+                                                                        ? 'bg-violet-100 text-violet-800 border-violet-200'
+                                                                        : 'bg-white text-slate-500 border-slate-200'
+                                                                }`}
+                                                                data-testid="ai-chip-screen-recording"
+                                                            >
+                                                                {editScreenRecording ? 'Screen recording required' : 'Require screen recording'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                                    <Button
+                                                        type="button"
+                                                        onClick={send}
+                                                        disabled={sending}
+                                                        className="rounded-full bg-slate-900 hover:bg-slate-800 gap-2"
+                                                        data-testid="ai-send-btn"
+                                                    >
+                                                        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                                        {sending ? 'Sending…' : 'Send'}
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={() => setShowDetails((v) => !v)}
+                                                        className="rounded-full gap-1.5"
+                                                        data-testid="ai-edit-details"
+                                                    >
+                                                        <Pencil className="w-3.5 h-3.5" />
+                                                        {showDetails ? 'Less' : 'More'}
+                                                    </Button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { onRequestExit?.(); }}
+                                                        className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 px-1"
+                                                        data-testid="ai-preview-close"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Details editor — fallback, not the default path */}
+                                {(!readyToConfirm && clarifying.length === 0) && (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4" data-testid="ai-details-editor">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-slate-800">
+                                                {readyToConfirm ? 'Edit details' : 'Fill in what is missing'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => { reset(); onRequestExit?.(); }}
+                                                className="text-slate-400 hover:text-slate-700 rounded-full p-1"
+                                                title="Discard"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Task</label>
+                                            <Input
+                                                value={editTitle}
+                                                onChange={(e) => setEditTitle(e.target.value)}
+                                                className="rounded-lg font-medium border-slate-300"
+                                                placeholder="Task title"
+                                                data-testid="ai-preview-title"
+                                            />
+                                            <Textarea
+                                                value={editDesc}
+                                                onChange={(e) => setEditDesc(e.target.value)}
+                                                className="rounded-lg text-sm border-slate-300 min-h-[48px]"
+                                                placeholder="What exactly needs to be done? (optional)"
+                                                rows={2}
+                                                data-testid="ai-preview-desc"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                                                Done well looks like <span className="font-normal normal-case text-slate-400">(optional)</span>
+                                            </label>
+                                            <Textarea
+                                                value={editCriteria}
+                                                onChange={(e) => setEditCriteria(e.target.value)}
+                                                className="rounded-lg text-sm border-slate-300 min-h-[48px]"
+                                                placeholder="e.g. Clean PDF with pricing, sent to the client, CC me"
+                                                rows={2}
+                                                data-testid="ai-preview-criteria"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                                                Assigned to ({personCount} {personCount === 1 ? 'person' : 'people'})
+                                            </label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {editAssignees.length === 0 && (
+                                                    <p className="text-xs text-slate-500 italic">No one identified yet. Reply above, or open the advanced form.</p>
+                                                )}
+                                                {editAssignees.map((a, i) => (
+                                                    <div
+                                                        key={`${a.kind}-${a.id || a.email || i}`}
+                                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border ${chipColor(a.kind)}`}
+                                                    >
+                                                        {a.kind === 'user' && <UserIcon className="w-3 h-3" />}
+                                                        {a.kind === 'email' && <UserIcon className="w-3 h-3" />}
+                                                        {(a.kind === 'group' || a.kind === 'team') && <Users className="w-3 h-3" />}
+                                                        <span>
+                                                            {a.name}
+                                                            {(a.kind === 'group' || a.kind === 'team') && a.member_count > 0 && (
+                                                                <span className="opacity-70 ml-1">· {a.member_count}</span>
+                                                            )}
+                                                        </span>
+                                                        {a.kind === 'team' && Array.isArray(a.alternates) && a.alternates.length > 0 && (
+                                                            <details className="relative">
+                                                                <summary className="list-none cursor-pointer opacity-60 hover:opacity-100 flex items-center">
+                                                                    <ChevronDown className="w-3 h-3" />
+                                                                </summary>
+                                                                <div className="absolute z-30 mt-1 right-0 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[220px]">
+                                                                    {a.alternates.map((alt) => (
+                                                                        <button
+                                                                            key={alt.id}
+                                                                            type="button"
+                                                                            onClick={(e) => { e.preventDefault(); swapAlternate(i, alt); e.currentTarget.closest('details').open = false; }}
+                                                                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-slate-700"
+                                                                        >
+                                                                            {alt.name}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </details>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeAssignee(i)}
+                                                            className="ml-1 opacity-60 hover:opacity-100"
+                                                            aria-label="Remove"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {unresolved.length > 0 && (
+                                                <p className="text-xs text-slate-500 italic">
+                                                    {`Couldn't identify: ${unresolved.join(', ')}. Add via the manual form.`}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider block mb-1.5">Due</label>
+                                                <DateTimePicker
+                                                    value={editDue}
+                                                    onChange={(v) => setEditDue(v)}
+                                                    data-testid="ai-preview-due"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider block mb-1.5">Priority</label>
+                                                <Select value={editPriority} onValueChange={setEditPriority}>
+                                                    <SelectTrigger className={`rounded-lg ${priorityColor}`} data-testid="ai-preview-priority">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Low">Low</SelectItem>
+                                                        <SelectItem value="Medium">Medium</SelectItem>
+                                                        <SelectItem value="High">High</SelectItem>
+                                                        <SelectItem value="Urgent">Urgent</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        {!readyToConfirm && (
+                                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenAdvanced?.({
+                                                        title: editTitle,
+                                                        description: editDesc,
+                                                        due_date: editDue,
+                                                        priority: editPriority,
+                                                        is_sales_task: editSales,
+                                                        requires_screen_recording: editScreenRecording,
+                                                        success_criteria: editCriteria,
+                                                        assignees: editAssignees,
+                                                        attachments,
+                                                    })}
+                                                    className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                                                    data-testid="ai-open-advanced"
+                                                >
+                                                    Open manual form
+                                                </button>
+                                                <Button
+                                                    type="button"
+                                                    onClick={send}
+                                                    disabled={sending || editAssignees.length === 0 || !editDue || !editTitle}
+                                                    className="rounded-full bg-slate-900 hover:bg-slate-800 gap-2"
+                                                    data-testid="ai-send-btn-details"
+                                                >
+                                                    {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                                    {sending ? 'Sending…' : 'Send task'}
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {readyToConfirm && (
+                                            <div className="flex justify-end pt-1 border-t border-slate-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenAdvanced?.({
+                                                        title: editTitle,
+                                                        description: editDesc,
+                                                        due_date: editDue,
+                                                        priority: editPriority,
+                                                        is_sales_task: editSales,
+                                                        requires_screen_recording: editScreenRecording,
+                                                        success_criteria: editCriteria,
+                                                        assignees: editAssignees,
+                                                        attachments,
+                                                    })}
+                                                    className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                                                    data-testid="ai-open-advanced"
+                                                >
+                                                    Open manual form
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                                {(loading || answerLoading) && (
+                                    <div className="ai-thread-assistant" data-testid="ai-thread-thinking">
+                                        <span className="ai-thread-thinking">
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Thinking…
+                                        </span>
+                                    </div>
+                                )}
+                                <div ref={threadEndRef} />
+                            </div>
+                        )}
+
                         {embedded && (
                             <div
                                 className={`ai-command-chips-wrap${showCommandChips ? ' is-open' : ''}`}
@@ -1748,7 +2591,22 @@ const AIQuickCreate = ({
                             )}
 
                             <div className="relative z-[1] flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
-                                <div className="relative flex items-center" ref={plusRef}>
+                                <div className="relative flex items-center gap-0.5" ref={plusRef}>
+                                    {embedded && (
+                                        <button
+                                            type="button"
+                                            className="ai-jarvis-mark h-8 w-8 rounded-full inline-flex items-center justify-center shrink-0"
+                                            onClick={focusInput}
+                                            data-testid="ai-jarvis-mark"
+                                            aria-label="Jarvis"
+                                            title="Jarvis"
+                                        >
+                                            <JarvisIcon
+                                                phase={listening ? 'listening' : (loading || answerLoading || sending) ? 'thinking' : 'idle'}
+                                                size={28}
+                                            />
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => setPlusOpen((v) => !v)}
@@ -1924,774 +2782,6 @@ const AIQuickCreate = ({
                     </div>
                 </div>
 
-                {answerMode && (
-                    <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-4" data-testid="ai-qa-answer">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="text-xs text-slate-500">You asked</p>
-                            <button
-                                type="button"
-                                onClick={() => { reset(); onRequestExit?.(); }}
-                                className="text-slate-400 hover:text-slate-700 rounded-full p-0.5"
-                                aria-label="Exit"
-                                data-testid="ai-qa-exit"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <div className="flex items-start gap-2">
-                            <Sparkles className="w-4 h-4 text-slate-700 shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                                <p className="text-sm font-medium text-slate-800 mb-3">{answerMode.question}</p>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{answerMode.reply}</p>
-                                <button
-                                    type="button"
-                                    onClick={() => { setAnswerMode(null); setText(''); focusInput(); }}
-                                    className="text-xs text-slate-600 hover:text-slate-900 underline underline-offset-2 mt-3"
-                                >
-                                    Ask another question or create a task
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {preview && (
-                    <div className="mt-4 space-y-3" data-testid="ai-preview-card">
-                        {/* Conversational thread */}
-                        <div className="space-y-2">
-                            <div className="flex justify-end">
-                                <div className="max-w-[90%] rounded-2xl rounded-br-md bg-slate-900 text-white px-3.5 py-2 text-sm">
-                                    {text}
-                                </div>
-                            </div>
-
-                            {teamScopePrompt && (
-                                <div className="flex justify-start" data-testid="ai-team-scope">
-                                    <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-teal-50 border border-teal-200 px-3.5 py-3 space-y-2">
-                                        <p className="text-sm font-medium text-teal-950">Who should this go to?</p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {(teamScopePrompt.options || []).map((opt) => (
-                                                <button
-                                                    key={opt.id || opt.label}
-                                                    type="button"
-                                                    onClick={() => pickTeamScope(opt)}
-                                                    className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:bg-teal-100 transition-colors"
-                                                    data-testid={`team-scope-${opt.id}`}
-                                                >
-                                                    <Users className="w-3.5 h-3.5" />
-                                                    {opt.label || opt.name}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {clarifying.length > 0 && (
-                                <div className="flex justify-start" data-testid="ai-clarifying">
-                                    <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
-                                        <div className="flex items-start gap-2">
-                                            <MessageCircleQuestion className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
-                                            <p className="text-sm font-medium text-amber-950">{clarifying[0]}</p>
-                                        </div>
-
-                                        {/scope|direct reports|everyone under/i.test(clarifying[0] || '') && teamScopePrompt ? (
-                                            <div className="flex flex-wrap gap-2 ml-6">
-                                                {(teamScopePrompt.options || []).map((opt) => (
-                                                    <button
-                                                        key={`q-${opt.id || opt.label}`}
-                                                        type="button"
-                                                        onClick={() => pickTeamScope(opt)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100"
-                                                    >
-                                                        <Users className="w-3.5 h-3.5" />
-                                                        {opt.label || opt.name}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : isWhoClarify ? (
-                                            <div className="relative ml-6" ref={peopleAnchorRef}>
-                                                <Input
-                                                    ref={clarifyRef}
-                                                    value={peopleSearch}
-                                                    onChange={(e) => {
-                                                        const v = e.target.value;
-                                                        setPeopleSearch(v);
-                                                        setShowPeopleDrop(true);
-                                                    }}
-                                                    onFocus={() => setShowPeopleDrop(true)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Escape') {
-                                                            e.preventDefault();
-                                                            setShowPeopleDrop(false);
-                                                        }
-                                                    }}
-                                                    placeholder="Search people or type @name"
-                                                    className="h-9 text-sm rounded-lg border-amber-300 bg-white"
-                                                    data-testid="clarify-people-search"
-                                                    disabled={loading || sending}
-                                                    autoComplete="off"
-                                                />
-                                                {showPeopleDrop && peopleDropPos && createPortal(
-                                                    <div
-                                                        style={{
-                                                            position: 'fixed',
-                                                            left: peopleDropPos.left,
-                                                            width: peopleDropPos.width,
-                                                            top: peopleDropPos.openUp ? undefined : peopleDropPos.top,
-                                                            bottom: peopleDropPos.openUp ? peopleDropPos.bottom : undefined,
-                                                            maxHeight: peopleDropPos.maxHeight,
-                                                            zIndex: 220,
-                                                        }}
-                                                        className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-2xl shadow-slate-900/10 py-1.5 px-1.5 clean-scroll"
-                                                        data-testid="clarify-people-dropdown"
-                                                        role="listbox"
-                                                        onPointerDown={(e) => e.stopPropagation()}
-                                                        onMouseDown={(e) => e.stopPropagation()}
-                                                    >
-                                                        {filteredPeople.length === 0 && groups.filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)).length === 0 && (
-                                                            <p className="px-2.5 py-3 text-xs text-slate-500">No matches — try an email or group</p>
-                                                        )}
-                                                        {groups
-                                                            .filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery))
-                                                            .slice(0, 4)
-                                                            .map((g) => (
-                                                                <button
-                                                                    key={`cg-${g.id}`}
-                                                                    type="button"
-                                                                    onMouseDown={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        addAssigneeChip({
-                                                                            kind: 'group',
-                                                                            id: g.id,
-                                                                            name: g.name,
-                                                                            emails: g.emails || [],
-                                                                            members: g.emails || [],
-                                                                            member_count: (g.emails || []).length,
-                                                                        });
-                                                                        setShowPeopleDrop(false);
-                                                                        setPeopleSearch('');
-                                                                        const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
-                                                                            || 'Who should own this task?';
-                                                                        const nextAnswers = { ...answers, [whoQ]: g.name };
-                                                                        setAnswers(nextAnswers);
-                                                                        setPreview((p) => {
-                                                                            if (!p) return p;
-                                                                            const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
-                                                                            return { ...p, clarifying_questions: qs };
-                                                                        });
-                                                                        if (editDue || preview?.due_date) runPreview(text, nextAnswers);
-                                                                    }}
-                                                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
-                                                                    role="option"
-                                                                    data-testid={`clarify-pick-group-${g.id}`}
-                                                                >
-                                                                    <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
-                                                                        <Users className="w-3.5 h-3.5" />
-                                                                    </span>
-                                                                    <span className="min-w-0 flex-1">
-                                                                        <span className="text-sm font-medium text-slate-800 block truncate">{g.name}</span>
-                                                                        <span className="text-[11px] text-slate-500">Group · {(g.emails || []).length}</span>
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        {filteredPeople.map((u) => (
-                                                            <button
-                                                                key={u.id || u.email}
-                                                                type="button"
-                                                                onMouseDown={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    pickPerson(u);
-                                                                }}
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                }}
-                                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-teal-50 flex items-center gap-2.5"
-                                                                role="option"
-                                                                data-testid={`clarify-pick-${u.id || u.email}`}
-                                                            >
-                                                                <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                                                                    u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-slate-100 text-slate-600'
-                                                                }`}>
-                                                                    {u.id === 'self' ? 'Me' : <UserIcon className="w-3.5 h-3.5" />}
-                                                                </span>
-                                                                <span className="min-w-0 flex-1">
-                                                                    <span className="text-sm font-medium text-slate-800 block truncate">{u.name}</span>
-                                                                    {u.email ? <span className="text-[11px] text-slate-500 truncate block">{u.email}</span> : null}
-                                                                </span>
-                                                            </button>
-                                                        ))}
-                                                        {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
-                                                            <button
-                                                                type="button"
-                                                                onMouseDown={(e) => {
-                                                                    e.preventDefault();
-                                                                    const email = peopleSearch.replace(/^@/, '').trim();
-                                                                    pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
-                                                                }}
-                                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-50 text-sm text-slate-700 mt-0.5 flex items-center gap-2.5"
-                                                            >
-                                                                <span className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
-                                                                    <Plus className="w-3.5 h-3.5" />
-                                                                </span>
-                                                                <span className="min-w-0">
-                                                                    <span className="font-medium block truncate">Assign {peopleSearch.replace(/^@/, '').trim()}</span>
-                                                                    <span className="text-[11px] text-slate-500">Invite by email</span>
-                                                                </span>
-                                                            </button>
-                                                        )}
-                                                    </div>,
-                                                    document.body
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div className="flex gap-2 ml-6">
-                                                <Input
-                                                    ref={clarifyRef}
-                                                    value={clarifyAnswer}
-                                                    onChange={(e) => setClarifyAnswer(e.target.value)}
-                                                    placeholder={isWhenClarify ? 'e.g. Friday 5pm' : 'Your answer…'}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' && clarifyAnswer.trim()) {
-                                                            e.preventDefault();
-                                                            answerClarify(clarifying[0], clarifyAnswer);
-                                                        }
-                                                    }}
-                                                    className="h-9 text-sm rounded-lg border-amber-300 bg-white"
-                                                    data-testid="clarify-answer-0"
-                                                    disabled={loading || sending}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    onClick={() => answerClarify(clarifying[0], clarifyAnswer)}
-                                                    disabled={loading || sending || !clarifyAnswer.trim()}
-                                                    className="rounded-lg bg-amber-700 hover:bg-amber-800"
-                                                >
-                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reply'}
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {ambiguous.length > 0 && clarifying.length === 0 && editAssignees.length === 0 && (
-                                <div className="flex justify-start">
-                                    <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
-                                        <p className="text-sm font-medium text-amber-950">Who did you mean?</p>
-                                        {ambiguous.map((amb, i) => {
-                                            // Deduplicate identical name/email candidates
-                                            const seen = new Set();
-                                            const unique = (amb.candidates || []).filter((c) => {
-                                                const key = `${(c.email || '').toLowerCase()}|${(c.name || '').toLowerCase()}|${c.id}`;
-                                                if (seen.has(key) || seen.has(c.id)) return false;
-                                                seen.add(key);
-                                                seen.add(c.id);
-                                                return true;
-                                            });
-                                            // If still same display name, show email to distinguish
-                                            const nameCounts = unique.reduce((m, c) => {
-                                                const n = (c.name || '').toLowerCase();
-                                                m[n] = (m[n] || 0) + 1;
-                                                return m;
-                                            }, {});
-                                            return (
-                                                <div key={i} className="flex flex-wrap items-center gap-1.5">
-                                                    {unique.map((c) => (
-                                                        <button
-                                                            key={c.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                addAssigneeChip({ kind: 'user', id: c.id, name: c.name, email: c.email });
-                                                                // Clear ambiguous so re-clicks don't stack duplicates
-                                                                setPreview((prev) => (prev ? {
-                                                                    ...prev,
-                                                                    assignee_resolution: {
-                                                                        ...(prev.assignee_resolution || {}),
-                                                                        ambiguous: [],
-                                                                        resolved: [
-                                                                            ...((prev.assignee_resolution?.resolved) || []),
-                                                                            { kind: 'user', id: c.id, name: c.name, email: c.email },
-                                                                        ],
-                                                                    },
-                                                                } : prev));
-                                                            }}
-                                                            className="rounded-full bg-white border border-amber-300 hover:bg-amber-100 px-2.5 py-1 text-xs"
-                                                            data-testid={`ambiguous-pick-${c.id}`}
-                                                        >
-                                                            {c.name}
-                                                            {nameCounts[(c.name || '').toLowerCase()] > 1 && c.email
-                                                                ? ` · ${c.email}`
-                                                                : ''}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {readyToConfirm && (
-                                <div className="flex justify-start">
-                                    <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
-                                        {attachments.length > 0 && (
-                                            <div className="flex flex-wrap gap-2" data-testid="ai-confirm-attachments">
-                                                {attachments.map((att, i) => {
-                                                    const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
-                                                    const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
-                                                    const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
-                                                    return (
-                                                        <button
-                                                            key={att.id || att.storage_path || i}
-                                                            type="button"
-                                                            onClick={() => setPreviewAttachment(att)}
-                                                            className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-white hover:ring-2 hover:ring-teal-300"
-                                                            title="View attachment"
-                                                        >
-                                                            {thumb ? (
-                                                                <img src={thumb} alt="" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <span className="w-full h-full flex items-center justify-center text-slate-500">
-                                                                    {isVideo ? <Video className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
-                                                                </span>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-
-                                        <p className="text-[15px] leading-7 text-slate-800" data-testid="ai-confirm-message">
-                                            I&apos;ll ask{' '}
-                                            {editAssignees.map((a, i) => (
-                                                <span key={`${a.kind}-${a.id || a.email || i}`}>
-                                                    {i > 0 ? (i === editAssignees.length - 1 ? ' and ' : ', ') : ''}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setEditingField(editingField === 'assignees' ? null : 'assignees')}
-                                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium border align-baseline ${chipColor(a.kind)} hover:opacity-90`}
-                                                        data-testid={`ai-chip-assignee-${i}`}
-                                                        title="Change assignee"
-                                                    >
-                                                        {a.name}
-                                                        <span
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            onClick={(e) => { e.stopPropagation(); removeAssignee(i); }}
-                                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeAssignee(i); } }}
-                                                            className="opacity-60 hover:opacity-100"
-                                                            aria-label="Remove assignee"
-                                                        >
-                                                            <X className="w-3 h-3" />
-                                                        </span>
-                                                    </button>
-                                                </span>
-                                            ))}
-                                            {' '}to{' '}
-                                            {editingField === 'title' ? (
-                                                <Input
-                                                    autoFocus
-                                                    value={editTitle}
-                                                    onChange={(e) => setEditTitle(e.target.value)}
-                                                    onBlur={() => setEditingField(null)}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingField(null); }}
-                                                    className="h-8 text-sm rounded-lg inline-flex w-auto min-w-[160px] max-w-full"
-                                                    data-testid="ai-inline-title"
-                                                />
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setEditingField('title')}
-                                                    className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
-                                                    data-testid="ai-chip-title"
-                                                    title="Edit task"
-                                                >
-                                                    {editTitle || 'Untitled'}
-                                                </button>
-                                            )}
-                                            {editDue ? ' by ' : ''}
-                                            {editingField === 'due' ? (
-                                                <span className="inline-block min-w-[200px] align-middle" data-testid="ai-inline-due">
-                                                    <DateTimePicker
-                                                        value={editDue}
-                                                        onChange={(v) => { setEditDue(v); setEditingField(null); }}
-                                                    />
-                                                </span>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setEditingField('due')}
-                                                    className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
-                                                    data-testid="ai-chip-due"
-                                                >
-                                                    {formatDue(editDue) || 'Pick a date'}
-                                                </button>
-                                            )}
-                                            {'. '}
-                                            {editingField === 'priority' ? (
-                                                <Select value={editPriority} onValueChange={(v) => { setEditPriority(v); setEditingField(null); }}>
-                                                    <SelectTrigger className={`h-7 w-[120px] rounded-lg inline-flex ${priorityColor}`} data-testid="ai-inline-priority">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Low">Low</SelectItem>
-                                                        <SelectItem value="Medium">Medium</SelectItem>
-                                                        <SelectItem value="High">High</SelectItem>
-                                                        <SelectItem value="Urgent">Urgent</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setEditingField('priority')}
-                                                    className={`font-semibold rounded-full px-2 py-0.5 text-xs align-baseline ${priorityColor}`}
-                                                    data-testid="ai-chip-priority"
-                                                >
-                                                    {editPriority}
-                                                </button>
-                                            )}
-                                        </p>
-                                        {editDesc ? (
-                                            <div
-                                                className="text-[14px] leading-6 text-slate-700 whitespace-pre-wrap"
-                                                data-testid="ai-confirm-assignee-ask"
-                                            >
-                                                {editDesc}
-                                            </div>
-                                        ) : null}
-
-                                        {editingField === 'assignees' && (
-                                            <div className="rounded-xl border border-slate-200 bg-white p-2 space-y-2" data-testid="ai-inline-assignees">
-                                                <Input
-                                                    autoFocus
-                                                    value={peopleSearch}
-                                                    onChange={(e) => setPeopleSearch(e.target.value)}
-                                                    placeholder="Search people or type an email…"
-                                                    className="h-8 text-sm rounded-lg"
-                                                    data-testid="ai-inline-assignee-search"
-                                                />
-                                                <div className="max-h-36 overflow-y-auto space-y-0.5">
-                                                    {filteredPeople.map((u) => {
-                                                        const selected = editAssignees.some((a) => a.id === u.id || (u.email && a.email === u.email));
-                                                        return (
-                                                            <button
-                                                                key={u.id || u.email}
-                                                                type="button"
-                                                                disabled={selected}
-                                                                onClick={() => pickPerson(u)}
-                                                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
-                                                            >
-                                                                <span className="font-medium">{u.name}</span>
-                                                                {u.email ? <span className="text-slate-500 ml-1">{u.email}</span> : null}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                    {isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()) && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const email = peopleSearch.trim();
-                                                                setEditAssignees((prev) => [...prev, { kind: 'email', email, name: email }]);
-                                                                setPeopleSearch('');
-                                                            }}
-                                                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-50"
-                                                        >
-                                                            Add email <span className="font-medium">{peopleSearch.trim()}</span>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <button type="button" onClick={() => setEditingField(null)} className="text-[11px] text-slate-500 underline">Done</button>
-                                            </div>
-                                        )}
-
-                                        {showDetails && (
-                                            <div className="space-y-2 text-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setEditingField(editingField === 'desc' ? null : 'desc')}
-                                                    className="text-left text-slate-600 w-full rounded-md px-1.5 py-0.5 hover:bg-white"
-                                                    data-testid="ai-chip-desc"
-                                                >
-                                                    {editDesc || <span className="text-slate-400 italic">Add a note for them (optional)</span>}
-                                                </button>
-                                                {editingField === 'desc' && (
-                                                    <Textarea
-                                                        autoFocus
-                                                        value={editDesc}
-                                                        onChange={(e) => setEditDesc(e.target.value)}
-                                                        onBlur={() => setEditingField(null)}
-                                                        className="rounded-lg text-sm min-h-[56px]"
-                                                        rows={3}
-                                                        data-testid="ai-inline-desc"
-                                                    />
-                                                )}
-                                                <div className="flex flex-wrap gap-2">
-                                                    {preview.recurring?.is_recurring && (
-                                                        <Badge className="bg-slate-200 text-slate-800">
-                                                            Recurring · {preview.recurring.frequency}
-                                                        </Badge>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setEditSales((v) => !v)}
-                                                        className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-wide font-semibold border ${
-                                                            editSales
-                                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                                : 'bg-white text-slate-500 border-slate-200'
-                                                        }`}
-                                                        data-testid="ai-chip-sales"
-                                                    >
-                                                        {editSales ? 'Sales' : 'Mark as sales'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setEditScreenRecording((v) => !v)}
-                                                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold border ${
-                                                            editScreenRecording
-                                                                ? 'bg-violet-100 text-violet-800 border-violet-200'
-                                                                : 'bg-white text-slate-500 border-slate-200'
-                                                        }`}
-                                                        data-testid="ai-chip-screen-recording"
-                                                    >
-                                                        {editScreenRecording ? 'Screen recording required' : 'Require screen recording'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                                            <Button
-                                                type="button"
-                                                onClick={send}
-                                                disabled={sending}
-                                                className="rounded-full bg-slate-900 hover:bg-slate-800 gap-2"
-                                                data-testid="ai-send-btn"
-                                            >
-                                                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                                {sending ? 'Sending…' : 'Send'}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => setShowDetails((v) => !v)}
-                                                className="rounded-full gap-1.5"
-                                                data-testid="ai-edit-details"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                                {showDetails ? 'Less' : 'More'}
-                                            </Button>
-                                            <button
-                                                type="button"
-                                                onClick={() => { onRequestExit?.(); }}
-                                                className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 px-1"
-                                                data-testid="ai-preview-close"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Details editor — fallback, not the default path */}
-                        {(!readyToConfirm && clarifying.length === 0) && (
-                            <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4" data-testid="ai-details-editor">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-semibold text-slate-800">
-                                        {readyToConfirm ? 'Edit details' : 'Fill in what is missing'}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={() => { reset(); onRequestExit?.(); }}
-                                        className="text-slate-400 hover:text-slate-700 rounded-full p-1"
-                                        title="Discard"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Task</label>
-                                    <Input
-                                        value={editTitle}
-                                        onChange={(e) => setEditTitle(e.target.value)}
-                                        className="rounded-lg font-medium border-slate-300"
-                                        placeholder="Task title"
-                                        data-testid="ai-preview-title"
-                                    />
-                                    <Textarea
-                                        value={editDesc}
-                                        onChange={(e) => setEditDesc(e.target.value)}
-                                        className="rounded-lg text-sm border-slate-300 min-h-[48px]"
-                                        placeholder="What exactly needs to be done? (optional)"
-                                        rows={2}
-                                        data-testid="ai-preview-desc"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                                        Done well looks like <span className="font-normal normal-case text-slate-400">(optional)</span>
-                                    </label>
-                                    <Textarea
-                                        value={editCriteria}
-                                        onChange={(e) => setEditCriteria(e.target.value)}
-                                        className="rounded-lg text-sm border-slate-300 min-h-[48px]"
-                                        placeholder="e.g. Clean PDF with pricing, sent to the client, CC me"
-                                        rows={2}
-                                        data-testid="ai-preview-criteria"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                                        Assigned to ({personCount} {personCount === 1 ? 'person' : 'people'})
-                                    </label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {editAssignees.length === 0 && (
-                                            <p className="text-xs text-slate-500 italic">No one identified yet. Reply above, or open the advanced form.</p>
-                                        )}
-                                        {editAssignees.map((a, i) => (
-                                            <div
-                                                key={`${a.kind}-${a.id || a.email || i}`}
-                                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border ${chipColor(a.kind)}`}
-                                            >
-                                                {a.kind === 'user' && <UserIcon className="w-3 h-3" />}
-                                                {a.kind === 'email' && <UserIcon className="w-3 h-3" />}
-                                                {(a.kind === 'group' || a.kind === 'team') && <Users className="w-3 h-3" />}
-                                                <span>
-                                                    {a.name}
-                                                    {(a.kind === 'group' || a.kind === 'team') && a.member_count > 0 && (
-                                                        <span className="opacity-70 ml-1">· {a.member_count}</span>
-                                                    )}
-                                                </span>
-                                                {a.kind === 'team' && Array.isArray(a.alternates) && a.alternates.length > 0 && (
-                                                    <details className="relative">
-                                                        <summary className="list-none cursor-pointer opacity-60 hover:opacity-100 flex items-center">
-                                                            <ChevronDown className="w-3 h-3" />
-                                                        </summary>
-                                                        <div className="absolute z-30 mt-1 right-0 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[220px]">
-                                                            {a.alternates.map((alt) => (
-                                                                <button
-                                                                    key={alt.id}
-                                                                    type="button"
-                                                                    onClick={(e) => { e.preventDefault(); swapAlternate(i, alt); e.currentTarget.closest('details').open = false; }}
-                                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-slate-700"
-                                                                >
-                                                                    {alt.name}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </details>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeAssignee(i)}
-                                                    className="ml-1 opacity-60 hover:opacity-100"
-                                                    aria-label="Remove"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {unresolved.length > 0 && (
-                                        <p className="text-xs text-slate-500 italic">
-                                            {`Couldn't identify: ${unresolved.join(', ')}. Add via the manual form.`}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider block mb-1.5">Due</label>
-                                        <DateTimePicker
-                                            value={editDue}
-                                            onChange={(v) => setEditDue(v)}
-                                            data-testid="ai-preview-due"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider block mb-1.5">Priority</label>
-                                        <Select value={editPriority} onValueChange={setEditPriority}>
-                                            <SelectTrigger className={`rounded-lg ${priorityColor}`} data-testid="ai-preview-priority">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Low">Low</SelectItem>
-                                                <SelectItem value="Medium">Medium</SelectItem>
-                                                <SelectItem value="High">High</SelectItem>
-                                                <SelectItem value="Urgent">Urgent</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {!readyToConfirm && (
-                                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                                        <button
-                                            type="button"
-                                            onClick={() => onOpenAdvanced?.({
-                                                title: editTitle,
-                                                description: editDesc,
-                                                due_date: editDue,
-                                                priority: editPriority,
-                                                is_sales_task: editSales,
-                                                requires_screen_recording: editScreenRecording,
-                                                success_criteria: editCriteria,
-                                                assignees: editAssignees,
-                                                attachments,
-                                            })}
-                                            className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
-                                            data-testid="ai-open-advanced"
-                                        >
-                                            Open manual form
-                                        </button>
-                                        <Button
-                                            type="button"
-                                            onClick={send}
-                                            disabled={sending || editAssignees.length === 0 || !editDue || !editTitle}
-                                            className="rounded-full bg-slate-900 hover:bg-slate-800 gap-2"
-                                            data-testid="ai-send-btn-details"
-                                        >
-                                            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                            {sending ? 'Sending…' : 'Send task'}
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {readyToConfirm && (
-                                    <div className="flex justify-end pt-1 border-t border-slate-100">
-                                        <button
-                                            type="button"
-                                            onClick={() => onOpenAdvanced?.({
-                                                title: editTitle,
-                                                description: editDesc,
-                                                due_date: editDue,
-                                                priority: editPriority,
-                                                is_sales_task: editSales,
-                                                requires_screen_recording: editScreenRecording,
-                                                success_criteria: editCriteria,
-                                                assignees: editAssignees,
-                                                attachments,
-                                            })}
-                                            className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
-                                            data-testid="ai-open-advanced"
-                                        >
-                                            Open manual form
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
 
             </div>
 

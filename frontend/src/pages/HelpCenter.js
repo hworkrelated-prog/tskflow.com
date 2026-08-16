@@ -20,7 +20,7 @@ const topics = [
                 <li>Tell TskFlow what you need done in plain English — e.g. &ldquo;Have Sarah email the Q3 update by tomorrow 3pm.&rdquo;</li>
                 <li>Confirm the summary (or answer one clarifying question if something critical is missing), then send.</li>
                 <li>Use <strong>Advanced create</strong> only when you need attachments, groups, or recurrence extras.</li>
-                <li>Ready for more? Tap the <strong>J</strong> orb at the bottom-right and ask Jarvis — say &ldquo;What’s outstanding?&rdquo;</li>
+                <li>Ready for more? Ask in the bottom bar — Jarvis lives in the prompt. Try &ldquo;What’s outstanding?&rdquo;</li>
             </ol>
         )
     },
@@ -53,7 +53,7 @@ const topics = [
         icon: <PlayCircle className="w-4 h-4" />, title: 'Voice Mode & Assistant', category: 'AI Assistant',
         body: (
             <div className="text-sm space-y-2">
-                <p>Tap the mic (bottom-right) — no popup, it listens immediately. Use it to:</p>
+                <p>Tap the mic in the prompt bar — no popup, it listens immediately. Use it to:</p>
                 <ul className="list-disc ml-5">
                     <li>Ask about outstanding tasks or open a page.</li>
                     <li>Create tasks by voice (&ldquo;Create a task to call the vendor Friday at 10&rdquo;).</li>
@@ -200,7 +200,7 @@ const HelpCenter = () => {
                                 { step: '1', title: 'Create your first task', body: 'Use the floating bar at the bottom — create, search, or go to any page in plain English. Confirm and send.' },
                                 { step: '2', title: 'Turn a routine into recurring', body: 'Open Advanced Options in Create Task. Pick a frequency, set an end (or never). TskFlow keeps future occurrences pre-filled.' },
                                 { step: '3', title: 'Delegate to your team', body: 'Type an email or search a teammate. Assign to multiple people to create a group task with a live leaderboard.' },
-                                { step: '4', title: 'Ask Jarvis', body: 'Tap the J orb bottom-right. Say &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; — it does both.' },
+                                { step: '4', title: 'Ask Jarvis', body: 'Type in the bottom bar — Jarvis is in the prompt. Ask &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; — it does both.' },
                                 { step: '5', title: 'Turn on Smart Reminders', body: 'Settings → Reminders. Set triggers, frequency, and channels so nothing important goes cold.' },
                             ].map((s) => (
                                 <div key={s.step} className="flex gap-4">
@@ -236,7 +236,7 @@ const HelpCenter = () => {
 
                 <div className="mt-10 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-sm text-teal-900 flex items-center gap-3">
                     <HelpCircle className="w-5 h-5 text-teal-500" />
-                    <div>Can’t find what you need? Type in the floating bar, or tap the J orb (bottom-right) and ask Jarvis.</div>
+                    <div>Can’t find what you need? Ask in the bottom bar — Jarvis is in the prompt.</div>
                 </div>
             </main>
         </div>

@@ -6521,9 +6521,10 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             hint = f" You currently have {len(outstanding)} open task{'s' if len(outstanding) != 1 else ''}."
         return {
             "reply": (
-                "I couldn't reach my full brain just now, but I'm still here."
-                f"{hint} Try “what's outstanding”, “open analytics”, “guide me”, "
-                "or create a task with New Task on the left."
+                "I can still help from here."
+                f"{hint} Ask what’s outstanding, or type an assignment like "
+                "“Ask Alice to send the recap by Friday” — I’ll send it, follow up if they go quiet, "
+                "and Slack them with you in the loop if they ignore two pings."
             ),
             "action": {"type": "assistant_answer", "params": {}},
             "executed": {"type": "assistant_answer", "degraded": True},
