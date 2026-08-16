@@ -42,5 +42,5 @@ def test_glow_stays_subtle_and_respects_reduced_motion():
     assert "prefers-reduced-motion" in CSS
     assert "animation: none" in CSS
     # Keep the idle halo faint so it draws the eye without dominating the page.
-    assert "--glow-strength: 0.28" in CSS
-    assert "--glow-strength: 0.62" in CSS
+    assert "--glow-strength: 0.42" in CSS
+    assert "--glow-strength: 0.82" in CSS
