@@ -38,5 +38,6 @@ def test_wide_screens_sit_jarvis_beside_the_bar():
 
 def test_dock_does_not_self_center_with_fixed_offset():
     assert "fixed left-1/2" not in DOCK
-    assert "translateX(-50%)" in CSS  # stage is centered, not the dock
+    assert "translateX(-50%)" not in CSS.split(".ai-bottom-stage")[1].split(".ai-prompt-field")[0]
+    assert "margin-left: auto" in CSS
     assert ".ai-bottom-stage" in CSS

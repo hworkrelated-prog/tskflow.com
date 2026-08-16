@@ -31,7 +31,7 @@ def test_mobile_glow_does_not_spill_around_jarvis():
     assert "inset: -4px" in phone
     assert "background: none" in phone
     assert "display: none" in phone
-    assert "overflow: hidden" in phone
+    assert "overflow: visible" in phone
     inset = css.split(".ai-composer-shell--inset")[1].split("}")[0]
     assert "background: rgba(248, 250, 252, 0.9)" not in inset
     assert "background: #f8fafc" in inset

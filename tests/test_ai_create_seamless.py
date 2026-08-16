@@ -39,6 +39,9 @@ def test_composer_has_formatting_toolbar():
     assert 'data-testid="ai-format-toolbar"' in src
     assert "htmlToMarkdown" in src
     assert "wrapSelection('**', '**')" in src
+    assert "formatOpen" in src
+    assert "{formatOpen ? (" in src
+    assert "e.key.toLowerCase() === 'b'" in src
 
 
 def test_exited_prompts_save_as_header_drafts():
