@@ -13,6 +13,10 @@ def _read(*parts: str) -> str:
 def test_examples_include_team_outreach_and_cycle():
     src = _read("lib", "promptExamples.js")
     assert "Tell my team to complete the outreach training by 12" in src
+    assert "Assign Maya the Q3 recap by Friday 5pm" in src
+    assert "Remind Jordan to send the client deck tomorrow" in src
+    assert "Harold" not in src
+    assert "Sally" not in src
     assert "PROMPT_EXAMPLE_INTERVAL_MS" in src
     assert "nextPromptExampleIndex" in src
 
