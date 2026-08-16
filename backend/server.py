@@ -28,6 +28,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
+from response_review import generate_group_response_review
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
 from transcript_helpers import (
     apply_owner_and_due_guesses,
@@ -242,6 +243,7 @@ class TaskResponse(BaseModel):
     blocked_reason: Optional[str] = None
     blocked_at: Optional[str] = None
     ai_review_summary: Optional[str] = None
+    ai_group_review: Optional[dict] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -1242,6 +1244,29 @@ async def get_parent_subtasks(parent_id: str, current_user: dict = Depends(get_c
         u = umap.get(s.get("assigned_to"), {})
         s["assigned_to_name"] = u.get("name", s.get("assigned_to_email") or "Unknown")
     return subs
+
+
+@api_router.post("/tasks/parents/{parent_id}/ai-review")
+async def review_parent_responses(parent_id: str, current_user: dict = Depends(get_current_user)):
+    """Assigner briefing: evaluate every child's reply against expectations."""
+    parent = await db.tasks.find_one({"id": parent_id, "is_parent": True, "deleted": {"$ne": True}}, {"_id": 0})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Group task not found")
+    if parent.get("created_by") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the assigner can review the group's responses")
+
+    children = await db.tasks.find({"parent_id": parent_id, "deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
+    user_ids = list({c.get("assigned_to") for c in children if c.get("assigned_to")})
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(len(user_ids) or 1)
+    umap = {u["id"]: u for u in users}
+    for child in children:
+        u = umap.get(child.get("assigned_to"), {})
+        child["assigned_to_name"] = u.get("name") or child.get("assigned_to_email") or "Someone"
+
+    review = await generate_group_response_review(parent, children)
+    review["generated_at"] = get_pst_now().isoformat()
+    await db.tasks.update_one({"id": parent_id}, {"$set": {"ai_group_review": review}})
+    return review
 
 
 @api_router.post("/tasks/parents/{parent_id}/remind")
@@ -2987,6 +3012,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         blocked_reason=task.get("blocked_reason"),
         blocked_at=task.get("blocked_at"),
         ai_review_summary=task.get("ai_review_summary"),
+        ai_group_review=task.get("ai_group_review"),
     )
 
 @api_router.put("/tasks/{task_id}/accept")

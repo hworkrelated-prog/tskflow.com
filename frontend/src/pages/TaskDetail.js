@@ -17,6 +17,7 @@ import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import AttachmentViewer from '@/components/AttachmentViewer';
 import RichTextEditor from '@/components/RichTextEditor';
+import GroupResponseReview from '@/components/GroupResponseReview';
 
 const TaskDetail = () => {
     const { taskId, token } = useParams();
@@ -1472,6 +1473,16 @@ const TaskDetail = () => {
                     </Card>
 
                     {/* Assignees panel — lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
+                    {isParentTask && user?.id === task.created_by && (
+                        <GroupResponseReview
+                            parentId={task.id}
+                            initialReview={task.ai_group_review}
+                            isCreator
+                            hasCriteria={!!task.success_criteria}
+                            onReview={(rev) => setTask((t) => (t ? { ...t, ai_group_review: rev } : t))}
+                        />
+                    )}
+
                     {(isParentTask ? subtasks.length > 0 : Boolean(task.assigned_to_name)) && (
                         <div className="mt-4" data-testid="task-assignees-panel">
                             {isParentTask ? (

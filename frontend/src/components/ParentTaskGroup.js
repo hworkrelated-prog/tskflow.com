@@ -156,6 +156,9 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                     </div>
                 </div>
                 <div className="mt-3"><Progress value={group.percent} className="h-2" /></div>
+                <p className="mt-2 text-[11px] text-teal-800/80">
+                    Open the group to have the assistant review every reply in one briefing.
+                </p>
             </div>
 
             {open && (
