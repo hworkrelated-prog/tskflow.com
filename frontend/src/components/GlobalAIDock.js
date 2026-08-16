@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { X } from 'lucide-react';
-import { useAuth } from '@/App';
+import { useAuth, API } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
 
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
@@ -20,6 +21,8 @@ const GlobalAIDock = () => {
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
     const attachHandlerRef = useRef(null);
+    const dockRef = useRef(null);
+    const typingTimer = useRef(null);
 
     const visible =
         !!user
@@ -68,22 +71,44 @@ const GlobalAIDock = () => {
         window.addEventListener('tskflow:focus-ai-prompt', markActive);
         window.addEventListener('tskflow:attach-to-ai-create', onAttach);
         window.addEventListener('tskflow:start-task-from-recording', onRecordingTask);
+        window.addEventListener('tskflow:resume-ai-draft', focusPrompt);
         return () => {
             window.removeEventListener('tskflow:open-ai-create', focusPrompt);
             window.removeEventListener('tskflow:focus-ai-prompt', markActive);
             window.removeEventListener('tskflow:attach-to-ai-create', onAttach);
             window.removeEventListener('tskflow:start-task-from-recording', onRecordingTask);
+            window.removeEventListener('tskflow:resume-ai-draft', focusPrompt);
         };
     }, []);
 
+    const persistDraftFromSnap = useCallback(async (snap) => {
+        const raw = (snap?.text || '').trim();
+        if (!raw || snap?.sending) return;
+        try {
+            const first = raw.split('\n')[0].replace(/^#+\s*/, '').trim();
+            await axios.post(`${API}/tasks/drafts`, {
+                title: (snap.editTitle || first || 'Untitled draft').slice(0, 80),
+                description: snap.editDesc || raw,
+                due_date: snap.editDue || '',
+                priority: snap.editPriority || 'Medium',
+                assigned_to: snap.editAssignees?.[0]?.id || snap.editAssignees?.[0]?.email || '',
+            });
+            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
+        } catch {
+            /* draft save is best-effort */
+        }
+    }, []);
+
     const clearFlow = useCallback(() => {
+        const snap = snapRef.current;
+        persistDraftFromSnap(snap);
         setActive(false);
         setFocused(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
         window.dispatchEvent(new CustomEvent('tskflow:ai-dock-reset'));
-    }, []);
+    }, [persistDraftFromSnap]);
 
     useEffect(() => {
         const onKey = (e) => {
@@ -103,6 +128,8 @@ const GlobalAIDock = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [active, focused, clearFlow]);
 
+    useEffect(() => () => window.clearTimeout(typingTimer.current), []);
+
     const openManual = (prefill) => {
         try {
             if (prefill) sessionStorage.setItem('tsk_manual_prefill', JSON.stringify(prefill));
@@ -117,12 +144,50 @@ const GlobalAIDock = () => {
 
     const open = active || focused || recordingPending;
 
+    const setGlowPoint = (e) => {
+        const el = dockRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const x = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
+        const y = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
+        el.style.setProperty('--glow-x', `${x}%`);
+        el.style.setProperty('--glow-y', `${y}%`);
+    };
+
+    const markTyping = () => {
+        const el = dockRef.current;
+        if (!el) return;
+        el.classList.add('is-typing');
+        window.clearTimeout(typingTimer.current);
+        typingTimer.current = window.setTimeout(() => {
+            dockRef.current?.classList.remove('is-typing');
+        }, 720);
+    };
+
     return (
         <div
-            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}`}
+            ref={dockRef}
+            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"
+            onPointerMove={setGlowPoint}
+            onPointerEnter={(e) => {
+                dockRef.current?.classList.add('is-hover');
+                setGlowPoint(e);
+            }}
+            onPointerLeave={() => dockRef.current?.classList.remove('is-hover')}
+            onFocusCapture={() => dockRef.current?.classList.add('is-focused')}
+            onBlurCapture={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                    dockRef.current?.classList.remove('is-focused');
+                }
+            }}
+            onInput={markTyping}
+            onKeyDown={markTyping}
         >
+            <div className="ai-bar-glow" aria-hidden data-testid="ai-bar-glow" />
+            <span className="ai-bar-glow-spot" aria-hidden />
             <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
                 <button
                     type="button"

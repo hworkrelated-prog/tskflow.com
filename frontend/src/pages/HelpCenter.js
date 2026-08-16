@@ -139,7 +139,7 @@ const HelpCenter = () => {
     }, [q]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
+        <div className="page-shell">
             <header className="border-b bg-white sticky top-0 z-10">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
