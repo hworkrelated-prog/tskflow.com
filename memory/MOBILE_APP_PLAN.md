@@ -1,6 +1,28 @@
 # TskFlow Mobile App Plan
 
-Use Emergent's **web → mobile conversion** on the existing TskFlow project. Do not start a second Emergent project and do not wrap the website in a WebView.
+## Recommendation: do not spend $100 on Emergent conversion yet
+
+The $100 is a one-time credit charge. The real cost of Emergent's convert is a **second frontend you must keep building forever**. TskFlow is a large SaaS (recordings, Stripe, Google OAuth, admin, analytics). A generated React Native app will not replace that, and every later web feature has to be built twice.
+
+**Best option now: installable mobile web (PWA).**  
+The site already has a standalone manifest, icons, service worker, Web Push, and phone layout work. Teammates can Add to Home Screen and use the same account, tasks, and backend. Cost: $0. One codebase.
+
+**Best option if you need App Store / Play Store listing:** wrap this same React app with **Capacitor** (or equivalent). Store fees still apply ($99/year Apple, $25 Google). You do **not** pay Emergent $100, and a `frontend/` change is still the app.
+
+**Pay Emergent $100 only if** you want a *smaller* native app on purpose — accept / complete / nudge on a phone — and you accept maintaining two UIs. In that case use the Phase 1 prompt below. Do not convert "the whole product."
+
+| Option | Upfront | Ongoing | Store listing | Verdict for TskFlow |
+| --- | --- | --- | --- | --- |
+| PWA / Add to Home Screen | $0 | One web frontend | No | **Do this first** |
+| Capacitor around current React | $0 + store fees | One frontend | Yes | **Best if you need store icons** |
+| Emergent web → mobile | ~$100 credits + store fees | Two frontends | Yes | Only for a scoped native MVP |
+| New Expo app in this repo | Engineering time | Two frontends | Yes | Same dual-UI cost, no $100 fee |
+
+Do not start a second Emergent project.
+
+---
+
+## If you later choose Emergent conversion
 
 The web app at [tskflow.com](https://tskflow.com) stays live. Conversion forks a new Expo / React Native frontend that talks to the **same FastAPI backend, MongoDB, and login**. Accounts and tasks stay one dataset. Frontend screens do not stay in sync — a web UI change does not appear on mobile until you build it again.
 
