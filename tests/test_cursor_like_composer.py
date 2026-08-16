@@ -32,6 +32,15 @@ def test_format_toolbar_is_overlay_only_when_open():
     assert "absolute" in bar
 
 
+def test_composer_send_uses_themeable_class():
+    src = _read("components", "AIQuickCreate.js")
+    toolbar = src[src.index("relative z-[1] flex items-center justify-between") : src.index("ai-inline-recorder")]
+    assert "ai-composer-send" in toolbar
+    assert "ai-composer-icon-btn" in toolbar
+    assert "disabled:opacity-50" not in toolbar
+    assert "bg-slate-200 text-slate-400" not in toolbar
+
+
 def test_composer_shell_is_a_quiet_chat_card():
     css = _read("index.css")
     shell = css.split(".ai-composer-shell {")[1].split(".ai-composer-shell--inset")[0]

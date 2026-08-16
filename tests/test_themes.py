@@ -48,6 +48,26 @@ def test_settings_eod_card_uses_semantic_surfaces():
     assert "theme-option-${t.id}" in src or 'theme-option-dark' in src
 
 
+def test_dark_composer_field_stays_flush_with_shell():
+    css = _read("index.css")
+    app = _read("App.css")
+    src = _read("components", "AIQuickCreate.js")
+    dark_field = css.split("[data-theme=\"dark\"] .ai-composer-shell textarea")[1].split("::placeholder")[0]
+    assert "background: transparent !important" in dark_field
+    assert "border-color: transparent !important" in dark_field
+    assert "background: transparent !important" in app.split(".ai-composer-shell textarea")[1].split("}")[0]
+    assert "ai-composer-send" in src
+    assert "is-ready" in src
+    send = css.split("[data-theme=\"dark\"] .ai-composer-send.is-ready")[1].split("}")[0]
+    assert "#f4f4f5" in send
+    assert "#111111" in send
+    idle = css.split("[data-theme=\"dark\"] .ai-composer-send {")[1].split("}")[0]
+    assert "rgba(255, 255, 255, 0.14)" in idle
+    placeholder = css.split("[data-theme=\"dark\"] .ai-prompt-placeholder")[1].split("}")[0]
+    assert "rgb(148 163 184)" not in placeholder
+    assert "hsl(215 12% 64%)" in placeholder
+
+
 def test_voice_fab_sits_above_command_bar():
     src = _read("components", "VoiceMode.js")
     css = _read("index.css")

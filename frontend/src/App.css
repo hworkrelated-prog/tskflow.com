@@ -171,6 +171,14 @@
     color: hsl(var(--foreground)) !important;
 }
 
+/* Composer fields stay flush with the chat shell (see index.css). */
+[data-theme="dark"] .ai-composer-shell textarea,
+[data-theme="dark"] .ai-composer-shell input {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
 [data-theme="dark"] .task-card {
     background: hsl(var(--card)) !important;
     border-color: hsl(var(--border)) !important;
