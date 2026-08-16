@@ -21,8 +21,12 @@ def test_glow_follows_pointer_and_brightens_on_type():
     assert "onPointerMove={setGlowPoint}" in DOCK
     assert "--glow-x" in DOCK
     assert "--glow-y" in DOCK
+    assert "ai-bar-glow-spot" in DOCK
+    assert ".ai-bar-glow-spot" in CSS
     assert "markTyping" in DOCK
     assert "onInput={markTyping}" in DOCK
+    assert "onKeyDown={markTyping}" in DOCK
+    assert "onFocusCapture" in DOCK
     assert "is-typing" in DOCK
     assert "is-hover" in DOCK
     assert "is-focused" in DOCK

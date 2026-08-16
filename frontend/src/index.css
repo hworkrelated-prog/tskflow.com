@@ -227,31 +227,44 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ai-bar-glow {
     position: absolute;
-    inset: -22px -18px -16px;
-    border-radius: 2.15rem;
+    inset: -28px -22px -20px;
+    border-radius: 2.25rem;
     pointer-events: none;
     z-index: -1;
+    overflow: visible;
     background:
         radial-gradient(
-            160px 70px at var(--glow-x) var(--glow-y),
-            rgba(13, 148, 136, calc(var(--glow-strength) * 0.42)),
-            transparent 62%
-        ),
-        radial-gradient(
-            320px 120px at var(--glow-x) var(--glow-y),
-            rgba(13, 148, 136, calc(var(--glow-strength) * 0.22)),
-            transparent 74%
+            200px 90px at var(--glow-x) var(--glow-y),
+            rgba(13, 148, 136, calc(var(--glow-strength) * 0.5)),
+            transparent 64%
         );
     box-shadow:
-        0 0 0 1px rgba(13, 148, 136, calc(var(--glow-strength) * 0.32)),
-        0 0 24px 4px rgba(13, 148, 136, calc(var(--glow-strength) * 0.2)),
-        0 14px 36px -8px rgba(13, 148, 136, calc(var(--glow-strength) * 0.38));
+        0 0 0 1px rgba(13, 148, 136, calc(var(--glow-strength) * 0.28)),
+        0 0 22px 3px rgba(13, 148, 136, calc(var(--glow-strength) * 0.16)),
+        0 14px 36px -8px rgba(13, 148, 136, calc(var(--glow-strength) * 0.32));
     opacity: 0.86;
     transition:
         opacity 280ms ease,
         box-shadow 280ms ease,
         background 280ms ease;
     animation: ai-bar-breathe 5.2s ease-in-out infinite;
+}
+.ai-bar-glow-spot {
+    position: absolute;
+    width: 240px;
+    height: 150px;
+    left: var(--glow-x);
+    top: var(--glow-y);
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: -1;
+    background: radial-gradient(
+        circle,
+        rgba(13, 148, 136, calc(var(--glow-strength) * 0.55)) 0%,
+        transparent 72%
+    );
+    filter: blur(14px);
 }
 .ai-command-dock.is-hover,
 .ai-command-dock.is-focused {
@@ -280,19 +293,21 @@ h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .ai-bar-glow {
     background:
         radial-gradient(
-            160px 70px at var(--glow-x) var(--glow-y),
-            rgba(45, 212, 191, calc(var(--glow-strength) * 0.36)),
-            transparent 62%
-        ),
-        radial-gradient(
-            320px 120px at var(--glow-x) var(--glow-y),
-            rgba(45, 212, 191, calc(var(--glow-strength) * 0.18)),
-            transparent 74%
+            200px 90px at var(--glow-x) var(--glow-y),
+            rgba(45, 212, 191, calc(var(--glow-strength) * 0.4)),
+            transparent 64%
         );
     box-shadow:
-        0 0 0 1px rgba(45, 212, 191, calc(var(--glow-strength) * 0.28)),
-        0 0 24px 4px rgba(45, 212, 191, calc(var(--glow-strength) * 0.16)),
-        0 14px 36px -8px rgba(45, 212, 191, calc(var(--glow-strength) * 0.32));
+        0 0 0 1px rgba(45, 212, 191, calc(var(--glow-strength) * 0.26)),
+        0 0 22px 3px rgba(45, 212, 191, calc(var(--glow-strength) * 0.14)),
+        0 14px 36px -8px rgba(45, 212, 191, calc(var(--glow-strength) * 0.28));
+}
+[data-theme="dark"] .ai-bar-glow-spot {
+    background: radial-gradient(
+        circle,
+        rgba(45, 212, 191, calc(var(--glow-strength) * 0.5)) 0%,
+        transparent 72%
+    );
 }
 [data-theme="dark"] .ai-command-dock.is-typing .ai-bar-glow {
     box-shadow:

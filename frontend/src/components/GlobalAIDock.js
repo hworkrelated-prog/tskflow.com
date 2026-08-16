@@ -177,9 +177,17 @@ const GlobalAIDock = () => {
                 setGlowPoint(e);
             }}
             onPointerLeave={() => dockRef.current?.classList.remove('is-hover')}
+            onFocusCapture={() => dockRef.current?.classList.add('is-focused')}
+            onBlurCapture={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                    dockRef.current?.classList.remove('is-focused');
+                }
+            }}
             onInput={markTyping}
+            onKeyDown={markTyping}
         >
             <div className="ai-bar-glow" aria-hidden data-testid="ai-bar-glow" />
+            <span className="ai-bar-glow-spot" aria-hidden />
             <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
                 <button
                     type="button"
