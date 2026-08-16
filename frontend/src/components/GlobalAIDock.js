@@ -4,6 +4,7 @@ import axios from 'axios';
 import { X } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
+import { applyJarvisAnchor, clearJarvisAnchor, jarvisAnchorFromDock } from '@/lib/jarvisAnchor';
 
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
 const LANDINGish = ['/', '/privacy', '/terms', '/contact'];
@@ -21,6 +22,7 @@ const GlobalAIDock = () => {
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
     const attachHandlerRef = useRef(null);
+    const dockRef = useRef(null);
 
     const visible =
         !!user
@@ -33,6 +35,33 @@ const GlobalAIDock = () => {
         document.body.classList.add('has-ai-dock');
         return () => document.body.classList.remove('has-ai-dock');
     }, [visible]);
+
+    useEffect(() => {
+        if (!visible) {
+            clearJarvisAnchor(document.documentElement);
+            return undefined;
+        }
+        const el = dockRef.current;
+        if (!el) return undefined;
+        const publish = () => {
+            applyJarvisAnchor(
+                document.documentElement,
+                jarvisAnchorFromDock(el.getBoundingClientRect(), {
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                }),
+            );
+        };
+        const ro = new ResizeObserver(publish);
+        ro.observe(el);
+        window.addEventListener('resize', publish);
+        publish();
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', publish);
+            clearJarvisAnchor(document.documentElement);
+        };
+    }, [visible, active, focused, recordingPending]);
 
     useEffect(() => {
         const markActive = () => setActive(true);
@@ -142,6 +171,7 @@ const GlobalAIDock = () => {
 
     return (
         <div
+            ref={dockRef}
             className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"

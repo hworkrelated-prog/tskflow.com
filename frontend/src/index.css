@@ -358,3 +358,20 @@ h1, h2, h3, h4, h5, h6 {
 body.app-authenticated.has-ai-dock .safe-fab-bl {
     bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }
+
+/* Jarvis parks above the prompt on phones, beside it when there is room. */
+.ai-jarvis-anchor {
+    right: var(--ai-jarvis-right, 0.75rem);
+    bottom: var(--ai-jarvis-bottom, calc(1.25rem + env(safe-area-inset-bottom, 0px)));
+    transition:
+        bottom 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        right 280ms ease;
+}
+html.ai-jarvis-above .ai-jarvis-orb {
+    height: 2.5rem;
+    width: 2.5rem;
+}
+html.ai-jarvis-beside .ai-jarvis-orb {
+    height: 3rem;
+    width: 3rem;
+}
