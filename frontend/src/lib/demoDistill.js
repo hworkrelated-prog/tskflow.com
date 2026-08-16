@@ -6,6 +6,7 @@ export const distillLandingPrompt = (raw) => {
     const text = String(raw || '').trim();
     if (!text) return null;
 
+    let who = /team|everyone/i.test(text) ? 'Your team' : 'The person you named';
     let work = text
         .replace(/^(please|kindly)\s+/i, '')
         .replace(
@@ -16,6 +17,13 @@ export const distillLandingPrompt = (raw) => {
         .replace(/^that\s+/i, '')
         .trim();
 
+    const assignWho = text.match(/^assign\s+(.+?)\s+to\s+/i);
+    if (assignWho) {
+        who = assignWho[1].replace(/^(the|my|our)\s+/i, '').trim();
+        if (who) who = who[0].toUpperCase() + who.slice(1);
+        work = text.replace(/^assign\s+.+?\s+to\s+/i, '').trim();
+    }
+
     let when = '';
     const onDay = work.match(new RegExp(`\\bon\\s+(${WEEKDAYS})\\b`, 'i'));
     if (onDay) {
@@ -24,6 +32,9 @@ export const distillLandingPrompt = (raw) => {
     } else if (/\btomorrow\b/i.test(work)) {
         when = 'Tomorrow';
         work = work.replace(/\btomorrow\b/i, ' ').trim();
+    } else if (/\bby eod\b/i.test(work)) {
+        when = 'By EOD';
+        work = work.replace(/\bby eod\b/i, ' ').trim();
     }
 
     work = work.replace(/\s+/g, ' ').replace(/^[,. ]+|[,. ]+$/g, '');
@@ -42,6 +53,6 @@ export const distillLandingPrompt = (raw) => {
         title: title.replace(/\.$/, ''),
         ask: ask.replace(/\.\.$/, '.'),
         when: when || 'When you set a time',
-        who: /team|everyone/i.test(text) ? 'Your team' : 'The person you named',
+        who,
     };
 };
