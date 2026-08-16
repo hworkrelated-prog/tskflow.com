@@ -481,7 +481,8 @@ const SettingsPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Google Sheets daily metrics */}
+                                {/* Google Sheets daily metrics — hidden until the connector scope is approved */}
+                                {false && (
                                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-3" data-testid="google-sheets-sync">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
@@ -702,6 +703,7 @@ const SettingsPage = () => {
                                         </div>
                                     )}
                                 </div>
+                                )}
                                 {(user?.subscription_tier === 'teams' || user?.subscription_tier === 'pro') && (
                                     <Button
                                         onClick={() => navigate('/team')}
@@ -938,7 +940,6 @@ const SettingsPage = () => {
                                                 { key: 'missed', label: 'Missed due dates', help: 'Overdue items' },
                                                 { key: 'manager_snapshot', label: 'Team you manage', help: 'Quick view of direct reports’ status' },
                                                 { key: 'suggested_plan', label: 'Suggested follow-ups', help: 'Jarvis tips for tomorrow' },
-                                                { key: 'sheet_metrics', label: 'Spreadsheet activity', help: 'Calls / emails from Google Sheets sync' },
                                             ].map((s) => (
                                                 <label
                                                     key={s.key}
