@@ -314,8 +314,13 @@
 [data-theme="dark"] .text-emerald-700,
 [data-theme="dark"] .text-emerald-800,
 [data-theme="dark"] .text-emerald-900 { color: #6ee7b7 !important; }
-[data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900 { color: #fcd34d !important; }
+[data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900,
+[data-theme="dark"] .text-amber-950 { color: #fcd34d !important; }
 [data-theme="dark"] .text-red-700, [data-theme="dark"] .text-red-800, [data-theme="dark"] .text-red-900 { color: #fca5a5 !important; }
+[data-theme="dark"] .text-teal-950,
+[data-theme="dark"] .text-slate-950 {
+    color: hsl(var(--foreground)) !important;
+}
 
 /* Borders — subtle */
 [data-theme="dark"] .border-gray-100,

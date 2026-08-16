@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -25,7 +25,7 @@ import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layou
  * Flow:
  *   1) User types plain English + Enter
  *   2) POST /api/ai/quick-create-preview
- *   3a) If one critical gap → ask ONE clarifying question conversationally
+ *   3a) If something critical is missing → keep chatting until it is filled in
  *   3b) If ready → natural-language summary + one-tap Confirm
  *   4) "Edit details" reveals the full field editor as a fallback
  */
@@ -184,6 +184,7 @@ const AIQuickCreate = ({
     const [showAttachPrompt, setShowAttachPrompt] = useState(false);
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
+    const [recurringHint, setRecurringHint] = useState(false);
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
     const [listening, setListening] = useState(false);
@@ -198,6 +199,7 @@ const AIQuickCreate = ({
     const threadEndRef = useRef(null);
     const threadRef = useRef([]);
     const activePromptRef = useRef('');
+    const recurringHintRef = useRef(false);
     const navigate = useNavigate();
     const { user } = useAuth();
     const [slackStatus, setSlackStatus] = useState({ connected: false, canManage: false });
@@ -702,7 +704,21 @@ const AIQuickCreate = ({
         };
         setPreview(nextPreview);
         if (filteredQs.length > 0) {
-            const isWho = /who|own|assign/i.test(filteredQs[0] || '') && !hasAssignees;
+            const q = filteredQs[0];
+            const last = threadRef.current[threadRef.current.length - 1];
+            if (!(last?.role === 'assistant' && last.text === q)) {
+                const entry = {
+                    id: `${Date.now()}-assistant-q`,
+                    role: 'assistant',
+                    text: q,
+                };
+                setThread((prev) => {
+                    const next = [...prev, entry];
+                    threadRef.current = next;
+                    return next;
+                });
+            }
+            const isWho = /who|own|assign/i.test(q || '') && !hasAssignees;
             setShowPeopleDrop(isWho);
             setTimeout(() => clarifyRef.current?.focus(), 50);
             if (!nudgeSentRef.current) {
@@ -730,6 +746,18 @@ const AIQuickCreate = ({
             return next;
         });
         return entry;
+    };
+
+    const startRecurringCompose = () => {
+        setPlusOpen(false);
+        setRecurringHint(true);
+        recurringHintRef.current = true;
+        setComposerFocused(true);
+        appendThread({
+            role: 'assistant',
+            text: 'What should happen on a repeat? Tell me the work, who it’s for, and how often — I’ll fill in anything that’s missing.',
+        });
+        focusInput();
     };
 
     const runQA = async (question, { alreadyLogged } = {}) => {
@@ -837,7 +865,11 @@ const AIQuickCreate = ({
             const res = await axios.post(`${API}/ai/quick-create-preview`, {
                 text: t,
                 answers: overrideAnswers ?? answers,
-            });
+                history: threadRef.current.slice(-12).map((m) => ({ role: m.role, text: m.text })),
+                context_hint: recurringHintRef.current
+                    ? 'User tapped Recurring in the plus menu. Treat this as a repeating series. Infer cadence if they said every/daily/weekly; otherwise ask how often in plain language.'
+                    : undefined,
+            }, { timeout: 25000 });
             const p = res.data;
             if (p.intent === 'question') {
                 await runQA(t, { alreadyLogged: true });
@@ -1021,6 +1053,8 @@ const AIQuickCreate = ({
         setActivePrompt('');
         activePromptRef.current = '';
         nudgeSentRef.current = false;
+        setRecurringHint(false);
+        recurringHintRef.current = false;
         focusInput();
     }, [focusInput]);
 
@@ -1337,7 +1371,7 @@ const AIQuickCreate = ({
     const unresolved = preview?.assignee_resolution?.unresolved || [];
     const needsAmbiguousPick = ambiguous.length > 0 && editAssignees.length === 0;
     const isWhoClarify = clarifying.length > 0 && /who|own|assign/i.test(clarifying[0] || '');
-    const isWhenClarify = clarifying.length > 0 && /when|due|deadline/i.test(clarifying[0] || '');
+    const isWhenClarify = clarifying.length > 0 && /when|due|deadline|often|repeat/i.test(clarifying[0] || '');
     const selfAssignConfirm = assigneesAreSelf(editAssignees, user?.id);
     const readyToConfirm =
         !!preview &&
@@ -1494,15 +1528,15 @@ const AIQuickCreate = ({
                                 <div className="space-y-2">
                                     {teamScopePrompt && (
                                         <div className="flex justify-start" data-testid="ai-team-scope">
-                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-teal-50 border border-teal-200 px-3.5 py-3 space-y-2">
-                                                <p className="text-sm font-medium text-teal-950">Who should this go to?</p>
+                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-muted/70 border border-border px-3.5 py-3 space-y-2">
+                                                <p className="text-sm font-medium text-foreground">Who should this go to?</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {(teamScopePrompt.options || []).map((opt) => (
                                                         <button
                                                             key={opt.id || opt.label}
                                                             type="button"
                                                             onClick={() => pickTeamScope(opt)}
-                                                            className="inline-flex items-center gap-1.5 rounded-full border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:bg-teal-100 transition-colors"
+                                                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
                                                             data-testid={`team-scope-${opt.id}`}
                                                         >
                                                             <Users className="w-3.5 h-3.5" />
@@ -1516,10 +1550,10 @@ const AIQuickCreate = ({
 
                                     {clarifying.length > 0 && (
                                         <div className="flex justify-start" data-testid="ai-clarifying">
-                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
+                                            <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-muted/70 border border-border px-3.5 py-3 space-y-2">
                                                 <div className="flex items-start gap-2">
-                                                    <MessageCircleQuestion className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
-                                                    <p className="text-sm font-medium text-amber-950">{clarifying[0]}</p>
+                                                    <MessageCircleQuestion className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                                                    <p className="text-sm font-medium text-foreground" data-testid="ai-clarify-question">{clarifying[0]}</p>
                                                 </div>
 
                                                 {/scope|direct reports|everyone under/i.test(clarifying[0] || '') && teamScopePrompt ? (
@@ -1529,7 +1563,7 @@ const AIQuickCreate = ({
                                                                 key={`q-${opt.id || opt.label}`}
                                                                 type="button"
                                                                 onClick={() => pickTeamScope(opt)}
-                                                                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-100"
+                                                                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                                                             >
                                                                 <Users className="w-3.5 h-3.5" />
                                                                 {opt.label || opt.name}
@@ -1554,7 +1588,7 @@ const AIQuickCreate = ({
                                                                 }
                                                             }}
                                                             placeholder="Search people or type @name"
-                                                            className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                            className="h-9 text-sm rounded-lg border-border bg-background text-foreground"
                                                             data-testid="clarify-people-search"
                                                             disabled={loading || sending}
                                                             autoComplete="off"
@@ -1680,14 +1714,14 @@ const AIQuickCreate = ({
                                                             ref={clarifyRef}
                                                             value={clarifyAnswer}
                                                             onChange={(e) => setClarifyAnswer(e.target.value)}
-                                                            placeholder={isWhenClarify ? 'e.g. Friday 5pm' : 'Your answer…'}
+                                                            placeholder={isWhenClarify ? (/often|repeat/i.test(clarifying[0] || '') ? 'e.g. every weekday at 5pm' : 'e.g. Friday 5pm') : 'Your answer…'}
                                                             onKeyDown={(e) => {
                                                                 if (e.key === 'Enter' && clarifyAnswer.trim()) {
                                                                     e.preventDefault();
                                                                     answerClarify(clarifying[0], clarifyAnswer);
                                                                 }
                                                             }}
-                                                            className="h-9 text-sm rounded-lg border-amber-300 bg-white"
+                                                            className="h-9 text-sm rounded-lg border-border bg-background text-foreground"
                                                             data-testid="clarify-answer-0"
                                                             disabled={loading || sending}
                                                         />
@@ -1696,7 +1730,7 @@ const AIQuickCreate = ({
                                                             size="sm"
                                                             onClick={() => answerClarify(clarifying[0], clarifyAnswer)}
                                                             disabled={loading || sending || !clarifyAnswer.trim()}
-                                                            className="rounded-lg bg-amber-700 hover:bg-amber-800"
+                                                            className="rounded-lg"
                                                         >
                                                             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Reply'}
                                                         </Button>
@@ -1708,8 +1742,8 @@ const AIQuickCreate = ({
 
                                     {ambiguous.length > 0 && clarifying.length === 0 && editAssignees.length === 0 && (
                                         <div className="flex justify-start">
-                                            <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-amber-50 border border-amber-200 px-3.5 py-3 space-y-2">
-                                                <p className="text-sm font-medium text-amber-950">Who did you mean?</p>
+                                            <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-muted/70 border border-border px-3.5 py-3 space-y-2">
+                                                <p className="text-sm font-medium text-foreground">Who did you mean?</p>
                                                 {ambiguous.map((amb, i) => {
                                                     // Deduplicate identical name/email candidates
                                                     const seen = new Set();
@@ -1891,7 +1925,7 @@ const AIQuickCreate = ({
                                                 </p>
                                                 {editDesc ? (
                                                     <div
-                                                        className="text-[14px] leading-6 text-slate-700 whitespace-pre-wrap"
+                                                        className="text-[14px] leading-6 text-foreground whitespace-pre-wrap"
                                                         data-testid="ai-confirm-assignee-ask"
                                                     >
                                                         {layoutTaskDescription(editDesc)}
@@ -2446,7 +2480,7 @@ const AIQuickCreate = ({
                                         {mentionOptions.map((opt, idx) => {
                                             const active = idx === mentionIndex;
                                             const rowClass = `w-full flex items-center gap-2.5 px-2.5 py-2.5 sm:py-2 rounded-xl text-left text-sm transition-colors touch-manipulation ${
-                                                active ? 'bg-teal-50 text-teal-950' : 'text-slate-800 hover:bg-slate-50 active:bg-slate-50'
+                                                active ? 'bg-muted text-foreground' : 'text-foreground hover:bg-muted/60 active:bg-muted'
                                             }`;
                                             if (opt.type === 'user') {
                                                 const u = opt.data;
@@ -2687,6 +2721,16 @@ const AIQuickCreate = ({
                                                     ? <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
                                                     : <Paperclip className="w-4 h-4 text-slate-400" strokeWidth={1.75} />}
                                                 Attach
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={startRecurringCompose}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                                data-testid="ai-recurring-btn"
+                                            >
+                                                <Repeat className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+                                                Recurring
                                             </button>
                                             <button
                                                 type="button"
