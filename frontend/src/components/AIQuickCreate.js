@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, Wand2, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -177,6 +177,7 @@ const AIQuickCreate = ({
     const [attachments, setAttachments] = useState([]);
     const [uploadingPaste, setUploadingPaste] = useState(false);
     const [showRecordPicker, setShowRecordPicker] = useState(false);
+    const [plusOpen, setPlusOpen] = useState(false);
     const [showAttachPrompt, setShowAttachPrompt] = useState(false);
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [teamScopePrompt, setTeamScopePrompt] = useState(null); // { options: [...] }
@@ -185,6 +186,7 @@ const AIQuickCreate = ({
     const [listening, setListening] = useState(false);
     const [formatOpen, setFormatOpen] = useState(false);
     const fileInputRef = useRef(null);
+    const plusRef = useRef(null);
     const pasteZoneRef = useRef(null);
     const recRef = useRef(null);
     const voiceFinalRef = useRef('');
@@ -889,6 +891,8 @@ const AIQuickCreate = ({
         setEditScreenRecording(false);
         setAttachments([]);
         setShowRecordPicker(false);
+        setPlusOpen(false);
+        setFormatOpen(false);
         setTeamScopePrompt(null);
         setEditingField(null);
         setShowDetails(false);
@@ -1047,6 +1051,25 @@ const AIQuickCreate = ({
         const t = setTimeout(() => pasteZoneRef.current?.focus?.(), 50);
         return () => clearTimeout(t);
     }, [showAttachPrompt]);
+
+    useEffect(() => {
+        if (!plusOpen) return undefined;
+        const onKey = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setPlusOpen(false);
+            }
+        };
+        const onPtr = (e) => {
+            if (!plusRef.current?.contains(e.target)) setPlusOpen(false);
+        };
+        window.addEventListener('keydown', onKey, true);
+        document.addEventListener('mousedown', onPtr);
+        return () => {
+            window.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('mousedown', onPtr);
+        };
+    }, [plusOpen]);
 
     const handleAttachFiles = async (e) => {
         const files = Array.from(e.target.files || []);
@@ -1358,11 +1381,11 @@ const AIQuickCreate = ({
                             data-testid="ai-quick-composer"
                         >
                             {formatOpen ? (
-                            <div className="flex items-center gap-0.5 px-1.5 pt-1.5" data-testid="ai-format-toolbar">
+                            <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-white/95 px-0.5 py-0.5 shadow-sm" data-testid="ai-format-toolbar">
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); wrapSelection('**', '**'); }}
-                                    className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
                                     title="Bold"
                                     aria-label="Bold"
                                 >
@@ -1371,7 +1394,7 @@ const AIQuickCreate = ({
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); wrapSelection('_', '_'); }}
-                                    className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
                                     title="Italic"
                                     aria-label="Italic"
                                 >
@@ -1380,7 +1403,7 @@ const AIQuickCreate = ({
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); prefixLine('- '); }}
-                                    className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
                                     title="Bullet list"
                                     aria-label="Bullet list"
                                 >
@@ -1487,7 +1510,7 @@ const AIQuickCreate = ({
                                 placeholder={listening ? 'Listening…' : ''}
                                 aria-label="Create, search, or go to"
                                 rows={1}
-                                className="min-h-[40px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-2.5 pb-1 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading || listening}
                             />
@@ -1725,39 +1748,67 @@ const AIQuickCreate = ({
                             )}
 
                             <div className="relative z-[1] flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
-                                <div className="flex items-center gap-0.5">
+                                <div className="relative flex items-center" ref={plusRef}>
                                     <button
                                         type="button"
-                                        onClick={() => setShowRecordPicker((v) => !v)}
-                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-teal-700 hover:bg-teal-50/80 flex items-center justify-center transition-colors"
-                                        title="Record your screen to attach"
-                                        aria-label="Record screen"
-                                        data-testid="ai-screen-record-btn"
+                                        onClick={() => setPlusOpen((v) => !v)}
+                                        className={`h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors ${plusOpen ? 'bg-slate-100 text-slate-700' : ''}`}
+                                        title="Add"
+                                        aria-label="Add attachment or recording"
+                                        aria-expanded={plusOpen}
+                                        data-testid="ai-plus-btn"
                                     >
-                                        <Video className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                        <Plus className="w-4 h-4" strokeWidth={1.75} />
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAttachPrompt(true)}
-                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors"
-                                        title="Attach"
-                                        aria-label="Attach"
-                                        data-testid="ai-attach-file-btn"
-                                    >
-                                        {(uploadingPaste)
-                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            : <Paperclip className="w-3.5 h-3.5" strokeWidth={1.75} />}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => navigate('/transcript')}
-                                        className="h-8 w-8 rounded-lg text-slate-400 hover:text-indigo-700 hover:bg-indigo-50/80 flex items-center justify-center transition-colors"
-                                        title="From transcript"
-                                        aria-label="From transcript"
-                                        data-testid="ai-transcript-btn"
-                                    >
-                                        <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                    </button>
+                                    {plusOpen && (
+                                        <div
+                                            className="ai-plus-menu absolute bottom-full left-0 mb-1.5 w-52 rounded-xl border py-1 shadow-lg shadow-slate-900/10 z-30"
+                                            data-testid="ai-plus-menu"
+                                            role="menu"
+                                        >
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => {
+                                                    setPlusOpen(false);
+                                                    setShowRecordPicker((v) => !v);
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                                data-testid="ai-screen-record-btn"
+                                            >
+                                                <Video className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+                                                Record screen
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => {
+                                                    setPlusOpen(false);
+                                                    setShowAttachPrompt(true);
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                                data-testid="ai-attach-file-btn"
+                                            >
+                                                {uploadingPaste
+                                                    ? <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                                                    : <Paperclip className="w-4 h-4 text-slate-400" strokeWidth={1.75} />}
+                                                Attach
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => {
+                                                    setPlusOpen(false);
+                                                    navigate('/transcript');
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                                data-testid="ai-transcript-btn"
+                                            >
+                                                <FileText className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+                                                From transcript
+                                            </button>
+                                        </div>
+                                    )}
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -1770,15 +1821,15 @@ const AIQuickCreate = ({
                                         }}
                                     />
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"
                                         onClick={toggleVoice}
                                         disabled={loading || sending || answerLoading}
-                                        className={`h-10 w-10 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center transition-colors ${
+                                        className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
                                             listening
                                                 ? 'bg-red-500 text-white animate-pulse'
-                                                : 'text-slate-500 hover:text-teal-800 hover:bg-teal-50'
+                                                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100/80'
                                         }`}
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
@@ -1789,16 +1840,23 @@ const AIQuickCreate = ({
                                             ? <MicOff className="w-4 h-4" />
                                             : <Mic className="w-4 h-4" />}
                                     </button>
-                                    <Button
+                                    <button
                                         type="button"
                                         onClick={() => runPreview()}
                                         disabled={loading || sending || answerLoading || listening || !text.trim()}
-                                        className="rounded-xl bg-slate-900 hover:bg-slate-800 h-10 sm:h-9 px-3.5 gap-1.5"
+                                        className={`h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
+                                            loading || answerLoading || text.trim()
+                                                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                : 'bg-slate-200 text-slate-400'
+                                        } disabled:opacity-50`}
                                         data-testid="ai-quick-preview-btn"
+                                        aria-label="Send"
+                                        title="Send"
                                     >
-                                        {(loading || answerLoading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                        <span>{loading || answerLoading ? '…' : 'Go'}</span>
-                                    </Button>
+                                        {(loading || answerLoading)
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : <ArrowUp className="w-4 h-4" strokeWidth={2.25} />}
+                                    </button>
                                 </div>
                             </div>
                         </div>
