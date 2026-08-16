@@ -266,6 +266,7 @@ class TaskResponse(BaseModel):
     nudge_count: Optional[int] = 0
     slack_thread_id: Optional[str] = None
     slack_followup_via: Optional[str] = None
+    source: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -2399,7 +2400,9 @@ async def get_task_by_shareable_link(token: str, current_user: dict = Depends(ge
         created_at=task["created_at"],
         accepted_at=task.get("accepted_at"),
         shareable_token=task.get("shareable_token"),
-        comments=task.get("comments", [])
+        comments=task.get("comments", []),
+        source=task.get("source"),
+        is_sales_task=task.get("is_sales_task", False),
     )
 
 # ===== SEND EMAIL TO ASSIGNEE ENDPOINT =====
@@ -3065,6 +3068,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         nudge_count=task.get("nudge_count") or 0,
         slack_thread_id=task.get("slack_thread_id"),
         slack_followup_via=task.get("slack_followup_via"),
+        source=task.get("source"),
     )
 
 @api_router.put("/tasks/{task_id}/accept")

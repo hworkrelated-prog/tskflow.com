@@ -51,6 +51,9 @@ def test_description_helpers_via_node():
     script = r"""
 import {
   layoutTaskDescription,
+  parseDescriptionBlocks,
+  displayTaskTitle,
+  fallbackTaskTitle,
   rewriteSelfAssignCopy,
   assigneesAreSelf,
   sentTaskFollowupMessage,
@@ -59,6 +62,34 @@ import {
 const laid = layoutTaskDescription('Our 1:1. Next steps: 1. Complete the 2. Reply with a brief update when you are done.');
 if (!laid.includes('\n1. ') || !laid.includes('\n2. ') || !laid.includes('Next steps:')) {
   console.error('layout failed', JSON.stringify(laid));
+  process.exit(1);
+}
+
+const html = layoutTaskDescription('<p>This is a reminder for myself to make sure I for all deals I steps: 1. Complete the 2. Reply with a brief update when you are done.</p>');
+if (!html.includes('Steps:') || !html.includes('\n1. ') || !html.includes('\n2. ')) {
+  console.error('html layout failed', JSON.stringify(html));
+  process.exit(1);
+}
+
+const blocks = parseDescriptionBlocks(html);
+const list = blocks.find((b) => b.type === 'ol');
+if (!list || list.items.length < 2) {
+  console.error('blocks failed', JSON.stringify(blocks));
+  process.exit(1);
+}
+
+if (displayTaskTitle('Complete This is a reminder for myself') !== 'This is a reminder for myself') {
+  console.error('display title failed', displayTaskTitle('Complete This is a reminder for myself'));
+  process.exit(1);
+}
+if (displayTaskTitle('Complete the Q3 deck') !== 'Complete the Q3 deck') {
+  console.error('kept complete-verb title', displayTaskTitle('Complete the Q3 deck'));
+  process.exit(1);
+}
+
+const fb = fallbackTaskTitle('This is a reminder for myself to follow up');
+if (fb.startsWith('Complete ')) {
+  console.error('fallback prefixed a sentence', fb);
   process.exit(1);
 }
 

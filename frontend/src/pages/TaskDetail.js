@@ -11,12 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ChevronRight, Plus, Trophy, Video, Ban, Bell } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ChevronRight, Plus, Trophy, Video, Ban, Bell, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
-import { layoutTaskDescription } from '@/lib/taskDescription';
+import { displayTaskTitle } from '@/lib/taskDescription';
 import AttachmentViewer from '@/components/AttachmentViewer';
+import FormattedTaskDescription from '@/components/FormattedTaskDescription';
 import RichTextEditor from '@/components/RichTextEditor';
 import GroupResponseReview from '@/components/GroupResponseReview';
 
@@ -615,10 +616,18 @@ const TaskDetail = () => {
         };
         const { class: className, label } = statusMap[status] || { class: '', label: status };
         return (
-            <Badge className={`${className} rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide`}>
+            <Badge className={`${className} rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide shrink-0`}>
                 {label}
             </Badge>
         );
+    };
+
+    const formatTaskDue = (value) => {
+        if (!value) return 'No date';
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return 'No date';
+        const sameYear = d.getFullYear() === new Date().getFullYear();
+        return format(d, sameYear ? 'MMM d, h:mm a' : 'MMM d, yyyy, h:mm a');
     };
 
     const canEdit = user?.id === task?.created_by && task?.status !== 'Completed' && task?.status !== 'Review Pending' && task?.status !== 'Parent';
@@ -637,12 +646,12 @@ const TaskDetail = () => {
     return (
         <div data-testid="task-detail-page" className="page-shell">
             <header className="glass-header border-b">
-                <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+                <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <Button
                         data-testid="back-button"
                         variant="outline"
                         onClick={() => navigate('/dashboard')}
-                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                        className="rounded-full"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
@@ -691,7 +700,7 @@ const TaskDetail = () => {
                 </div>
             </header>
 
-            <main className="container mx-auto px-6 py-8 max-w-7xl">
+            <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-7xl">
                 <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -699,11 +708,16 @@ const TaskDetail = () => {
                     transition={{ duration: 0.5 }}
                 >
                     <Card className="border-2 shadow-soft rounded-2xl">
-                        <CardHeader>
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <CardTitle className="text-4xl" style={{ fontFamily: 'Outfit' }}>{task.title}</CardTitle>
+                        <CardHeader className="p-4 sm:p-6 space-y-3">
+                            <div className="flex flex-col gap-3 min-w-0">
+                                <div className="flex items-start gap-2 min-w-0">
+                                    <CardTitle
+                                        className="text-2xl sm:text-3xl leading-snug tracking-tight break-words min-w-0 flex-1"
+                                        style={{ fontFamily: 'Outfit' }}
+                                        data-testid="task-title"
+                                    >
+                                        {displayTaskTitle(task.title)}
+                                    </CardTitle>
                                         {canEdit && (
                                             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
                                                 <DialogTrigger asChild>
@@ -711,7 +725,7 @@ const TaskDetail = () => {
                                                         data-testid="edit-task-button"
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="rounded-full hover:bg-teal-100"
+                                                        className="rounded-full shrink-0"
                                                     >
                                                         <Pencil className="w-4 h-4 text-teal-600" />
                                                     </Button>
@@ -817,11 +831,31 @@ const TaskDetail = () => {
                                                 </DialogContent>
                                             </Dialog>
                                         )}
-                                    </div>
-                                    <CardDescription className="text-base">
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2" data-testid="task-badges">
+                                    {task.is_sales_task && (
+                                        <Badge
+                                            className="sales-badge rounded-md px-2.5 py-1 text-[11px]"
+                                            data-testid="sales-badge"
+                                        >
+                                            Sales
+                                        </Badge>
+                                    )}
+                                    {getStatusBadge(task.status)}
+                                    {String(task.source || '').toLowerCase() === 'transcript' && (
+                                        <span
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/70 px-3 py-1 text-xs text-muted-foreground"
+                                            data-testid="from-transcript-chip"
+                                        >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            From transcript
+                                        </span>
+                                    )}
+                                </div>
+                                    <CardDescription className="text-sm sm:text-base break-words">
                                         Created by {task.created_by_name}
                                         {user?.id === task.assigned_to && task.created_by_email && (
-                                            <span className="text-xs text-gray-400 ml-1">({task.created_by_email})</span>
+                                            <span className="text-xs text-muted-foreground ml-1">({task.created_by_email})</span>
                                         )}
                                         {isParentTask && Array.isArray(subtasks) && subtasks.length > 0 && (
                                             <> {' | '}Assigned to <span className="font-medium">{subtasks.length} people</span></>
@@ -843,21 +877,9 @@ const TaskDetail = () => {
                                             ))}
                                         </div>
                                     )}
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    {task.is_sales_task && (
-                                        <Badge
-                                            className="sales-badge rounded-md px-2.5 py-1 text-xs"
-                                            data-testid="sales-badge"
-                                        >
-                                            Sales
-                                        </Badge>
-                                    )}
-                                    {getStatusBadge(task.status)}
-                                </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-6">
+                        <CardContent className="space-y-6 p-4 pt-0 sm:p-6 sm:pt-0">
                             {/* Screen recording requirement — shown prominently so the assignee sees it. */}
                             {task.requires_screen_recording && (
                                 <div className="border-2 border-teal-200 bg-gradient-to-r from-teal-50 to-teal-50 rounded-2xl p-4 flex items-start gap-3" data-testid="requires-recording-banner">
@@ -881,19 +903,21 @@ const TaskDetail = () => {
                                     </div>
                                 </div>
                             )}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                <div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="min-w-0">
                                     <Label className="text-muted-foreground">Priority</Label>
-                                    <p className="font-semibold text-lg">{task.priority}</p>
+                                    <p className="font-semibold text-base sm:text-lg">{task.priority}</p>
                                 </div>
-                                <div>
+                                <div className="min-w-0">
                                     <Label className="text-muted-foreground">Due Date</Label>
-                                    <p className="font-semibold text-lg">{task.due_date && !isNaN(new Date(task.due_date).getTime()) ? format(new Date(task.due_date), 'MMM dd, yyyy h:mm a') : 'No date'}</p>
+                                    <p className="font-semibold text-base sm:text-lg leading-snug" data-testid="task-due-date">
+                                        {formatTaskDue(task.due_date)}
+                                    </p>
                                 </div>
-                                {task.category && (
-                                    <div>
+                                {task.category && !(task.is_sales_task && String(task.category).trim().toLowerCase() === 'sales') && (
+                                    <div className="min-w-0">
                                         <Label className="text-muted-foreground">Category</Label>
-                                        <p className="font-semibold text-lg">{task.category}</p>
+                                        <p className="font-semibold text-base sm:text-lg">{task.category}</p>
                                     </div>
                                 )}
                                 {/* NOTE: The "Assigned to" info is rendered only ONCE — in the "Assignees" card beneath the Comments/Chatter panel. */}
@@ -901,28 +925,13 @@ const TaskDetail = () => {
 
                             <div className="min-w-0">
                                 <Label className="text-muted-foreground">Description</Label>
-                                {task.description ? (
-                                    /<[a-z][\s\S]*>/i.test(task.description) ? (
-                                        <div
-                                            className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
-                                            style={{ overflowWrap: 'anywhere' }}
-                                            dangerouslySetInnerHTML={{ __html: task.description }}
-                                            data-testid="task-description"
-                                        />
-                                    ) : (
-                                        <p className="mt-2 text-base leading-relaxed text-slate-800 whitespace-pre-wrap break-words" data-testid="task-description">
-                                            {layoutTaskDescription(task.description)}
-                                        </p>
-                                    )
-                                ) : (
-                                    <p className="mt-2 text-sm text-muted-foreground italic">No description</p>
-                                )}
+                                <FormattedTaskDescription value={task.description} />
                             </div>
 
                             {task.success_criteria && (
-                                <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="task-success-criteria">
+                                <div className="min-w-0 rounded-xl border border-border bg-muted/50 px-4 py-3" data-testid="task-success-criteria">
                                     <Label className="text-muted-foreground">Done well looks like</Label>
-                                    <p className="mt-1.5 text-base leading-relaxed text-slate-800 whitespace-pre-wrap">
+                                    <p className="mt-1.5 text-base leading-relaxed text-foreground whitespace-pre-wrap">
                                         {task.success_criteria}
                                     </p>
                                 </div>
@@ -1390,11 +1399,11 @@ const TaskDetail = () => {
                 <aside className="block lg:sticky lg:top-24" data-testid="comments-panel">
                     <Card className="border-2 rounded-2xl">
                         <CardContent className="pt-6">
-                            <div className="flex items-center gap-1 p-1 mb-4 rounded-full bg-gray-100" data-testid="chatter-reminders-toggle">
+                            <div className="flex items-center gap-1 p-1 mb-4 rounded-full bg-muted" data-testid="chatter-reminders-toggle">
                                 <button
                                     type="button"
                                     onClick={() => setSideTab('chatter')}
-                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'chatter' ? 'bg-white text-teal-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'chatter' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                     data-testid="tab-chatter"
                                 >
                                     <MessageSquare className="w-4 h-4" />
@@ -1404,7 +1413,7 @@ const TaskDetail = () => {
                                 <button
                                     type="button"
                                     onClick={() => setSideTab('reminders')}
-                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'reminders' ? 'bg-white text-amber-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${sideTab === 'reminders' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                     data-testid="tab-reminders"
                                 >
                                     <Bell className="w-4 h-4" />
