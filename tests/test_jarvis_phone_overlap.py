@@ -23,7 +23,7 @@ def test_prompt_and_jarvis_share_a_bottom_stage():
 def test_phone_stacks_jarvis_above_the_bar():
     assert "flex-direction: column" in CSS
     assert "align-self: stretch" in CSS
-    assert "gap: 0.75rem" in CSS
+    assert "gap: 1rem" in CSS
     # No guessed offset that used to cover the Go button.
     assert "7.5rem" not in VOICE
     assert "ai-jarvis-anchor" in VOICE
