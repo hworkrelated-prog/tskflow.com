@@ -48,3 +48,4 @@ def test_glow_stays_subtle_and_respects_reduced_motion():
     # Keep the idle halo faint so it draws the eye without dominating the page.
     assert "--glow-strength: 0.42" in CSS
     assert "--glow-strength: 0.82" in CSS
+    assert "@media (max-width: 51.99rem)" in CSS
