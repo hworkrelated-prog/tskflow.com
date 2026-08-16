@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ArrowUpRight, Plus, Trophy, Video, Ban, Bell } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ChevronRight, Plus, Trophy, Video, Ban, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -1541,15 +1541,24 @@ const TaskDetail = () => {
                                                     const isMe = t.assigned_to === user?.id;
                                                     const done = t.status === 'Completed';
                                                     return (
-                                                        <li key={t.id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-teal-50/50' : ''}`} data-testid={`peer-leaderboard-row-${t.id}`}>
-                                                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? 'bg-emerald-500 text-white' : i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-700'}`}>{done ? '✓' : i + 1}</span>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium truncate">
-                                                                    {t.assigned_to_name || t.assigned_to_email || 'Unknown'}
-                                                                    {isMe && <span className="ml-2 text-[10px] text-teal-700 font-semibold uppercase tracking-wide">You</span>}
-                                                                </p>
-                                                                <p className="text-xs text-muted-foreground truncate">{t.status}</p>
-                                                            </div>
+                                                        <li key={t.id} className={isMe ? 'bg-teal-50/50' : ''} data-testid={`peer-leaderboard-row-${t.id}`}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => t.id && navigate(`/task/${t.id}`)}
+                                                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-teal-50/50"
+                                                                data-testid={`peer-leaderboard-open-${t.id}`}
+                                                                aria-label={`Open ${t.assigned_to_name || 'assignee'}’s task`}
+                                                            >
+                                                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${done ? 'bg-emerald-500 text-white' : i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-700'}`}>{done ? '✓' : i + 1}</span>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium truncate">
+                                                                        {t.assigned_to_name || t.assigned_to_email || 'Unknown'}
+                                                                        {isMe && <span className="ml-2 text-[10px] text-teal-700 font-semibold uppercase tracking-wide">You</span>}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground truncate">{t.status}</p>
+                                                                </div>
+                                                                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                                                            </button>
                                                         </li>
                                                     );
                                                 })}
@@ -1703,17 +1712,26 @@ const statusRank = (s) => {
     return 2;
 };
 
+const resolveAssigneeTaskId = (task, lb) =>
+    task?.id || task?.task_id || lb?.task_id || lb?.id || null;
+
 const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCreator = false, onReviewSubtask, onNudge, nudging = false, onAddAssignees, onRemoveAssignee }) => {
+    const navigate = useNavigate();
     // Merge subtasks + leaderboard entries for status columns
     const rows = React.useMemo(() => {
         const byId = {};
-        subtasks.forEach((t) => { byId[t.assigned_to] = t; });
+        subtasks.forEach((t) => {
+            if (t.assigned_to) byId[t.assigned_to] = t;
+            if (t.assigned_to_email) byId[t.assigned_to_email] = t;
+            if (t.id) byId[t.id] = t;
+        });
         const merged = leaderboard.map((lb) => {
-            const t = byId[lb.assignee_id || lb.user_id] || {};
+            const t = byId[lb.assignee_id || lb.user_id || lb.task_id] || {};
             const status = t.status || lb.status || 'Pending';
+            const subtaskId = resolveAssigneeTaskId(t, lb);
             return {
-                key: t.id || lb.task_id || lb.user_id,
-                subtaskId: t.id || lb.task_id,
+                key: subtaskId || lb.user_id || lb.assignee_id,
+                subtaskId,
                 name: t.assigned_to_name || lb.name || 'Unknown',
                 email: t.assigned_to_email,
                 status,
@@ -1732,7 +1750,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
             subtasks.forEach((t) => {
                 merged.push({
                     key: t.id,
-                    subtaskId: t.id,
+                    subtaskId: resolveAssigneeTaskId(t),
                     name: t.assigned_to_name || t.assigned_to_email || 'Unknown',
                     email: t.assigned_to_email,
                     status: t.status || 'Pending',
@@ -1791,52 +1809,81 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
             <ul className="divide-y">
                 {visible.map((r, i) => {
                     const canOpen = Boolean(r.subtaskId);
+                    const openAssignee = (e) => {
+                        e?.preventDefault?.();
+                        e?.stopPropagation?.();
+                        if (!r.subtaskId) {
+                            toast.error('Could not open that assignee’s task');
+                            return;
+                        }
+                        navigate(`/task/${r.subtaskId}`);
+                    };
                     return (
-                        <li key={r.key || i} className={`flex items-center gap-3 px-4 py-2.5 ${r.completed ? 'bg-emerald-50/40' : ''} ${canOpen ? 'hover:bg-teal-50/50 cursor-pointer' : ''}`}
-                            onClick={() => { if (canOpen) window.location.assign(`/task/${r.subtaskId}`); }}
-                            data-testid={`participant-row-${r.subtaskId || i}`}
-                        >
-                            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
-                                r.completed ? 'bg-emerald-500 text-white'
-                                    : i === 0 ? 'bg-amber-400 text-white'
-                                        : i === 1 ? 'bg-slate-300 text-slate-800'
-                                            : i === 2 ? 'bg-orange-200 text-orange-900'
-                                                : 'bg-slate-100 text-slate-600'
-                            }`}>{r.completed ? '✓' : i + 1}</span>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate">{r.name}</div>
-                                <div className="flex gap-1 mt-0.5 flex-wrap">
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
-                                </div>
-                            </div>
-                            <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? '—' : r.status)}</div>
-                            {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
-                                <Button
-                                    size="sm"
-                                    onClick={(e) => { e.stopPropagation(); onReviewSubtask(r); }}
-                                    className="rounded-full h-7 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white shrink-0"
-                                    data-testid={`review-subtask-${r.subtaskId}`}
-                                >
-                                    Review
-                                </Button>
-                            )}
-                            {isCreator && r.subtaskId && onRemoveAssignee && (
+                        <li key={r.key || i} className={r.completed ? 'bg-emerald-50/40' : ''}>
+                            <div
+                                className={`flex items-center gap-3 px-4 py-2.5 ${canOpen ? 'hover:bg-teal-50/50' : ''}`}
+                                data-testid={`participant-row-${r.subtaskId || i}`}
+                            >
                                 <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); onRemoveAssignee(r); }}
-                                    title="Remove from group"
-                                    className="p-1 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
-                                    data-testid={`remove-assignee-${r.subtaskId}`}
+                                    onClick={openAssignee}
+                                    disabled={!canOpen}
+                                    className={`flex flex-1 items-center gap-3 min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 ${canOpen ? 'cursor-pointer' : 'cursor-default'}`}
+                                    data-testid={`participant-open-${r.subtaskId || i}`}
+                                    aria-label={`Open ${r.name}’s task`}
                                 >
-                                    <X className="w-3.5 h-3.5" />
+                                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                                        r.completed ? 'bg-emerald-500 text-white'
+                                            : i === 0 ? 'bg-amber-400 text-white'
+                                                : i === 1 ? 'bg-slate-300 text-slate-800'
+                                                    : i === 2 ? 'bg-orange-200 text-orange-900'
+                                                        : 'bg-slate-100 text-slate-600'
+                                    }`}>{r.completed ? '✓' : i + 1}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium truncate">{r.name}</div>
+                                        <div className="flex gap-1 mt-0.5 flex-wrap">
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.viewed ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Viewed</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? '—' : r.status)}</div>
                                 </button>
-                            )}
-                            {canOpen && (
-                                <ArrowUpRight className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                            )}
+                                {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
+                                    <Button
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); onReviewSubtask(r); }}
+                                        className="rounded-full h-7 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white shrink-0"
+                                        data-testid={`review-subtask-${r.subtaskId}`}
+                                    >
+                                        Review
+                                    </Button>
+                                )}
+                                {isCreator && r.subtaskId && onRemoveAssignee && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); onRemoveAssignee(r); }}
+                                        title="Remove from group"
+                                        className="p-1 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                                        data-testid={`remove-assignee-${r.subtaskId}`}
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                                {canOpen && (
+                                    <button
+                                        type="button"
+                                        onClick={openAssignee}
+                                        className="h-9 w-9 rounded-full text-teal-700 hover:bg-teal-50 inline-flex items-center justify-center shrink-0"
+                                        data-testid={`participant-chevron-${r.subtaskId}`}
+                                        aria-label={`Open ${r.name}’s task`}
+                                        title="Open assignee task"
+                                    >
+                                        <ChevronRight className="w-5 h-5" />
+                                    </button>
+                                )}
+                            </div>
                         </li>
                     );
                 })}

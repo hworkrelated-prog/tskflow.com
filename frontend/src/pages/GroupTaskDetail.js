@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, Trophy, MessageSquare, Send, TrendingUp, TrendingDown, Mail, Zap, AlertCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Trophy, MessageSquare, Send, TrendingUp, TrendingDown, Mail, Zap, AlertCircle, Sparkles, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 
 // Fuzzy score — lower is better. Rewards exact prefix + substring hits.
@@ -168,7 +168,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
 };
 
 
-const LeaderboardRow = ({ entry, rank, onNudge, showNudge, tone = 'default' }) => {
+const LeaderboardRow = ({ entry, rank, onNudge, showNudge, tone = 'default', onOpen }) => {
     const status = entry.status || 'Pending';
     const isCompleted = status === 'Completed';
     const isReview = status === 'Review Pending' || status === 'Review';
@@ -189,9 +189,16 @@ const LeaderboardRow = ({ entry, rank, onNudge, showNudge, tone = 'default' }) =
         rank === 3 ? 'bg-orange-500 text-white' :
         'bg-gray-200 text-gray-700';
 
+    const taskId = entry.task_id || entry.id;
     return (
         <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${border}`} data-testid={`lb-row-${entry.assignee_id}`}>
-            <div className="flex items-center gap-3 min-w-0 flex-1">
+            <button
+                type="button"
+                onClick={() => taskId && onOpen?.(taskId)}
+                className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                data-testid={`lb-open-${taskId || entry.assignee_id}`}
+                aria-label={`Open ${entry.name}’s task`}
+            >
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${badgeColor}`}>
                     {rank}
                 </div>
@@ -207,7 +214,8 @@ const LeaderboardRow = ({ entry, rank, onNudge, showNudge, tone = 'default' }) =
                         {isReview && <span className="text-xs text-amber-700">Awaiting review</span>}
                     </div>
                 </div>
-            </div>
+                {taskId && <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+            </button>
             <div className="flex items-center gap-2 shrink-0">
                 <Badge variant={isCompleted ? 'default' : 'outline'} className="text-[10px]">
                     {status}
@@ -460,6 +468,7 @@ const GroupTaskDetail = () => {
                                         rank={entry.rank}
                                         onNudge={(e) => openNudge(e)}
                                         showNudge={isCreator}
+                                        onOpen={(id) => navigate(`/task/${id}`)}
                                     />
                                 ))}
                             </div>
@@ -552,6 +561,7 @@ const GroupTaskDetail = () => {
                                             onNudge={() => {}}
                                             showNudge={false}
                                             tone="top"
+                                            onOpen={(id) => navigate(`/task/${id}`)}
                                         />
                                     ))}
                                 </div>
@@ -588,6 +598,7 @@ const GroupTaskDetail = () => {
                                             onNudge={(e) => openNudge(e)}
                                             showNudge={isCreator}
                                             tone="bottom"
+                                            onOpen={(id) => navigate(`/task/${id}`)}
                                         />
                                     ))}
                                 </div>
