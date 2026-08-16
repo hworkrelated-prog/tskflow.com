@@ -65,7 +65,7 @@ const RecordingLibraryPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="page-shell">
             <header className="bg-white border-b sticky top-0 z-30">
                 <div className="container mx-auto px-6 py-4 flex items-center gap-3">
                     <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="rounded-full" data-testid="library-back-btn">

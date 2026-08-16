@@ -36,6 +36,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
+import { applyTheme } from '@/lib/theme';
 import TeamSetupModal from '@/components/TeamSetupModal';
 import WhatsNewPrompt from '@/components/WhatsNewPrompt';
 
@@ -66,6 +67,11 @@ const AuthProvider = ({ children }) => {
             setLoading(false);
         }
     }, [token]);
+
+    useEffect(() => {
+        const saved = user?.preferences?.theme;
+        if (saved) applyTheme(saved);
+    }, [user]);
 
     // Prompt for browser notification permission whenever we have a live session
     // (covers both fresh sign-in AND page reloads for existing sessions).

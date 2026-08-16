@@ -183,7 +183,7 @@ const TeamManagementPage = () => {
     }
 
     return (
-        <div data-testid="team-management-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
+        <div data-testid="team-management-page" className="page-shell">
             <header className="glass-header border-b">
                 <div className="container mx-auto px-6 py-4">
                     <Button

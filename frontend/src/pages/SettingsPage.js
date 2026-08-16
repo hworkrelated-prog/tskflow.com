@@ -12,6 +12,7 @@ import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
+import { applyTheme } from '@/lib/theme';
 import OnboardingPopup from '@/components/OnboardingPopup';
 
 const SettingsPage = () => {
@@ -110,7 +111,7 @@ const SettingsPage = () => {
                 ...(response.data.eod_sections || {}),
             });
             setHierarchyReviewFrequency(response.data.hierarchy_review_frequency || 'monthly');
-            document.documentElement.setAttribute('data-theme', response.data.theme || 'light');
+            applyTheme(response.data.theme || 'light');
         } catch (error) {
             console.error('Failed to fetch preferences');
         }
@@ -169,7 +170,7 @@ const SettingsPage = () => {
         try {
             await axios.put(`${API}/auth/preferences`, { theme: newTheme });
             setTheme(newTheme);
-            document.documentElement.setAttribute('data-theme', newTheme);
+            applyTheme(newTheme);
             toast.success('Theme updated');
         } catch (error) {
             toast.error('Failed to update theme');
@@ -304,7 +305,7 @@ const SettingsPage = () => {
     };
 
     return (
-        <div data-testid="settings-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
+        <div data-testid="settings-page" className="page-shell">
             <AnimatePresence>
                 {showHowItWorks && <OnboardingPopup page="howItWorks" onClose={() => setShowHowItWorks(false)} />}
             </AnimatePresence>
@@ -314,7 +315,7 @@ const SettingsPage = () => {
                         data-testid="back-button"
                         variant="outline"
                         onClick={() => navigate('/dashboard')}
-                        className="rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                        className="rounded-full border-border text-foreground hover:bg-muted hover:text-foreground"
                     >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back to Hub
@@ -752,7 +753,7 @@ const SettingsPage = () => {
                                         value={hierarchyReviewFrequency}
                                         onChange={(e) => saveTeamChanges(e.target.value)}
                                         disabled={savingTeamChanges}
-                                        className="mt-1 w-full sm:w-72 px-3 py-2 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none"
+                                        className="mt-1 w-full sm:w-72 px-3 py-2 border border-input rounded-xl text-sm bg-background text-foreground focus:border-teal-500 focus:outline-none"
                                         data-testid="hierarchy-review-frequency"
                                     >
                                         <option value="weekly">Weekly — teams reshuffle often</option>
@@ -842,17 +843,26 @@ const SettingsPage = () => {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-2">
-                                {['light', 'dark', 'minimal'].map((t) => (
+                                {[
+                                    { id: 'light', label: 'Light', swatch: 'bg-[#f8fafc] border-slate-200' },
+                                    { id: 'dark', label: 'Dark', swatch: 'bg-[#14161c] border-neutral-600' },
+                                    { id: 'minimal', label: 'Minimal', swatch: 'bg-white border-neutral-300' },
+                                ].map((t) => (
                                     <button
-                                        key={t}
-                                        onClick={() => handleThemeChange(t)}
+                                        key={t.id}
+                                        type="button"
+                                        onClick={() => handleThemeChange(t.id)}
+                                        data-testid={`theme-option-${t.id}`}
                                         className={`w-full p-3 rounded-xl border text-left transition-all ${
-                                            theme === t ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                                            theme === t.id ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
                                         }`}
                                     >
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-medium capitalize">{t}</span>
-                                            {theme === t && <Check className="w-5 h-5 text-primary" />}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="flex items-center gap-3">
+                                                <span className={`h-8 w-8 rounded-lg border ${t.swatch}`} aria-hidden />
+                                                <span className="font-medium text-foreground">{t.label}</span>
+                                            </span>
+                                            {theme === t.id && <Check className="w-5 h-5 text-primary" />}
                                         </div>
                                     </button>
                                 ))}
@@ -861,7 +871,7 @@ const SettingsPage = () => {
                     </div>
 
                     {/* End-of-day report */}
-                    <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="eod-settings-card">
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="eod-settings-card">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
@@ -876,7 +886,7 @@ const SettingsPage = () => {
                                     className="sr-only peer"
                                 />
                                 <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-amber-500 transition-colors">
-                                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${eodEnabled ? 'translate-x-5' : ''}`}></span>
+                                    <span className={`theme-toggle-knob absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${eodEnabled ? 'translate-x-5' : ''}`}></span>
                                 </span>
                             </label>
                         </div>
@@ -888,7 +898,7 @@ const SettingsPage = () => {
                                         <select
                                             value={eodHour}
                                             onChange={(e) => { const h = parseInt(e.target.value, 10); setEodHour(h); saveEod({ eod_hour: h }); }}
-                                            className="mt-1 w-full px-3 py-2 border rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            className="mt-1 w-full px-3 py-2 border border-input rounded-xl text-sm bg-background text-foreground focus:border-amber-500 focus:outline-none"
                                             data-testid="eod-hour-select"
                                         >
                                             {Array.from({ length: 24 }, (_, i) => (
@@ -901,7 +911,7 @@ const SettingsPage = () => {
                                         <select
                                             value={eodChannel}
                                             onChange={(e) => { const v = e.target.value; setEodChannel(v); saveEod({ eod_channel: v }); }}
-                                            className="mt-1 w-full px-3 py-2 border rounded-xl text-sm bg-white focus:border-amber-500 focus:outline-none"
+                                            className="mt-1 w-full px-3 py-2 border border-input rounded-xl text-sm bg-background text-foreground focus:border-amber-500 focus:outline-none"
                                             data-testid="eod-channel-select"
                                         >
                                             <option value="email">Email</option>
@@ -924,13 +934,13 @@ const SettingsPage = () => {
                                             : 'Ask your Teams admin to connect Slack.'}
                                     </p>
                                 )}
-                                <details className="rounded-xl border border-slate-200 bg-slate-50/50 group">
-                                    <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
+                                <details className="rounded-xl border border-border bg-muted/40 group">
+                                    <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-foreground flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
                                         <span>Customize contents</span>
                                         <span className="text-xs text-slate-500 group-open:hidden">Show</span>
                                         <span className="text-xs text-slate-500 hidden group-open:inline">Hide</span>
                                     </summary>
-                                    <div className="px-4 pb-3 border-t border-slate-200/80 pt-2" data-testid="eod-sections">
+                                    <div className="px-4 pb-3 border-t border-border pt-2" data-testid="eod-sections">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                             {[
                                                 { key: 'completed', label: 'Completed today', help: 'Tasks you finished' },
@@ -942,7 +952,7 @@ const SettingsPage = () => {
                                             ].map((s) => (
                                                 <label
                                                     key={s.key}
-                                                    className="flex items-start gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/80"
+                                                    className="flex items-start gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-background/80"
                                                     data-testid={`eod-section-${s.key}`}
                                                 >
                                                     <input
@@ -952,8 +962,8 @@ const SettingsPage = () => {
                                                         className="accent-amber-600 mt-0.5"
                                                     />
                                                     <span className="min-w-0">
-                                                        <span className="text-sm text-slate-800 block">{s.label}</span>
-                                                        <span className="text-[11px] text-slate-500">{s.help}</span>
+                                                        <span className="text-sm text-foreground block">{s.label}</span>
+                                                        <span className="text-[11px] text-muted-foreground">{s.help}</span>
                                                     </span>
                                                 </label>
                                             ))}
@@ -969,7 +979,7 @@ const SettingsPage = () => {
 
                     {/* Slack Bridge — Teams admin only */}
                     {canManageSlack ? (
-                    <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div className="flex-1">
@@ -1029,7 +1039,7 @@ const SettingsPage = () => {
                                                 // Handle paste directly to auto-connect on next tick with the pasted value
                                                 setTimeout(() => handleSlackInput(e.target.value), 0);
                                             }}
-                                            className="flex-1 px-3 py-2.5 border rounded-xl text-sm bg-white focus:border-teal-500 focus:outline-none font-mono"
+                                            className="flex-1 px-3 py-2.5 border border-input rounded-xl text-sm bg-background text-foreground focus:border-teal-500 focus:outline-none font-mono"
                                             data-testid="slack-webhook-input"
                                         />
                                         {slackWebhook.trim() && !slackWebhook.startsWith('https://hooks.slack.com/') ? null : (
@@ -1073,7 +1083,7 @@ const SettingsPage = () => {
                         )}
                     </div>
                     ) : user?.subscription_tier === 'teams' ? (
-                    <div className="bg-white/70 border rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div>
@@ -1090,7 +1100,7 @@ const SettingsPage = () => {
                         </div>
                     </div>
                     ) : (
-                    <div className="bg-white/70 border rounded-2xl p-5" data-testid="slack-settings-upgrade">
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-5" data-testid="slack-settings-upgrade">
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B]/80 text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div>
@@ -1388,7 +1398,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
     const toggleFrom = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 
     if (loading) {
-        return <div className="bg-white/70 border rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
+        return <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 text-sm text-muted-foreground">Loading reminders…</div>;
     }
 
     const activePreset = matchReminderPreset(rule);
@@ -1417,7 +1427,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
     ];
 
     return (
-        <div className="bg-white/70 border rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
+        <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
             <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
@@ -1433,12 +1443,12 @@ const SmartRemindersCard = ({ slackConnected }) => {
                         data-testid="reminders-enable-toggle"
                     />
                     <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-rose-500 transition-colors">
-                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`} />
+                        <span className={`theme-toggle-knob absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`} />
                     </span>
                 </label>
             </div>
 
-            <p className="text-xs text-slate-600" data-testid="reminders-value-summary">{summary}</p>
+            <p className="text-xs text-muted-foreground" data-testid="reminders-value-summary">{summary}</p>
 
             {rule.enabled && (
                 <div className="space-y-3 pt-2 border-t">
@@ -1453,7 +1463,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     className={`text-left p-3 rounded-xl border transition-colors ${
                                         selected
                                             ? 'border-rose-400 bg-rose-50 ring-1 ring-rose-200'
-                                            : 'border-slate-200 bg-white hover:border-rose-300 hover:bg-rose-50/40'
+                                            : 'border-border bg-background hover:border-rose-300 hover:bg-rose-50/40'
                                     }`}
                                     data-testid={`reminder-preset-${key}`}
                                     aria-pressed={selected}
@@ -1465,8 +1475,8 @@ const SmartRemindersCard = ({ slackConnected }) => {
                         })}
                     </div>
 
-                    <details className="rounded-xl border border-slate-200 bg-slate-50/50 group">
-                        <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
+                    <details className="rounded-xl border border-border bg-muted/40 group">
+                        <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-foreground flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
                             <span>Customize</span>
                             <span className="text-xs text-slate-500 group-open:hidden">Show</span>
                             <span className="text-xs text-slate-500 hidden group-open:inline">Hide</span>

@@ -393,7 +393,7 @@ const GroupTaskDetail = () => {
         .slice(0, 6)
         .map((x) => x.u);
 
-    if (loading) return <div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>;
+    if (loading) return <div className="page-shell flex items-center justify-center">Loading...</div>;
 
     const isCreator = group && user && (group.created_by === user.id);
     const all = leaderboard?.leaderboard || [];
@@ -406,7 +406,7 @@ const GroupTaskDetail = () => {
     const bottom5 = [...all].reverse().slice(0, splitSize);
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="page-shell">
             <header className="border-b bg-white sticky top-0 z-10">
                 <div className="container mx-auto px-6 py-4">
                     <Button variant="ghost" onClick={() => navigate('/dashboard')} className="mb-2">
