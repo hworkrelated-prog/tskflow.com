@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { ArrowLeft, Copy, Check, Download, Video, Library, Trash2, Link2 } from 'lucide-react';
-import { uploadBlob } from '@/lib/upload';
+import { uploadBlob, fileUrl } from '@/lib/upload';
 import { loadRecordingBlob, clearRecordingBlob } from '@/lib/recordingStore';
 import LoomPlayer from '@/components/LoomPlayer';
 
@@ -133,8 +133,10 @@ const RecordingEditorPage = () => {
                 mime_type: blob?.type,
             });
             setShareLink(res.data.shareable_link);
-            toast.success('Recording saved');
-            try { await clearRecordingBlob(); } catch { /* noop */ }
+            toast.success('Recording saved — preview stays here so you can watch it again.');
+            if (!videoUrl && ref?.storage_path) {
+                setVideoUrl(fileUrl(ref.storage_path));
+            }
         } catch (e) {
             const detail = e?.response?.data?.detail || e?.message || 'Failed to save recording';
             toast.error(typeof detail === 'string' ? detail : 'Failed to save recording');
@@ -203,9 +205,9 @@ const RecordingEditorPage = () => {
 
             <div className="container mx-auto px-4 sm:px-6 py-6 max-w-5xl">
                 <div className="rounded-2xl overflow-hidden mb-5 border border-white/10 shadow-2xl">
-                    {videoUrl ? (
+                    {(videoUrl || uploadRef?.storage_path) ? (
                         <LoomPlayer
-                            src={videoUrl}
+                            src={videoUrl || fileUrl(uploadRef.storage_path)}
                             autoPlay
                             onDuration={(d) => setDuration(d)}
                             videoClassName="max-h-[62vh]"
