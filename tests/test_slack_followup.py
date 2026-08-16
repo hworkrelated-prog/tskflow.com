@@ -179,7 +179,8 @@ def test_server_and_ui_are_wired():
     landing = (root / "frontend" / "src" / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert '"/slack/events"' in server
     assert '"/tasks/{task_id}/slack-followup"' in server
-    assert "record_ping" in server and "_maybe_open_slack_followup" in server
+    assert "slack_thread_id" in server
+    assert "nudge_count" in (root / "backend" / "server.py").read_text(encoding="utf-8").split("class TaskResponse")[1].split("class TaskAction")[0]
     assert "_sweep_ignored_slack_followups" in server
     assert "process_assignee_slack_event" in follow
     assert "SlackFollowupCard" in detail

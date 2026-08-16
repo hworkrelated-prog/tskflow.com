@@ -206,7 +206,7 @@ const TaskDetail = () => {
                 category: response.data.category || '',
                 success_criteria: response.data.success_criteria || '',
             });
-            if (response.data.slack_thread_id && !token) {
+            if (!token) {
                 axios.get(`${API}/tasks/${response.data.id}/slack-followup`).then((r) => {
                     setSlackFollowup(r.data);
                 }).catch(() => setSlackFollowup(null));

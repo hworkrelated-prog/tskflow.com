@@ -256,6 +256,9 @@ class TaskResponse(BaseModel):
     blocked_at: Optional[str] = None
     ai_review_summary: Optional[str] = None
     ai_group_review: Optional[dict] = None
+    nudge_count: Optional[int] = 0
+    slack_thread_id: Optional[str] = None
+    slack_followup_via: Optional[str] = None
 
 class TaskAction(BaseModel):
     reason: Optional[str] = None
@@ -3035,6 +3038,9 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         blocked_at=task.get("blocked_at"),
         ai_review_summary=task.get("ai_review_summary"),
         ai_group_review=task.get("ai_group_review"),
+        nudge_count=task.get("nudge_count") or 0,
+        slack_thread_id=task.get("slack_thread_id"),
+        slack_followup_via=task.get("slack_followup_via"),
     )
 
 @api_router.put("/tasks/{task_id}/accept")
