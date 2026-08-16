@@ -69,24 +69,24 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     [data-theme="dark"] {
-        --background: 222 47% 11%;
-        --foreground: 210 40% 98%;
-        --card: 222 47% 15%;
-        --card-foreground: 210 40% 98%;
-        --popover: 222 47% 15%;
-        --popover-foreground: 210 40% 98%;
+        --background: 222 14% 8%;
+        --foreground: 210 20% 96%;
+        --card: 222 12% 14%;
+        --card-foreground: 210 20% 96%;
+        --popover: 222 12% 14%;
+        --popover-foreground: 210 20% 96%;
         --primary: 173 50% 42%;
         --primary-foreground: 160 40% 98%;
-        --secondary: 217 33% 17%;
-        --secondary-foreground: 210 40% 98%;
-        --muted: 217 33% 17%;
-        --muted-foreground: 215 20% 65%;
-        --accent: 173 30% 18%;
+        --secondary: 222 10% 18%;
+        --secondary-foreground: 210 20% 96%;
+        --muted: 222 10% 18%;
+        --muted-foreground: 215 14% 72%;
+        --accent: 173 24% 16%;
         --accent-foreground: 168 40% 90%;
-        --destructive: 0 84% 60%;
+        --destructive: 0 72% 56%;
         --destructive-foreground: 210 40% 98%;
-        --border: 217 33% 22%;
-        --input: 217 33% 22%;
+        --border: 222 10% 28%;
+        --input: 222 10% 20%;
         --ring: 173 50% 42%;
     }
 
@@ -141,9 +141,23 @@ h1, h2, h3, h4, h5, h6 {
     background: hsl(173 58% 32%);
 }
 
+[data-theme="dark"] ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: hsl(222 10% 28%);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: hsl(173 50% 42%);
+}
+
 @layer components {
     .page-shell {
-        @apply min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/40;
+        @apply min-h-screen bg-background text-foreground;
+    }
+    :root:not([data-theme]) .page-shell,
+    [data-theme="light"] .page-shell {
+        background-image: linear-gradient(to bottom right, rgb(248 250 252), rgb(255 255 255), rgb(240 253 250 / 0.4));
     }
     .brand-wordmark {
         @apply text-2xl font-bold bg-gradient-to-r from-teal-800 to-slate-800 bg-clip-text text-transparent;
@@ -325,6 +339,20 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow:
         0 0 0 1px rgba(45, 212, 191, 0.45),
         0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .ai-composer-shell textarea,
+[data-theme="dark"] .ai-composer-shell input {
+    color: hsl(var(--foreground));
+}
+[data-theme="dark"] .ai-composer-shell textarea::placeholder,
+[data-theme="dark"] .ai-composer-shell input::placeholder {
+    color: hsl(215 12% 58%);
+}
+[data-theme="minimal"] .ai-composer-shell {
+    background: #fff;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 10px 28px -12px rgba(0, 0, 0, 0.12);
 }
 
 body.app-authenticated.has-ai-dock .safe-fab-bl {

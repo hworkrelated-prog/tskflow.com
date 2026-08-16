@@ -372,7 +372,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         <div
             className={`fixed z-40 flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
                     dockIntegrated
-                        ? 'right-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))]'
+                        ? 'right-3 bottom-[calc(7.5rem+env(safe-area-inset-bottom,0px))]'
                     : 'safe-fab-br'
             }`}
             data-testid="voice-mode-widget"

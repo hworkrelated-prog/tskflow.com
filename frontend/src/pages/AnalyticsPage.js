@@ -147,7 +147,7 @@ const AnalyticsPage = () => {
     };
 
     return (
-        <div data-testid="analytics-page" className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
+        <div data-testid="analytics-page" className="page-shell">
             {/* Onboarding Popup */}
             <AnimatePresence>
                 {showOnboarding && (
