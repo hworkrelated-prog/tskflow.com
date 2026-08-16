@@ -604,8 +604,7 @@ const AIQuickCreate = ({
         const fromParse = p.assignee_resolution?.resolved || [];
         let merged;
         if (promptMeansSelfAssign(text)) {
-            const me = (fromParse.find((a) => a.kind === 'user') || fromParse[0]) || SELF_CHIP;
-            merged = [me];
+            merged = [SELF_CHIP];
         } else {
             merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
         }
