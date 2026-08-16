@@ -15,6 +15,7 @@ import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X,
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
+import { layoutTaskDescription } from '@/lib/taskDescription';
 import AttachmentViewer from '@/components/AttachmentViewer';
 import RichTextEditor from '@/components/RichTextEditor';
 import GroupResponseReview from '@/components/GroupResponseReview';
@@ -906,10 +907,11 @@ const TaskDetail = () => {
                                             className="mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden"
                                             style={{ overflowWrap: 'anywhere' }}
                                             dangerouslySetInnerHTML={{ __html: task.description }}
+                                            data-testid="task-description"
                                         />
                                     ) : (
-                                        <p className="mt-2 text-base leading-relaxed text-slate-800 whitespace-pre-wrap break-words">
-                                            {task.description}
+                                        <p className="mt-2 text-base leading-relaxed text-slate-800 whitespace-pre-wrap break-words" data-testid="task-description">
+                                            {layoutTaskDescription(task.description)}
                                         </p>
                                     )
                                 ) : (

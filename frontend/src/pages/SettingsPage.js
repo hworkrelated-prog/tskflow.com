@@ -1103,7 +1103,7 @@ const SettingsPage = () => {
                                         ? (slackBotEnabled
                                             ? 'Connected. Jarvis DMs people who ignore two pings, then updates their task from the reply.'
                                             : 'Connected by your admin for channel posts.')
-                                        : 'Ask your admin to connect Slack'}
+                                        : 'Only your Teams admin can connect Slack. Once they do, follow-ups can go to Slack too.'}
                                 </p>
                             </div>
                             {slackTeamConnected && (

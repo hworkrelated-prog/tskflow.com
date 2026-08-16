@@ -20,9 +20,9 @@ def test_prompt_and_jarvis_share_a_bottom_stage():
     assert "pointer-events: none" in CSS
 
 
-def test_jarvis_is_inside_the_composer():
-    assert 'data-testid="ai-jarvis-mark"' in CREATE
-    assert "JarvisIcon" in CREATE
+def test_jarvis_is_not_a_prompt_button():
+    assert 'data-testid="ai-jarvis-mark"' not in CREATE
+    assert "JarvisIcon" not in CREATE
     assert "Jarvis lives in the prompt bar" in VOICE
     assert "return null" in VOICE.split("Jarvis lives in the prompt bar")[1][:220]
     assert "flex-direction: row-reverse" not in CSS

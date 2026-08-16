@@ -868,11 +868,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
     accepted_at = get_pst_now().isoformat() if is_self_assigned else None
-    
+    title = task.title
+    description = task.description or ""
+    if is_self_assigned:
+        title, description = _apply_self_assign_copy(title, description)
+
     task_doc = {
         "id": task_id,
-        "title": task.title,
-        "description": task.description or "",
+        "title": title,
+        "description": description,
         "assigned_to": assigned_to_id,
         "assigned_to_email": assigned_to_email,
         "created_by": current_user["id"],
@@ -1023,10 +1027,14 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                 continue  # Skip invalid user IDs
         
         invite_token = str(uuid.uuid4())[:8]
+        title = task.title
+        description = task.description or ""
+        if is_self_assigned:
+            title, description = _apply_self_assign_copy(title, description)
         task_doc = {
             "id": task_id,
-            "title": task.title,
-            "description": task.description,
+            "title": title,
+            "description": description,
             "assigned_to": assigned_to_id,
             "created_by": current_user["id"],
             "due_date": task.due_date,
@@ -6523,8 +6531,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             "reply": (
                 "I can still help from here."
                 f"{hint} Ask what’s outstanding, or type an assignment like "
-                "“Ask Alice to send the recap by Friday” — I’ll send it, follow up if they go quiet, "
-                "and Slack them with you in the loop if they ignore two pings."
+                "“Ask Alice to send the recap by Friday” — I’ll send it and follow up if they go quiet."
             ),
             "action": {"type": "assistant_answer", "params": {}},
             "executed": {"type": "assistant_answer", "degraded": True},
@@ -8742,7 +8749,8 @@ TITLE RULES:
 
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Distill the manager's request into a Dale Carnegie-style ask: clear, simple, respectful, and easy to act on.
-- ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…").
+- If the speaker is assigning to themselves, write in first person: "my 1:1" not "our 1:1", no "Please", no "I'll ask them".
+- ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
   Write as the assigner speaking directly to them — never as a note about them.
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
 - Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
@@ -9039,6 +9047,11 @@ def _prompt_names_other_assignee(text: str) -> bool:
         return True
     if _OTHER_ASSIGNEE_RE.search(text):
         return True
+    if re.search(
+        r"(?i)\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+(?!me\b)(?-i:[A-Z][A-Za-z'.-]*)",
+        text,
+    ):
+        return True
     return False
 
 
@@ -9055,6 +9068,8 @@ def _self_assign_hint(text: str) -> bool:
     if _SELF_ASSIGN_TO_RE.search(text) or _SELF_TASK_FOR_RE.search(text):
         return True
     if re.search(r"(?i)\bfor myself\b|\bto myself\b", text):
+        return True
+    if re.search(r"(?i)\b(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b", text):
         return True
     if _NOT_SELF_DELIVER_TO_ME_RE.search(text) and not _SELF_FIRST_PERSON_RE.search(text):
         return False
@@ -9330,6 +9345,12 @@ def _strip_manager_voice(text: str) -> str:
     s = _WANT_THEM_RE.sub("", s, count=1)
     s = re.sub(r"(?i)^let\s+(?:(?:my|the|our)\s+)?(?:team|them)\s+know\s+(?:that\s+)?", "", s)
     s = re.sub(r"(?i)^tell\s+that\s+", "", s)
+    s = re.sub(
+        r"(?i)^(?:this\s+is\s+)?(?:a\s+)?reminder\s+for\s+(?:me|myself)\s+(?:to\s+)?(?:make\s+sure\s+(?:that\s+)?)?(?:i\s+)?",
+        "",
+        s,
+        count=1,
+    )
     s = re.sub(r"(?i)^(?:please\s+)?(?:remind|nudge|ping|notify)\s+me\s*(?:to\s+|that\s+)?", "", s, count=1)
     s = re.sub(r"(?i)^that\s+", "", s)
     s = re.sub(
@@ -9377,6 +9398,101 @@ def _split_when_and_work(text: str) -> tuple:
         work,
     ).strip(" .,:;-")
     return when, work
+
+
+def _rewrite_for_self(text: str) -> str:
+    """Self-assigned copy should sound personal, not like a team ask."""
+    if not text:
+        return text
+    s = str(text)
+    s = re.sub(r"(?i)\bplease\s+", "", s)
+    s = re.sub(r"(?i)\bour\s+(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b", "my 1:1", s)
+    s = re.sub(r"(?i)\bour\s+(meeting|call|standup|sync|review|deck|notes)\b", r"the \1", s)
+    s = re.sub(r"(?i)\bour\b", "my", s)
+    s = re.sub(r"(?i)\bwe'll\b", "I'll", s)
+    s = re.sub(r"(?i)\bwe're\b", "I'm", s)
+    s = re.sub(r"(?i)\bwe are\b", "I am", s)
+    s = re.sub(r"(?i)\bwe\s+need\s+to\b", "I need to", s)
+    s = re.sub(r"(?i)\bwe\s+have\s+to\b", "I have to", s)
+    s = re.sub(r"(?i)\bwe\s+should\b", "I should", s)
+    return s
+
+
+def _apply_self_assign_copy(title: str, description: str) -> tuple:
+    """Final pass so persisted self-assigned tasks never keep team/assignee voice."""
+    title_out = _rewrite_for_self(title or "") or (title or "")
+    desc = _rewrite_for_self(description or "")
+    desc = re.sub(
+        r"(?i)Reply with a brief update when you are done\.?",
+        "Mark this done when you finish.",
+        desc,
+    )
+    desc = re.sub(r"(?i)Complete the ask above\.?", "Do the work.", desc)
+    return title_out, _normalize_description_layout(desc)
+
+
+def _parse_is_self_assign(parsed: dict, raw_text: str, current_user: Optional[dict] = None) -> bool:
+    if _self_assign_hint(raw_text):
+        return True
+    hints = [str(h).strip().lower() for h in (parsed.get("assignee_hints") or []) if h]
+    self_tokens = {"me", "myself", "self"}
+    if hints and all(h in self_tokens for h in hints):
+        return True
+    if hints and any(h in self_tokens for h in hints) and not _prompt_names_other_assignee(raw_text or ""):
+        return True
+    user = current_user or {}
+    uid = str(user.get("id") or "")
+    email = str(user.get("email") or "").strip().lower()
+    name = str(user.get("name") or "").strip().lower()
+    first = name.split()[0] if name else ""
+
+    def _chip_is_self(r: dict) -> bool:
+        rid = str(r.get("id") or "")
+        remail = str(r.get("email") or "").strip().lower()
+        rname = str(r.get("name") or "").strip().lower()
+        if rid in ("self", "me") or rname in ("me", "myself"):
+            return True
+        if uid and rid == uid:
+            return True
+        if email and remail == email:
+            return True
+        return False
+
+    resolved = [
+        r for r in ((parsed.get("assignee_resolution") or {}).get("resolved") or [])
+        if isinstance(r, dict)
+    ]
+    if resolved and all(_chip_is_self(r) for r in resolved):
+        return True
+    if name and hints and all(h in self_tokens or h == name or (first and h == first) for h in hints):
+        return True
+    return False
+
+
+def _self_facing_note(when: str, work: str) -> str:
+    body = _rewrite_for_self((work or "").strip())
+    if body:
+        body = body[0].upper() + body[1:] if len(body) > 1 else body.upper()
+    else:
+        body = "Get this done."
+    if when:
+        rest = body[0].lower() + body[1:] if len(body) > 1 else body.lower()
+        body = f"{when}, {rest}"
+    if body and body[-1] not in ".!?":
+        body += "."
+    return body
+
+
+def _normalize_description_layout(text: str) -> str:
+    """Keep numbered instructions on their own lines so the UI can render them."""
+    s = (text or "").strip()
+    if not s:
+        return s
+    s = re.sub(r"(?i)\s*next steps?:\s*", "\n\nNext steps:\n", s, count=1)
+    s = re.sub(r"(?<!\n)\s+(\d{1,2})[.)]\s+", r"\n\1. ", s)
+    s = re.sub(r"[ \t]+\n", "\n", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
 
 
 def _too_close_to_prompt(candidate: str, raw: str) -> bool:
@@ -9467,8 +9583,23 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     return s.strip()
 
 
-def _infer_next_steps(desc: str, title: str = "") -> List[str]:
+def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> List[str]:
     blob = f"{title} {desc}".strip()
+    if self_assign:
+        if re.search(r"(?i)\b(1\s*:\s*1|one[\s-]?on[\s-]?one|meeting|prep)\b", blob):
+            return [
+                "Jot the topics you want to cover.",
+                "Mark this done when you're prepared.",
+            ]
+        if re.search(r"(?i)\b(deal|dmc|pipeline)\b", blob):
+            return [
+                "Gather what you need for each deal.",
+                "Mark this done when everything is ready.",
+            ]
+        return [
+            "Do the work.",
+            "Mark this done when you finish.",
+        ]
     steps = []
     if re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
         steps.append("Review the material and note anything that needs a decision.")
@@ -9482,18 +9613,18 @@ def _infer_next_steps(desc: str, title: str = "") -> List[str]:
     return steps[:3]
 
 
-def _carnegie_format_description(desc: str, title: str = "", manager_name: Optional[str] = None) -> str:
+def _carnegie_format_description(desc: str, title: str = "", manager_name: Optional[str] = None, self_assign: bool = False) -> str:
     """Clear ask + numbered next steps (Dale Carnegie: make the request easy to act on)."""
     s = (desc or "").strip()
     if not s:
         return s
     if re.search(r"(?i)next steps?:", s) or re.search(r"(?m)^\s*1[\.\)]\s", s):
-        return s
-    steps = _infer_next_steps(s, title)
-    if manager_name:
+        return _normalize_description_layout(s)
+    steps = _infer_next_steps(s, title, self_assign=self_assign)
+    if manager_name and not self_assign:
         steps = [st.replace("your manager", manager_name) for st in steps]
     numbered = "\n".join(f"{i + 1}. {st}" for i, st in enumerate(steps))
-    return f"{s.rstrip()}\n\nNext steps:\n{numbered}"
+    return _normalize_description_layout(f"{s.rstrip()}\n\nNext steps:\n{numbered}")
 
 
 def _assignee_name_list(parsed: dict) -> List[str]:
@@ -9563,6 +9694,14 @@ def _title_from_work_text(work: str) -> str:
         s,
     ).strip()
     s = re.sub(r"(?i)^(an?|the)\s+", "", s).strip()
+    m_prep = re.search(r"(?i)\bget\s+(.+?)\s+prepared\b", s)
+    if m_prep:
+        thing = re.sub(r"(?i)^(all|the|my)\s+", "", m_prep.group(1)).strip()
+        if thing:
+            s = "Prepare " + " ".join(thing.split()[:6])
+            if s[0].islower():
+                s = s[0].upper() + s[1:]
+            return s
     if re.search(r"(?i)\b(eod|end of day)\b", s) and re.search(r"(?i)\breport\b", s):
         return "Send EOD report"
     if re.search(r"(?i)\beod\b", s) and not re.search(r"(?i)\breport\b", s):
@@ -9612,7 +9751,7 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
     )
 
 
-def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: Optional[str] = None) -> None:
+def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: Optional[str] = None, current_user: Optional[dict] = None) -> None:
     """Keep title short/clean and ensure detailed prompts land as assignee-facing description."""
     repaired, speech_hints = _repair_speech_prompt(raw_text or "")
     if speech_hints:
@@ -9623,6 +9762,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
         parsed["assignee_hints"] = hints
 
     source_text = repaired or raw_text or ""
+    self_assign = _parse_is_self_assign(parsed, source_text, current_user)
     people = _assignee_name_list(parsed)
     for h in speech_hints:
         if h and h not in people:
@@ -9655,6 +9795,9 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     else:
         parsed["title"] = title
 
+    if self_assign:
+        parsed["title"] = _rewrite_for_self(parsed.get("title") or "") or parsed.get("title")
+
     desc_seed = desc
     if (not desc_seed) and actions:
         desc_seed = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
@@ -9664,13 +9807,23 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     ):
         desc_seed = ""
 
-    ask = _assignee_facing_ask(when, distilled_work or desc_seed, manager_name)
-    title_for_steps = str(parsed.get("title") or title or "")
-    parsed["description"] = _carnegie_format_description(
-        ask,
-        title=title_for_steps,
-        manager_name=manager_name,
-    )
+    if self_assign:
+        note = _self_facing_note(when, distilled_work or desc_seed)
+        title_for_steps = str(parsed.get("title") or title or "")
+        parsed["description"] = _carnegie_format_description(
+            note,
+            title=title_for_steps,
+            manager_name=manager_name,
+            self_assign=True,
+        )
+    else:
+        ask = _assignee_facing_ask(when, distilled_work or desc_seed, manager_name)
+        title_for_steps = str(parsed.get("title") or title or "")
+        parsed["description"] = _carnegie_format_description(
+            ask,
+            title=title_for_steps,
+            manager_name=manager_name,
+        )
     if actions:
         parsed["action_items"] = [
             _rewrite_description_for_assignee(_strip_manager_voice(a), manager_name) for a in actions
@@ -9872,7 +10025,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         parsed["assignee_resolution"] = await _resolve_assignee_hints(parsed.get("assignee_hints", []), current_user)
 
     # Title/description quality — strip @people and keep real work text (assignee-facing)
-    _enrich_parse_title_description(parsed, text, manager_name=current_user.get("name"))
+    _enrich_parse_title_description(
+        parsed, text, manager_name=current_user.get("name"), current_user=current_user
+    )
     # Fast title re-vet only when still bad (speech debris / names). Skip when already clean.
     people_for_vet = _assignee_name_list(parsed)
     if _title_looks_bad(str(parsed.get("title") or ""), people_for_vet, text):

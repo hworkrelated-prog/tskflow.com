@@ -469,15 +469,6 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     align-self: stretch;
     width: 100%;
 }
-.ai-jarvis-mark {
-    border: 0;
-    background: transparent;
-    padding: 0;
-    cursor: pointer;
-}
-.ai-jarvis-mark:hover {
-    opacity: 0.92;
-}
 .ai-thread {
     display: flex;
     flex-direction: column;

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
-import { API } from '@/App';
+import { API, useAuth } from '@/App';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,10 +15,10 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { JarvisIcon } from '@/components/JarvisIcon';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
+import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip } from '@/lib/taskDescription';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -199,6 +199,8 @@ const AIQuickCreate = ({
     const threadRef = useRef([]);
     const activePromptRef = useRef('');
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const [slackStatus, setSlackStatus] = useState({ connected: false, canManage: false });
 
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 30);
@@ -265,6 +267,20 @@ const AIQuickCreate = ({
         window.addEventListener('tskflow:focus-ai-prompt', onFocus);
         return () => window.removeEventListener('tskflow:focus-ai-prompt', onFocus);
     }, [focusInput]);
+
+    useEffect(() => {
+        let cancelled = false;
+        axios.get(`${API}/auth/preferences`)
+            .then((res) => {
+                if (cancelled) return;
+                setSlackStatus({
+                    connected: Boolean(res.data?.slack_team_connected),
+                    canManage: Boolean(res.data?.can_manage_slack),
+                });
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -545,9 +561,10 @@ const AIQuickCreate = ({
 
     const applyPreview = (p) => {
         const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
+        const fromParse = p.assignee_resolution?.resolved || [];
         const peopleNames = [
             ...editAssignees.map((a) => a.name).filter(Boolean),
-            ...((p.assignee_resolution?.resolved || []).map((a) => a.name).filter(Boolean)),
+            ...fromParse.map((a) => a.name).filter(Boolean),
             ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
         ];
         // Prefer the LLM title when it already looks clean — avoid over-scrubbing into "get do it"
@@ -557,10 +574,16 @@ const AIQuickCreate = ({
             || /^assign\b/i.test(llmTitle)
             || peopleNames.some((n) => n && llmTitle.toLowerCase().includes(String(n).toLowerCase()));
         let title = llmTitleClean ? stripPeopleNoise(llmTitle, peopleNames) : llmTitle;
-        let desc = stripPeopleNoise(p.description || '', peopleNames);
+        let desc = String(p.description || '')
+            .replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}/g, '')
+            .replace(/[ \t]+\n/g, '\n')
+            .trim();
         const actions = Array.isArray(p.action_items)
             ? p.action_items.map((a) => stripPeopleNoise(a, peopleNames)).filter(Boolean)
             : [];
+        const hintSelf = (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()));
+        const resolvedSelf = fromParse.length > 0 && fromParse.every((a) => isSelfAssigneeChip(a, user?.id));
+        const selfParse = promptMeansSelfAssign(text) || hintSelf || resolvedSelf;
 
         const work = stripPeopleNoise(text || '', peopleNames)
             .replace(/\b(by|before|due)\s+.+$/i, '')
@@ -602,9 +625,10 @@ const AIQuickCreate = ({
         desc = (desc || '')
             .replace(/\bget\s+do\b/gi, 'do')
             .replace(/\band\s+get\b/gi, 'and')
-            .replace(/\s+/g, ' ')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/[ \t]{2,}/g, ' ')
             .trim();
-        if (desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do)\b/i.test(desc)) {
+        if (!selfParse && desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do)\b/i.test(desc)) {
             if (/\b(review|watch|check|complete|send|submit)\b/i.test(desc)) {
                 desc = desc.charAt(0).toUpperCase() + desc.slice(1);
             } else {
@@ -612,13 +636,10 @@ const AIQuickCreate = ({
             }
         }
 
-        setEditTitle(title || p.title || '');
-        setEditDesc(desc || '');
         setEditDue(p.due_date || '');
         setEditPriority(p.priority || 'Medium');
         // Keep @mentions the user already picked; merge in any newly resolved assignees.
         // "Remind me" / "I need to" always lands on Me — never reopen the people picker.
-        const fromParse = p.assignee_resolution?.resolved || [];
         let merged;
         if (promptMeansSelfAssign(text)) {
             merged = [SELF_CHIP];
@@ -627,6 +648,13 @@ const AIQuickCreate = ({
         }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
+        if (selfParse || assigneesAreSelf(merged, user?.id)) {
+            title = rewriteSelfAssignCopy(title);
+            desc = rewriteSelfAssignCopy(desc);
+        }
+        desc = layoutTaskDescription(desc);
+        setEditTitle(title || p.title || '');
+        setEditDesc(desc || '');
         const mergedCount = merged.length;
         if (mergedCount) writeLastAssignees(merged);
         setEditCriteria(p.success_criteria || '');
@@ -732,7 +760,7 @@ const AIQuickCreate = ({
             }
         } catch (err) {
             const fallback =
-                "I can still help from here. Type an assignment like “Ask Alice to send the Q3 recap by Friday” and I’ll send it, follow up if they go quiet, and open Slack if they ignore two pings. Or ask what’s outstanding.";
+                "I can still help from here. Type an assignment like “Ask Alice to send the Q3 recap by Friday” and I’ll send it and follow up if they go quiet. Or ask what’s outstanding.";
             const detail = err?.response?.data?.detail;
             appendThread({
                 role: 'assistant',
@@ -794,6 +822,8 @@ const AIQuickCreate = ({
             editAssigneesRef.current = [SELF_CHIP];
             setEditAssignees([SELF_CHIP]);
             setShowPeopleDrop(false);
+            setEditTitle((prev) => rewriteSelfAssignCopy(prev));
+            setEditDesc((prev) => rewriteSelfAssignCopy(prev));
         } else if (!promptNamesSomeoneElse(t) && editAssigneesRef.current.length === 0) {
             const remembered = rememberedAssigneesForPrompt(t);
             if (remembered.length) {
@@ -912,7 +942,7 @@ const AIQuickCreate = ({
     };
 
     const pickPerson = (person) => {
-        const isSelf = person.id === 'self';
+        const isSelf = person.id === 'self' || (user?.id && person.id === user.id);
         const isEmailOnly = !isSelf && (String(person.id || '').startsWith('email_') || person.is_invited);
         const chip = isSelf
             ? { kind: 'user', id: 'self', name: 'Me' }
@@ -931,6 +961,10 @@ const AIQuickCreate = ({
         setPeopleSearch('');
         setShowPeopleDrop(false);
         setClarifyAnswer('');
+        if (isSelf) {
+            setEditTitle((t) => rewriteSelfAssignCopy(t));
+            setEditDesc((d) => rewriteSelfAssignCopy(d));
+        }
         const label = person.name || person.email;
         const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
             || 'Who should own this task?';
@@ -1233,7 +1267,7 @@ const AIQuickCreate = ({
                 }
                 const payloads = unique.map((aid) => ({
                     title: editTitle.trim(),
-                    description: editDesc || '',
+                    description: layoutTaskDescription(editDesc) || '',
                     assigned_to: aid,
                     priority: editPriority,
                     start_due_date: editDue.includes('T')
@@ -1251,7 +1285,7 @@ const AIQuickCreate = ({
                 const sales = !!editSales;
                 const payload = {
                     title: editTitle.trim(),
-                    description: editDesc || '',
+                    description: layoutTaskDescription(editDesc) || '',
                     assigned_to: unique,
                     due_date: editDue,
                     priority: editPriority,
@@ -1267,13 +1301,23 @@ const AIQuickCreate = ({
                 } else {
                     await axios.post(`${API}/tasks/bulk`, payload);
                 }
-                toast.success(`Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
             }
             writeLastAssignees(editAssignees);
+            const selfAssign = assigneesAreSelf(editAssignees, user?.id);
             const names = editAssignees.map((a) => a.name).filter(Boolean).join(', ') || 'your team';
+            if (!isRecurring) {
+                toast.success(selfAssign
+                    ? 'Saved for you'
+                    : `Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
+            }
             appendThread({
                 role: 'assistant',
-                text: `Sent to ${names}. I’ll follow up if they go quiet — and if they ignore two pings, I’ll Slack them with you in the loop.`,
+                text: sentTaskFollowupMessage({
+                    names,
+                    isSelf: selfAssign,
+                    slackConnected: slackStatus.connected,
+                    canManageSlack: slackStatus.canManage,
+                }),
             });
             reset({ keepThread: true });
             onCreated?.();
@@ -1294,6 +1338,7 @@ const AIQuickCreate = ({
     const needsAmbiguousPick = ambiguous.length > 0 && editAssignees.length === 0;
     const isWhoClarify = clarifying.length > 0 && /who|own|assign/i.test(clarifying[0] || '');
     const isWhenClarify = clarifying.length > 0 && /when|due|deadline/i.test(clarifying[0] || '');
+    const selfAssignConfirm = assigneesAreSelf(editAssignees, user?.id);
     const readyToConfirm =
         !!preview &&
         clarifying.length === 0 &&
@@ -1749,6 +1794,10 @@ const AIQuickCreate = ({
                                                 )}
 
                                                 <p className="text-[15px] leading-7 text-slate-800" data-testid="ai-confirm-message">
+                                                    {selfAssignConfirm ? (
+                                                        <>I&apos;ll remind you to{' '}</>
+                                                    ) : (
+                                                        <>
                                                     I&apos;ll ask{' '}
                                                     {editAssignees.map((a, i) => (
                                                         <span key={`${a.kind}-${a.id || a.email || i}`}>
@@ -1775,6 +1824,8 @@ const AIQuickCreate = ({
                                                         </span>
                                                     ))}
                                                     {' '}to{' '}
+                                                        </>
+                                                    )}
                                                     {editingField === 'title' ? (
                                                         <Input
                                                             autoFocus
@@ -1843,7 +1894,7 @@ const AIQuickCreate = ({
                                                         className="text-[14px] leading-6 text-slate-700 whitespace-pre-wrap"
                                                         data-testid="ai-confirm-assignee-ask"
                                                     >
-                                                        {editDesc}
+                                                        {layoutTaskDescription(editDesc)}
                                                     </div>
                                                 ) : null}
 
@@ -2592,21 +2643,6 @@ const AIQuickCreate = ({
 
                             <div className="relative z-[1] flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
                                 <div className="relative flex items-center gap-0.5" ref={plusRef}>
-                                    {embedded && (
-                                        <button
-                                            type="button"
-                                            className="ai-jarvis-mark h-8 w-8 rounded-full inline-flex items-center justify-center shrink-0"
-                                            onClick={focusInput}
-                                            data-testid="ai-jarvis-mark"
-                                            aria-label="Jarvis"
-                                            title="Jarvis"
-                                        >
-                                            <JarvisIcon
-                                                phase={listening ? 'listening' : (loading || answerLoading || sending) ? 'thinking' : 'idle'}
-                                                size={28}
-                                            />
-                                        </button>
-                                    )}
                                     <button
                                         type="button"
                                         onClick={() => setPlusOpen((v) => !v)}

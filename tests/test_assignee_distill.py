@@ -6,7 +6,7 @@ SRC = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
 
 def _ns():
-    start = SRC.index("_SPEECH_VERB_STOP = ")
+    start = SRC.index("_DIRECT_HINTS = ")
     end = SRC.index("async def _llm_vet_title")
     ns = {}
     exec("import re\nfrom typing import Optional, List\n" + SRC[start:end], ns)
@@ -93,7 +93,7 @@ def test_system_prompt_forbids_pasting_the_command():
 def test_confirm_shows_assignee_ask():
     src = (ROOT / "frontend" / "src" / "components" / "AIQuickCreate.js").read_text(encoding="utf-8")
     assert 'data-testid="ai-confirm-assignee-ask"' in src
-    assert "{editDesc}" in src
+    assert "layoutTaskDescription(editDesc)" in src
 
 
 def test_preview_panel_is_opaque():

@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar, Image, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { layoutTaskDescription } from '@/lib/taskDescription';
 
 const safeDate = (value, fmt = 'MMM dd') => {
     if (!value) return 'No date';
@@ -93,7 +94,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
             >
                 <Card
                     data-testid={`task-card-${task.id}`}
-                    className={`group relative overflow-hidden rounded-xl border bg-card p-4 sm:p-6 transition-all cursor-pointer task-card active:scale-[0.99] ${selected ? 'ring-2 ring-teal-500 bg-teal-50/50' : ''}`}
+                    className={`group relative rounded-xl border bg-card p-4 sm:p-6 transition-shadow cursor-pointer task-card active:scale-[0.99] ${selected ? 'ring-2 ring-teal-500 bg-teal-50/50' : ''}`}
                     onClick={() => !selectionMode && navigate(`/task/${task.id}`)}
                 >
                     <CardContent className="p-0 space-y-3">
@@ -122,9 +123,11 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                             {getStatusBadge(task.status)}
                         </div>
                         
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                            {task.description ? task.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''}
-                        </p>
+                        {task.description ? (
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4" data-testid="task-card-description">
+                                {layoutTaskDescription(task.description)}
+                            </p>
+                        ) : null}
                         <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className={getPriorityClass(task.priority)}>{task.priority}</span>

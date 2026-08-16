@@ -1660,7 +1660,7 @@ const TaskHub = () => {
                                 <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
                                 <CardDescription>Tasks from others</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No tasks assigned to you'}</p>
                                 ) : (
@@ -1678,7 +1678,7 @@ const TaskHub = () => {
                                 <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
                                 <CardDescription>Your personal tasks</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
                                     <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No self-assigned tasks'}</p>
                                 ) : (
@@ -1696,7 +1696,7 @@ const TaskHub = () => {
                                 <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
                                 <CardDescription>Tasks you assigned</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pb-4 sm:pb-6">
+                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {parentGroups
                                     .filter(matchesGroupSearch)
                                     .filter((g) => !salesOnly || isSalesGroup(g))
