@@ -28,12 +28,11 @@ def test_voice_fab_does_not_overlap_prompt():
     app = _read("App.js")
     voice = _read("components", "VoiceMode.js")
     css = (ROOT / "frontend/src/index.css").read_text(encoding="utf-8")
-    # Prompt mic from #32 is in the composer; Jarvis stays in the shared stage
-    # (this PR) instead of a fixed FAB sitting on Go.
+    # Prompt mic is in the composer; integrated VoiceMode keeps shortcuts only (no FAB).
     assert "<VoiceMode dockIntegrated />" in app
     assert 'data-testid="ai-bottom-stage"' in app
     assert "voice-mode-fab" not in app
-    assert "fixed z-[45] safe-fab-br" in voice
+    assert "Jarvis lives in the prompt bar" in voice
     assert "dockIntegrated" in voice
     assert ".ai-bottom-stage" in css
 

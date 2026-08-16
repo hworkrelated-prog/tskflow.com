@@ -52,5 +52,5 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
     css = (FRONT / "index.css").read_text(encoding="utf-8")
     shell = css.split(".ai-composer-shell {")[1].split(".ai-composer-shell--inset")[0]
     assert "inset 0 0 0 1px" in shell
-    assert "overflow: hidden" not in css.split("@media (max-width: 51.99rem)")[-1].split(".ai-bar-glow")[0]
+    assert "overflow: hidden" not in css.split("@media (max-width: 51.99rem)")[-1].split(".ai-prompt-field")[0]
     assert "translateX(-50%)" not in css.split(".ai-bottom-stage")[1].split(".ai-prompt-field")[0]

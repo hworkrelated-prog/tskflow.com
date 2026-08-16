@@ -1,4 +1,4 @@
-"""Mobile AI bar: example text stays in the field; glow does not ghost the page."""
+"""Mobile AI bar: example text stays in the field; no glow spill."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,14 +25,12 @@ def test_placeholder_cannot_cover_toolbar_icons():
     assert "relative z-[1]" in src
 
 
-def test_mobile_glow_does_not_spill_around_jarvis():
+def test_no_glow_spill_and_composer_is_solid():
     css = _read("index.css")
-    phone = css.split(".ai-bottom-stage .ai-jarvis-orb")[1]
-    assert "inset: -4px" in phone
-    assert "background: none" in phone
-    assert "display: none" in phone
-    assert "overflow: visible" in phone
+    assert ".ai-bar-glow" not in css
+    assert ".ai-bottom-stage .ai-jarvis-orb" not in css
     inset = css.split(".ai-composer-shell--inset")[1].split("}")[0]
     assert "background: rgba(248, 250, 252, 0.9)" not in inset
     assert "background: #f8fafc" in inset
-    assert "box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16)" in css
+    shell = css.split(".ai-composer-shell {")[1].split(".ai-composer-shell--inset")[0]
+    assert "0 8px 24px -10px" in shell
