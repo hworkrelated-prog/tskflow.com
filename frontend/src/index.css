@@ -420,7 +420,7 @@ h1, h2, h3, h4, h5, h6 {
     transition: box-shadow 280ms ease;
 }
 .ai-composer-shell--inset {
-    background: rgba(248, 250, 252, 0.9);
+    background: #f8fafc;
 }
 .ai-composer-shell:focus-within {
     box-shadow:
@@ -502,6 +502,25 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 .ai-bottom-stage .ai-jarvis-orb {
     height: 2.5rem;
     width: 2.5rem;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+}
+@media (max-width: 51.99rem) {
+    .ai-command-dock {
+        overflow: hidden;
+        --glow-strength: 0.2;
+    }
+    .ai-bar-glow {
+        inset: -4px;
+        opacity: 0.45;
+        animation: none;
+        background: none;
+        box-shadow:
+            0 0 0 1px rgba(13, 148, 136, 0.14),
+            0 8px 16px -12px rgba(13, 148, 136, 0.28);
+    }
+    .ai-bar-glow-spot {
+        display: none;
+    }
 }
 @media (min-width: 52rem) {
     .ai-bottom-stage {
@@ -520,34 +539,39 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
     }
 }
 
+.ai-prompt-field {
+    position: relative;
+    overflow: hidden;
+}
 .ai-prompt-placeholder {
     pointer-events: none;
     position: absolute;
     left: 0.875rem;
-    right: 7rem;
+    right: 0.875rem;
     top: 0.625rem;
+    bottom: 0.25rem;
     color: rgb(148 163 184);
     font-size: 1rem;
-    line-height: 1.625;
-    white-space: normal;
+    line-height: 1.5;
+    white-space: nowrap;
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    text-overflow: ellipsis;
 }
 @media (min-width: 640px) {
     .ai-prompt-placeholder {
-        right: 9rem;
         font-size: 0.875rem;
     }
 }
 .ai-prompt-placeholder-fade {
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     animation: ai-placeholder-in 420ms ease;
 }
 @keyframes ai-placeholder-in {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
     .ai-prompt-placeholder-fade {

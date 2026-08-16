@@ -1357,7 +1357,7 @@ const AIQuickCreate = ({
                                     <List className="w-3.5 h-3.5" />
                                 </button>
                             </div>
-                            <div className="relative">
+                            <div className="ai-prompt-field relative">
                             {showPromptExample && (
                                 <div
                                     className="ai-prompt-placeholder"
@@ -1668,7 +1668,7 @@ const AIQuickCreate = ({
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
+                            <div className="relative z-[1] flex items-center justify-between gap-2 px-2 pb-2 pt-0.5">
                                 <div className="flex items-center gap-0.5">
                                     <button
                                         type="button"

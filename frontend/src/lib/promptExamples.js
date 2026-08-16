@@ -1,11 +1,11 @@
 /** Common AI-bar commands shown as a rotating placeholder. */
 export const PROMPT_EXAMPLES = [
     'Tell my team to complete the outreach training by 12',
-    'Assign Harold the Q3 recap by Friday 5pm',
+    'Assign Maya the Q3 recap by Friday 5pm',
     'What’s outstanding?',
     'Go to analytics',
     'Search follow-ups from last week',
-    'Remind Sally to send the client deck tomorrow',
+    'Remind Jordan to send the client deck tomorrow',
     'From transcript',
     'Nudge everyone who hasn’t accepted',
 ];

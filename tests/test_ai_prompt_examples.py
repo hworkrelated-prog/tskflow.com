@@ -13,16 +13,28 @@ def _read(*parts: str) -> str:
 def test_examples_include_team_outreach_and_cycle():
     src = _read("lib", "promptExamples.js")
     assert "Tell my team to complete the outreach training by 12" in src
+    assert "Assign Maya the Q3 recap by Friday 5pm" in src
+    assert "Remind Jordan to send the client deck tomorrow" in src
+    assert "Harold" not in src
+    assert "Sally" not in src
     assert "PROMPT_EXAMPLE_INTERVAL_MS" in src
     assert "nextPromptExampleIndex" in src
 
 
 def test_composer_uses_rotating_placeholder():
     src = _read("components", "AIQuickCreate.js")
+    css = _read("index.css")
     assert "PROMPT_EXAMPLES" in src
     assert 'data-testid="ai-prompt-placeholder"' in src
     assert "nextPromptExampleIndex" in src
     assert 'placeholder="Create, search, or go to…"' not in src
+    assert "ai-prompt-field" in src
+    # Overlay stays inside the field so it cannot paint over attach/Go.
+    assert ".ai-prompt-field" in css
+    assert "text-overflow: ellipsis" in css
+    assert "white-space: nowrap" in css
+    assert "-webkit-line-clamp: 2" not in css
+    assert "right: 7rem" not in css
 
 
 def test_next_example_index_wraps():
