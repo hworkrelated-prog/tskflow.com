@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Plus, Shield, Users, Crown, ArrowLeft } from 'lucide-react';
+import { Trash2, Plus, Shield, Users, Crown, ArrowLeft, Activity, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -18,6 +18,8 @@ const AdminPage = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [grants, setGrants] = useState([]);
+    const [engagement, setEngagement] = useState(null);
+    const [sendingDigest, setSendingDigest] = useState(false);
     const [newGrant, setNewGrant] = useState({ type: 'email', value: '', plan: 'pro' });
 
     useEffect(() => {
@@ -25,6 +27,7 @@ const AdminPage = () => {
         if (token) {
             setIsLoggedIn(true);
             fetchGrants(token);
+            fetchEngagement(token);
         }
     }, []);
 
@@ -36,11 +39,47 @@ const AdminPage = () => {
             localStorage.setItem('admin_token', response.data.access_token);
             setIsLoggedIn(true);
             fetchGrants(response.data.access_token);
+            fetchEngagement(response.data.access_token);
             toast.success('Admin login successful');
         } catch (error) {
             toast.error('Invalid admin password');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchEngagement = async (token) => {
+        try {
+            const response = await axios.get(`${API}/admin/engagement`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEngagement(response.data);
+        } catch (error) {
+            if (error.response?.status === 401) {
+                localStorage.removeItem('admin_token');
+                setIsLoggedIn(false);
+            }
+        }
+    };
+
+    const sendDigestNow = async () => {
+        const token = localStorage.getItem('admin_token');
+        if (!token) return;
+        setSendingDigest(true);
+        try {
+            const response = await axios.post(`${API}/admin/engagement/send`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.data?.sent) {
+                toast.success(`Summary emailed to ${response.data.to || 'you'}`);
+            } else {
+                toast.error(response.data?.reason || 'Could not send summary');
+            }
+            fetchEngagement(token);
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Failed to send summary');
+        } finally {
+            setSendingDigest(false);
         }
     };
 
@@ -102,6 +141,7 @@ const AdminPage = () => {
         localStorage.removeItem('admin_token');
         setIsLoggedIn(false);
         setGrants([]);
+        setEngagement(null);
     };
 
     if (!isLoggedIn) {
@@ -157,6 +197,59 @@ const AdminPage = () => {
             </header>
 
             <main className="container mx-auto px-4 py-8 max-w-4xl">
+                <Card className="mb-8 border-0 shadow-lg" data-testid="admin-engagement">
+                    <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div>
+                            <CardTitle className="flex items-center gap-2">
+                                <Activity className="w-5 h-5" /> Are people using Tskflow?
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                {engagement?.blurb || 'Loading this week’s numbers…'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Email summary every Friday at 3:00 PM Pacific
+                                {engagement?.email_to ? ` → ${engagement.email_to}` : ''}.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={sendDigestNow}
+                            disabled={sendingDigest}
+                            data-testid="admin-engagement-send"
+                        >
+                            <Send className="w-4 h-4 mr-1" />
+                            {sendingDigest ? 'Sending…' : 'Email me this week'}
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {engagement ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {[
+                                    ['Signed up', engagement.total_users],
+                                    ['New this week', engagement.new_users_week],
+                                    ['Active (7 days)', engagement.active_week],
+                                    ['Active today', engagement.active_today],
+                                    ['Assigned out', engagement.tasks_assigned_out],
+                                    ['Assigned this week', engagement.tasks_assigned_out_week],
+                                    ['Still open', engagement.open_assigned_out],
+                                    ['Done this week', engagement.completed_week],
+                                    ['Overdue', engagement.overdue],
+                                    ['Never created a task', engagement.never_created_a_task],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="rounded-xl bg-slate-50 px-3 py-3">
+                                        <div className="text-2xl font-semibold tabular-nums">{value ?? 0}</div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Loading engagement…</p>
+                        )}
+                    </CardContent>
+                </Card>
+
                 {/* Add New Grant */}
                 <Card className="mb-8 border-0 shadow-lg">
                     <CardHeader>

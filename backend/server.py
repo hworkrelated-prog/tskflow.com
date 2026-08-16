@@ -60,6 +60,13 @@ from sheets_helpers import (
     find_person_metrics,
     format_metrics_line,
 )
+from engagement import (
+    digest_subject,
+    engagement_blurb,
+    render_engagement_html,
+    should_send_weekly,
+    week_id,
+)
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -664,6 +671,11 @@ async def login(user: UserLogin):
     if not db_user.get("email_verified", False):
         raise HTTPException(status_code=403, detail="Email not verified. Please verify your email first.")
     
+    now = get_pst_now().isoformat()
+    await db.users.update_one(
+        {"id": db_user["id"]},
+        {"$set": {"last_login": now, "last_active": now}},
+    )
     access_token = create_access_token(data={"sub": db_user["id"]})
     
     return TokenResponse(
@@ -688,6 +700,10 @@ async def login(user: UserLogin):
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"last_active": get_pst_now().isoformat()}},
+    )
     return UserResponse(
         id=current_user["id"],
         name=current_user["name"],
@@ -5097,6 +5113,134 @@ async def trigger_analytics(background_tasks: BackgroundTasks):
     background_tasks.add_task(send_daily_analytics)
     return {"message": "Analytics email queued"}
 
+
+_LIVE_TASK = {
+    "deleted": {"$ne": True},
+    "status": {"$nin": ["Draft"]},
+    "is_parent": {"$ne": True},
+}
+_OPEN_STATUSES = {"$nin": ["Completed", "Declined", "Draft", "Cancelled", "Rejected"]}
+
+
+async def _build_engagement_snapshot(now: Optional[datetime] = None) -> dict:
+    """Product-wide engagement numbers for the owner digest and /admin panel."""
+    now = now or get_pst_now()
+    week_ago = (now - timedelta(days=7)).isoformat()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    due_cut = now.strftime("%Y-%m-%dT%H:%M")
+
+    total_users = await db.users.count_documents({})
+    verified = await db.users.count_documents({"email_verified": True})
+    new_users_week = await db.users.count_documents({"created_at": {"$gte": week_ago}})
+    active_week = await db.users.count_documents({
+        "$or": [
+            {"last_active": {"$gte": week_ago}},
+            {"last_login": {"$gte": week_ago}},
+        ]
+    })
+    active_today = await db.users.count_documents({
+        "$or": [
+            {"last_active": {"$gte": today_start}},
+            {"last_login": {"$gte": today_start}},
+        ]
+    })
+
+    assigned_out_match = {
+        **_LIVE_TASK,
+        "$expr": {"$and": [
+            {"$ne": ["$created_by", "$assigned_to"]},
+            {"$ne": ["$assigned_to", None]},
+            {"$ne": ["$assigned_to", ""]},
+        ]},
+    }
+    self_match = {
+        **_LIVE_TASK,
+        "$expr": {"$eq": ["$created_by", "$assigned_to"]},
+    }
+
+    tasks_total = await db.tasks.count_documents(_LIVE_TASK)
+    tasks_week = await db.tasks.count_documents({**_LIVE_TASK, "created_at": {"$gte": week_ago}})
+    tasks_assigned_out = await db.tasks.count_documents(assigned_out_match)
+    tasks_assigned_out_week = await db.tasks.count_documents({**assigned_out_match, "created_at": {"$gte": week_ago}})
+    open_assigned_out = await db.tasks.count_documents({**assigned_out_match, "status": _OPEN_STATUSES})
+    open_self = await db.tasks.count_documents({**self_match, "status": _OPEN_STATUSES})
+    completed_week = await db.tasks.count_documents({
+        **_LIVE_TASK,
+        "status": "Completed",
+        "completed_at": {"$gte": week_ago},
+    })
+    overdue = await db.tasks.count_documents({
+        **_LIVE_TASK,
+        "status": _OPEN_STATUSES,
+        "due_date": {"$lt": due_cut, "$ne": None},
+    })
+
+    creators = await db.tasks.distinct("created_by", _LIVE_TASK)
+    never_created_a_task = await db.users.count_documents({
+        "email_verified": True,
+        "id": {"$nin": creators or ["__none__"]},
+    })
+
+    domain_pipeline = [
+        {"$group": {"_id": "$company_domain", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 8},
+    ]
+    domains = await db.users.aggregate(domain_pipeline).to_list(8)
+    top_domains = [{"domain": d.get("_id") or "none", "users": d.get("count", 0)} for d in domains]
+
+    snap = {
+        "as_of": now.isoformat(),
+        "week_id": week_id(now),
+        "total_users": total_users,
+        "verified_users": verified,
+        "new_users_week": new_users_week,
+        "active_week": active_week,
+        "active_today": active_today,
+        "tasks_total": tasks_total,
+        "tasks_created_week": tasks_week,
+        "tasks_assigned_out": tasks_assigned_out,
+        "tasks_assigned_out_week": tasks_assigned_out_week,
+        "open_assigned_out": open_assigned_out,
+        "open_self": open_self,
+        "completed_week": completed_week,
+        "overdue": overdue,
+        "never_created_a_task": never_created_a_task,
+        "top_domains": top_domains,
+    }
+    snap["blurb"] = engagement_blurb(snap)
+    return snap
+
+
+def _analytics_inbox() -> str:
+    return os.getenv("ANALYTICS_EMAIL", "connect@hashimmahmood.com")
+
+
+async def send_weekly_engagement_digest(now: Optional[datetime] = None, force: bool = False) -> dict:
+    """Email the product owner a short weekly engagement summary."""
+    now = now or get_pst_now()
+    if not force and not should_send_weekly(now):
+        return {"sent": False, "reason": "not_friday_3pm_pt"}
+    key = f"weekly-{week_id(now)}"
+    if not force:
+        existing = await db.engagement_digests.find_one({"id": key})
+        if existing:
+            return {"sent": False, "reason": "already_sent", "week_id": week_id(now)}
+    snap = await _build_engagement_snapshot(now)
+    inner = render_engagement_html(snap, now)
+    html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/admin", cta_label="Open engagement")
+    to_email = _analytics_inbox()
+    await send_email_notification(to_email, digest_subject(now), html)
+    doc_id = key if not force else f"manual-{now.strftime('%Y%m%dT%H%M%S')}"
+    await db.engagement_digests.update_one(
+        {"id": doc_id},
+        {"$set": {"id": doc_id, "week_id": week_id(now), "sent_at": now.isoformat(), "forced": force, "to": to_email, "snapshot": snap}},
+        upsert=True,
+    )
+    logging.info(f"Weekly engagement digest sent to {to_email}")
+    return {"sent": True, "to": to_email, "week_id": week_id(now), "snapshot": snap}
+
+
 # Admin endpoint to view user stats
 @api_router.get("/admin/stats")
 async def get_admin_stats():
@@ -5158,6 +5302,22 @@ async def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(secur
         return True
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid admin token")
+
+@api_router.get("/admin/engagement")
+async def get_admin_engagement(admin: bool = Depends(verify_admin)):
+    """Live product engagement snapshot for the owner admin panel."""
+    snap = await _build_engagement_snapshot()
+    return {
+        **snap,
+        "email_to": _analytics_inbox(),
+        "schedule": "Every Friday at 3:00 PM Pacific",
+    }
+
+@api_router.post("/admin/engagement/send")
+async def send_admin_engagement_now(admin: bool = Depends(verify_admin)):
+    """Send this week's summary email immediately (does not wait for Friday 3pm)."""
+    result = await send_weekly_engagement_digest(force=True)
+    return result
 
 @api_router.get("/admin/access-grants")
 async def get_access_grants(admin: bool = Depends(verify_admin)):
@@ -7698,6 +7858,15 @@ async def cron_eod_report(secret: Optional[str] = None):
                     pass
 
     return {"ok": True, "sent": sent}
+
+
+@api_router.post("/cron/engagement-digest")
+async def cron_engagement_digest(secret: Optional[str] = None):
+    """Friday 3 PM Pacific weekly owner summary. Safe to hit every hour — no-ops otherwise."""
+    expected = os.getenv("CRON_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return await send_weekly_engagement_digest()
 
 
 @api_router.post("/eod/preview")
@@ -10953,6 +11122,7 @@ async def _scheduler_loop():
             await _check_smart_reminders()
             await _sweep_ignored_slack_followups()
             await _sync_all_sheet_configs()
+            await send_weekly_engagement_digest()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
         await asyncio.sleep(300)  # every 5 min
@@ -10978,6 +11148,7 @@ async def _ensure_indexes():
         await db.slack_threads.create_index("slack_thread_ts")
         await db.slack_threads.create_index("assignee_id")
         await db.slack_threads.create_index("slack_channel_id")
+        await db.engagement_digests.create_index("id", unique=True)
     except Exception:
         pass
 
