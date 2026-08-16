@@ -23,11 +23,12 @@ def test_thread_has_no_you_asked_chrome():
     assert "history" in src
 
 
-def test_jarvis_mark_is_in_the_prompt_toolbar():
+def test_jarvis_mark_is_not_in_the_prompt_toolbar():
     src = _read("components", "AIQuickCreate.js")
     toolbar = src[src.index("relative z-[1] flex items-center justify-between") : src.index("ai-inline-recorder")]
-    assert 'data-testid="ai-jarvis-mark"' in toolbar
-    assert toolbar.index("ai-jarvis-mark") < toolbar.index("ai-plus-btn")
+    assert 'data-testid="ai-jarvis-mark"' not in src
+    assert "JarvisIcon" not in src
+    assert 'data-testid="ai-plus-btn"' in toolbar
     assert 'data-testid="ai-prompt-voice-btn"' in toolbar
 
 
@@ -53,13 +54,16 @@ def test_degraded_voice_reply_stays_in_the_bar():
     server = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
     assert "full brain" not in server
     assert "New Task on the left" not in server
-    assert "Slack them with you in the loop" in server
+    assert "I’ll send it and follow up if they go quiet." in server
+    chunk = server.split("I can still help from here.", 1)[1][:500]
+    assert "Slack" not in chunk
 
 
 def test_thread_stays_open_after_send():
     src = _read("components", "AIQuickCreate.js")
     assert "keepThread" in src
-    assert "I’ll Slack them" in src or "I'll Slack them" in src
+    assert "sentTaskFollowupMessage" in src
+    assert "I’ll Slack them" not in src and "I'll Slack them" not in src
     dock = _read("components", "GlobalAIDock.js")
     created = dock[dock.index("onCreated={() => {") : dock.index("onOpenAdvanced")]
     assert "setActive(false)" not in created

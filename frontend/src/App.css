@@ -1,10 +1,14 @@
 .task-card {
-    transition: all 0.3s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    border: 1px solid hsl(var(--border));
+    overflow: visible;
+    transform: none;
 }
 
 .task-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    transform: none;
+    border-color: hsl(var(--border));
+    box-shadow: 0 8px 20px -8px rgba(15, 23, 42, 0.16);
 }
 
 .status-badge-pending {
@@ -177,7 +181,8 @@
 }
 
 [data-theme="dark"] .task-card:hover {
-    border-color: hsl(var(--ring)) !important;
+    border-color: hsl(var(--border)) !important;
+    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme="dark"] [class*="DialogContent"],

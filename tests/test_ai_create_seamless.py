@@ -16,6 +16,7 @@ def test_confirm_is_a_message_not_a_form():
     assert 'data-testid="ai-confirm-message"' in src
     assert 'data-testid="ai-confirm-assignee-ask"' in src
     assert "I'll ask" in src or "I&apos;ll ask" in src
+    assert "I'll remind you" in src or "I&apos;ll remind you" in src
     assert "Confirm & send" not in src
     assert 'data-testid="ai-send-btn"' in src
     assert "{sending ? 'Sending…' : 'Send'}" in src
@@ -111,7 +112,7 @@ def test_classify_team_hint_and_name_extract():
 
 def test_carnegie_adds_next_steps():
     src = _read(BE)
-    start = src.index("def _infer_next_steps")
+    start = src.index("def _normalize_description_layout")
     end = src.index("def _assignee_name_list")
     ns = {}
     exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)

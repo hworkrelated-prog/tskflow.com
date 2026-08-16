@@ -23,7 +23,7 @@ def _parse_helpers():
 
 def _copy_helpers():
     src = BE.read_text(encoding="utf-8")
-    start = src.index("_SPEECH_VERB_STOP = ")
+    start = src.index("_DIRECT_HINTS = ")
     end = src.index("async def _llm_vet_title")
     ns = {}
     exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
@@ -84,8 +84,73 @@ def test_remind_me_strips_to_the_work():
     ns["_enrich_parse_title_description"](parsed, raw, manager_name="Jordan")
     assert "remind" not in (parsed.get("title") or "").lower()
     assert "send" in (parsed.get("title") or "").lower()
-    assert "please" in (parsed.get("description") or "").lower()
-    assert "i need to" not in (parsed.get("description") or "").lower().split("next steps:")[0]
+    lead = (parsed.get("description") or "").lower().split("next steps:")[0]
+    assert "please" not in lead
+    assert "i need to" not in lead
+    assert "send 100 emails" in (parsed.get("description") or "").lower()
+    assert "\n1." in (parsed.get("description") or "")
+
+
+def test_self_assign_our_1on1_becomes_my():
+    ns = _copy_helpers()
+    parsed = {
+        "title": "Prepare for our 1:1",
+        "description": "Prepare for our 1:1",
+        "action_items": [],
+        "assignee_hints": ["me"],
+    }
+    ns["_enrich_parse_title_description"](parsed, "Prepare for our 1:1")
+    title = (parsed.get("title") or "").lower()
+    desc = (parsed.get("description") or "").lower()
+    assert "our" not in title
+    assert "my 1:1" in title
+    assert "our" not in desc.split("next steps:")[0]
+    assert "please" not in desc.split("next steps:")[0]
+    assert "\n1." in (parsed.get("description") or "")
+
+
+def test_self_assign_by_own_user_chip_rewrites_our():
+    ns = _copy_helpers()
+    parsed = {
+        "title": "Prepare for our 1:1",
+        "description": "Prepare for our 1:1",
+        "action_items": [],
+        "assignee_hints": ["Henrik"],
+        "assignee_resolution": {
+            "resolved": [{"id": "u1", "name": "Henrik Morgan", "email": "henrik@acme.com"}],
+        },
+    }
+    ns["_enrich_parse_title_description"](
+        parsed,
+        "Prepare for our 1:1",
+        manager_name="Henrik Morgan",
+        current_user={"id": "u1", "name": "Henrik Morgan", "email": "henrik@acme.com"},
+    )
+    title = (parsed.get("title") or "").lower()
+    desc = (parsed.get("description") or "").lower()
+    assert "our" not in title
+    assert "my 1:1" in title
+    assert "our" not in desc.split("next steps:")[0]
+    assert "please" not in desc.split("next steps:")[0]
+
+
+def test_reminder_for_myself_is_personal_not_slack_them():
+    ns = _copy_helpers()
+    raw = "This is a reminder for myself to make sure I get all DMC prepared for all deals I have for Monday"
+    parsed = {
+        "title": raw,
+        "description": raw,
+        "action_items": [],
+        "assignee_hints": ["me"],
+    }
+    ns["_enrich_parse_title_description"](parsed, raw, manager_name="Henrik")
+    title = (parsed.get("title") or "").lower()
+    desc = (parsed.get("description") or "").lower()
+    assert "reminder for myself" not in title
+    assert "dmc" in title or "prepare" in title
+    assert "please" not in desc.split("next steps:")[0]
+    assert "them" not in desc
+    assert "\n1." in (parsed.get("description") or "")
 
 
 def test_fast_path_wired_in_smart_parse():
