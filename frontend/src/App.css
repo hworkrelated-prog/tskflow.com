@@ -171,6 +171,14 @@
     color: hsl(var(--foreground)) !important;
 }
 
+/* Composer fields stay flush with the chat shell (see index.css). */
+[data-theme="dark"] .ai-composer-shell textarea,
+[data-theme="dark"] .ai-composer-shell input {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
 [data-theme="dark"] .task-card {
     background: hsl(var(--card)) !important;
     border-color: hsl(var(--border)) !important;
@@ -267,7 +275,6 @@
 [data-theme="dark"] .bg-teal-50,
 [data-theme="dark"] .bg-pink-50,
 [data-theme="dark"] .bg-blue-50,
-[data-theme="dark"] .bg-emerald-50,
 [data-theme="dark"] .bg-green-50,
 [data-theme="dark"] .bg-amber-50,
 [data-theme="dark"] .bg-yellow-50,
@@ -277,6 +284,8 @@
 [data-theme="dark"] .bg-teal-100 { background: #12332f !important; color: #99f6e4 !important; }
 [data-theme="dark"] .bg-blue-100 { background: #16273f !important; color: #bfdbfe !important; }
 [data-theme="dark"] .bg-green-100 { background: #16301f !important; color: #86efac !important; }
+[data-theme="dark"] .bg-emerald-50,
+[data-theme="dark"] .bg-emerald-100 { background: #12332f !important; color: #6ee7b7 !important; }
 [data-theme="dark"] .bg-amber-100 { background: #33260c !important; color: #fcd34d !important; }
 [data-theme="dark"] .bg-red-100 { background: #331616 !important; color: #fecaca !important; }
 [data-theme="dark"] .bg-gray-100 { background: #1a1a1a !important; color: #d0d0d0 !important; }
@@ -297,6 +306,9 @@
 [data-theme="dark"] .text-teal-900 { color: #5eead4 !important; }
 [data-theme="dark"] .text-blue-700, [data-theme="dark"] .text-blue-800, [data-theme="dark"] .text-blue-900 { color: #93c5fd !important; }
 [data-theme="dark"] .text-green-700, [data-theme="dark"] .text-green-800, [data-theme="dark"] .text-green-900 { color: #86efac !important; }
+[data-theme="dark"] .text-emerald-700,
+[data-theme="dark"] .text-emerald-800,
+[data-theme="dark"] .text-emerald-900 { color: #6ee7b7 !important; }
 [data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900 { color: #fcd34d !important; }
 [data-theme="dark"] .text-red-700, [data-theme="dark"] .text-red-800, [data-theme="dark"] .text-red-900 { color: #fca5a5 !important; }
 
@@ -306,6 +318,30 @@
 [data-theme="dark"] .border-slate-200,
 [data-theme="dark"] .border-slate-100 {
     border-color: #2f2f2f !important;
+}
+[data-theme="dark"] .border-emerald-100,
+[data-theme="dark"] .border-emerald-200 {
+    border-color: #2d6a5a !important;
+}
+
+/* Sales chip: dark-green-on-dark was illegible (emerald-800 on a charcoal fill). */
+.sales-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+}
+[data-theme="dark"] .sales-badge {
+    background: #0f766e !important;
+    color: #f0fdfa !important;
+    border-color: #2dd4bf !important;
 }
 
 /* --- MINIMAL THEME polish: keep text dark, cards white, subtle borders --- */

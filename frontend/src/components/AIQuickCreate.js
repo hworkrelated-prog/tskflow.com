@@ -2610,7 +2610,7 @@ const AIQuickCreate = ({
                                     <button
                                         type="button"
                                         onClick={() => setPlusOpen((v) => !v)}
-                                        className={`h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors ${plusOpen ? 'bg-slate-100 text-slate-700' : ''}`}
+                                        className={`ai-composer-icon-btn h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${plusOpen ? 'is-open' : ''}`}
                                         title="Add"
                                         aria-label="Add attachment or recording"
                                         aria-expanded={plusOpen}
@@ -2684,10 +2684,8 @@ const AIQuickCreate = ({
                                         type="button"
                                         onClick={toggleVoice}
                                         disabled={loading || sending || answerLoading}
-                                        className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
-                                            listening
-                                                ? 'bg-red-500 text-white animate-pulse'
-                                                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100/80'
+                                        className={`ai-composer-icon-btn h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
+                                            listening ? 'is-listening bg-red-500 text-white animate-pulse' : ''
                                         }`}
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
@@ -2702,11 +2700,9 @@ const AIQuickCreate = ({
                                         type="button"
                                         onClick={() => runPreview()}
                                         disabled={loading || sending || answerLoading || listening || !text.trim()}
-                                        className={`h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
-                                            loading || answerLoading || text.trim()
-                                                ? 'bg-slate-900 text-white hover:bg-slate-800'
-                                                : 'bg-slate-200 text-slate-400'
-                                        } disabled:opacity-50`}
+                                        className={`ai-composer-send h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
+                                            loading || answerLoading || text.trim() ? 'is-ready' : ''
+                                        }`}
                                         data-testid="ai-quick-preview-btn"
                                         aria-label="Send"
                                         title="Send"

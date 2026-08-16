@@ -846,7 +846,7 @@ const TaskDetail = () => {
                                 <div className="flex items-center gap-2 shrink-0">
                                     {task.is_sales_task && (
                                         <Badge
-                                            className="rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                            className="sales-badge rounded-md px-2.5 py-1 text-xs"
                                             data-testid="sales-badge"
                                         >
                                             Sales

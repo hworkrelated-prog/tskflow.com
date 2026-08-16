@@ -111,7 +111,7 @@ export const ParentTaskGroup = ({ group, onChanged, selectable = false, selected
                                 <h3 className="font-semibold text-base truncate">{group.title}</h3>
                                 {(group.is_sales_task || (group.children || []).some((c) => c.is_sales_task)) && (
                                     <span
-                                        className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded shrink-0"
+                                        className="sales-badge shrink-0"
                                         data-testid={`sales-badge-${group.id}`}
                                     >
                                         Sales
