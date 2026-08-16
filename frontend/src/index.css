@@ -463,6 +463,9 @@ h1, h2, h3, h4, h5, h6 {
     border-color: rgba(255, 255, 255, 0.12);
     color: hsl(var(--foreground));
 }
+[data-theme="dark"] .ai-plus-menu button {
+    color: hsl(var(--foreground));
+}
 [data-theme="dark"] .ai-composer-shell textarea,
 [data-theme="dark"] .ai-composer-shell input {
     color: hsl(var(--foreground));
