@@ -8482,16 +8482,25 @@ TITLE RULES:
 - Completely ignore leading @mentions like "@Mark Sibghat @Benjamin White …" — those are assignees, not title words.
 - Keep compound phrases intact (e.g. "action plans", not truncated "action").
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
+- Never start with Tell/Ask/Have/Need or leave "we need to" in the title.
 - Speech/dictation is often broken ("Please can you Mahmood an EOD report"). Infer the intent:
   person name → assignee_hints; work → title like "Send EOD report". Never leave speech debris in the title.
 
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Distill the manager's request into a Dale Carnegie-style ask: clear, simple, respectful, and easy to act on.
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…").
+  Write as the assigner speaking directly to them — never as a note about them.
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
 - Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
-- NEVER paste manager-centric or broken speech phrasing like "Ask my team to…", "Please can you Mahmood…", "I want them to…" as-is.
-  Rewrite into assignee-facing instructions, e.g. "Please send your manager an end-of-day report…".
+- NEVER paste the user's raw prompt (or a near-copy) into title or description.
+  Manager-voice wrappers to strip: "Tell my team that…", "Tell my team to…", "Ask my team to…",
+  "I want them to…", "we need to…", "have X do…". Those are routing, not the task.
+- Example: "Tell my team that on Monday we need to finish outreach training"
+    title: "Finish outreach training"
+    description: "On Monday, please finish the outreach training."
+  NEVER title/description: "Tell that on Monday we need to finish outreach training"
+- If the prompt is truncated ("…we need to" with no object), still rewrite into an assignee-facing ask
+  ("On Monday, please complete this.") — do not echo "Tell that… we need to".
 - If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
 - Also fill action_items with those assignee-facing steps.
 - Only leave description empty for a trivial one-liner where the title alone is enough.
@@ -8983,6 +8992,92 @@ def _repair_speech_prompt(text: str) -> tuple:
     return s, hints
 
 
+_WEEKDAYS = (
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+)
+_MANAGER_TELL_RE = re.compile(
+    r"(?i)^(please\s+|kindly\s+)?(ask|tell|have|get|remind|inform)\s+"
+    r"(?:(?:my|the|our)\s+)?(?:team|direct reports|reports|everyone(?:\s+under\s+me)?|staff|group|them)\s+"
+    r"(?:to\s+|that\s+)?"
+)
+_WANT_THEM_RE = re.compile(
+    r"(?i)^i\s+(?:want|need|would like)\s+(?:(?:my|the|our)\s+team|them|everyone)\s+to\s+"
+)
+_NEED_TO_RE = re.compile(r"(?i)\b(?:we|they|you)\s+need\s+to\s*")
+_ON_WEEKDAY_RE = re.compile(
+    r"(?i)\bon\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+)
+
+
+def _strip_manager_voice(text: str) -> str:
+    """Remove routing wrappers so only the work remains."""
+    s = (text or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"(?i)^(please|kindly)\s+", "", s)
+    s = _MANAGER_TELL_RE.sub("", s, count=1)
+    s = _WANT_THEM_RE.sub("", s, count=1)
+    s = re.sub(r"(?i)^let\s+(?:(?:my|the|our)\s+)?(?:team|them)\s+know\s+(?:that\s+)?", "", s)
+    s = re.sub(r"(?i)^tell\s+that\s+", "", s)
+    s = re.sub(r"(?i)^that\s+", "", s)
+    s = _NEED_TO_RE.sub(" ", s)
+    return re.sub(r"\s+", " ", s).strip(" .,:;-")
+
+
+def _split_when_and_work(text: str) -> tuple:
+    """Pull a weekday phrase out so copy can speak to the assignee about when."""
+    s = _strip_manager_voice(text)
+    when = ""
+    m = _ON_WEEKDAY_RE.search(s)
+    if m:
+        when = f"On {m.group(1).capitalize()}"
+        s = (s[: m.start()] + " " + s[m.end() :]).strip()
+    else:
+        m = re.search(r"(?i)\b(tomorrow|today|tonight)\b", s)
+        if m:
+            when = m.group(1).capitalize()
+            s = (s[: m.start()] + " " + s[m.end() :]).strip()
+    work = re.sub(r"\s+", " ", s).strip(" .,:;-")
+    work = re.sub(r"(?i)^(to\s+|that\s+)", "", work).strip(" .,:;-")
+    return when, work
+
+
+def _too_close_to_prompt(candidate: str, raw: str) -> bool:
+    """True when title/description still reads like the typed command."""
+    first = (candidate or "").split("Next steps:")[0].strip()
+    if not first:
+        return False
+    if re.search(r"(?i)\b(tell my team|ask my team|tell that|we need to)\b", first):
+        return True
+    compact = lambda s: re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+    a, b = compact(first), compact(raw)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # Verbatim paste of most of the prompt (ignore short titles that share a verb).
+    return len(a) > 24 and (a in b or b in a)
+
+
+def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = None) -> str:
+    """Assigner talking directly to the people who will do the work."""
+    mgr = (manager_name or "your manager").strip() or "your manager"
+    body = (work or "").strip()
+    if body:
+        ask = _rewrite_description_for_assignee(body, mgr)
+    else:
+        ask = "Please complete this."
+    ask = (ask or "").strip()
+    if ask and not re.match(r"(?i)^please\b", ask):
+        ask = "Please " + (ask[0].lower() + ask[1:] if len(ask) > 1 else ask.lower())
+    if when:
+        rest = ask[0].lower() + ask[1:] if len(ask) > 1 else ask.lower()
+        ask = f"{when}, {rest}"
+    if ask and ask[-1] not in ".!?":
+        ask += "."
+    return ask
+
+
 def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = None) -> str:
     """Turn manager-centric wording into clear instructions for the assignee."""
     if not desc:
@@ -8991,10 +9086,14 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     mgr = (manager_name or "your manager").strip() or "your manager"
 
     replacements = [
-        (r"(?i)^ask\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)^(?:please\s+)?ask\s+to\s+", "Please "),
+        (r"(?i)^tell\s+(?:my|the|our)\s+team\s+that\s+", ""),
+        (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)^please\s+tell\s+that\s+", "Please "),
+        (r"(?i)^tell\s+that\s+", ""),
         (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
         (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
-        (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)\b(?:we|they)\s+need\s+to\s+", ""),
         # Broken speech: "Please can you Mahmood an EOD report" (name tokens stay capitalized-only)
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", "Please "),
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+", "Please "),
@@ -9092,6 +9191,8 @@ def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> 
     for name in people_names or []:
         if not name:
             continue
+        if re.search(r"(?i)\b(team|reports|everyone)\b", name):
+            continue
         s = re.sub(rf"\b{re.escape(name)}\b", " ", s, flags=re.I)
     # Drop leading leftover first/last name tokens from known people
     name_tokens = set()
@@ -9112,20 +9213,23 @@ def _title_from_work_text(work: str) -> str:
     if not work:
         return ""
     s = work
-    s = re.sub(r"(?i)^(need to|needs to|have to|must|please|kindly|can you)\s+", "", s).strip()
+    s = re.sub(r"(?i)^(need to|needs to|have to|must|please|kindly|can you|tell|ask)\s+(that\s+)?", "", s).strip()
     s = re.sub(r"(?i)^(an?|the)\s+", "", s).strip()
     if re.search(r"(?i)\b(eod|end of day)\b", s) and re.search(r"(?i)\breport\b", s):
         return "Send EOD report"
     if re.search(r"(?i)\beod\b", s) and not re.search(r"(?i)\breport\b", s):
         return "Send EOD update"
+    if re.match(r"(?i)^on\s+\w+$", s) or s.lower() in _WEEKDAYS:
+        day = re.sub(r"(?i)^on\s+", "", s).strip()
+        return f"Complete this by {day.capitalize()}" if day else "Complete this"
     # Prefer starting at a strong verb when present
     m = re.search(
-        r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|provide|share|write)\b.*$",
+        r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|provide|share|write|finish|start|begin|handle)\b.*$",
         s,
     )
     if m:
         s = m.group(0)
-    elif s:
+    elif s and not re.match(r"(?i)^(complete|send|finish|do|go)\b", s):
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
     words = [w for w in s.split() if w][:7]
@@ -9152,6 +9256,10 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
         or len(title.split()) < 2
         or re.match(r"(?i)^(an?|the)\b", title)
         or re.search(r"(?i)\b(can you|please can|get do)\b", title)
+        or re.match(r"(?i)^(tell|ask|have|get|need|want|remind|let)\b", title)
+        or re.search(r"(?i)\bwe need to\b", title)
+        or re.search(r"(?i)^please tell\b", title)
+        or _too_close_to_prompt(title, raw_text)
         or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
     )
 
@@ -9178,48 +9286,46 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     actions = [_strip_people_noise(str(a), people) for a in actions if str(a).strip()]
     actions = [a for a in actions if a]
 
-    work = _strip_people_noise(source_text, people)
-    # Drop manager-voice prefixes before building title/description
-    work = re.sub(
-        r"(?i)^(ask|tell|have|i want)\s+(?:my|the|our)\s+team\s+to\s+",
-        "",
-        work,
-    ).strip()
-    work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", work).strip(" .,:;-")
+    work = _strip_manager_voice(_strip_people_noise(source_text, people))
+    when, distilled_work = _split_when_and_work(work)
+    distilled_work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", distilled_work).strip(" .,:;-")
+    title_seed = _strip_manager_voice(title)
+    title_seed_when, title_seed_work = _split_when_and_work(title_seed)
+    when = when or title_seed_when
+    work_for_title = distilled_work or title_seed_work or (actions[0] if actions else "")
 
-    if _title_looks_bad(title, people, source_text):
-        seed = actions[0] if actions else work
-        title = _title_from_work_text(seed) or _title_from_work_text(work)
+    if _title_looks_bad(title, people, source_text) or _too_close_to_prompt(title, source_text):
+        title = _title_from_work_text(work_for_title) or _title_from_work_text(
+            f"{when} {work_for_title}".strip()
+        )
         if title:
             parsed["title"] = title
+        elif when:
+            parsed["title"] = _title_from_work_text(when) or "Complete this"
+        else:
+            parsed["title"] = "Complete this"
     else:
         parsed["title"] = title
 
-    if not desc and actions:
-        desc = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+    desc_seed = desc
+    if (not desc_seed) and actions:
+        desc_seed = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+    if desc_seed and (
+        _too_close_to_prompt(desc_seed, source_text)
+        or re.search(r"(?i)\b(tell my team|ask my team|we need to|tell that)\b", desc_seed)
+    ):
+        desc_seed = ""
 
-    if not desc and len((source_text or "").strip()) > 12:
-        cleaned = work or _strip_people_noise(repaired or "", people)
-        if len(cleaned) > 8:
-            desc = cleaned
-
-    # Always present the task the way the assignee should read it
+    ask = _assignee_facing_ask(when, distilled_work or desc_seed, manager_name)
     title_for_steps = str(parsed.get("title") or title or "")
-    if desc:
-        parsed["description"] = _carnegie_format_description(
-            _rewrite_description_for_assignee(desc, manager_name),
-            title=title_for_steps,
-            manager_name=manager_name,
-        )
-    elif repaired:
-        parsed["description"] = _carnegie_format_description(
-            _rewrite_description_for_assignee(repaired, manager_name),
-            title=title_for_steps,
-            manager_name=manager_name,
-        )
+    parsed["description"] = _carnegie_format_description(
+        ask,
+        title=title_for_steps,
+        manager_name=manager_name,
+    )
     if actions:
         parsed["action_items"] = [
-            _rewrite_description_for_assignee(a, manager_name) for a in actions
+            _rewrite_description_for_assignee(_strip_manager_voice(a), manager_name) for a in actions
         ]
 
 
@@ -9307,7 +9413,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
 
     now = get_pst_now()
     fallback = {
-        "title": text[:60],
+        "title": "",
         "description": "",
         "priority": "Medium",
         "category": "General",

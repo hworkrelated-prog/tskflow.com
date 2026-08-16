@@ -2124,7 +2124,7 @@ const AIQuickCreate = ({
 
                             {readyToConfirm && (
                                 <div className="flex justify-start">
-                                    <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-slate-50 border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
+                                    <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
                                         {attachments.length > 0 && (
                                             <div className="flex flex-wrap gap-2" data-testid="ai-confirm-attachments">
                                                 {attachments.map((att, i) => {
@@ -2242,6 +2242,14 @@ const AIQuickCreate = ({
                                                 </button>
                                             )}
                                         </p>
+                                        {editDesc ? (
+                                            <div
+                                                className="text-[14px] leading-6 text-slate-700 whitespace-pre-wrap"
+                                                data-testid="ai-confirm-assignee-ask"
+                                            >
+                                                {editDesc}
+                                            </div>
+                                        ) : null}
 
                                         {editingField === 'assignees' && (
                                             <div className="rounded-xl border border-slate-200 bg-white p-2 space-y-2" data-testid="ai-inline-assignees">

@@ -14,6 +14,7 @@ def _read(*parts: str) -> str:
 def test_confirm_is_a_message_not_a_form():
     src = _read(FE, "components", "AIQuickCreate.js")
     assert 'data-testid="ai-confirm-message"' in src
+    assert 'data-testid="ai-confirm-assignee-ask"' in src
     assert "I'll ask" in src or "I&apos;ll ask" in src
     assert "Confirm & send" not in src
     assert 'data-testid="ai-send-btn"' in src
