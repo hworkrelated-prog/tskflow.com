@@ -1,4 +1,5 @@
 """AI prompt bar: voice send + no overlapping Jarvis FAB."""
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,8 @@ def test_composer_has_voice_mic_that_auto_sends():
     assert "getSpeechRecognition" in src
     assert "webkitSpeechRecognition" in src
     assert "runPreviewRef.current" in src
-    assert "voiceFinalRef" in src
+    assert "shouldAutoSendVoice" in src
+    assert "composeVoiceSubmit" in src
     assert "Speak — sends when you finish" in src
     assert "is-listening" in src
     # Toolbar is a real row, not an overlay sitting on the field.
@@ -34,3 +36,33 @@ def test_analytics_metrics_stack_on_mobile():
     assert "md:hidden" in src
     assert "hidden md:block" in src
     assert "formatAvgResponse" in src
+
+
+def test_voice_submit_helper_auto_sends_spoken_text():
+    script = r"""
+import { composeVoiceSubmit, shouldAutoSendVoice } from './frontend/src/lib/promptVoice.js';
+const cases = [
+  [composeVoiceSubmit('', 'assign this to Harold'), 'assign this to Harold'],
+  [composeVoiceSubmit('follow up', 'with Harold tomorrow'), 'follow up with Harold tomorrow'],
+  [composeVoiceSubmit('  ', '  '), ''],
+  [shouldAutoSendVoice('go to analytics'), true],
+  [shouldAutoSendVoice('a'), false],
+  [shouldAutoSendVoice(''), false],
+];
+for (const [got, want] of cases) {
+  if (got !== want) {
+    console.error('mismatch', JSON.stringify(got), JSON.stringify(want));
+    process.exit(1);
+  }
+}
+console.log('ok');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "ok" in result.stdout

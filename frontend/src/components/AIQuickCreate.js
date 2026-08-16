@@ -15,6 +15,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -708,8 +709,8 @@ const AIQuickCreate = ({
                 else interim += piece;
             }
             voiceFinalRef.current = finalText.trim();
-            const spoken = [voiceFinalRef.current, interim].filter(Boolean).join(' ').trim();
-            const shown = [voiceSeedRef.current, spoken].filter(Boolean).join(' ');
+            const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
+            const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
             if (shown) setText(shown);
         };
         rec.onerror = (event) => {
@@ -724,9 +725,8 @@ const AIQuickCreate = ({
             recRef.current = null;
             setListening(false);
             const spoken = voiceFinalRef.current.trim();
-            const full = [voiceSeedRef.current, spoken].filter(Boolean).join(' ').trim();
-            if (full.length >= 2) {
-                runPreviewRef.current?.(full);
+            if (shouldAutoSendVoice(spoken)) {
+                runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
             }
         };
         recRef.current = rec;
