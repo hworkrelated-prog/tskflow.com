@@ -26,6 +26,7 @@ const SettingsPage = () => {
     const [slackWebhook, setSlackWebhook] = React.useState('');
     const [canManageSlack, setCanManageSlack] = React.useState(false);
     const [slackTeamConnected, setSlackTeamConnected] = React.useState(false);
+    const [slackBotEnabled, setSlackBotEnabled] = React.useState(false);
     const [savingSlack, setSavingSlack] = React.useState(false);
     const [testingSlack, setTestingSlack] = React.useState(false);
     const [displayName, setDisplayName] = React.useState('');
@@ -98,6 +99,10 @@ const SettingsPage = () => {
             setSlackWebhook(response.data.slack_webhook_url || '');
             setCanManageSlack(Boolean(response.data.can_manage_slack));
             setSlackTeamConnected(Boolean(response.data.slack_team_connected));
+            try {
+                const slack = await axios.get(`${API}/integrations/slack/status`);
+                setSlackBotEnabled(Boolean(slack.data?.bot || slack.data?.followup_enabled));
+            } catch (_) { /* optional */ }
             setEodEnabled(Boolean(response.data.eod_enabled));
             setEodHour(response.data.eod_hour ?? 17);
             setEodChannel(response.data.eod_channel || 'email');
@@ -298,7 +303,7 @@ const SettingsPage = () => {
             'Company domain workspace',
             'Org hierarchy & leaderboards',
             'Team analytics dashboard',
-            'Admin Slack webhook',
+            'Slack follow-up for ignored tasks',
             'Admin controls',
             'Shared task visibility',
         ]
@@ -985,6 +990,10 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div className="flex-1">
                                 <h3 className="font-semibold text-base">Slack</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    Channel posts use a webhook. After two ignored pings, Jarvis DMs the assignee
+                                    {slackBotEnabled ? ' — follow-up DMs are on.' : ' when SLACK_BOT_TOKEN is set on the server.'}
+                                </p>
                             </div>
                             {slackWebhook && (
                                 <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
@@ -1091,7 +1100,9 @@ const SettingsPage = () => {
                                 <h3 className="font-semibold text-base">Slack</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {slackTeamConnected
-                                        ? 'Connected by your admin'
+                                        ? (slackBotEnabled
+                                            ? 'Connected. Jarvis DMs people who ignore two pings, then updates their task from the reply.'
+                                            : 'Connected by your admin for channel posts.')
                                         : 'Ask your admin to connect Slack'}
                                 </p>
                             </div>

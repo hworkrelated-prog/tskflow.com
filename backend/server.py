@@ -1,10 +1,11 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks, Request as HTTPRequest
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import json
 import logging
 import asyncio
 import re
@@ -30,6 +31,16 @@ load_dotenv(ROOT_DIR / '.env')
 from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
 from response_review import generate_group_response_review
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
+from slack_followup import (
+    group_accountability,
+    open_ignored_task_thread,
+    process_assignee_slack_event,
+    record_ping,
+    should_open_slack_followup,
+    slack_bot_token,
+    slack_signing_secret,
+    verify_slack_signature,
+)
 from transcript_helpers import (
     apply_owner_and_due_guesses,
     build_transcript_extract_prompt,
@@ -1339,6 +1350,12 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
             )
         except Exception as e:
             logging.warning(f"Failed to log group reminder activity: {e}")
+        try:
+            if (c.get("status") or "Pending") == "Pending":
+                pinged = await record_ping(db, c, get_pst_now(), "group_remind")
+                await _maybe_open_slack_followup(pinged)
+        except Exception as e:
+            logging.warning(f"Slack follow-up after group remind failed: {e}")
 
     return {"message": f"Reminder sent to {reminded} outstanding assignee(s)", "reminded": reminded}
 
@@ -2673,7 +2690,8 @@ async def get_task_analytics(task_id: str, current_user: dict = Depends(get_curr
         "review_pending": review_pending,
         "declined": declined,
         "completion_rate": round(completed / total * 100) if total else 0,
-        "avg_completion_hours": avg_completion_hours
+        "avg_completion_hours": avg_completion_hours,
+        "accountability": group_accountability(children),
     }
 
 @api_router.get("/tasks/{task_id}/leaderboard")
@@ -6929,6 +6947,131 @@ async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict
         return False
 
 
+async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
+    """After two ignored pings, Jarvis DMs the assignee on Slack and talks like a person."""
+    if not should_open_slack_followup(task):
+        return None
+    aid = task.get("assigned_to")
+    if not aid or str(aid).startswith("email_"):
+        return None
+    assignee = await db.users.find_one({"id": aid}, {"_id": 0})
+    if not assignee:
+        return None
+    assigner = None
+    if task.get("created_by"):
+        assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+
+    async def post_webhook(text: str):
+        webhook = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
+        if webhook:
+            await _post_to_slack(webhook, text)
+
+    thread = await open_ignored_task_thread(
+        db, task, assignee, assigner, get_pst_now(), post_webhook=post_webhook
+    )
+    if not thread:
+        return None
+    title = task.get("title") or "a task"
+    name = assignee.get("name") or "them"
+    if assigner and assigner.get("id"):
+        await create_notification(
+            assigner["id"],
+            "status_change",
+            "Jarvis started a Slack thread",
+            f"No response after 2 pings — Jarvis is talking to {name} about “{title}”.",
+            task_id=task.get("id"),
+            actor_name="Jarvis",
+        )
+    await create_notification(
+        assignee["id"],
+        "nudge",
+        "Jarvis messaged you on Slack",
+        f"About “{title}” — reply in Slack and I’ll update the task from whatever you say.",
+        task_id=task.get("id"),
+        actor_name="Jarvis",
+    )
+    try:
+        await log_task_activity(
+            db,
+            task_id=task["id"],
+            event_type="nudge",
+            channel="slack",
+            actor_name="Jarvis",
+            recipient_id=assignee.get("id"),
+            recipient_name=assignee.get("name"),
+            recipient_email=assignee.get("email"),
+            company_domain=assignee.get("company_domain") or task.get("company_domain"),
+            title="Slack follow-up opened",
+            body=f"Jarvis started a Slack thread with {name} after 2 ignored pings.",
+            meta={"slack_thread_id": thread.get("id"), "via": thread.get("via")},
+            created_at=get_pst_now().isoformat(),
+        )
+    except Exception as e:
+        logging.warning(f"Failed to log Slack follow-up activity: {e}")
+    return thread
+
+
+async def _notify_slack_reply_result(result: dict) -> None:
+    """Tell the assigner when Jarvis updates a task from a Slack reply."""
+    if not result:
+        return
+    assignee = result.get("assignee") or {}
+    assigner = result.get("assigner") or {}
+    task = result.get("task") or {}
+    applied = result.get("applied") or {}
+    name = assignee.get("name") or "Someone"
+    title = task.get("title") or "the task"
+    status = applied.get("status")
+    user_text = ((result.get("parsed") or {}).get("user_text") or "")[:240]
+    if not assigner.get("id"):
+        return
+    if status == "Accepted":
+        headline, body = f"{name} accepted via Slack", f"Jarvis marked “{title}” accepted from their reply."
+    elif status == "Completed":
+        headline, body = f"{name} finished via Slack", f"Jarvis marked “{title}” complete from their reply."
+    elif status == "Declined":
+        headline, body = f"{name} declined via Slack", f"Jarvis declined “{title}” based on what they said."
+    elif status == "Blocked":
+        headline, body = f"{name} is blocked", f"Jarvis flagged “{title}” as blocked from their Slack reply."
+    else:
+        headline, body = f"{name} replied on Slack", user_text or f"Jarvis left their note on “{title}”."
+    await create_notification(
+        assigner["id"],
+        "status_change",
+        headline,
+        body,
+        task_id=task.get("id"),
+        actor_name="Jarvis",
+    )
+
+
+async def _sweep_ignored_slack_followups() -> None:
+    """Catch Pending tasks that already crossed 2 pings but never got a Slack thread."""
+    try:
+        tasks = await db.tasks.find(
+            {
+                "deleted": {"$ne": True},
+                "is_parent": {"$ne": True},
+                "status": "Pending",
+                "nudge_count": {"$gte": 2},
+            },
+            {"_id": 0},
+        ).to_list(80)
+        opened = 0
+        for t in tasks:
+            if not should_open_slack_followup(t):
+                continue
+            try:
+                if await _maybe_open_slack_followup(t):
+                    opened += 1
+            except Exception as e:
+                logging.warning(f"[slack_sweep] {t.get('id')}: {e}")
+        if opened:
+            logging.info(f"[slack_sweep] opened {opened} Slack follow-up(s)")
+    except Exception as e:
+        logging.error(f"[slack_sweep] {e}")
+
+
 async def create_notification(
     user_id: str,
     n_type: str,
@@ -7925,10 +8068,108 @@ async def test_slack_webhook(body: dict, current_user: dict = Depends(get_curren
     return {"ok": True}
 
 
+@api_router.get("/integrations/slack/status")
+async def slack_integration_status(current_user: dict = Depends(get_current_user)):
+    """Webhook (channel posts) vs bot (Jarvis DMs ignored assignees)."""
+    prefs = current_user.get("preferences") or {}
+    webhook = (prefs.get("slack_webhook_url") or "").strip()
+    bot = bool(slack_bot_token())
+    return {
+        "webhook": webhook.startswith("https://hooks.slack.com/"),
+        "bot": bot,
+        "followup_enabled": bot,
+    }
+
+
+@api_router.post("/slack/events")
+async def slack_events(request: HTTPRequest, background_tasks: BackgroundTasks):
+    """Slack Events API: URL challenge + assignee DM/thread replies that update tasks."""
+    body = await request.body()
+    timestamp = request.headers.get("X-Slack-Request-Timestamp") or request.headers.get("x-slack-request-timestamp") or ""
+    signature = request.headers.get("X-Slack-Signature") or request.headers.get("x-slack-signature") or ""
+    secret = slack_signing_secret()
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid payload")
+
+    if payload.get("type") == "url_verification":
+        if secret and not verify_slack_signature(secret, timestamp, body, signature):
+            raise HTTPException(status_code=401, detail="invalid signature")
+        return JSONResponse({"challenge": payload.get("challenge")})
+
+    if secret:
+        if not verify_slack_signature(secret, timestamp, body, signature):
+            raise HTTPException(status_code=401, detail="invalid signature")
+    elif payload.get("type") == "event_callback":
+        logging.warning("Slack event ignored — SLACK_SIGNING_SECRET is not set")
+        return {"ok": True, "ignored": "no_signing_secret"}
+
+    background_tasks.add_task(_consume_slack_event, payload)
+    return {"ok": True}
+
+
+async def _consume_slack_event(payload: dict) -> None:
+    try:
+        if (payload or {}).get("type") != "event_callback":
+            return
+        event = payload.get("event") or {}
+        result = await process_assignee_slack_event(db, event, get_pst_now())
+        if not result:
+            return
+        await _notify_slack_reply_result(result)
+        task = result.get("task") or {}
+        assignee = result.get("assignee") or {}
+        try:
+            await log_task_activity(
+                db,
+                task_id=task.get("id"),
+                event_type="status_change" if (result.get("applied") or {}).get("status") else "nudge",
+                channel="slack",
+                actor_id=assignee.get("id"),
+                actor_name=assignee.get("name"),
+                recipient_id=(result.get("assigner") or {}).get("id"),
+                recipient_name=(result.get("assigner") or {}).get("name"),
+                company_domain=assignee.get("company_domain") or task.get("company_domain"),
+                title="Slack reply",
+                body=((result.get("parsed") or {}).get("user_text") or "")[:500],
+                meta={"via": "slack_followup", "new_status": (result.get("applied") or {}).get("status")},
+                created_at=get_pst_now().isoformat(),
+            )
+        except Exception as log_err:
+            logging.warning(f"slack reply activity log failed: {log_err}")
+    except Exception as e:
+        logging.warning(f"slack event failed: {e}")
+
+
+@api_router.get("/tasks/{task_id}/slack-followup")
+async def get_slack_followup(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Conversation Jarvis had with the assignee after ignored pings."""
+    task = await db.tasks.find_one({"id": task_id, "deleted": {"$ne": True}}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    thread = await db.slack_threads.find_one({"task_id": task_id}, {"_id": 0})
+    if not thread:
+        raise HTTPException(status_code=404, detail="No Slack follow-up yet")
+    uid = current_user["id"]
+    allowed = uid in {
+        task.get("created_by"),
+        task.get("assigned_to"),
+        thread.get("assignee_id"),
+        thread.get("assigner_id"),
+    }
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return thread
+
+
 @api_router.get("/product-updates")
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
     """Static feed of product changes (newest first)."""
     updates = [
+        {"id": "u24", "area": "Slack follow-up", "change": "If someone ignores two pings, Jarvis DMs them on Slack, talks like a teammate, and updates the task from whatever they reply.", "was": "Slack only posted into a channel webhook — ignored assignees stayed silent."},
         {"id": "u19", "area": "AI Command Bar", "change": "A persistent bottom prompt bar — type what you need, paste a screenshot, attach a recording, @assign, and send. Recurring, sales, and reminders are inferred automatically.", "was": "Task creation lived only inside a modal and felt like a long Q&A."},
         {"id": "u20", "area": "Screen Recording", "change": "Loom-style controls stay on the bottom-left and stay draggable. Capture uses the raw screen track so video no longer freezes when you switch tabs.", "was": "Recording could freeze after leaving the tab even though audio kept going."},
         {"id": "u23", "area": "Conversational create", "change": "Name someone and TskFlow assigns them — confirm is a chat message with clickable chips, not a form. Exited prompts save as drafts in the header.", "was": "The AI kept asking who even after you named Harold, then showed a labeled form."},
@@ -10145,6 +10386,12 @@ async def _check_smart_reminders():
             if bucket and bucket != "overdue":
                 update_doc["reminder_buckets_fired"] = list(set(fired_buckets + [bucket]))
             await db.tasks.update_one({"id": t["id"]}, {"$set": update_doc})
+            if (t.get("status") or "Pending") == "Pending":
+                pinged = await record_ping(db, {**t, **update_doc}, now, fired_kind or "reminder")
+                try:
+                    await _maybe_open_slack_followup(pinged)
+                except Exception as slack_follow_err:
+                    logging.warning(f"[smart_reminders] slack follow-up failed: {slack_follow_err}")
         if orphans_marked:
             logging.info(f"[smart_reminders] auto-cleaned {orphans_marked} orphan task(s)")
     except Exception as e:
@@ -10487,6 +10734,7 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
         background_tasks.add_task(send_email_notification, u["email"], subject, email_html)
         # Log on the assignee's task (child if group, else the task itself)
         log_task_id = task_id
+        child = None
         if children:
             child = next((c for c in children if c.get("assigned_to") == uid), None)
             if child:
@@ -10512,6 +10760,13 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
             except Exception as e:
                 logging.warning(f"Failed to log nudge activity: {e}")
         sent += 1
+        try:
+            ping_src = child if child else task
+            if (ping_src.get("status") or "Pending") == "Pending":
+                pinged = await record_ping(db, ping_src, now, f"manual_{preset_key}")
+                await _maybe_open_slack_followup(pinged)
+        except Exception as e:
+            logging.warning(f"Slack follow-up after nudge failed: {e}")
 
     return {"ok": True, "sent": sent, "preset": preset_key}
 
@@ -10534,6 +10789,7 @@ async def _scheduler_loop():
         try:
             await _background_generate_all_recurring()
             await _check_smart_reminders()
+            await _sweep_ignored_slack_followups()
             await _sync_all_sheet_configs()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
@@ -10555,6 +10811,11 @@ async def _ensure_indexes():
         await db.daily_metrics.create_index([("date", 1), ("person_name", 1)])
         await db.daily_metrics.create_index([("company_domain", 1), ("date", 1)])
         await db.sheet_sync_configs.create_index("owner_user_id")
+        await db.slack_threads.create_index("task_id")
+        await db.slack_threads.create_index("slack_user_id")
+        await db.slack_threads.create_index("slack_thread_ts")
+        await db.slack_threads.create_index("assignee_id")
+        await db.slack_threads.create_index("slack_channel_id")
     except Exception:
         pass
 

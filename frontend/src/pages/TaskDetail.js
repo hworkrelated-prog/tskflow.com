@@ -28,6 +28,8 @@ const TaskDetail = () => {
     // Parent-task specific state
     const [subtasks, setSubtasks] = useState([]);
     const [leaderboard, setLeaderboard] = useState([]);
+    const [groupRollup, setGroupRollup] = useState(null);
+    const [slackFollowup, setSlackFollowup] = useState(null);
     const [showAllParticipants, setShowAllParticipants] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -204,6 +206,13 @@ const TaskDetail = () => {
                 category: response.data.category || '',
                 success_criteria: response.data.success_criteria || '',
             });
+            if (response.data.slack_thread_id && !token) {
+                axios.get(`${API}/tasks/${response.data.id}/slack-followup`).then((r) => {
+                    setSlackFollowup(r.data);
+                }).catch(() => setSlackFollowup(null));
+            } else {
+                setSlackFollowup(null);
+            }
             // If this is a parent task, load participants + leaderboard for the collapsible section
             if (response.data.is_parent || response.data.status === 'Parent') {
                 const pid = response.data.id;
@@ -213,6 +222,9 @@ const TaskDetail = () => {
                 axios.get(`${API}/tasks/${pid}/leaderboard`).then((r) => {
                     setLeaderboard(r.data?.leaderboard || []);
                 }).catch(() => setLeaderboard([]));
+                axios.get(`${API}/tasks/${pid}/analytics`).then((r) => {
+                    setGroupRollup(r.data?.accountability || r.data || null);
+                }).catch(() => setGroupRollup(null));
             } else if (response.data.parent_id) {
                 // Subtask — load the parent's leaderboard so the receiver can see how their peers are doing
                 const pid = response.data.parent_id;
@@ -814,6 +826,22 @@ const TaskDetail = () => {
                                             <> {' | '}Assigned to <span className="font-medium">{subtasks.length} people</span></>
                                         )}
                                     </CardDescription>
+                                    {isParentTask && groupRollup && (
+                                        <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2" data-testid="group-accountability">
+                                            {[
+                                                ['Received', groupRollup.received ?? groupRollup.delivered ?? subtasks.length],
+                                                ['Accepted', groupRollup.accepted],
+                                                ['Silent', groupRollup.silent],
+                                                ['Pinged twice', groupRollup.pinged_twice],
+                                                ['Slack threads', groupRollup.slack_threads],
+                                            ].map(([label, n]) => (
+                                                <div key={label} className="rounded-xl bg-muted/60 ring-1 ring-border px-3 py-2">
+                                                    <p className="text-lg font-semibold leading-none">{n ?? 0}</p>
+                                                    <p className="text-[11px] text-muted-foreground mt-1">{label}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     {task.is_sales_task && (
@@ -1472,6 +1500,10 @@ const TaskDetail = () => {
                         </CardContent>
                     </Card>
 
+                    {slackFollowup && (
+                        <SlackFollowupCard thread={slackFollowup} />
+                    )}
+
                     {/* Assignees panel — lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
                     {isParentTask && user?.id === task.created_by && (
                         <GroupResponseReview
@@ -1743,6 +1775,8 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 completion_note: t.completion_note,
                 completion_note_images: t.completion_note_images,
                 completed_at: t.completed_at,
+                pingedTwice: Number(t.nudge_count || 0) >= 2 && (t.status || 'Pending') === 'Pending',
+                slackThread: Boolean(t.slack_thread_id),
             };
         });
         // If leaderboard was empty, fall back to subtasks
@@ -1762,6 +1796,8 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                     completion_note: t.completion_note,
                     completion_note_images: t.completion_note_images,
                     completed_at: t.completed_at,
+                    pingedTwice: Number(t.nudge_count || 0) >= 2 && (t.status || 'Pending') === 'Pending',
+                    slackThread: Boolean(t.slack_thread_id),
                 });
             });
         }
@@ -1846,6 +1882,12 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.accepted ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-400'}`}>Accepted</span>
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.submitted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>Submitted</span>
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>Completed</span>
+                                            {r.pingedTwice && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" data-testid="badge-pinged-twice">Pinged twice</span>
+                                            )}
+                                            {r.slackThread && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#4A154B]/10 text-[#4A154B]" data-testid="badge-slack-thread">Slack</span>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? '—' : r.status)}</div>
@@ -1899,5 +1941,36 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 </button>
             )}
         </div>
+    );
+};
+
+const SlackFollowupCard = ({ thread }) => {
+    const messages = Array.isArray(thread?.messages) ? thread.messages : [];
+    return (
+        <Card className="border-2 rounded-2xl mt-4 overflow-hidden" data-testid="slack-followup-card">
+            <div className="px-4 py-3 bg-[#4A154B] text-white flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                <h3 className="font-semibold text-sm">Slack thread</h3>
+                <span className="ml-auto text-[11px] text-white/70">
+                    {thread?.status === 'resolved' ? 'Resolved' : 'Open'}{thread?.via === 'slack_dm' ? ' · DM' : ''}
+                </span>
+            </div>
+            <CardContent className="pt-4 space-y-3">
+                {messages.length === 0 && (
+                    <p className="text-sm text-muted-foreground">Jarvis will talk to them here after two ignored pings.</p>
+                )}
+                {messages.map((m, i) => (
+                    <div key={`${m.ts || i}-${i}`} className={m.role === 'user' ? 'pl-4' : ''}>
+                        <p className="text-[11px] text-muted-foreground mb-0.5">
+                            {m.role === 'assistant' ? 'Jarvis' : 'Assignee'}
+                        </p>
+                        <p className="text-sm whitespace-pre-wrap">{m.text}</p>
+                    </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                    Replies on Slack update this task — accepted, blocked, declined, or done.
+                </p>
+            </CardContent>
+        </Card>
     );
 };
