@@ -231,13 +231,108 @@ h1, h2, h3, h4, h5, h6 {
     70% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
     100% { box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15); }
 }
-.ai-dock-pulse > div:first-child {
+.ai-dock-pulse .ai-dock-panel {
     animation: ai-dock-pulse-kf 0.85s ease-out;
 }
 
 /* Bottom bar stays planted; open/close eases instead of snapping. */
 .ai-command-dock {
     width: 100%;
+    --glow-x: 50%;
+    --glow-y: 70%;
+    --glow-strength: 0.42;
+    isolation: isolate;
+    overflow: visible;
+}
+.ai-bar-glow {
+    position: absolute;
+    inset: -28px -22px -20px;
+    border-radius: 2.25rem;
+    pointer-events: none;
+    z-index: -1;
+    overflow: visible;
+    background:
+        radial-gradient(
+            200px 90px at var(--glow-x) var(--glow-y),
+            rgba(13, 148, 136, calc(var(--glow-strength) * 0.5)),
+            transparent 64%
+        );
+    box-shadow:
+        0 0 0 1px rgba(13, 148, 136, calc(var(--glow-strength) * 0.28)),
+        0 0 22px 3px rgba(13, 148, 136, calc(var(--glow-strength) * 0.16)),
+        0 14px 36px -8px rgba(13, 148, 136, calc(var(--glow-strength) * 0.32));
+    opacity: 0.86;
+    transition:
+        opacity 280ms ease,
+        box-shadow 280ms ease,
+        background 280ms ease;
+    animation: ai-bar-breathe 5.2s ease-in-out infinite;
+}
+.ai-bar-glow-spot {
+    position: absolute;
+    width: 240px;
+    height: 150px;
+    left: var(--glow-x);
+    top: var(--glow-y);
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: -1;
+    background: radial-gradient(
+        circle,
+        rgba(13, 148, 136, calc(var(--glow-strength) * 0.55)) 0%,
+        transparent 72%
+    );
+    filter: blur(14px);
+}
+.ai-command-dock.is-hover,
+.ai-command-dock.is-focused {
+    --glow-strength: 0.62;
+}
+.ai-command-dock.is-hover .ai-bar-glow,
+.ai-command-dock.is-focused .ai-bar-glow {
+    opacity: 1;
+    animation: none;
+}
+.ai-command-dock.is-typing {
+    --glow-strength: 0.82;
+}
+.ai-command-dock.is-typing .ai-bar-glow {
+    opacity: 1;
+    animation: none;
+    box-shadow:
+        0 0 0 1px rgba(13, 148, 136, 0.34),
+        0 0 28px 6px rgba(13, 148, 136, 0.22),
+        0 16px 40px -6px rgba(13, 148, 136, 0.4);
+}
+@keyframes ai-bar-breathe {
+    0%, 100% { opacity: 0.68; }
+    50% { opacity: 0.96; }
+}
+[data-theme="dark"] .ai-bar-glow {
+    background:
+        radial-gradient(
+            200px 90px at var(--glow-x) var(--glow-y),
+            rgba(45, 212, 191, calc(var(--glow-strength) * 0.4)),
+            transparent 64%
+        );
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, calc(var(--glow-strength) * 0.26)),
+        0 0 22px 3px rgba(45, 212, 191, calc(var(--glow-strength) * 0.14)),
+        0 14px 36px -8px rgba(45, 212, 191, calc(var(--glow-strength) * 0.28));
+}
+[data-theme="dark"] .ai-bar-glow-spot {
+    background: radial-gradient(
+        circle,
+        rgba(45, 212, 191, calc(var(--glow-strength) * 0.5)) 0%,
+        transparent 72%
+    );
+}
+[data-theme="dark"] .ai-command-dock.is-typing .ai-bar-glow {
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, 0.34),
+        0 0 28px 6px rgba(45, 212, 191, 0.2),
+        0 16px 40px -6px rgba(45, 212, 191, 0.36);
 }
 .ai-dock-panel {
     padding: 0;
@@ -306,8 +401,10 @@ h1, h2, h3, h4, h5, h6 {
 @media (prefers-reduced-motion: reduce) {
     .ai-dock-panel,
     .ai-dock-exit,
-    .ai-command-chips-wrap {
+    .ai-command-chips-wrap,
+    .ai-bar-glow {
         transition: none;
+        animation: none;
     }
 }
 
@@ -411,4 +508,42 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
         height: 3rem;
         width: 3rem;
     }
+}
+
+.ai-prompt-placeholder {
+    pointer-events: none;
+    position: absolute;
+    left: 0.875rem;
+    right: 7rem;
+    top: 0.625rem;
+    color: rgb(148 163 184);
+    font-size: 1rem;
+    line-height: 1.625;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+@media (min-width: 640px) {
+    .ai-prompt-placeholder {
+        right: 9rem;
+        font-size: 0.875rem;
+    }
+}
+.ai-prompt-placeholder-fade {
+    display: block;
+    animation: ai-placeholder-in 420ms ease;
+}
+@keyframes ai-placeholder-in {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ai-prompt-placeholder-fade {
+        animation: none;
+    }
+}
+[data-theme="dark"] .ai-prompt-placeholder {
+    color: rgb(148 163 184);
 }
