@@ -49,6 +49,13 @@ def test_help_center_points_at_the_prompt_bar():
     assert "Jarvis is in the prompt" in help_src or "Jarvis lives in the prompt" in help_src
 
 
+def test_degraded_voice_reply_stays_in_the_bar():
+    server = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
+    assert "full brain" not in server
+    assert "New Task on the left" not in server
+    assert "Slack them with you in the loop" in server
+
+
 def test_thread_stays_open_after_send():
     src = _read("components", "AIQuickCreate.js")
     assert "keepThread" in src
