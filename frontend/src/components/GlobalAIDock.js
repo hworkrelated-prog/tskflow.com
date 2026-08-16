@@ -128,6 +128,8 @@ const GlobalAIDock = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [active, focused, clearFlow]);
 
+    useEffect(() => () => window.clearTimeout(typingTimer.current), []);
+
     const openManual = (prefill) => {
         try {
             if (prefill) sessionStorage.setItem('tsk_manual_prefill', JSON.stringify(prefill));
@@ -162,8 +164,6 @@ const GlobalAIDock = () => {
             dockRef.current?.classList.remove('is-typing');
         }, 720);
     };
-
-    useEffect(() => () => window.clearTimeout(typingTimer.current), []);
 
     return (
         <div

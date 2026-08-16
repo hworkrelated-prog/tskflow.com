@@ -30,6 +30,12 @@ def test_glow_follows_pointer_and_brightens_on_type():
     assert "--glow-strength" in CSS
 
 
+def test_glow_timer_hook_is_not_conditional():
+    cleanup = "useEffect(() => () => window.clearTimeout(typingTimer.current)"
+    assert cleanup in DOCK
+    assert DOCK.index(cleanup) < DOCK.index("if (!visible) return null")
+
+
 def test_glow_stays_subtle_and_respects_reduced_motion():
     assert "radial-gradient" in CSS
     assert "ai-bar-breathe" in CSS
