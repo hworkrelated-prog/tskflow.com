@@ -19,6 +19,7 @@ def test_placeholder_cannot_cover_toolbar_icons():
     assert "overflow: hidden" in field
     assert "text-overflow: ellipsis" in placeholder
     assert "white-space: nowrap" in placeholder
+    assert "transform: translateY(5px)" not in css
     assert "right: 7rem" not in placeholder
     assert "-webkit-line-clamp: 2" not in placeholder
     assert "relative z-[1]" in src

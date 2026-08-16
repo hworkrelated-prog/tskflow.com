@@ -564,11 +564,14 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 }
 .ai-prompt-placeholder-fade {
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     animation: ai-placeholder-in 420ms ease;
 }
 @keyframes ai-placeholder-in {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
     .ai-prompt-placeholder-fade {
