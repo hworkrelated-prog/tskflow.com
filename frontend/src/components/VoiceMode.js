@@ -370,10 +370,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     return (
         <div
-            className={`fixed z-[45] flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)] ${
-                    dockIntegrated
-                        ? 'ai-jarvis-anchor'
-                    : 'safe-fab-br'
+            className={`ai-jarvis-anchor flex flex-col items-end gap-2 max-w-[calc(100vw-1.5rem)]${
+                dockIntegrated ? '' : ' fixed z-[45] safe-fab-br'
             }`}
             data-testid="voice-mode-widget"
         >
