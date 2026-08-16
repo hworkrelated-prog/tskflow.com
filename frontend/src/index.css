@@ -212,13 +212,79 @@ h1, h2, h3, h4, h5, h6 {
     70% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
     100% { box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15); }
 }
-.ai-dock-pulse > div:first-child {
+.ai-dock-pulse .ai-dock-panel {
     animation: ai-dock-pulse-kf 0.85s ease-out;
 }
 
 /* Bottom bar stays planted; open/close eases instead of snapping. */
 .ai-command-dock {
+    --glow-x: 50%;
+    --glow-y: 70%;
+    --glow-strength: 0.28;
+    isolation: isolate;
+    overflow: visible;
     transform: translateX(-50%);
+}
+.ai-bar-glow {
+    position: absolute;
+    inset: -14px -10px -10px;
+    border-radius: 2rem;
+    pointer-events: none;
+    z-index: -1;
+    background:
+        radial-gradient(
+            220px 90px at var(--glow-x) var(--glow-y),
+            rgba(13, 148, 136, calc(var(--glow-strength) * 0.38)),
+            transparent 72%
+        );
+    box-shadow:
+        0 0 0 1px rgba(13, 148, 136, calc(var(--glow-strength) * 0.16)),
+        0 10px 32px -10px rgba(13, 148, 136, calc(var(--glow-strength) * 0.42));
+    opacity: 0.72;
+    transition:
+        opacity 280ms ease,
+        box-shadow 280ms ease,
+        background 280ms ease;
+    animation: ai-bar-breathe 5.2s ease-in-out infinite;
+}
+.ai-command-dock.is-hover,
+.ai-command-dock.is-focused {
+    --glow-strength: 0.46;
+}
+.ai-command-dock.is-hover .ai-bar-glow,
+.ai-command-dock.is-focused .ai-bar-glow {
+    opacity: 1;
+    animation: none;
+}
+.ai-command-dock.is-typing {
+    --glow-strength: 0.62;
+}
+.ai-command-dock.is-typing .ai-bar-glow {
+    opacity: 1;
+    animation: none;
+    box-shadow:
+        0 0 0 1px rgba(13, 148, 136, 0.22),
+        0 12px 36px -8px rgba(13, 148, 136, 0.38);
+}
+@keyframes ai-bar-breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.88; }
+}
+[data-theme="dark"] .ai-bar-glow {
+    background:
+        radial-gradient(
+            220px 90px at var(--glow-x) var(--glow-y),
+            rgba(45, 212, 191, calc(var(--glow-strength) * 0.32)),
+            transparent 72%
+        );
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, calc(var(--glow-strength) * 0.18)),
+        0 10px 32px -10px rgba(45, 212, 191, calc(var(--glow-strength) * 0.36));
+}
+[data-theme="dark"] .ai-command-dock.is-typing .ai-bar-glow {
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, 0.22),
+        0 12px 36px -8px rgba(45, 212, 191, 0.32);
 }
 .ai-dock-panel {
     padding: 0;
@@ -287,8 +353,10 @@ h1, h2, h3, h4, h5, h6 {
 @media (prefers-reduced-motion: reduce) {
     .ai-dock-panel,
     .ai-dock-exit,
-    .ai-command-chips-wrap {
+    .ai-command-chips-wrap,
+    .ai-bar-glow {
         transition: none;
+        animation: none;
     }
 }
 

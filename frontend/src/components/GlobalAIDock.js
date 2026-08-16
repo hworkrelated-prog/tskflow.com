@@ -21,6 +21,8 @@ const GlobalAIDock = () => {
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
     const attachHandlerRef = useRef(null);
+    const dockRef = useRef(null);
+    const typingTimer = useRef(null);
 
     const visible =
         !!user
@@ -140,12 +142,44 @@ const GlobalAIDock = () => {
 
     const open = active || focused || recordingPending;
 
+    const setGlowPoint = (e) => {
+        const el = dockRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const x = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
+        const y = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
+        el.style.setProperty('--glow-x', `${x}%`);
+        el.style.setProperty('--glow-y', `${y}%`);
+    };
+
+    const markTyping = () => {
+        const el = dockRef.current;
+        if (!el) return;
+        el.classList.add('is-typing');
+        window.clearTimeout(typingTimer.current);
+        typingTimer.current = window.setTimeout(() => {
+            dockRef.current?.classList.remove('is-typing');
+        }, 720);
+    };
+
+    useEffect(() => () => window.clearTimeout(typingTimer.current), []);
+
     return (
         <div
-            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}`}
+            ref={dockRef}
+            className={`ai-command-dock fixed left-1/2 z-40 w-[min(96vw,40rem)] bottom-4${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
             data-testid="ai-command-dock"
+            onPointerMove={setGlowPoint}
+            onPointerEnter={(e) => {
+                dockRef.current?.classList.add('is-hover');
+                setGlowPoint(e);
+            }}
+            onPointerLeave={() => dockRef.current?.classList.remove('is-hover')}
+            onInput={markTyping}
         >
+            <div className="ai-bar-glow" aria-hidden data-testid="ai-bar-glow" />
             <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
                 <button
                     type="button"
