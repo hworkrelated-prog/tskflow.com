@@ -40,6 +40,7 @@ def test_self_assign_hint_remind_me_and_first_person():
     assert fn("Nudge me to call Jordan") is True
     assert fn("@me send the deck") is True
     assert fn("a reminder for myself") is True
+    assert fn("Prepare for our 1:1") is True
 
 
 def test_self_assign_hint_does_not_steal_other_people():
@@ -50,6 +51,7 @@ def test_self_assign_hint_does_not_steal_other_people():
     assert fn("have Harold go through this and send me an update") is False
     assert fn("Tell my team that I need to send 100 emails") is False
     assert fn("Ask Sarah to review the deck") is False
+    assert fn("Have Harold prepare for our 1:1") is False
 
 
 def test_in_10_minutes_is_exact_not_ten_oclock():
@@ -107,6 +109,27 @@ def test_self_assign_our_1on1_becomes_my():
     assert "our" not in desc.split("next steps:")[0]
     assert "please" not in desc.split("next steps:")[0]
     assert "\n1." in (parsed.get("description") or "")
+
+
+def test_prepare_for_1on1_without_hints_is_self():
+    ns = _copy_helpers()
+    parsed = {
+        "title": "Prepare for our 1:1",
+        "description": "Prepare for our 1:1",
+        "action_items": [],
+        "assignee_hints": [],
+    }
+    ns["_enrich_parse_title_description"](parsed, "Prepare for our 1:1")
+    assert "my 1:1" in (parsed.get("title") or "").lower()
+    assert "our" not in (parsed.get("title") or "").lower()
+    title, desc = ns["_apply_self_assign_copy"](
+        "Prepare for our 1:1",
+        "Tomorrow, please prepare for our 1:1.\n\nNext steps:\n1. Complete the ask above.\n2. Reply with a brief update when you are done.",
+    )
+    assert "my 1:1" in title.lower()
+    assert "please" not in desc.lower().split("next steps:")[0]
+    assert "reply with a brief update" not in desc.lower()
+    assert "mark this done" in desc.lower()
 
 
 def test_self_assign_by_own_user_chip_rewrites_our():

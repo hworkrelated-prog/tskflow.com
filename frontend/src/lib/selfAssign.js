@@ -27,6 +27,7 @@ export function promptMeansSelfAssign(text) {
     if (SELF_REMIND_RE.test(t) || /(^|\s)@me\b/i.test(t)) return true;
     if (SELF_ASSIGN_TO_RE.test(t) || SELF_TASK_FOR_RE.test(t)) return true;
     if (/\bfor myself\b|\bto myself\b/i.test(t)) return true;
+    if (/\b(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b/i.test(t)) return true;
     if (DELIVER_TO_ME_RE.test(t) && !SELF_FIRST_PERSON_RE.test(t)) return false;
     if (SELF_FIRST_PERSON_RE.test(t)) return true;
     return false;

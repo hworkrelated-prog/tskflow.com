@@ -13,6 +13,7 @@ export function rewriteSelfAssignCopy(text) {
     if (!text) return text;
     let s = String(text);
     s = s.replace(/^Please\s+/i, '');
+    s = s.replace(/\bplease\s+/gi, '');
     s = s.replace(/\bour\s+(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b/gi, 'my 1:1');
     s = s.replace(/\bour\s+(meeting|call|standup|sync|review|deck|notes)\b/gi, 'the $1');
     s = s.replace(/\bour\b/gi, 'my');

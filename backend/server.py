@@ -868,11 +868,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
     accepted_at = get_pst_now().isoformat() if is_self_assigned else None
-    
+    title = task.title
+    description = task.description or ""
+    if is_self_assigned:
+        title, description = _apply_self_assign_copy(title, description)
+
     task_doc = {
         "id": task_id,
-        "title": task.title,
-        "description": task.description or "",
+        "title": title,
+        "description": description,
         "assigned_to": assigned_to_id,
         "assigned_to_email": assigned_to_email,
         "created_by": current_user["id"],
@@ -1023,10 +1027,14 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                 continue  # Skip invalid user IDs
         
         invite_token = str(uuid.uuid4())[:8]
+        title = task.title
+        description = task.description or ""
+        if is_self_assigned:
+            title, description = _apply_self_assign_copy(title, description)
         task_doc = {
             "id": task_id,
-            "title": task.title,
-            "description": task.description,
+            "title": title,
+            "description": description,
             "assigned_to": assigned_to_id,
             "created_by": current_user["id"],
             "due_date": task.due_date,
@@ -9039,6 +9047,11 @@ def _prompt_names_other_assignee(text: str) -> bool:
         return True
     if _OTHER_ASSIGNEE_RE.search(text):
         return True
+    if re.search(
+        r"(?i)\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+(?!me\b)(?-i:[A-Z][A-Za-z'.-]*)",
+        text,
+    ):
+        return True
     return False
 
 
@@ -9055,6 +9068,8 @@ def _self_assign_hint(text: str) -> bool:
     if _SELF_ASSIGN_TO_RE.search(text) or _SELF_TASK_FOR_RE.search(text):
         return True
     if re.search(r"(?i)\bfor myself\b|\bto myself\b", text):
+        return True
+    if re.search(r"(?i)\b(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b", text):
         return True
     if _NOT_SELF_DELIVER_TO_ME_RE.search(text) and not _SELF_FIRST_PERSON_RE.search(text):
         return False
@@ -9390,7 +9405,7 @@ def _rewrite_for_self(text: str) -> str:
     if not text:
         return text
     s = str(text)
-    s = re.sub(r"(?i)^please\s+", "", s)
+    s = re.sub(r"(?i)\bplease\s+", "", s)
     s = re.sub(r"(?i)\bour\s+(1\s*:\s*1|one[\s-]?on[\s-]?one|one[\s-]?to[\s-]?one)\b", "my 1:1", s)
     s = re.sub(r"(?i)\bour\s+(meeting|call|standup|sync|review|deck|notes)\b", r"the \1", s)
     s = re.sub(r"(?i)\bour\b", "my", s)
@@ -9401,6 +9416,19 @@ def _rewrite_for_self(text: str) -> str:
     s = re.sub(r"(?i)\bwe\s+have\s+to\b", "I have to", s)
     s = re.sub(r"(?i)\bwe\s+should\b", "I should", s)
     return s
+
+
+def _apply_self_assign_copy(title: str, description: str) -> tuple:
+    """Final pass so persisted self-assigned tasks never keep team/assignee voice."""
+    title_out = _rewrite_for_self(title or "") or (title or "")
+    desc = _rewrite_for_self(description or "")
+    desc = re.sub(
+        r"(?i)Reply with a brief update when you are done\.?",
+        "Mark this done when you finish.",
+        desc,
+    )
+    desc = re.sub(r"(?i)Complete the ask above\.?", "Do the work.", desc)
+    return title_out, _normalize_description_layout(desc)
 
 
 def _parse_is_self_assign(parsed: dict, raw_text: str, current_user: Optional[dict] = None) -> bool:
