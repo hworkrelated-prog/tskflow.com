@@ -8428,6 +8428,7 @@ DATE RULES (this is the most important part — be aggressive and accurate):
 - "before standup" → 9:00 AM the next working day
 - Weekday names ("Monday", "this Friday", "next Tuesday") → next occurrence of that weekday at 5:00 PM. "next X" always means the following week's X.
 - "next week" → Monday of next week at 12:00 PM
+- "in N minutes/mins" → exactly N minutes from now (do not round to 15 min)
 - "in N days/hours/weeks" → arithmetic from now
 - If NO date/time is present at all, set due_date=null and add a clarifying question about it.
 - Always output ISO YYYY-MM-DDTHH:MM (no seconds, no timezone).
@@ -8461,6 +8462,10 @@ ASSIGNEE HINTS:
 - If they say "my direct reports" or "my reports" include the literal string "my direct reports"
 - If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
 - A first name is enough ("have Harold…", "ask Sarah to…") — put that name in assignee_hints. Do not ask who.
+- SELF-ASSIGN: if the speaker says "remind me", "nudge me", "ping me", "notify me", "assign to me/myself",
+  "@me", "I need to", "I have to", "I'll", "I will", "I should", "I must", they ARE the assignee.
+  Put "me" in assignee_hints. Do NOT ask who. Do NOT leave assignee_hints empty.
+- "send me an update" / "tell me when" / "email me the deck" is NOT self-assign — someone else delivers to the speaker.
 - NEVER invent assignees. If none found, return empty array.
 
 INTENT DETECTION:
@@ -8475,6 +8480,7 @@ CLARIFYING QUESTIONS:
 - Never ask about success criteria / expectations — those are optional.
 - Ask about due_date only if truly missing/ambiguous AND assignee is already clear.
 - Ask about assignees only if no usable hint was found (do not invent names). If the sentence already names a person, do not ask who.
+- Never ask who when the speaker said "me" / "myself" / "remind me" / "I need to" / "I'll". They already named themselves.
 
 TITLE RULES:
 - Crisp imperative 3–7 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
@@ -8622,6 +8628,21 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
     if re.search(r"\btomorrow\b", e):
         return (now + timedelta(days=1)).replace(hour=12, minute=0).strftime("%Y-%m-%dT%H:%M")
 
+    # "in N minutes/hours/days/weeks" — MUST run before clock-time so "in 10 minutes"
+    # is not read as 10:00. Minutes stay exact (no 15-min rounding).
+    m = re.search(r"\bin\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?|weeks?)\b", e)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2).lower()
+        if unit.startswith("min"):
+            return (now + timedelta(minutes=n)).strftime("%Y-%m-%dT%H:%M")
+        if unit.startswith("hour") or unit.startswith("hr"):
+            return _round_to_quarter(now + timedelta(hours=n)).strftime("%Y-%m-%dT%H:%M")
+        if unit.startswith("day"):
+            return (now + timedelta(days=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+        if unit.startswith("week"):
+            return (now + timedelta(weeks=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
+
     # Today at HH / HH PST / HHpm
     m = re.search(r"\b(?:by |at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(pst|pt|pdt|est|et|edt|utc|gmt)?\b", e)
     if m:
@@ -8654,18 +8675,6 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
                 days_ahead += 7
             target = (now + timedelta(days=days_ahead)).replace(hour=17, minute=0)
             return target.strftime("%Y-%m-%dT%H:%M")
-
-    # in N hours/days/weeks
-    m = re.search(r"in\s+(\d+)\s*(hour|hr|day|week)s?", e)
-    if m:
-        n = int(m.group(1))
-        unit = m.group(2)
-        if unit in ("hour", "hr"):
-            return _round_to_quarter(now + timedelta(hours=n)).strftime("%Y-%m-%dT%H:%M")
-        if unit == "day":
-            return (now + timedelta(days=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
-        if unit == "week":
-            return (now + timedelta(weeks=n)).replace(hour=17, minute=0).strftime("%Y-%m-%dT%H:%M")
 
     if "next week" in e:
         # Monday of next week 12:00
@@ -8756,6 +8765,60 @@ def _name_hints_from_text(text: str) -> List[str]:
         if name and name not in found:
             found.append(name)
     return found
+
+
+_SELF_REMIND_RE = re.compile(r"(?i)\b(?:remind|nudge|ping|notify)\s+me\b")
+_SELF_ASSIGN_TO_RE = re.compile(r"(?i)\bassign(?:ed)?(?:\s+\w+){0,4}\s+to\s+(?:me|myself)\b")
+_SELF_TASK_FOR_RE = re.compile(r"(?i)\b(?:a\s+)?(?:task|reminder|todo|note)\s+for\s+(?:me|myself)\b")
+_SELF_FIRST_PERSON_RE = re.compile(
+    r"(?i)\bi(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\b"
+)
+_NOT_SELF_DELIVER_TO_ME_RE = re.compile(
+    r"(?i)\b(?:send|give|email|forward|cc|show|tell|share|text)\s+me\b"
+)
+_OTHER_ASSIGNEE_RE = re.compile(
+    r"(?i)\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b|\beveryone under me\b"
+)
+
+
+def _prompt_names_other_assignee(text: str) -> bool:
+    """True when the sentence already names someone other than the speaker."""
+    if not text:
+        return False
+    if _name_hints_from_text(text):
+        return True
+    if re.search(r"@[A-Za-z]", text) and not re.search(r"(?i)@me\b", text):
+        return True
+    if _OTHER_ASSIGNEE_RE.search(text):
+        return True
+    return False
+
+
+def _self_assign_hint(text: str) -> bool:
+    """True when the speaker is clearly assigning the work to themselves.
+
+    'Remind me…' / 'I need to…' → self.
+    'Send me an update' → not self (someone else delivers to the speaker).
+    """
+    if not text or _prompt_names_other_assignee(text):
+        return False
+    if _SELF_REMIND_RE.search(text) or re.search(r"(?i)(?:^|\s)@me\b", text):
+        return True
+    if _SELF_ASSIGN_TO_RE.search(text) or _SELF_TASK_FOR_RE.search(text):
+        return True
+    if re.search(r"(?i)\bfor myself\b|\bto myself\b", text):
+        return True
+    if _NOT_SELF_DELIVER_TO_ME_RE.search(text) and not _SELF_FIRST_PERSON_RE.search(text):
+        return False
+    if _SELF_FIRST_PERSON_RE.search(text):
+        return True
+    return False
+
+
+def _should_fast_self_parse(text: str) -> bool:
+    """Skip the LLM round-trip for short first-person / remind-me prompts."""
+    t = (text or "").strip()
+    return bool(t) and len(t) <= 220 and _self_assign_hint(t)
 
 
 def _resolved_user_chip(u: dict) -> dict:
@@ -9019,13 +9082,20 @@ def _strip_manager_voice(text: str) -> str:
     s = _WANT_THEM_RE.sub("", s, count=1)
     s = re.sub(r"(?i)^let\s+(?:(?:my|the|our)\s+)?(?:team|them)\s+know\s+(?:that\s+)?", "", s)
     s = re.sub(r"(?i)^tell\s+that\s+", "", s)
+    s = re.sub(r"(?i)^(?:please\s+)?(?:remind|nudge|ping|notify)\s+me\s*(?:to\s+|that\s+)?", "", s, count=1)
     s = re.sub(r"(?i)^that\s+", "", s)
+    s = re.sub(
+        r"(?i)^i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+",
+        "",
+        s,
+        count=1,
+    )
     s = _NEED_TO_RE.sub(" ", s)
     return re.sub(r"\s+", " ", s).strip(" .,:;-")
 
 
 def _split_when_and_work(text: str) -> tuple:
-    """Pull a weekday phrase out so copy can speak to the assignee about when."""
+    """Pull a weekday / relative-time phrase out so copy can speak to the assignee about when."""
     s = _strip_manager_voice(text)
     when = ""
     m = _ON_WEEKDAY_RE.search(s)
@@ -9033,12 +9103,31 @@ def _split_when_and_work(text: str) -> tuple:
         when = f"On {m.group(1).capitalize()}"
         s = (s[: m.start()] + " " + s[m.end() :]).strip()
     else:
-        m = re.search(r"(?i)\b(tomorrow|today|tonight)\b", s)
+        m = re.search(r"(?i)\bin\s+(\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\b", s)
         if m:
-            when = m.group(1).capitalize()
+            n, raw_unit = m.group(1), m.group(2).lower()
+            if raw_unit.startswith("min"):
+                unit = "minute" if n == "1" else "minutes"
+            elif raw_unit.startswith("hour") or raw_unit.startswith("hr"):
+                unit = "hour" if n == "1" else "hours"
+            elif raw_unit.startswith("day"):
+                unit = "day" if n == "1" else "days"
+            else:
+                unit = "week" if n == "1" else "weeks"
+            when = f"In {n} {unit}"
             s = (s[: m.start()] + " " + s[m.end() :]).strip()
+        else:
+            m = re.search(r"(?i)\b(tomorrow|today|tonight)\b", s)
+            if m:
+                when = m.group(1).capitalize()
+                s = (s[: m.start()] + " " + s[m.end() :]).strip()
     work = re.sub(r"\s+", " ", s).strip(" .,:;-")
     work = re.sub(r"(?i)^(to\s+|that\s+)", "", work).strip(" .,:;-")
+    work = re.sub(
+        r"(?i)^i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+",
+        "",
+        work,
+    ).strip(" .,:;-")
     return when, work
 
 
@@ -9093,6 +9182,8 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"(?i)^tell\s+that\s+", ""),
         (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
         (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
+        (r"(?i)^(?:please\s+)?(?:remind|nudge|ping|notify)\s+me\s+(?:to\s+|that\s+)?", ""),
+        (r"(?i)^(?:please\s+)?i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+", ""),
         (r"(?i)\b(?:we|they)\s+need\s+to\s+", ""),
         # Broken speech: "Please can you Mahmood an EOD report" (name tokens stay capitalized-only)
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", "Please "),
@@ -9213,7 +9304,16 @@ def _title_from_work_text(work: str) -> str:
     if not work:
         return ""
     s = work
-    s = re.sub(r"(?i)^(need to|needs to|have to|must|please|kindly|can you|tell|ask)\s+(that\s+)?", "", s).strip()
+    s = re.sub(
+        r"(?i)^i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+",
+        "",
+        s,
+    ).strip()
+    s = re.sub(
+        r"(?i)^(need to|needs to|have to|must|please|kindly|can you|tell|ask|remind me)\s+(that\s+|to\s+)?",
+        "",
+        s,
+    ).strip()
     s = re.sub(r"(?i)^(an?|the)\s+", "", s).strip()
     if re.search(r"(?i)\b(eod|end of day)\b", s) and re.search(r"(?i)\breport\b", s):
         return "Send EOD report"
@@ -9430,7 +9530,15 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
 
-    parsed = await _llm_parse(text, current_user, req.context_hint) or fallback
+    # First-person / "remind me" is deterministic — skip the LLM round-trip.
+    if _should_fast_self_parse(text):
+        parsed = dict(fallback)
+        parsed["assignee_hints"] = ["me"]
+        parsed["clarifying_questions"] = []
+        parsed["recurring"] = dict(fallback.get("recurring") or {})
+        parsed["confidence"] = {"title": 0.85, "priority": 0.5, "due_date": 0.0, "assignees": 0.98}
+    else:
+        parsed = await _llm_parse(text, current_user, req.context_hint) or fallback
 
     # Merge shape
     for k, v in fallback.items():
@@ -9457,6 +9565,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             r"\b(?:by\s+|at\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\s+tomorrow\b"
             r"|\btomorrow\s+(?:at\s+|by\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\b"
             r"|\b(?:by |at )?\d{1,2}(?::\d{2})?\s*(am|pm)\b"
+            r"|\bin\s+\d+\s*(minutes?|mins?|hours?|hrs?|days?|weeks?)\b"
             r"|\b(?:asap|urgent(ly)?|eod|end of day)\b",
             (text or "").lower(),
         ))
@@ -9506,6 +9615,8 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         if key not in hint_keys:
             hints.append(name)
             hint_keys.add(key)
+    if _self_assign_hint(text):
+        hints = ["me"]
     parsed["assignee_hints"] = hints
 
     # Resolve assignees before title scrub so known names can be removed from title/description
@@ -9529,7 +9640,12 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         ar = parsed.get("assignee_resolution") or {}
         needs_team_scope = bool(ar.get("needs_team_scope"))
         # Ask who only when nothing was named and nothing resolved
-        if not ar.get("resolved") and not ar.get("ambiguous") and not parsed.get("assignee_hints"):
+        if (
+            not ar.get("resolved")
+            and not ar.get("ambiguous")
+            and not parsed.get("assignee_hints")
+            and not _self_assign_hint(text)
+        ):
             needs_who = True
 
     single_q = None

@@ -17,6 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -598,12 +599,19 @@ const AIQuickCreate = ({
         setEditDesc(desc || '');
         setEditDue(p.due_date || '');
         setEditPriority(p.priority || 'Medium');
-        // Keep @mentions the user already picked; merge in any newly resolved assignees
+        // Keep @mentions the user already picked; merge in any newly resolved assignees.
+        // "Remind me" / "I need to" always lands on Me — never reopen the people picker.
         const fromParse = p.assignee_resolution?.resolved || [];
-        const merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
+        let merged;
+        if (promptMeansSelfAssign(text)) {
+            merged = [SELF_CHIP];
+        } else {
+            merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
+        }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
         const mergedCount = merged.length;
+        if (mergedCount) writeLastAssignees(merged);
         setEditCriteria(p.success_criteria || '');
         setEditSales(!!sales);
         setEditScreenRecording(!!p.requires_screen_recording);
@@ -630,10 +638,11 @@ const AIQuickCreate = ({
         }
 
         const qs = p.clarifying_questions || [];
-        // Skip "who" if we already have a person — a first name is enough
+        // Skip "who" if we already have a person — a first name / "me" is enough
         const hasAssignees = mergedCount > 0
+            || promptMeansSelfAssign(text)
             || (p.assignee_resolution?.resolved || []).length > 0
-            || (p.assignee_hints || []).some((h) => !/^(my team|the team|our team|team|my reports|my direct reports|direct reports|everyone under me)$/i.test(String(h || '').trim()))
+            || (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()) || !/^(my team|the team|our team|team|my reports|my direct reports|direct reports|everyone under me)$/i.test(String(h || '').trim()))
             || /@/.test(text);
         const filteredQs = hasAssignees
             ? qs.filter((q) => !/who|own|assign/i.test(q || '') || /scope|direct reports|everyone under/i.test(q || ''))
@@ -711,6 +720,18 @@ const AIQuickCreate = ({
             return;
         }
         setAnswerMode(null);
+        if (promptMeansSelfAssign(t)) {
+            editAssigneesRef.current = [SELF_CHIP];
+            setEditAssignees([SELF_CHIP]);
+            setShowPeopleDrop(false);
+        } else if (!promptNamesSomeoneElse(t) && editAssigneesRef.current.length === 0) {
+            const remembered = rememberedAssigneesForPrompt(t);
+            if (remembered.length) {
+                editAssigneesRef.current = remembered;
+                setEditAssignees(remembered);
+                setShowPeopleDrop(false);
+            }
+        }
         setLoading(true);
         try {
             const res = await axios.post(`${API}/ai/quick-create-preview`, {
@@ -820,8 +841,12 @@ const AIQuickCreate = ({
                 : { kind: 'user', id: person.id, name: person.name, email: person.email };
         setEditAssignees((prev) => {
             const key = chip.id || chip.email;
-            if (prev.some((a) => (a.id && a.id === key) || (a.email && a.email === key))) return prev;
-            return [...prev, chip];
+            const next = prev.some((a) => (a.id && a.id === key) || (a.email && a.email === key))
+                ? prev
+                : [...prev, chip];
+            editAssigneesRef.current = next;
+            writeLastAssignees(next);
+            return next;
         });
         setPeopleSearch('');
         setShowPeopleDrop(false);
@@ -1135,6 +1160,7 @@ const AIQuickCreate = ({
                 }
                 toast.success(`Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
             }
+            writeLastAssignees(editAssignees);
             reset();
             onCreated?.();
         } catch (err) {
