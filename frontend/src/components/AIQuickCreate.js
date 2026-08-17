@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
-import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
@@ -562,11 +562,14 @@ const AIQuickCreate = ({
     };
 
     const applyPreview = (p) => {
-        const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
+        const sourceText = (activePromptRef.current || text || '').trim();
+        const sales = !!(p.is_sales_task || looksLikeSales(sourceText, p.title, p.description, p.category));
         const fromParse = p.assignee_resolution?.resolved || [];
+        const fromPeople = matchAssigneesFromPeople(sourceText, people);
         const peopleNames = [
             ...editAssignees.map((a) => a.name).filter(Boolean),
             ...fromParse.map((a) => a.name).filter(Boolean),
+            ...fromPeople.map((a) => a.name).filter(Boolean),
             ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
         ];
         // Prefer the LLM title when it already looks clean — avoid over-scrubbing into "get do it"
@@ -585,9 +588,9 @@ const AIQuickCreate = ({
             : [];
         const hintSelf = (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()));
         const resolvedSelf = fromParse.length > 0 && fromParse.every((a) => isSelfAssigneeChip(a, user?.id));
-        const selfParse = promptMeansSelfAssign(text) || hintSelf || resolvedSelf;
+        const selfParse = promptMeansSelfAssign(sourceText) || hintSelf || resolvedSelf;
 
-        const work = stripPeopleNoise(text || '', peopleNames)
+        const work = stripPeopleNoise(sourceText || '', peopleNames)
             .replace(/\b(by|before|due)\s+.+$/i, '')
             .replace(/\band\s+get\b/gi, 'and')
             .trim();
@@ -642,10 +645,11 @@ const AIQuickCreate = ({
         // Keep @mentions the user already picked; merge in any newly resolved assignees.
         // "Remind me" / "I need to" always lands on Me — never reopen the people picker.
         let merged;
-        if (promptMeansSelfAssign(text)) {
+        if (promptMeansSelfAssign(sourceText)) {
             merged = [SELF_CHIP];
         } else {
             merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
+            merged = mergeAssigneeLists(merged, fromPeople);
         }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
@@ -687,10 +691,10 @@ const AIQuickCreate = ({
         const qs = p.clarifying_questions || [];
         // Skip "who" if we already have a person — a first name / "me" is enough
         const hasAssignees = mergedCount > 0
-            || promptMeansSelfAssign(text)
+            || promptMeansSelfAssign(sourceText)
             || (p.assignee_resolution?.resolved || []).length > 0
-            || (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()) || !/^(my team|the team|our team|team|my reports|my direct reports|direct reports|everyone under me)$/i.test(String(h || '').trim()))
-            || /@/.test(text);
+            || fromPeople.length > 0
+            || /@/.test(sourceText);
         const filteredQs = hasAssignees
             ? qs.filter((q) => !/who|own|assign/i.test(q || '') || /scope|direct reports|everyone under/i.test(q || ''))
             : qs;
