@@ -2201,16 +2201,20 @@ def _notify_text(s: Optional[str]) -> str:
     """Normalize notification text for OS / browsers that mangle unicode dashes."""
     if not s:
         return ""
-    return (
+    t = (
         str(s)
-        .replace("\u2014", "-")  # em dash
-        .replace("\u2013", "-")  # en dash
         .replace("\u2018", "'")
         .replace("\u2019", "'")
         .replace("\u201c", '"')
         .replace("\u201d", '"')
         .replace("\xa0", " ")
     )
+    t = re.sub(r"[\u2014\u2013\u2551]", "-", t)
+    # UTF-8 em/en dash decoded as Latin-1/cp1252, sometimes double-encoded.
+    t = re.sub(r"\u00e2\u20ac.", "-", t)
+    t = re.sub(r"\u00c3\u00a2(?:\u00c2.){0,4}", "-", t)
+    t = re.sub(r" {2,}", " ", t)
+    return t
 
 
 # ===== BROWSER NOTIFICATIONS (poll-based) =====
@@ -7388,6 +7392,11 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user), limit: int = 50):
     docs = await db.notifications.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    for d in docs:
+        if "title" in d:
+            d["title"] = _notify_text(d.get("title"))
+        if "body" in d:
+            d["body"] = _notify_text(d.get("body"))
     unread = await db.notifications.count_documents({"user_id": current_user["id"], "read": {"$ne": True}})
     return {"notifications": docs, "unread": unread}
 

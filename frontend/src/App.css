@@ -338,6 +338,38 @@
 [data-theme="dark"] .bg-gray-100 { background: #1a1a1a !important; color: #d0d0d0 !important; }
 [data-theme="dark"] .bg-gray-200 { background: #262626 !important; color: #e0e0e0 !important; }
 
+/* Notification dropdown: unread teal-50/40 stayed light while titles went white. */
+.notif-unread {
+    background: rgb(240 253 250);
+}
+[data-theme="dark"] .notif-unread {
+    background: rgba(45, 212, 191, 0.12) !important;
+    color: hsl(var(--foreground)) !important;
+}
+.notif-catch-up {
+    background: #fff1f2;
+    color: #9f1239;
+}
+[data-theme="dark"] .notif-catch-up {
+    background: #3f1d24 !important;
+    color: #fecdd3 !important;
+}
+.notif-whats-new {
+    background: #f0fdfa;
+    color: #115e59;
+}
+[data-theme="dark"] .notif-whats-new {
+    background: #12332f !important;
+    color: #99f6e4 !important;
+}
+[data-theme="dark"] .bg-teal-50\/40,
+[data-theme="dark"] .bg-teal-50\/50,
+[data-theme="dark"] .bg-rose-50\/60,
+[data-theme="dark"] .hover\:bg-gray-50:hover {
+    background: #232323 !important;
+    color: hsl(var(--foreground)) !important;
+}
+
 /* Gradients — flatten to a single dark tone so text stays readable */
 [data-theme="dark"] .bg-gradient-to-r:not(.bg-clip-text),
 [data-theme="dark"] .bg-gradient-to-l:not(.bg-clip-text),
