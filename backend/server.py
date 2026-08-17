@@ -28,7 +28,15 @@ from googleapiclient.discovery import build
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-from phase_helpers import priority_followup_config, generate_ai_work_review, build_manager_eod_section
+from phase_helpers import priority_followup_config, generate_ai_work_review
+from eod_report import (
+    aggregate_leaderboard,
+    eod_sends_on_weekday,
+    group_unfinished,
+    normalize_eod_days,
+    render_eod_inner,
+    render_eod_slack,
+)
 from response_review import generate_group_response_review
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
 from slack_followup import (
@@ -3915,6 +3923,8 @@ class UserPreferences(BaseModel):
     # Which sections to include in the EOD report (all default on when omitted).
     # Keys: completed | open | missed | manager_snapshot | suggested_plan | sheet_metrics
     eod_sections: Optional[Dict[str, bool]] = None
+    # Days to send the report. Python weekday ints: Mon=0 … Sun=6. Sat+Sun stay on by default.
+    eod_days: Optional[List[int]] = None
     # Post-login team setup + how often org/reporting changes are expected.
     team_setup_complete: Optional[bool] = None
     hierarchy_review_frequency: Optional[str] = None  # weekly | monthly | quarterly | rarely
@@ -3941,6 +3951,10 @@ def _eod_sections_for(user: dict) -> Dict[str, bool]:
     return out
 
 
+def _eod_days_for(prefs: dict) -> List[int]:
+    return normalize_eod_days((prefs or {}).get("eod_days"))
+
+
 def _eod_target_hour(prefs: dict) -> int:
     target_hour = (prefs or {}).get("eod_hour")
     if target_hour is None:
@@ -3953,8 +3967,11 @@ def _eod_target_hour(prefs: dict) -> int:
 
 
 def _eod_is_due(prefs: dict, now) -> bool:
-    """True once the user's Pacific delivery hour has arrived and we have not sent today."""
+    """True once the user's Pacific delivery hour has arrived on a selected day,
+    and we have not sent today."""
     if not (prefs or {}).get("eod_enabled"):
+        return False
+    if not eod_sends_on_weekday(prefs, now.weekday()):
         return False
     today = now.strftime("%Y-%m-%d")
     if (prefs or {}).get("eod_last_sent_date") == today:
@@ -3977,6 +3994,8 @@ async def update_preferences(prefs: UserPreferences, current_user: dict = Depend
         if url and not url.startswith("https://hooks.slack.com/"):
             raise HTTPException(status_code=400, detail="Invalid Slack webhook URL.")
         update["slack_webhook_url"] = url
+    if "eod_days" in update:
+        update["eod_days"] = normalize_eod_days(update.get("eod_days"))
     merged = {**current_prefs, **update}
     await db.users.update_one(
         {"id": current_user["id"]},
@@ -3994,6 +4013,7 @@ async def get_preferences(current_user: dict = Depends(get_current_user)):
     prefs["can_manage_slack"] = can_manage
     prefs["slack_team_connected"] = bool(team_webhook)
     prefs["eod_sections"] = _eod_sections_for(current_user)
+    prefs["eod_days"] = _eod_days_for(prefs)
     # Never expose the webhook URL to non-admins
     if not can_manage:
         prefs.pop("slack_webhook_url", None)
@@ -7730,105 +7750,173 @@ async def sales_only_count(current_user: dict = Depends(get_current_user)):
 
 
 # --- End-of-day report (cron-able) ---
+async def _eod_name_map(tasks: list) -> dict:
+    ids = list({
+        t.get("assigned_to") for t in tasks
+        if t.get("assigned_to") and not str(t.get("assigned_to")).startswith("email_")
+    })
+    if not ids:
+        return {}
+    users = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(ids))
+    return {u["id"]: u.get("name") or "Someone" for u in users}
+
+
 async def _build_eod_summary_for_user(u: dict, now):
-    """Build the HTML email + Slack text for one user. Returns (html, slack_text, counts) or None if nothing to send."""
+    """Short glance: done / still open / who didn't finish / most-done + fastest."""
     sections = _eod_sections_for(u)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    completed = await db.tasks.find({
-        "assigned_to": u["id"],
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_iso = today_start.isoformat()
+    week_iso = (today_start - timedelta(days=7)).isoformat()
+    uid = u["id"]
+    not_done = {"$nin": ["Completed", "Declined", "Cancelled", "Rejected", "Draft"]}
+
+    completed_mine = await db.tasks.find({
+        "assigned_to": uid,
         "status": "Completed",
-        "completed_at": {"$gte": today_start},
-        "deleted": {"$ne": True},
-    }, {"_id": 0}).to_list(200) if sections.get("completed") else []
-    open_tasks_docs = await db.tasks.find({
-        "assigned_to": u["id"],
-        "status": {"$nin": ["Completed", "Declined", "Cancelled", "Rejected"]},
+        "completed_at": {"$gte": today_iso},
         "deleted": {"$ne": True},
         "is_parent": {"$ne": True},
-    }, {"_id": 0}).to_list(500) if (sections.get("open") or sections.get("missed")) else []
+    }, {"_id": 0, "title": 1, "assigned_to": 1, "assigned_to_email": 1, "completed_at": 1, "accepted_at": 1, "created_at": 1}).to_list(50) if sections.get("completed") else []
+
+    open_mine = await db.tasks.find({
+        "assigned_to": uid,
+        "status": not_done,
+        "deleted": {"$ne": True},
+        "is_parent": {"$ne": True},
+    }, {"_id": 0, "title": 1, "assigned_to": 1, "assigned_to_email": 1, "status": 1, "due_date": 1}).to_list(80) if (sections.get("open") or sections.get("missed")) else []
+
+    completed_out = await db.tasks.find({
+        "created_by": uid,
+        "status": "Completed",
+        "completed_at": {"$gte": today_iso},
+        "deleted": {"$ne": True},
+        "is_parent": {"$ne": True},
+    }, {"_id": 0, "title": 1, "assigned_to": 1, "assigned_to_email": 1, "completed_at": 1, "accepted_at": 1, "created_at": 1, "status": 1}).to_list(200)
+
+    open_out = await db.tasks.find({
+        "created_by": uid,
+        "status": not_done,
+        "deleted": {"$ne": True},
+        "is_parent": {"$ne": True},
+        "assigned_to": {"$ne": uid},
+    }, {"_id": 0, "title": 1, "assigned_to": 1, "assigned_to_email": 1, "status": 1, "due_date": 1}).to_list(200) if sections.get("manager_snapshot") else []
+
+    all_for_names = list(completed_mine) + list(open_mine) + list(completed_out) + list(open_out)
+    name_map = await _eod_name_map(all_for_names)
+    name_map[uid] = (u.get("name") or "You").split(" ")[0]
+
     missed = []
-    if sections.get("missed"):
-        for t in open_tasks_docs:
-            try:
-                due = datetime.fromisoformat(t["due_date"].replace('Z', '+00:00'))
-                if due.tzinfo is None:
-                    due = PST.localize(due)
-                if due < now and not t.get("due_date_rescheduled_and_accepted"):
-                    missed.append(t)
-            except Exception:
-                pass
-    want_mgr = sections.get("manager_snapshot") or sections.get("suggested_plan")
-    mgr_html, mgr_slack, mgr_counts = ("", "", {})
-    if want_mgr:
-        mgr_html, mgr_slack, mgr_counts = await build_manager_eod_section(
-            db, u, now, PST, timedelta,
-            include_snapshot=bool(sections.get("manager_snapshot")),
-            include_plan=bool(sections.get("suggested_plan")),
-        )
-    # Nothing selected / nothing to report
-    if not any([
-        sections.get("completed") and completed,
-        sections.get("open") and open_tasks_docs,
-        sections.get("missed") and missed,
-        mgr_html,
-    ]) and not any(sections.values()):
-        return None
-    if not completed and not (sections.get("open") and open_tasks_docs) and not missed and not mgr_html:
-        # Still send a short "quiet day" if they opted into at least one personal section
-        if not any(sections.get(k) for k in ("completed", "open", "missed", "manager_snapshot", "suggested_plan")):
-            return None
-
-    first = (u.get('name') or 'friend').split(' ')[0]
-    day = now.strftime('%A, %b %d, %Y')
-    parts_html = [
-        f"<h2 style=\"margin:0 0 8px;font-size:20px;\">Your day at Tskflow, {first}</h2>",
-        f"<p style=\"color:#6b7280;margin:0 0 20px;\">{day}</p>",
-    ]
-    slack_bits = [f":sunset: *EOD summary - {now.strftime('%b %d')}*"]
-
-    if sections.get("completed"):
-        rows_done = "".join([f"<li><strong>{(t.get('title') or '')[:80]}</strong> - completed</li>" for t in completed[:20]]) or "<li>Nothing marked complete today.</li>"
-        parts_html.append(f"<h3 style=\"font-size:15px;margin:16px 0 6px;\">Completed today ({len(completed)})</h3>")
-        parts_html.append(f"<ul style=\"padding-left:20px;margin:0;\">{rows_done}</ul>")
-        slack_bits.append(f"Completed today: {len(completed)}")
-
-    if sections.get("open"):
-        rows_open = "".join([f"<li>{(t.get('title') or '')[:80]} - due {t.get('due_date','?')[:10]}</li>" for t in open_tasks_docs[:20]]) or "<li>All caught up - no open tasks.</li>"
-        parts_html.append(f"<h3 style=\"font-size:15px;margin:20px 0 6px;\">Still open ({len(open_tasks_docs)})</h3>")
-        parts_html.append(f"<ul style=\"padding-left:20px;margin:0;\">{rows_open}</ul>")
-        slack_bits.append(f"Still open: {len(open_tasks_docs)}")
-
-    if sections.get("missed") and missed:
-        parts_html.append(f"<p style='color:#b91c1c;'>{len(missed)} task(s) missed their due date.</p>")
-        slack_bits.append(f"Warning: {len(missed)} missed due date(s)")
-
-    if mgr_html:
-        parts_html.append(mgr_html)
-    if mgr_slack:
-        slack_bits.append("")
-        slack_bits.append(mgr_slack)
-
-    sheet_html, sheet_slack, sheet_counts = ("", "", {})
-    if sections.get("sheet_metrics"):
+    for t in open_mine:
         try:
-            sheet_html, sheet_slack, sheet_counts = await build_sheet_metrics_eod_section(
-                db, u, now, include_self=True, include_team=True,
-            )
-        except Exception as e:
-            logging.warning(f"EOD sheet metrics: {e}")
-    if sheet_html:
-        parts_html.append(sheet_html)
-    if sheet_slack:
-        slack_bits.append("")
-        slack_bits.append(sheet_slack)
+            due = datetime.fromisoformat(str(t.get("due_date") or "").replace("Z", "+00:00"))
+            now_cmp = now if due.tzinfo else now.replace(tzinfo=None)
+            due_cmp = due if now_cmp.tzinfo else due.replace(tzinfo=None)
+            if due_cmp < now_cmp and not t.get("due_date_rescheduled_and_accepted"):
+                missed.append(t)
+        except Exception:
+            pass
 
-    if len(parts_html) <= 2 and not mgr_html and not sheet_html:
-        parts_html.append("<p style=\"color:#6b7280;\">Quiet day — nothing matched the sections you selected.</p>")
-        slack_bits.append("Quiet day — nothing to report for your selected sections.")
+    done_items = []
+    seen_titles = set()
+    for t in completed_out + completed_mine:
+        title = (t.get("title") or "").strip()
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        who = name_map.get(t.get("assigned_to")) or ""
+        if t.get("assigned_to") == uid:
+            who = ""
+        done_items.append({"title": title[:70], "who": who.split(" ")[0] if who else ""})
+        if len(done_items) >= 5:
+            break
 
-    html = _jarvis_email_shell("".join(parts_html), cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
-    slack_text = "\n".join(slack_bits) + f"\n<{APP_BASE_URL}/dashboard|Open Tskflow>"
-    return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts, **sheet_counts}
+    stuck_src = list(open_out) if open_out else list(open_mine)
+    stuck_items = group_unfinished(stuck_src, name_map, now, limit=5)
+
+    lb_tasks = list(completed_out)
+    board_label = "Today"
+    if len({t.get("assigned_to") for t in lb_tasks if t.get("assigned_to")}) < 2:
+        week_out = await db.tasks.find({
+            "created_by": uid,
+            "status": "Completed",
+            "completed_at": {"$gte": week_iso},
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True},
+        }, {"_id": 0, "assigned_to": 1, "assigned_to_email": 1, "completed_at": 1, "accepted_at": 1, "created_at": 1}).to_list(400)
+        if week_out:
+            extra = await _eod_name_map(week_out)
+            name_map.update(extra)
+            lb_tasks = week_out
+            board_label = "This week"
+        elif not lb_tasks:
+            email = u.get("email") or ""
+            domain = email.split("@")[-1] if "@" in email else ""
+            if domain and not any(p in domain.lower() for p in ("gmail.", "yahoo.", "hotmail.", "outlook.")):
+                org_users = await db.users.find(
+                    {"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}},
+                    {"_id": 0, "id": 1, "name": 1},
+                ).to_list(200)
+                org_ids = [x["id"] for x in org_users]
+                name_map.update({x["id"]: x.get("name") or "Someone" for x in org_users})
+                org_done = await db.tasks.find({
+                    "assigned_to": {"$in": org_ids},
+                    "status": "Completed",
+                    "completed_at": {"$gte": today_iso},
+                    "deleted": {"$ne": True},
+                    "is_parent": {"$ne": True},
+                }, {"_id": 0, "assigned_to": 1, "assigned_to_email": 1, "completed_at": 1, "accepted_at": 1, "created_at": 1}).to_list(400)
+                if len({t.get("assigned_to") for t in org_done}) >= 2:
+                    lb_tasks = org_done
+                    board_label = "Team · today"
+                else:
+                    org_week = await db.tasks.find({
+                        "assigned_to": {"$in": org_ids},
+                        "status": "Completed",
+                        "completed_at": {"$gte": week_iso},
+                        "deleted": {"$ne": True},
+                        "is_parent": {"$ne": True},
+                    }, {"_id": 0, "assigned_to": 1, "assigned_to_email": 1, "completed_at": 1, "accepted_at": 1, "created_at": 1}).to_list(400)
+                    if len({t.get("assigned_to") for t in org_week}) >= 2:
+                        lb_tasks = org_week
+                        board_label = "Team · this week"
+
+    most_done, fastest = aggregate_leaderboard(lb_tasks, name_map, limit=3)
+
+    done_count = len(completed_out) if completed_out else len(completed_mine)
+    open_count = len(open_out) if open_out else len(open_mine)
+    overdue_count = len(missed)
+    for t in open_out:
+        try:
+            due = datetime.fromisoformat(str(t.get("due_date") or "").replace("Z", "+00:00"))
+            now_cmp = now if due.tzinfo else now.replace(tzinfo=None)
+            due_cmp = due if now_cmp.tzinfo else due.replace(tzinfo=None)
+            if due_cmp < now_cmp:
+                overdue_count += 1
+        except Exception:
+            pass
+
+    first = (u.get("name") or "friend").split(" ")[0]
+    payload = {
+        "first": first,
+        "day": now.strftime("%A, %b %d, %Y"),
+        "done_count": done_count,
+        "open_count": open_count,
+        "overdue_count": overdue_count,
+        "done_items": done_items if sections.get("completed") else [],
+        "stuck_items": stuck_items,
+        "most_done": most_done,
+        "fastest": fastest,
+        "board_label": board_label,
+    }
+    inner = render_eod_inner(payload)
+    html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/dashboard", cta_label="Open Tskflow")
+    slack_text = render_eod_slack(payload) + f"\n<{APP_BASE_URL}/dashboard|Open Tskflow>"
+    return html, slack_text, {
+        "completed": payload["done_count"],
+        "open": payload["open_count"],
+        "missed": payload["overdue_count"],
+        "leaderboard": len(most_done),
+    }
 
 
 async def send_due_eod_reports():

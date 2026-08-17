@@ -53,6 +53,7 @@ const SettingsPage = () => {
     const [eodEnabled, setEodEnabled] = React.useState(false);
     const [eodHour, setEodHour] = React.useState(17);
     const [eodChannel, setEodChannel] = React.useState('email');
+    const [eodDays, setEodDays] = React.useState([0, 1, 2, 3, 4, 5, 6]);
     const [eodSections, setEodSections] = React.useState({
         completed: true,
         open: true,
@@ -123,6 +124,9 @@ const SettingsPage = () => {
             setEodEnabled(Boolean(response.data.eod_enabled));
             setEodHour(response.data.eod_hour ?? 17);
             setEodChannel(response.data.eod_channel || 'email');
+            setEodDays(Array.isArray(response.data.eod_days) && response.data.eod_days.length
+                ? response.data.eod_days.map(Number)
+                : [0, 1, 2, 3, 4, 5, 6]);
             setEodSections({
                 completed: true,
                 open: true,
@@ -159,6 +163,7 @@ const SettingsPage = () => {
                 eod_enabled: eodEnabled,
                 eod_hour: eodHour,
                 eod_channel: eodChannel,
+                eod_days: eodDays,
                 eod_sections: eodSections,
                 ...patch,
             };
@@ -166,10 +171,19 @@ const SettingsPage = () => {
             if (patch.eod_enabled !== undefined) setEodEnabled(patch.eod_enabled);
             if (patch.eod_hour !== undefined) setEodHour(patch.eod_hour);
             if (patch.eod_channel !== undefined) setEodChannel(patch.eod_channel);
+            if (patch.eod_days !== undefined) setEodDays(patch.eod_days);
             if (patch.eod_sections !== undefined) setEodSections(patch.eod_sections);
             toast.success('EOD settings saved');
         } catch { toast.error('Failed to save EOD settings'); }
         finally { setEodSaving(false); }
+    };
+
+    const toggleEodDay = (n) => {
+        const on = eodDays.includes(n);
+        let next = on ? eodDays.filter((d) => d !== n) : [...eodDays, n].sort((a, b) => a - b);
+        if (!next.length) next = [5, 6]; // keep Saturday + Sunday
+        setEodDays(next);
+        saveEod({ eod_days: next });
     };
 
     const toggleEodSection = (key) => {
@@ -900,7 +914,7 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
-                                <p className="text-xs text-muted-foreground">Daily summary of what you finished, what’s still open, and what to do next. Sends once a day at the Pacific time you pick — if that hour already passed, today’s report goes out within a few minutes.</p>
+                                <p className="text-xs text-muted-foreground">A short glance at what got done, who didn’t finish, and today’s leaderboard. Pick the days and Pacific time — Saturday and Sunday stay on unless you turn them off.</p>
                             </div>
                             <IosSwitch
                                 checked={eodEnabled}
@@ -944,6 +958,38 @@ const SettingsPage = () => {
                                     <Button size="sm" variant="outline" onClick={previewEod} disabled={eodPreviewing || eodSaving} className="rounded-lg h-[42px]" data-testid="eod-preview-btn">
                                         {eodPreviewing ? 'Sending…' : 'Preview'}
                                     </Button>
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">Days</Label>
+                                    <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid="eod-days" role="group" aria-label="Days to send the end-of-day report">
+                                        {[
+                                            { n: 6, label: 'Sun' },
+                                            { n: 0, label: 'Mon' },
+                                            { n: 1, label: 'Tue' },
+                                            { n: 2, label: 'Wed' },
+                                            { n: 3, label: 'Thu' },
+                                            { n: 4, label: 'Fri' },
+                                            { n: 5, label: 'Sat' },
+                                        ].map((d) => {
+                                            const on = eodDays.includes(d.n);
+                                            return (
+                                                <button
+                                                    key={d.n}
+                                                    type="button"
+                                                    onClick={() => toggleEodDay(d.n)}
+                                                    aria-pressed={on}
+                                                    data-testid={`eod-day-${d.n}`}
+                                                    className={`min-w-[2.75rem] px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                                        on
+                                                            ? 'bg-foreground text-background border-foreground'
+                                                            : 'bg-background text-muted-foreground border-border hover:border-foreground/40'
+                                                    }`}
+                                                >
+                                                    {d.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 {(eodChannel === 'slack' || eodChannel === 'both') && !slackTeamConnected && (
                                     <p className="text-xs text-amber-700">
