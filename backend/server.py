@@ -9010,7 +9010,8 @@ ASSIGNEE HINTS:
 - If speaker refers to "my team" or "the team" or "our team", include the literal string "my team" (everyone under them)
 - If they say "my direct reports" or "my reports" include the literal string "my direct reports"
 - If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
-- A first name is enough ("have Harold…", "ask Sarah to…") — put that name in assignee_hints. Do not ask who.
+- A first name is enough ("have Harold…", "ask Sarah to…", "Benjamin needs to review…") — put that name in assignee_hints. Do not ask who.
+- "{Name} needs to / should / has to / will / must …" means that person owns the work. Example: "Benjamin needs to review opportunities by 1pm" → assignee_hints: ["Benjamin"]. Do NOT ask "Who should this be assigned to?"
 - SELF-ASSIGN: if the speaker says "remind me", "nudge me", "ping me", "notify me", "assign to me/myself",
   "@me", "I need to", "I have to", "I'll", "I will", "I should", "I must", they ARE the assignee.
   Put "me" in assignee_hints. Do NOT ask who. Do NOT leave assignee_hints empty.
@@ -9272,13 +9273,20 @@ _EVERYONE_HINTS = {
 }
 _HAVE_NAME_RE = re.compile(
     r"\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+"
-    r"([A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,2})\s+"
+    r"([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+"
     r"(?:to|go|do|review|send|look|check|update|through)",
     re.I,
 )
+_OWNER_NEEDS_RE = re.compile(
+    r"\b([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+"
+    r"(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\b",
+    re.I,
+)
 _NAME_STOP = {
-    "my", "the", "our", "this", "that", "them", "him", "her", "me", "us", "it",
-    "a", "an", "your", "their", "someone", "anyone", "everyone", "team",
+    "my", "the", "our", "this", "that", "them", "him", "her", "he", "she", "they",
+    "we", "you", "i", "me", "us", "it", "a", "an", "your", "their", "someone",
+    "anyone", "everyone", "anybody", "somebody", "nobody", "who", "what", "when",
+    "please", "today", "tomorrow", "team", "all", "each", "both",
 }
 
 
@@ -9308,17 +9316,18 @@ def _hints_from_answers(answers: Optional[dict]) -> List[str]:
 
 
 def _name_hints_from_text(text: str) -> List[str]:
-    """Pull first/full names from 'have Harold…' / 'ask Sarah to…' even if lowercase."""
+    """Pull first/full names from 'have Harold…' / 'Benjamin needs to…' even if lowercase."""
     if not text:
         return []
     found = []
-    for m in _HAVE_NAME_RE.finditer(text):
-        name = (m.group(1) or "").strip()
-        first = name.split()[0].lower() if name else ""
-        if first in _NAME_STOP:
-            continue
-        if name and name not in found:
-            found.append(name)
+    for rx in (_HAVE_NAME_RE, _OWNER_NEEDS_RE):
+        for m in rx.finditer(text):
+            name = (m.group(1) or "").strip()
+            first = name.split()[0].lower() if name else ""
+            if first in _NAME_STOP:
+                continue
+            if name and name not in found:
+                found.append(name)
     return found
 
 

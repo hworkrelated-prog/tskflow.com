@@ -106,6 +106,12 @@ def test_classify_team_hint_and_name_extract():
     assert ns["_classify_team_hint"]("harold") is None
     names = ns["_name_hints_from_text"]("have harold go through this and send me an update")
     assert any(n.lower().startswith("harold") for n in names)
+    owner = ns["_name_hints_from_text"](
+        "Benjamin needs to review and clear all redundant open opportunities by 1 pm PST today. "
+        "He should either close lost them, or move them to September or October on their close dates."
+    )
+    assert [n.lower() for n in owner] == ["benjamin"]
+    assert not ns["_name_hints_from_text"]("He should close lost opportunities")
     hints = ns["_hints_from_answers"]({"Who should own this task?": "Harold John"})
     assert "Harold John" in hints
 

@@ -52,6 +52,7 @@ def test_self_assign_hint_does_not_steal_other_people():
     assert fn("Tell my team that I need to send 100 emails") is False
     assert fn("Ask Sarah to review the deck") is False
     assert fn("Have Harold prepare for our 1:1") is False
+    assert fn("Benjamin needs to review and clear all redundant open opportunities by 1 pm PST today.") is False
 
 
 def test_in_10_minutes_is_exact_not_ten_oclock():
@@ -200,7 +201,8 @@ def test_frontend_self_assign_and_memory():
     assert "writeLastAssignees" in ai
     assert "SELF_CHIP" in ai
     apply = ai[ai.index("const applyPreview") : ai.index("const runQA")]
-    assert "promptMeansSelfAssign(text)" in apply
+    assert "promptMeansSelfAssign(sourceText)" in apply
+    assert "matchAssigneesFromPeople" in apply
     assert "setShowPeopleDrop(false)" in apply or "hasAssignees" in apply
     run = ai[ai.index("const runPreview") : ai.index("runPreviewRef.current")]
     assert "SELF_CHIP" in run
