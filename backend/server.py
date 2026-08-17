@@ -9048,6 +9048,7 @@ TITLE RULES:
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Distill the manager's request into a Dale Carnegie-style ask: clear, simple, respectful, and easy to act on.
 - If the speaker is assigning to themselves, write in first person: "my 1:1" not "our 1:1", no "Please", no "I'll ask them".
+  Title the WORK ("Review open deals"), never "This is a reminder for myself" and never "Complete This is…".
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
   Write as the assigner speaking directly to them — never as a note about them.
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
@@ -9719,13 +9720,18 @@ def _rewrite_for_self(text: str) -> str:
 def _apply_self_assign_copy(title: str, description: str) -> tuple:
     """Final pass so persisted self-assigned tasks never keep team/assignee voice."""
     title_out = _rewrite_for_self(title or "") or (title or "")
+    title_out = re.sub(r"(?i)^complete\s+(?=this|that|these|those|i\b|my\b)", "", title_out).strip()
+    title_out = re.sub(r"(?i)^this is a reminder for myself(?:\s+to)?\s*", "", title_out).strip() or title_out
+    if title_out:
+        title_out = title_out[0].upper() + title_out[1:]
     desc = _rewrite_for_self(description or "")
     desc = re.sub(
         r"(?i)Reply with a brief update when you are done\.?",
-        "Mark this done when you finish.",
+        "Mark this done when I finish.",
         desc,
     )
     desc = re.sub(r"(?i)Complete the ask above\.?", "Do the work.", desc)
+    desc = re.sub(r"(?m)^\s*\d+[.)]\s*Complete the\s*$", "", desc)
     return title_out, _normalize_description_layout(desc)
 
 
@@ -9887,7 +9893,7 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
         if re.search(r"(?i)\b(1\s*:\s*1|one[\s-]?on[\s-]?one|meeting|prep)\b", blob):
             return [
                 "Jot the topics you want to cover.",
-                "Mark this done when you're prepared.",
+                "Mark this done when I finish.",
             ]
         if re.search(r"(?i)\b(deal|dmc|pipeline)\b", blob):
             return [
@@ -9896,7 +9902,7 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
             ]
         return [
             "Do the work.",
-            "Mark this done when you finish.",
+            "Mark this done when I finish.",
         ]
     steps = []
     if re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
@@ -9923,6 +9929,33 @@ def _carnegie_format_description(desc: str, title: str = "", manager_name: Optio
         steps = [st.replace("your manager", manager_name) for st in steps]
     numbered = "\n".join(f"{i + 1}. {st}" for i, st in enumerate(steps))
     return _normalize_description_layout(f"{s.rstrip()}\n\nNext steps:\n{numbered}")
+
+
+def _looks_truncated(s: str) -> bool:
+    t = (s or "").strip()
+    if not t:
+        return False
+    last = re.split(r"\s+", t)[-1].strip(".,;:")
+    if re.match(r"(?i)^(the|a|an|to|for|and|or|i|my|our|of|with)$", last):
+        return True
+    if re.search(r"(?i)\b(make sure i for|complete the)\s*$", t):
+        return True
+    return False
+
+
+def _copy_looks_illogical(title: str, description: str) -> bool:
+    if _title_looks_bad(title or "", [], ""):
+        return True
+    if re.match(r"(?i)^complete\s+(this|that|these|those|it)\b", title or ""):
+        return True
+    if re.search(r"(?i)\bthis is a reminder\b", title or ""):
+        return True
+    lead = (description or "").split("Next steps:")[0].strip()
+    if _looks_truncated(lead.split("\n")[0] if lead else ""):
+        return True
+    if re.search(r"(?m)^\s*\d+[.)]\s*(complete the|the)\s*$", description or ""):
+        return True
+    return False
 
 
 def _assignee_name_list(parsed: dict) -> List[str]:
@@ -9991,6 +10024,12 @@ def _title_from_work_text(work: str) -> str:
         "",
         s,
     ).strip()
+    s = re.sub(
+        r"(?i)^(this is )?(just )?(a )?(personal )?reminder(?:\s+for myself)?(?:\s+to)?\s+",
+        "",
+        s,
+    ).strip()
+    s = re.sub(r"(?i)^this is a reminder for myself\.?\s*", "", s).strip()
     s = re.sub(r"(?i)^(an?|the)\s+", "", s).strip()
     m_prep = re.search(r"(?i)\bget\s+(.+?)\s+prepared\b", s)
     if m_prep:
@@ -10014,7 +10053,10 @@ def _title_from_work_text(work: str) -> str:
     )
     if m:
         s = m.group(0)
-    elif s and not re.match(r"(?i)^(complete|send|finish|do|go)\b", s):
+    elif s and re.match(r"(?i)^(this|that|these|those|it|i|my)\b", s):
+        # A sentence leftover, not a noun phrase — never "Complete This is a reminder…"
+        s = re.sub(r"(?i)^(this is |that is )", "", s).strip()
+    elif s and not re.match(r"(?i)^(complete|send|finish|do|go|review|prepare|update|create|call|fix)\b", s):
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
     words = [w for w in s.split() if w][:7]
@@ -10044,6 +10086,8 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
         or re.match(r"(?i)^(tell|ask|have|get|need|want|remind|let)\b", title)
         or re.search(r"(?i)\bwe need to\b", title)
         or re.search(r"(?i)^please tell\b", title)
+        or re.match(r"(?i)^complete\s+(this|that|these|those|it|a reminder)\b", title)
+        or re.search(r"(?i)\bthis is a reminder\b", title)
         or _too_close_to_prompt(title, raw_text)
         or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
     )
@@ -10106,7 +10150,10 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
         desc_seed = ""
 
     if self_assign:
-        note = _self_facing_note(when, distilled_work or desc_seed)
+        work_body = distilled_work or desc_seed
+        if _looks_truncated(work_body):
+            work_body = parsed.get("title") or distilled_work or desc_seed
+        note = _self_facing_note(when, work_body)
         title_for_steps = str(parsed.get("title") or title or "")
         parsed["description"] = _carnegie_format_description(
             note,
@@ -10168,6 +10215,61 @@ async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], c
             return out
     except Exception as e:
         logging.warning(f"title vet LLM error: {e}")
+    return None
+
+
+async def _llm_logical_copy(
+    raw_text: str,
+    title: str,
+    description: str,
+    self_assign: bool,
+    current_user: dict,
+) -> Optional[dict]:
+    """Second pass: turn messy parse output into complete, voice-correct copy."""
+    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        return None
+    voice = (
+        "SELF-ASSIGNED personal reminder. First person (I/my). No Please. "
+        "No asking someone to reply. Last step: Mark this done when I finish."
+        if self_assign
+        else "DELEGATED to someone else. Second person (you). Clear ask. Last step can ask them to reply when done."
+    )
+    prompt = (
+        "Rewrite this TskFlow task so it is logical and complete. JSON only, no markdown:\n"
+        '{"title":"...","description":"..."}\n'
+        f"Voice: {voice}\n"
+        "Title: 3-8 words naming the WORK. Imperative. Never 'Complete This is…', "
+        "never 'This is a reminder for myself', no names/@/dates.\n"
+        "Description: full grammatical sentences. If the draft is truncated, finish the thought "
+        "from the original request — do not leave dangling 'the' / 'I' / 'for'. "
+        "Use a short Next steps: numbered list (2-4 complete items).\n"
+        "Do not invent a different task.\n"
+        f"Original request: {raw_text[:800]}\n"
+        f"Draft title: {title[:200]}\n"
+        f"Draft description: {description[:1200]}\n"
+    )
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=emergent_key,
+            session_id=f"logic_{current_user['id']}_{int(get_pst_now().timestamp())}",
+            system_message="You rewrite task copy so it is clear and complete. Reply with JSON only.",
+        ).with_model("openai", "gpt-4o-mini")
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=8.0)
+        text_out = (raw if isinstance(raw, str) else str(raw)).strip()
+        start = text_out.index("{")
+        end = text_out.rindex("}") + 1
+        data = _json.loads(text_out[start:end])
+        if not isinstance(data, dict):
+            return None
+        out_title = re.sub(r"\s+", " ", str(data.get("title") or "")).strip().strip('"').strip("'")
+        out_desc = str(data.get("description") or "").strip()
+        if not out_title or _copy_looks_illogical(out_title, out_desc):
+            return None
+        return {"title": out_title, "description": out_desc}
+    except Exception as e:
+        logging.warning(f"logical copy LLM error: {e}")
     return None
 
 
@@ -10257,16 +10359,11 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
 
-    # First-person / "remind me" is deterministic — skip the LLM round-trip
-    # unless we have extra context (recurring from +, follow-up chat) to understand.
-    if _should_fast_self_parse(text) and not (req.context_hint or "").strip() and not req.history:
-        parsed = dict(fallback)
+    # Always run the task parser so copy is inferred, then a logic pass rewrites it.
+    parsed = await _llm_parse(text, current_user, req.context_hint, req.history) or fallback
+    if _self_assign_hint(text):
         parsed["assignee_hints"] = ["me"]
         parsed["clarifying_questions"] = []
-        parsed["recurring"] = dict(fallback.get("recurring") or {})
-        parsed["confidence"] = {"title": 0.85, "priority": 0.5, "due_date": 0.0, "assignees": 0.98}
-    else:
-        parsed = await _llm_parse(text, current_user, req.context_hint, req.history) or fallback
 
     # Merge shape
     for k, v in fallback.items():
@@ -10361,6 +10458,25 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         vetted = await _llm_vet_title(text, str(parsed.get("title") or ""), people_for_vet, current_user)
         if vetted:
             parsed["title"] = vetted
+    self_assign = _parse_is_self_assign(parsed, text, current_user)
+    parsed["self_assign"] = bool(self_assign)
+    logical = await _llm_logical_copy(
+        text,
+        str(parsed.get("title") or ""),
+        str(parsed.get("description") or ""),
+        self_assign,
+        current_user,
+    )
+    if logical:
+        if logical.get("title"):
+            parsed["title"] = logical["title"]
+        if logical.get("description"):
+            parsed["description"] = _normalize_description_layout(logical["description"])
+    if self_assign:
+        parsed["title"], parsed["description"] = _apply_self_assign_copy(
+            str(parsed.get("title") or ""),
+            str(parsed.get("description") or ""),
+        )
 
     # Rebuild clarifying questions: one at a time, preferring who / team-scope / cadence / when
     needs_who = False

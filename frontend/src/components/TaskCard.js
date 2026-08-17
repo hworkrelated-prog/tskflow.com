@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar, Image, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { displayTaskTitle, layoutTaskDescription } from '@/lib/taskDescription';
+import { displayTaskTitle, layoutTaskDescription, rewriteSelfAssignCopy } from '@/lib/taskDescription';
 
 const safeDate = (value, fmt = 'MMM dd') => {
     if (!value) return 'No date';
@@ -125,7 +125,11 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                         
                         {task.description ? (
                             <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4" data-testid="task-card-description">
-                                {layoutTaskDescription(task.description)}
+                                {(() => {
+                                    const laid = layoutTaskDescription(task.description);
+                                    const isSelf = task.assigned_to && task.created_by && task.assigned_to === task.created_by;
+                                    return isSelf ? rewriteSelfAssignCopy(laid) : laid;
+                                })()}
                             </p>
                         ) : null}
                         <div className="flex items-center justify-between text-sm">

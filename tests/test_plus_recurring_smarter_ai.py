@@ -24,7 +24,7 @@ def test_preview_sends_history_and_hint():
     src = _read("components", "AIQuickCreate.js")
     assert "history: threadRef.current.slice(-12)" in src
     assert "context_hint: recurringHintRef.current" in src
-    assert "timeout: 25000" in src
+    assert "timeout: 35000" in src
 
 
 def test_who_question_uses_readable_foreground():
