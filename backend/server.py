@@ -9005,8 +9005,9 @@ PRIORITY RULES:
 
 ASSIGNEE HINTS:
 - Extract explicit @mentions (strip @ prefix)
-- Extract first names/full names that appear in a "for X", "to X", "assign to X", "have X", "tell X", "@X", "I want X to..." pattern
-- Extract team/group names like "sales team", "managers", "engineering", "@Sales team"
+- Extract first names/full names that appear in a "for X", "assign to X", "have X", "tell X", "@X", "I want X to...", "I need my @X to..." pattern
+- "to their managers" / "to your manager" is WHERE the work is delivered, NOT an assignee. Do not add "managers" to assignee_hints unless they were @mentioned as the owner.
+- Extract team/group names that OWN the work (e.g. "@HM Org", "sales team"). The people who do the verb are the assignees.
 - If speaker refers to "my team" or "the team" or "our team", include the literal string "my team" (everyone under them)
 - If they say "my direct reports" or "my reports" include the literal string "my direct reports"
 - If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
@@ -9635,7 +9636,13 @@ _MANAGER_TELL_RE = re.compile(
     r"(?:to\s+|that\s+)?"
 )
 _WANT_THEM_RE = re.compile(
-    r"(?i)^i\s+(?:want|need|would like)\s+(?:(?:my|the|our)\s+team|them|everyone)\s+to\s+"
+    r"(?i)^i\s+(?:want|need|would like)\s+"
+    r"(?:(?:my|the|our)\s+(?:team|group)|them|everyone|"
+    r"(?:my|the|our)\s+@[A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2}|"
+    r"(?:my|the|our)\s+[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2})\s+to\s+"
+)
+_NEED_MY_TO_RE = re.compile(
+    r"(?i)^i\s+(?:want|need|would like)\s+(?:my|the|our)\s+to\s+"
 )
 _NEED_TO_RE = re.compile(r"(?i)\b(?:we|they|you)\s+need\s+to\s*")
 _ON_WEEKDAY_RE = re.compile(
@@ -9651,6 +9658,7 @@ def _strip_manager_voice(text: str) -> str:
     s = re.sub(r"(?i)^(please|kindly)\s+", "", s)
     s = _MANAGER_TELL_RE.sub("", s, count=1)
     s = _WANT_THEM_RE.sub("", s, count=1)
+    s = _NEED_MY_TO_RE.sub("", s, count=1)
     s = re.sub(r"(?i)^let\s+(?:(?:my|the|our)\s+)?(?:team|them)\s+know\s+(?:that\s+)?", "", s)
     s = re.sub(r"(?i)^tell\s+that\s+", "", s)
     s = re.sub(
@@ -9861,6 +9869,8 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"(?i)^have\s+(?:my|the|our)\s+team\s+", "Please "),
         (r"(?i)^(?:please\s+)?(?:remind|nudge|ping|notify)\s+me\s+(?:to\s+|that\s+)?", ""),
         (r"(?i)^(?:please\s+)?i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+", ""),
+        (r"(?i)^(?:please\s+)?i\s+(?:need|want|would like)\s+(?:my|the|our)\s+(?:to\s+)?", ""),
+        (r"(?i)\bto their managers\b", "to your managers"),
         (r"(?i)\b(?:we|they)\s+need\s+to\s+", ""),
         # Broken speech: "Please can you Mahmood an EOD report" (name tokens stay capitalized-only)
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", "Please "),
@@ -9890,7 +9900,13 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
             s = re.sub(r"(?i)\b(?:my|the|our)\s+team\b", "you", s)
             s = re.sub(r"(?i)\bthem\b", "this", s)
             s = re.sub(r"(?i)\bthey\b", "you", s)
-        if not re.match(r"(?i)^please\b", s):
+        if re.search(r"(?i)\bi need my\b|^(?:please\s+)?i\b", s):
+            m = re.search(
+                r"(?i)\b(submit|send|review|complete|prepare|create|update|call|fix|draft|schedule|share|write|close)\b.*$",
+                s,
+            )
+            s = m.group(0) if m else re.sub(r"(?i)^(?:please\s+)?i\s+need\s+my\s+(?:to\s+)?", "", s)
+        if s and not re.match(r"(?i)^please\b", s) and not re.match(r"(?i)^i\b", s):
             s = "Please " + s[0].lower() + s[1:] if len(s) > 1 else "Please " + s
 
     return s.strip()
@@ -9914,11 +9930,17 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
             "Mark this done when I finish.",
         ]
     steps = []
-    if re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
+    if re.search(r"(?i)\bsubmit\b", blob):
+        steps.append("Submit it and confirm it went through.")
+        if re.search(r"(?i)\bmanagers?\b", blob):
+            steps.append("Make sure the submission reached them.")
+    elif re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
         steps.append("Review the material and note anything that needs a decision.")
-    if re.search(r"(?i)\b(update|report|eod|summary)\b", blob):
+    if re.search(r"(?i)\b(update|report|eod|summary)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append(f"Send a short update to {('your manager')} with what you found and any blockers.")
-    if re.search(r"(?i)\b(call|meet|talk)\b", blob):
+    if re.search(r"(?i)\b(meet|talk|meeting)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
+        steps.append("Complete the conversation and capture the outcome.")
+    elif re.search(r"(?i)\bcall\b", blob) and not re.search(r"(?i)\b(bamfam|submit)\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     if not steps:
         steps.append("Complete the ask above.")
@@ -9962,6 +9984,8 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
     lead = (description or "").split("Next steps:")[0].strip()
     if _looks_truncated(lead.split("\n")[0] if lead else ""):
         return True
+    if re.search(r"(?i)\bi need my\b|please i\b|need my submit\b", description or ""):
+        return True
     if re.search(r"(?m)^\s*\d+[.)]\s*(complete the|the)\s*$", description or ""):
         return True
     return False
@@ -9993,7 +10017,7 @@ def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> 
         return ""
     s = str(text)
     # Multi-word @mentions: "@Mark Sibghat", "@Benjamin White"
-    s = re.sub(r"@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}", " ", s)
+    s = re.sub(r"@[A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2}", " ", s)
     s = re.sub(r"@\S+", " ", s)
     # Capitalized-only name tokens — do not use (?i) with [A-Z] or "an EOD" gets swallowed
     s = re.sub(r"\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", " ", s)
@@ -10001,7 +10025,7 @@ def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> 
     for name in people_names or []:
         if not name:
             continue
-        if re.search(r"(?i)\b(team|reports|everyone)\b", name):
+        if re.search(r"(?i)\b(team|reports|everyone|managers?|org)\b", name):
             continue
         s = re.sub(rf"\b{re.escape(name)}\b", " ", s, flags=re.I)
     # Drop leading leftover first/last name tokens from known people
@@ -10016,6 +10040,41 @@ def _strip_people_noise(text: str, people_names: Optional[List[str]] = None) -> 
     s = " ".join(tokens)
     s = re.sub(r"\s+", " ", s).strip(" .,:;-")
     return s
+
+
+def _strip_due_phrases(text: str) -> str:
+    """Remove due-date tails without eating the rest of the ask (e.g. 'to your managers')."""
+    s = text or ""
+    s = re.sub(
+        r"(?i)\s*\b(?:by|before|due)\s+(?:end of (?:the )?day|eod|close of business)"
+        r"(?:\s+meaning)?(?:\s+by\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+pst)?)?",
+        "",
+        s,
+    )
+    s = re.sub(
+        r"(?i)\s*\b(?:by|before|due)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+pst)?",
+        "",
+        s,
+    )
+    s = re.sub(r"(?i)\s*\bmeaning\b", " ", s)
+    return re.sub(r"\s+", " ", s).strip(" .,:;-")
+
+
+def _drop_destination_assignee_hints(hints: List[str], text: str) -> List[str]:
+    """'to their managers' is where work is delivered, not who owns it."""
+    if not re.search(r"(?i)\bto\s+(?:their|your|his|her|the)\s+managers?\b", text or ""):
+        return list(hints or [])
+    mentioned = {
+        m.group(1).strip().lower()
+        for m in re.finditer(r"@([A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2})", text or "")
+    }
+    out = []
+    for h in hints or []:
+        key = str(h or "").strip().lstrip("@").lower()
+        if re.fullmatch(r"(?:hm\s+)?managers?", key) and key not in mentioned:
+            continue
+        out.append(h)
+    return out
 
 
 def _title_from_work_text(work: str) -> str:
@@ -10068,6 +10127,7 @@ def _title_from_work_text(work: str) -> str:
     elif s and not re.match(r"(?i)^(complete|send|finish|do|go|review|prepare|update|create|call|fix)\b", s):
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
+    s = re.sub(r"(?i)\s+to\s+(?:their|your|his|her)\s+managers?\s*$", "", s).strip(" .,:;-")
     words = [w for w in s.split() if w][:7]
     title = " ".join(words)
     if title and title[0].islower():
@@ -10113,6 +10173,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
         parsed["assignee_hints"] = hints
 
     source_text = repaired or raw_text or ""
+    parsed["assignee_hints"] = _drop_destination_assignee_hints(parsed.get("assignee_hints") or [], source_text)
     self_assign = _parse_is_self_assign(parsed, source_text, current_user)
     people = _assignee_name_list(parsed)
     for h in speech_hints:
@@ -10127,7 +10188,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
 
     work = _strip_manager_voice(_strip_people_noise(source_text, people))
     when, distilled_work = _split_when_and_work(work)
-    distilled_work = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", distilled_work).strip(" .,:;-")
+    distilled_work = _strip_due_phrases(distilled_work)
     title_seed = _strip_manager_voice(title)
     title_seed_when, title_seed_work = _split_when_and_work(title_seed)
     when = when or title_seed_when
@@ -10252,6 +10313,9 @@ async def _llm_logical_copy(
         "never 'This is a reminder for myself', no names/@/dates.\n"
         "Description: full grammatical sentences. If the draft is truncated, finish the thought "
         "from the original request — do not leave dangling 'the' / 'I' / 'for'. "
+        "Never write 'I need my …' or glue Please onto leftover manager voice. "
+        "Example: 'I need my @HM Org to submit one BAMFAM call to their managers' → "
+        "'Please submit one BAMFAM call to your managers.' "
         "Use a short Next steps: numbered list (2-4 complete items).\n"
         "Do not invent a different task.\n"
         f"Original request: {raw_text[:800]}\n"
@@ -10426,7 +10490,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     # Ensure multi-word @mentions / team phrases become assignee hints even if the LLM skipped them
     hints = list(parsed.get("assignee_hints") or [])
     hint_keys = {str(h).strip().lstrip("@").lower() for h in hints}
-    for m in re.finditer(r"@([A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2})", text or ""):
+    for m in re.finditer(r"@([A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2})", text or ""):
         hint = m.group(1).strip()
         key = hint.lower()
         if hint and key not in hint_keys:
@@ -10451,7 +10515,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             hint_keys.add(key)
     if _self_assign_hint(text):
         hints = ["me"]
-    parsed["assignee_hints"] = hints
+    parsed["assignee_hints"] = _drop_destination_assignee_hints(hints, text)
 
     # Resolve assignees before title scrub so known names can be removed from title/description
     if req.resolve:

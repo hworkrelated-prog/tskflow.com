@@ -90,7 +90,35 @@ def test_system_prompt_forbids_pasting_the_command():
     assert 'title: "Finish outreach training"' in SRC
 
 
-def test_confirm_shows_assignee_ask():
+def test_need_my_group_to_submit_is_a_clear_ask():
+    ns = _ns()
+    raw = (
+        "I need my @HM Org to submit one BAMFAM call by end of day "
+        "meaning by 3 PM PST to their managers"
+    )
+    parsed = {
+        "title": raw,
+        "description": raw,
+        "action_items": [],
+        "assignee_hints": ["HM Org", "managers"],
+    }
+    ns["_enrich_parse_title_description"](parsed, raw, manager_name="Henrik")
+    title = (parsed.get("title") or "").lower()
+    desc = (parsed.get("description") or "").lower()
+    assert "submit" in title and "bamfam" in title
+    assert "to their" not in title
+    assert "i need my" not in desc
+    assert "please i" not in desc
+    assert "please submit" in desc
+    assert "your managers" in desc
+    assert "complete the conversation" not in desc
+    dropped = ns["_drop_destination_assignee_hints"](["HM Org", "managers", "Hm Managers"], raw)
+    assert "HM Org" in dropped
+    assert not any(str(h).lower() in ("managers", "hm managers") for h in dropped)
+    voice = ns["_strip_manager_voice"](ns["_strip_people_noise"](raw, ["HM Org"]))
+    assert voice.lower().startswith("submit")
+    assert "i need my" not in voice.lower()
+
     src = (ROOT / "frontend" / "src" / "components" / "AIQuickCreate.js").read_text(encoding="utf-8")
     assert 'data-testid="ai-confirm-assignee-ask"' in src
     assert "layoutTaskDescription(editDesc)" in src
