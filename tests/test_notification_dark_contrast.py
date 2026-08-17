@@ -42,3 +42,6 @@ def test_notify_text_repairs_mojibake_dashes():
     assert _notify_text("Due soon \u2014 heads up") == "Due soon - heads up"
     latin1_dash = "\u00e2\u20ac\u201d"
     assert _notify_text(f"get the team {latin1_dash} priority Urgent") == "get the team - priority Urgent"
+    apos = "No progress yet \u00c3\u00a2\u00c2\u20ac\u00c2\u2122 need help?"
+    assert "Ã" not in _notify_text(apos)
+    assert "'" in _notify_text(apos)
