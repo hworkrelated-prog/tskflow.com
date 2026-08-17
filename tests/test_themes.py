@@ -46,6 +46,8 @@ def test_settings_eod_card_uses_semantic_surfaces():
     assert "bg-card" in eod
     assert "bg-white/70" not in src.split("End-of-day report")[1].split("Smart Reminders")[0]
     assert "theme-option-${t.id}" in src or 'theme-option-dark' in src
+    assert "ios-switch" in src
+    assert "#34c759" in _read("App.css")
 
 
 def test_sales_badge_is_readable_in_dark_mode():
