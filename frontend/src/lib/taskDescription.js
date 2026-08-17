@@ -118,6 +118,7 @@ export function rewriteSelfAssignCopy(text) {
     s = s.replace(/Reply with a brief update when you are done\.?/gi, 'Mark this done when I finish.');
     s = s.replace(/Complete the ask above\.?/gi, 'Do the work.');
     s = s.replace(/^\s*\d{1,2}[.)]\s*Complete the\s*$/gim, '');
+    s = s.replace(/\n{3,}/g, '\n\n');
     return s;
 }
 

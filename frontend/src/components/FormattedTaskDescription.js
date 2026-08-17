@@ -1,6 +1,7 @@
 import React from 'react';
 import {
     descriptionHasStructuredHtml,
+    layoutTaskDescription,
     parseDescriptionBlocks,
     rewriteSelfAssignCopy,
 } from '@/lib/taskDescription';
@@ -10,19 +11,18 @@ const FormattedTaskDescription = ({ value, className = '', testId = 'task-descri
         return <p className="mt-2 text-sm text-muted-foreground italic">No description</p>;
     }
 
-    const source = isSelf ? rewriteSelfAssignCopy(value) : value;
-
-    if (descriptionHasStructuredHtml(source)) {
+    if (descriptionHasStructuredHtml(value) && !isSelf) {
         return (
             <div
                 className={`mt-2 text-base leading-relaxed prose prose-sm max-w-none break-words [word-break:break-word] overflow-hidden text-foreground ${className}`}
                 style={{ overflowWrap: 'anywhere' }}
-                dangerouslySetInnerHTML={{ __html: source }}
+                dangerouslySetInnerHTML={{ __html: value }}
                 data-testid={testId}
             />
         );
     }
 
+    const source = isSelf ? rewriteSelfAssignCopy(layoutTaskDescription(value)) : value;
     const blocks = parseDescriptionBlocks(source);
     return (
         <div className={`mt-2 space-y-3 text-base leading-relaxed text-foreground ${className}`} data-testid={testId}>
