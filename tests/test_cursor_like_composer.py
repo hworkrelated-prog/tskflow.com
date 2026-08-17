@@ -17,6 +17,8 @@ def test_composer_uses_plus_menu_and_arrow_send():
     assert 'data-testid="ai-screen-record-btn"' in toolbar
     assert 'data-testid="ai-attach-file-btn"' in toolbar
     assert 'data-testid="ai-transcript-btn"' in toolbar
+    assert 'data-testid="ai-recurring-btn"' in toolbar
+    assert "Repeat" in src
     assert "ArrowUp" in toolbar
     assert 'aria-label="Send"' in toolbar
     assert ">Go<" not in toolbar

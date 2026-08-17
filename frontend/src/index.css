@@ -401,6 +401,21 @@ h1, h2, h3, h4, h5, h6 {
     background: rgba(255, 255, 255, 0.06) !important;
     color: hsl(var(--foreground)) !important;
 }
+.ai-people-dropdown {
+    background: #fff;
+    border-color: rgb(226 232 240);
+    color: #0f172a;
+    box-shadow: 0 25px 50px -12px rgb(15 23 42 / 0.18);
+}
+[data-theme="dark"] .ai-people-dropdown {
+    background: #1c1c1f;
+    border-color: rgba(255, 255, 255, 0.12);
+    color: hsl(var(--foreground));
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.55);
+}
+[data-theme="dark"] .ai-people-dropdown button:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+}
 /* App.css paints every textarea with --input; keep this field flush with the shell. */
 [data-theme="dark"] .ai-composer-shell textarea,
 [data-theme="dark"] .ai-composer-shell input {

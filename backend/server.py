@@ -6645,7 +6645,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
                 api_key=emergent_key,
                 session_id=f"voice_{current_user['id']}",
                 system_message=VOICE_ASSISTANT_SYSTEM
-            ).with_model("openai", "gpt-4o-mini")
+            ).with_model("openai", _task_llm_model())
             hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
             screen_hint = ""
             if context.get("screen"):
@@ -6657,7 +6657,7 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             user_msg = UserMessage(
                 text=f"{hist_block}{screen_hint}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
             )
-            raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=14.0)
+            raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=_task_llm_timeout())
         except asyncio.TimeoutError:
             logging.error("Voice LLM timed out")
             raw = None
@@ -8810,9 +8810,12 @@ class SmartParseRequest(BaseModel):
     text: str
     context_hint: Optional[str] = None  # e.g. "engineering", "sales meeting" — optional
     resolve: Optional[bool] = False  # if True, resolve assignee_hints against DB users + groups
+    history: Optional[List[dict]] = None  # prior chat turns [{role, text}]
 
 
-SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI. Turn one short sentence into a perfect task.
+SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI — a sharp, fully-present colleague, not a form parser.
+
+Read the request the way a human would: messy speech, half-sentences, slang, implied owners ("her", "same as last time", "the team"), work buried in a story, and follow-ups that only make sense with the recent conversation. Infer everything you can. Only leave a field empty if it is truly unknown.
 
 Return ONE JSON object ONLY (no markdown, no prose):
 {
@@ -8901,14 +8904,18 @@ INTENT DETECTION:
 - Otherwise intent="task".
 
 CLARIFYING QUESTIONS:
-- Ask AT MOST ONE question. Prefer asking about the assignee (who) over the due date (when).
-- Only ask if something critical is missing. Don't ask questions the sentence already answered.
-- Prefer yes/no or A-or-B questions.
+- Ask AT MOST ONE question at a time, in natural chat — the way you'd ping someone on Slack. Never a form label ("Assignee:", "Due date:").
+- Prefer asking about the assignee (who) over the due date (when), and cadence if this is a recurring series.
+- Only ask if something critical is missing. Don't ask questions the sentence (or earlier chat) already answered.
+- After they answer, combine the original request + every answer into one complete task. Do not forget earlier details.
+- Prefer yes/no or A-or-B questions when there are two clear options; otherwise one short open question.
 - Never ask about title, description, priority, category, or success criteria if you can infer them.
 - Never ask about success criteria / expectations — those are optional.
 - Ask about due_date only if truly missing/ambiguous AND assignee is already clear.
 - Ask about assignees only if no usable hint was found (do not invent names). If the sentence already names a person, do not ask who.
 - Never ask who when the speaker said "me" / "myself" / "remind me" / "I need to" / "I'll". They already named themselves.
+- If the user opened Recurring (or said every/daily/weekly), treat it as a repeating series even if they forget the word "every". If cadence is missing, ask how often.
+- Goal: keep chatting until nothing important is left out, then return a ready task.
 
 TITLE RULES:
 - Crisp imperative 3–7 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
@@ -10003,6 +10010,18 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
         ]
 
 
+def _task_llm_model() -> str:
+    """Highest-quality model for understanding user prompts. Mini stays on cheap/fast passes."""
+    return (os.getenv("TSKFLOW_PARSE_MODEL") or "gpt-4o").strip() or "gpt-4o"
+
+
+def _task_llm_timeout() -> float:
+    try:
+        return max(8.0, float(os.getenv("TSKFLOW_PARSE_TIMEOUT") or "18"))
+    except (TypeError, ValueError):
+        return 18.0
+
+
 async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], current_user: dict) -> Optional[str]:
     """Tiny/fast second pass only when the title still looks wrong. Uses mini + 3s timeout."""
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
@@ -10034,7 +10053,12 @@ async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], c
     return None
 
 
-async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] = None) -> Optional[dict]:
+async def _llm_parse(
+    text: str,
+    current_user: dict,
+    context_hint: Optional[str] = None,
+    history: Optional[List[dict]] = None,
+) -> Optional[dict]:
     emergent_key = os.getenv("EMERGENT_LLM_KEY")
     if not emergent_key:
         return None
@@ -10046,14 +10070,25 @@ async def _llm_parse(text: str, current_user: dict, context_hint: Optional[str] 
         context += f" Likely assignee from speech: {', '.join(speech_hints)}."
     if context_hint:
         context += f" Hint: {context_hint}"
+    if history:
+        turns = []
+        for turn in history[-10:]:
+            if not isinstance(turn, dict):
+                continue
+            role = (turn.get("role") or "").strip().lower()
+            htext = (turn.get("text") or "").strip()
+            if role in ("user", "assistant") and htext:
+                turns.append(f"{role}: {htext[:600]}")
+        if turns:
+            context += "\nRecent conversation (use this to understand follow-ups, pronouns, and implied owners/dates):\n" + "\n".join(turns)
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(
             api_key=emergent_key,
             session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
             system_message=SMART_PARSE_SYSTEM + "\n\n" + context
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=parse_text)), timeout=7.0)
+        ).with_model("openai", _task_llm_model())
+        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=parse_text)), timeout=_task_llm_timeout())
     except Exception as e:
         logging.warning(f"smart_parse LLM error: {e}")
         return None
@@ -10104,15 +10139,16 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
 
-    # First-person / "remind me" is deterministic — skip the LLM round-trip.
-    if _should_fast_self_parse(text):
+    # First-person / "remind me" is deterministic — skip the LLM round-trip
+    # unless we have extra context (recurring from +, follow-up chat) to understand.
+    if _should_fast_self_parse(text) and not (req.context_hint or "").strip() and not req.history:
         parsed = dict(fallback)
         parsed["assignee_hints"] = ["me"]
         parsed["clarifying_questions"] = []
         parsed["recurring"] = dict(fallback.get("recurring") or {})
         parsed["confidence"] = {"title": 0.85, "priority": 0.5, "due_date": 0.0, "assignees": 0.98}
     else:
-        parsed = await _llm_parse(text, current_user, req.context_hint) or fallback
+        parsed = await _llm_parse(text, current_user, req.context_hint, req.history) or fallback
 
     # Merge shape
     for k, v in fallback.items():
@@ -10208,10 +10244,18 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         if vetted:
             parsed["title"] = vetted
 
-    # Rebuild clarifying questions: at most ONE, preferring who / team-scope over when
+    # Rebuild clarifying questions: one at a time, preferring who / team-scope / cadence / when
     needs_who = False
     needs_team_scope = False
     needs_when = not bool(parsed.get("due_date"))
+    rec = parsed.get("recurring") if isinstance(parsed.get("recurring"), dict) else {}
+    hint_l = (req.context_hint or "").lower()
+    force_recurring = "recurring" in hint_l or bool(rec.get("is_recurring"))
+    if force_recurring:
+        rec = dict(rec or {})
+        rec["is_recurring"] = True
+        parsed["recurring"] = rec
+    needs_cadence = force_recurring and not rec.get("frequency")
     if req.resolve:
         ar = parsed.get("assignee_resolution") or {}
         needs_team_scope = bool(ar.get("needs_team_scope"))
@@ -10226,16 +10270,18 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
 
     single_q = None
     if needs_who:
-        single_q = "Who should own this task?"
+        single_q = "Who should this be assigned to?"
     elif needs_team_scope:
         single_q = "Which team scope — direct reports or everyone under you?"
+    elif needs_cadence:
+        single_q = "How often should this repeat — daily, weekdays, weekly, or monthly?"
     elif needs_when:
         single_q = "When should this be done by?"
     else:
-        # Keep at most one LLM question if it is about who/when; drop the rest
+        # Keep at most one LLM question if it is about who/when/cadence; drop the rest
         for q in parsed["clarifying_questions"]:
             ql = (q or "").lower()
-            if any(k in ql for k in ("who", "assign", "when", "due", "deadline")):
+            if any(k in ql for k in ("who", "assign", "when", "due", "deadline", "often", "repeat")):
                 single_q = q
                 break
     parsed["clarifying_questions"] = [single_q] if single_q else []
@@ -10246,11 +10292,13 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
 class QuickCreatePreviewRequest(BaseModel):
     text: str
     answers: Optional[Dict[str, str]] = None  # optional Q&A pass-through
+    history: Optional[List[dict]] = None
+    context_hint: Optional[str] = None
 
 
 @api_router.post("/ai/quick-create-preview")
 async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dict = Depends(get_current_user)):
-    """One-shot: parse + resolve → returns a ready-to-confirm task preview + clarifying questions."""
+    """Parse + resolve → ready-to-confirm preview, chatting through anything still missing."""
     # If answers were provided, append them to the text so the LLM has more context
     text = req.text or ""
     extra_hints = _hints_from_answers(req.answers)
@@ -10262,7 +10310,12 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
             if h and f"assign to {h.lower()}" not in text.lower():
                 text = f"{text}. Assign to {h}."
 
-    parse_req = SmartParseRequest(text=text, resolve=True)
+    parse_req = SmartParseRequest(
+        text=text,
+        resolve=True,
+        context_hint=req.context_hint,
+        history=req.history,
+    )
     parsed = await smart_parse_task(parse_req, current_user)
     if extra_hints:
         hints = list(parsed.get("assignee_hints") or [])

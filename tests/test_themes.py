@@ -57,6 +57,11 @@ def test_sales_badge_is_readable_in_dark_mode():
     dark = css.split("[data-theme=\"dark\"] .sales-badge")[1].split("}")[0]
     assert "#f0fdfa" in dark
     assert "#0f766e" in dark
+    assert "[data-theme=\"dark\"] .text-amber-950" in css
+    index = _read("index.css")
+    assert ".ai-people-dropdown" in index
+    assert "[data-theme=\"dark\"] .ai-people-dropdown" in index
+    assert "[data-theme=\"dark\"] .text-teal-950" in css
     assert "text-emerald-800" in css
     assert 'className="sales-badge"' in card
     assert "sales-badge" in group
