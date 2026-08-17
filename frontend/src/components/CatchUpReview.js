@@ -43,13 +43,13 @@ const Row = ({ title, meta, onClick, testId }) => (
         type="button"
         onClick={onClick}
         data-testid={testId}
-        className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-colors"
+        className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border bg-secondary/60 hover:bg-muted hover:border-border transition-colors"
     >
         <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-slate-900 truncate">{title}</div>
-            {meta ? <div className="text-xs text-slate-500 truncate mt-0.5">{meta}</div> : null}
+            <div className="text-sm font-medium text-foreground truncate">{title}</div>
+            {meta ? <div className="text-xs text-muted-foreground truncate mt-0.5">{meta}</div> : null}
         </div>
-        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
     </button>
 );
 
@@ -121,22 +121,22 @@ export const CatchUpReview = () => {
     return (
         <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-6" data-testid="catch-up-review">
             <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
-            <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 max-h-[min(88dvh,640px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                <div className="px-5 pt-5 pb-3 border-b border-slate-100">
+            <div className="relative w-full sm:max-w-lg bg-card text-card-foreground rounded-t-2xl sm:rounded-2xl shadow-2xl border border-border max-h-[min(88dvh,640px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                <div className="px-5 pt-5 pb-3 border-b border-border">
                     <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
                             <Inbox className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h2 className="text-lg font-semibold text-slate-900">Catch up</h2>
-                            <p className="text-sm text-slate-500 mt-0.5">
+                            <h2 className="text-lg font-semibold text-foreground">Catch up</h2>
+                            <p className="text-sm text-muted-foreground mt-0.5">
                                 {loading ? 'Loading…' : (headlineParts.join(' · ') || 'Here is what needs your attention.')}
                             </p>
                         </div>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
-                            className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500"
+                            className="p-1.5 rounded-full hover:bg-muted text-muted-foreground"
                             aria-label="Close"
                             data-testid="catch-up-close"
                         >
@@ -229,7 +229,7 @@ export const CatchUpReview = () => {
                     )}
                 </div>
 
-                <div className="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center gap-2 bg-slate-50/80">
+                <div className="px-5 py-3 border-t border-border flex flex-wrap items-center gap-2 bg-muted/50">
                     <Button
                         variant="outline"
                         size="sm"
