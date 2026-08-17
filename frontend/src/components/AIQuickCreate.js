@@ -532,7 +532,7 @@ const AIQuickCreate = ({
     const stripPeopleNoise = (value, peopleNames = []) => {
         let s = String(value || '');
         // Multi-word @mentions: "@Mark Sibghat"
-        s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}/g, ' ');
+        s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2}/g, ' ');
         s = s.replace(/@\S+/g, ' ');
         // Speech debris: "please can you Mahmood an EOD report" → drop can-you + capitalized name only
         s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/g, '');
@@ -540,6 +540,8 @@ const AIQuickCreate = ({
         // Manager-voice: "get Hashim to review…" / "have Sarah do…" → keep the work clause
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/gi, '');
+        s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+(?:@[^\s]+(?:\s+[A-Za-z][\w'.-]*){0,2}\s+)?to\s+/gi, '');
+        s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+to\s+/gi, '');
         const names = [...peopleNames].filter(Boolean).sort((a, b) => b.length - a.length);
         for (const name of names) {
             s = s.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
@@ -632,10 +634,18 @@ const AIQuickCreate = ({
             .replace(/[ \t]+\n/g, '\n')
             .replace(/[ \t]{2,}/g, ' ')
             .trim();
+        if (!selfParse && desc && /\bi need my\b|^please i\b/i.test(desc.split('\n')[0] || '')) {
+            const m = desc.match(/\b(submit|send|review|complete|prepare|create|update|call|fix|draft|schedule|share|write|close)\b[\s\S]*/i);
+            if (m) desc = m[0].charAt(0).toUpperCase() + m[0].slice(1);
+        }
         if (!selfParse && desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do)\b/i.test(desc)) {
-            if (/\b(review|watch|check|complete|send|submit)\b/i.test(desc)) {
-                desc = desc.charAt(0).toUpperCase() + desc.slice(1);
-            } else {
+            if (/^(i|we|my)\b/i.test(desc)) {
+                const m = desc.match(/\b(submit|send|review|complete|prepare|create|update|call|fix|draft|schedule|share|write|close)\b[\s\S]*/i);
+                desc = m ? m[0] : desc.replace(/^i\s+need\s+my\s+(to\s+)?/i, '');
+            }
+            if (desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do|i)\b/i.test(desc)) {
+                desc = `Please ${desc.charAt(0).toLowerCase()}${desc.slice(1)}`;
+            } else if (desc && /^(submit|send|review|complete|prepare|create|update)\b/i.test(desc)) {
                 desc = `Please ${desc.charAt(0).toLowerCase()}${desc.slice(1)}`;
             }
         }
