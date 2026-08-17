@@ -36,6 +36,10 @@ def test_who_question_uses_readable_foreground():
     assert "bg-muted/70" in clarify
     assert "Who should this go to?" in src
     assert "text-teal-950" not in src
+    people_drop = src.split('data-testid="clarify-people-dropdown"')[1].split("peopleSearch.includes")[0]
+    assert "ai-people-dropdown" in people_drop
+    assert "hover:bg-teal-50" not in people_drop
+    assert "text-foreground" in people_drop
 
 
 def test_parse_uses_high_intelligence_model():
