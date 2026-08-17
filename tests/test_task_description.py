@@ -147,3 +147,53 @@ console.log('ok');
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ok" in result.stdout
+
+
+def test_named_owner_needs_to_is_not_self_assign():
+    script = r"""
+import {
+  nameHintsFromText,
+  promptNamesSomeoneElse,
+  promptMeansSelfAssign,
+  matchAssigneesFromPeople,
+} from './frontend/src/lib/selfAssign.js';
+
+const prompt = 'Benjamin needs to review and clear all redundant open opportunities by 1 pm PST today.';
+const hints = nameHintsFromText(prompt);
+if (!hints.some((n) => n.toLowerCase() === 'benjamin')) {
+  console.error('hint failed', hints);
+  process.exit(1);
+}
+if (!promptNamesSomeoneElse(prompt) || promptMeansSelfAssign(prompt)) {
+  console.error('owner treated as self');
+  process.exit(1);
+}
+const chips = matchAssigneesFromPeople(prompt, [
+  { id: 'u1', name: 'Benjamin White', email: 'ben@acme.com' },
+  { id: 'u2', name: 'Alice Chen', email: 'alice@acme.com' },
+]);
+if (chips.length !== 1 || chips[0].id !== 'u1') {
+  console.error('people match failed', chips);
+  process.exit(1);
+}
+if (nameHintsFromText('He should close lost opportunities').length) {
+  console.error('pronoun leaked', nameHintsFromText('He should close lost opportunities'));
+  process.exit(1);
+}
+const longPrompt = 'Benjamin needs to review and clear all redundant open opportunities by 1 pm PST today. He should either close lost them, or move them to September or October on their close dates.';
+const longHints = nameHintsFromText(longPrompt);
+if (longHints.length !== 1 || longHints[0].toLowerCase() !== 'benjamin') {
+  console.error('extra hints', longHints);
+  process.exit(1);
+}
+console.log('ok');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ok" in result.stdout

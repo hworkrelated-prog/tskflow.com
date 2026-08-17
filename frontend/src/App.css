@@ -251,6 +251,19 @@
     border-color: hsl(var(--border)) !important;
 }
 
+/* hover:bg-white is a different class than bg-white — without this, dark-mode
+   chips (Catch up rows, AI confirm due/title) flash a white pill over light text. */
+[data-theme="dark"] .hover\:bg-white:hover {
+    background: hsl(var(--muted)) !important;
+    color: hsl(var(--foreground)) !important;
+}
+[data-theme="dark"] .hover\:border-slate-200:hover,
+[data-theme="dark"] .hover\:border-slate-100:hover,
+[data-theme="dark"] .hover\:border-gray-200:hover,
+[data-theme="dark"] .hover\:border-gray-100:hover {
+    border-color: hsl(var(--border)) !important;
+}
+
 /* Toggle knobs stay white so they remain visible on the track */
 [data-theme="dark"] .theme-toggle-knob,
 [data-theme="dark"] span.w-5.h-5.bg-white.rounded-full {

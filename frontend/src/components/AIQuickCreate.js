@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
-import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
@@ -532,7 +532,7 @@ const AIQuickCreate = ({
     const stripPeopleNoise = (value, peopleNames = []) => {
         let s = String(value || '');
         // Multi-word @mentions: "@Mark Sibghat"
-        s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}/g, ' ');
+        s = s.replace(/@[A-Za-z][\w'.-]*(?:\s+[A-Z][A-Za-z']*){0,2}/g, ' ');
         s = s.replace(/@\S+/g, ' ');
         // Speech debris: "please can you Mahmood an EOD report" → drop can-you + capitalized name only
         s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/g, '');
@@ -540,6 +540,8 @@ const AIQuickCreate = ({
         // Manager-voice: "get Hashim to review…" / "have Sarah do…" → keep the work clause
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/gi, '');
+        s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+(?:@[^\s]+(?:\s+[A-Za-z][\w'.-]*){0,2}\s+)?to\s+/gi, '');
+        s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+to\s+/gi, '');
         const names = [...peopleNames].filter(Boolean).sort((a, b) => b.length - a.length);
         for (const name of names) {
             s = s.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
@@ -562,11 +564,14 @@ const AIQuickCreate = ({
     };
 
     const applyPreview = (p) => {
-        const sales = !!(p.is_sales_task || looksLikeSales(text, p.title, p.description, p.category));
+        const sourceText = (activePromptRef.current || text || '').trim();
+        const sales = !!(p.is_sales_task || looksLikeSales(sourceText, p.title, p.description, p.category));
         const fromParse = p.assignee_resolution?.resolved || [];
+        const fromPeople = matchAssigneesFromPeople(sourceText, people);
         const peopleNames = [
             ...editAssignees.map((a) => a.name).filter(Boolean),
             ...fromParse.map((a) => a.name).filter(Boolean),
+            ...fromPeople.map((a) => a.name).filter(Boolean),
             ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
         ];
         // Prefer the LLM title when it already looks clean — avoid over-scrubbing into "get do it"
@@ -585,9 +590,9 @@ const AIQuickCreate = ({
             : [];
         const hintSelf = (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()));
         const resolvedSelf = fromParse.length > 0 && fromParse.every((a) => isSelfAssigneeChip(a, user?.id));
-        const selfParse = promptMeansSelfAssign(text) || hintSelf || resolvedSelf;
+        const selfParse = promptMeansSelfAssign(sourceText) || hintSelf || resolvedSelf;
 
-        const work = stripPeopleNoise(text || '', peopleNames)
+        const work = stripPeopleNoise(sourceText || '', peopleNames)
             .replace(/\b(by|before|due)\s+.+$/i, '')
             .replace(/\band\s+get\b/gi, 'and')
             .trim();
@@ -629,10 +634,18 @@ const AIQuickCreate = ({
             .replace(/[ \t]+\n/g, '\n')
             .replace(/[ \t]{2,}/g, ' ')
             .trim();
+        if (!selfParse && desc && /\bi need my\b|^please i\b/i.test(desc.split('\n')[0] || '')) {
+            const m = desc.match(/\b(submit|send|review|complete|prepare|create|update|call|fix|draft|schedule|share|write|close)\b[\s\S]*/i);
+            if (m) desc = m[0].charAt(0).toUpperCase() + m[0].slice(1);
+        }
         if (!selfParse && desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do)\b/i.test(desc)) {
-            if (/\b(review|watch|check|complete|send|submit)\b/i.test(desc)) {
-                desc = desc.charAt(0).toUpperCase() + desc.slice(1);
-            } else {
+            if (/^(i|we|my)\b/i.test(desc)) {
+                const m = desc.match(/\b(submit|send|review|complete|prepare|create|update|call|fix|draft|schedule|share|write|close)\b[\s\S]*/i);
+                desc = m ? m[0] : desc.replace(/^i\s+need\s+my\s+(to\s+)?/i, '');
+            }
+            if (desc && !/^(please|kindly|review|complete|send|submit|prepare|create|update|watch|check|do|i)\b/i.test(desc)) {
+                desc = `Please ${desc.charAt(0).toLowerCase()}${desc.slice(1)}`;
+            } else if (desc && /^(submit|send|review|complete|prepare|create|update)\b/i.test(desc)) {
                 desc = `Please ${desc.charAt(0).toLowerCase()}${desc.slice(1)}`;
             }
         }
@@ -642,10 +655,11 @@ const AIQuickCreate = ({
         // Keep @mentions the user already picked; merge in any newly resolved assignees.
         // "Remind me" / "I need to" always lands on Me — never reopen the people picker.
         let merged;
-        if (promptMeansSelfAssign(text)) {
+        if (promptMeansSelfAssign(sourceText)) {
             merged = [SELF_CHIP];
         } else {
             merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
+            merged = mergeAssigneeLists(merged, fromPeople);
         }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
@@ -687,10 +701,10 @@ const AIQuickCreate = ({
         const qs = p.clarifying_questions || [];
         // Skip "who" if we already have a person — a first name / "me" is enough
         const hasAssignees = mergedCount > 0
-            || promptMeansSelfAssign(text)
+            || promptMeansSelfAssign(sourceText)
             || (p.assignee_resolution?.resolved || []).length > 0
-            || (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()) || !/^(my team|the team|our team|team|my reports|my direct reports|direct reports|everyone under me)$/i.test(String(h || '').trim()))
-            || /@/.test(text);
+            || fromPeople.length > 0
+            || /@/.test(sourceText);
         const filteredQs = hasAssignees
             ? qs.filter((q) => !/who|own|assign/i.test(q || '') || /scope|direct reports|everyone under/i.test(q || ''))
             : qs;
@@ -1874,7 +1888,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField('title')}
-                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-muted border border-transparent hover:border-border"
                                                             data-testid="ai-chip-title"
                                                             title="Edit task"
                                                         >
@@ -1893,7 +1907,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField('due')}
-                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-muted border border-transparent hover:border-border"
                                                             data-testid="ai-chip-due"
                                                         >
                                                             {formatDue(editDue) || 'Pick a date'}
@@ -1981,7 +1995,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField(editingField === 'desc' ? null : 'desc')}
-                                                            className="text-left text-slate-600 w-full rounded-md px-1.5 py-0.5 hover:bg-white"
+                                                            className="text-left text-muted-foreground w-full rounded-md px-1.5 py-0.5 hover:bg-muted"
                                                             data-testid="ai-chip-desc"
                                                         >
                                                             {editDesc || <span className="text-slate-400 italic">Add a note for them (optional)</span>}
