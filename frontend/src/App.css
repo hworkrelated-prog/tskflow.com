@@ -343,7 +343,7 @@
     background: rgb(240 253 250);
 }
 [data-theme="dark"] .notif-unread {
-    background: rgba(45, 212, 191, 0.12) !important;
+    background: #17332f !important;
     color: hsl(var(--foreground)) !important;
 }
 .notif-catch-up {

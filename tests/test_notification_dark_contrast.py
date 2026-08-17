@@ -23,7 +23,7 @@ def test_unread_rows_use_dedicated_dark_surface():
     assert "text-foreground" in bell
     assert "text-muted-foreground" in bell
     assert '[data-theme="dark"] .notif-unread' in css
-    assert "rgba(45, 212, 191, 0.12)" in css
+    assert "#17332f" in css
     dark_unread = css.split('[data-theme="dark"] .notif-unread')[1].split("}")[0]
     assert "hsl(var(--foreground))" in dark_unread
     dark_catch = css.split('[data-theme="dark"] .notif-catch-up')[1].split("}")[0]
