@@ -15,6 +15,23 @@ import { getErrorMessage } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
 import OnboardingPopup from '@/components/OnboardingPopup';
 
+function IosSwitch({ checked, onChange, testId }) {
+    return (
+        <label className="ios-switch-wrap inline-flex items-center cursor-pointer shrink-0">
+            <input
+                type="checkbox"
+                checked={!!checked}
+                onChange={onChange}
+                className="sr-only"
+                data-testid={testId}
+            />
+            <span className={`ios-switch ${checked ? 'is-on' : ''}`} aria-hidden="true">
+                <span className="ios-switch-knob theme-toggle-knob" />
+            </span>
+        </label>
+    );
+}
+
 const SettingsPage = () => {
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
@@ -883,19 +900,13 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
-                                <p className="text-xs text-muted-foreground">Daily summary of what you finished, what’s still open, and what to do next.</p>
+                                <p className="text-xs text-muted-foreground">Daily summary of what you finished, what’s still open, and what to do next. Sends once a day at the Pacific time you pick — if that hour already passed, today’s report goes out within a few minutes.</p>
                             </div>
-                            <label className="inline-flex items-center gap-2 cursor-pointer shrink-0" data-testid="eod-enabled-toggle">
-                                <input
-                                    type="checkbox"
-                                    checked={eodEnabled}
-                                    onChange={(e) => { setEodEnabled(e.target.checked); saveEod({ eod_enabled: e.target.checked }); }}
-                                    className="sr-only peer"
-                                />
-                                <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-amber-500 transition-colors">
-                                    <span className={`theme-toggle-knob absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${eodEnabled ? 'translate-x-5' : ''}`}></span>
-                                </span>
-                            </label>
+                            <IosSwitch
+                                checked={eodEnabled}
+                                testId="eod-enabled-toggle"
+                                onChange={(e) => { setEodEnabled(e.target.checked); saveEod({ eod_enabled: e.target.checked }); }}
+                            />
                         </div>
                         {eodEnabled && (
                             <div className="space-y-3 pt-2 border-t">
@@ -1446,18 +1457,11 @@ const SmartRemindersCard = ({ slackConnected }) => {
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
                     <p className="text-xs text-muted-foreground">Automatic nudges when tasks need attention — before they’re due, stuck, or overdue.</p>
                 </div>
-                <label className="inline-flex items-center gap-2 cursor-pointer shrink-0">
-                    <input
-                        type="checkbox"
-                        checked={rule.enabled}
-                        onChange={(e) => save({ enabled: e.target.checked })}
-                        className="sr-only peer"
-                        data-testid="reminders-enable-toggle"
-                    />
-                    <span className="w-11 h-6 bg-gray-200 rounded-full relative peer-checked:bg-rose-500 transition-colors">
-                        <span className={`theme-toggle-knob absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${rule.enabled ? 'translate-x-5' : ''}`} />
-                    </span>
-                </label>
+                <IosSwitch
+                    checked={rule.enabled}
+                    testId="reminders-enable-toggle"
+                    onChange={(e) => save({ enabled: e.target.checked })}
+                />
             </div>
 
             <p className="text-xs text-muted-foreground" data-testid="reminders-value-summary">{summary}</p>
@@ -1474,14 +1478,14 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     onClick={() => applyPreset(key)}
                                     className={`text-left p-3 rounded-xl border transition-colors ${
                                         selected
-                                            ? 'border-rose-400 bg-rose-50 ring-1 ring-rose-200'
-                                            : 'border-border bg-background hover:border-rose-300 hover:bg-rose-50/40'
+                                            ? 'border-rose-500 bg-rose-600 text-white ring-1 ring-rose-500'
+                                            : 'border-border bg-background text-foreground hover:border-rose-300'
                                     }`}
                                     data-testid={`reminder-preset-${key}`}
                                     aria-pressed={selected}
                                 >
-                                    <span className="text-sm font-semibold text-slate-800 block">{p.label}</span>
-                                    <span className="text-[11px] text-slate-500 leading-snug block">{p.help}</span>
+                                    <span className={`text-sm font-semibold block ${selected ? 'text-white' : 'text-foreground'}`}>{p.label}</span>
+                                    <span className={`text-[11px] leading-snug block ${selected ? 'text-white' : 'text-muted-foreground'}`}>{p.help}</span>
                                 </button>
                             );
                         })}
@@ -1505,7 +1509,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                                 type="button"
                                                 onClick={() => save({ triggers: toggleFrom(rule.triggers || [], t.key) })}
                                                 className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                                                    on ? 'bg-rose-50 border-rose-200 text-rose-900 font-medium' : 'bg-white border-slate-200 text-slate-600'
+                                                    on ? 'bg-muted border-border text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
                                                 }`}
                                                 data-testid={`reminder-trigger-${t.key}`}
                                                 aria-pressed={on}
@@ -1528,7 +1532,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                                 type="button"
                                                 onClick={() => save({ priorities: toggleFrom(rule.priorities || [], p) })}
                                                 className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                                                    on ? 'bg-teal-50 border-teal-200 text-teal-900 font-medium' : 'bg-white border-slate-200 text-slate-600'
+                                                    on ? 'bg-muted border-border text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
                                                 }`}
                                                 data-testid={`reminder-priority-${p}`}
                                                 aria-pressed={on}
@@ -1554,10 +1558,10 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                                 onClick={() => !c.disabled && save({ channels: toggleFrom(rule.channels || [], c.key) })}
                                                 className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
                                                     c.disabled
-                                                        ? 'opacity-40 cursor-not-allowed bg-white border-slate-200 text-slate-500'
+                                                        ? 'opacity-40 cursor-not-allowed bg-background border-border text-muted-foreground'
                                                         : on
-                                                            ? 'bg-rose-50 border-rose-200 text-rose-900 font-medium'
-                                                            : 'bg-white border-slate-200 text-slate-600'
+                                                            ? 'bg-muted border-border text-foreground font-medium'
+                                                            : 'bg-background border-border text-muted-foreground'
                                                 }`}
                                                 data-testid={`reminder-channel-${c.key}`}
                                                 aria-pressed={on}

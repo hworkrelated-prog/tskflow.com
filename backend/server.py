@@ -358,12 +358,12 @@ def to_pst(dt_str: str):
     dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
     return dt.astimezone(PST)
 
-async def send_email_notification(to_email: str, subject: str, content: str):
+async def send_email_notification(to_email: str, subject: str, content: str) -> bool:
     resend_key = os.getenv('RESEND_API_KEY')
     
     if not resend_key:
         logging.warning("Resend API key not configured, skipping email")
-        return
+        return False
     
     params = {
         "from": EMAIL_FROM,
@@ -378,12 +378,13 @@ async def send_email_notification(to_email: str, subject: str, content: str):
         try:
             email = await asyncio.to_thread(resend.Emails.send, params)
             logging.info(f"Email sent to {to_email}, id: {email.get('id') if isinstance(email, dict) else email}")
-            return
+            return True
         except Exception as e:
             last_err = e
             if attempt < 2:
                 await asyncio.sleep(0.4 * (attempt + 1))
     logging.error(f"Failed to send email to {to_email} after 3 attempts: {last_err}")
+    return False
 
 
 async def send_emails_concurrent(messages: list):
@@ -3938,6 +3939,27 @@ def _eod_sections_for(user: dict) -> Dict[str, bool]:
         if k in raw:
             out[k] = bool(raw[k])
     return out
+
+
+def _eod_target_hour(prefs: dict) -> int:
+    target_hour = (prefs or {}).get("eod_hour")
+    if target_hour is None:
+        target_hour = 17
+    try:
+        target_hour = int(target_hour)
+    except Exception:
+        target_hour = 17
+    return max(0, min(23, target_hour))
+
+
+def _eod_is_due(prefs: dict, now) -> bool:
+    """True once the user's Pacific delivery hour has arrived and we have not sent today."""
+    if not (prefs or {}).get("eod_enabled"):
+        return False
+    today = now.strftime("%Y-%m-%d")
+    if (prefs or {}).get("eod_last_sent_date") == today:
+        return False
+    return now.hour >= _eod_target_hour(prefs)
 
 @api_router.put("/auth/preferences")
 async def update_preferences(prefs: UserPreferences, current_user: dict = Depends(get_current_user)):
@@ -7809,17 +7831,12 @@ async def _build_eod_summary_for_user(u: dict, now):
     return html, slack_text, {"completed": len(completed), "open": len(open_tasks_docs), "missed": len(missed), **mgr_counts, **sheet_counts}
 
 
-@api_router.post("/cron/eod-report")
-async def cron_eod_report(secret: Optional[str] = None):
-    """Runs every hour from the scheduler. For each user opted-in whose local hour matches
-    their preferred delivery hour (eod_hour, default 17 == 5pm), send their EOD digest to
-    the channel they chose (email / slack / both).
+async def send_due_eod_reports():
+    """Send today's EOD digest to opted-in users whose Pacific hour has arrived.
+    Safe to call every few minutes — at most one send per user per calendar day.
     """
-    expected = os.getenv("CRON_SECRET", "")
-    if expected and secret != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
     now = get_pst_now()
+    today = now.strftime("%Y-%m-%d")
     users = await db.users.find({}, {
         "_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1,
         "subscription_tier": 1, "is_team_owner": 1, "team_owner_email": 1, "company_domain": 1,
@@ -7827,18 +7844,7 @@ async def cron_eod_report(secret: Optional[str] = None):
     sent = 0
     for u in users:
         prefs = u.get("preferences") or {}
-        # Opt-in gate: by default we DO NOT spam users — they must enable in Settings.
-        if not prefs.get("eod_enabled"):
-            continue
-        target_hour = prefs.get("eod_hour")
-        if target_hour is None:
-            target_hour = 17
-        try:
-            target_hour = int(target_hour)
-        except Exception:
-            target_hour = 17
-        # Only fire when the scheduler tick lines up with the user's chosen hour.
-        if now.hour != target_hour:
+        if not _eod_is_due(prefs, now):
             continue
 
         built = await _build_eod_summary_for_user(u, now)
@@ -7846,22 +7852,42 @@ async def cron_eod_report(secret: Optional[str] = None):
             continue
         html, slack_text, _counts = built
         channel = (prefs.get("eod_channel") or "email").lower()
+        delivered = False
 
         if channel in ("email", "both"):
             try:
-                await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html)
-                sent += 1
-            except Exception:
-                pass
+                if await send_email_notification(u["email"], f"Your Tskflow EOD summary — {now.strftime('%b %d')}", html):
+                    delivered = True
+            except Exception as e:
+                logging.warning(f"[eod] email failed for {u.get('email')}: {e}")
         if channel in ("slack", "both"):
             webhook = await _resolve_slack_webhook(u)
             if webhook:
                 try:
                     await _post_to_slack(webhook, slack_text)
-                except Exception:
-                    pass
+                    delivered = True
+                except Exception as e:
+                    logging.warning(f"[eod] slack failed for {u.get('email')}: {e}")
+            elif channel == "slack":
+                logging.warning(f"[eod] slack selected but no webhook for {u.get('email')}")
+
+        if delivered:
+            await db.users.update_one(
+                {"id": u["id"]},
+                {"$set": {"preferences.eod_last_sent_date": today}},
+            )
+            sent += 1
 
     return {"ok": True, "sent": sent}
+
+
+@api_router.post("/cron/eod-report")
+async def cron_eod_report(secret: Optional[str] = None):
+    """Hourly-safe entrypoint. Also runs from the in-app scheduler every 5 minutes."""
+    expected = os.getenv("CRON_SECRET", "")
+    if expected and secret != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return await send_due_eod_reports()
 
 
 @api_router.post("/cron/engagement-digest")
@@ -7894,10 +7920,10 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
     delivered_to = []
     if channel in ("email", "both"):
         try:
-            await send_email_notification(u["email"], f"Tskflow EOD preview — {now.strftime('%b %d')}", html)
-            delivered_to.append("email")
-        except Exception:
-            pass
+            if await send_email_notification(u["email"], f"Tskflow EOD preview — {now.strftime('%b %d')}", html):
+                delivered_to.append("email")
+        except Exception as e:
+            logging.warning(f"[eod preview] email failed: {e}")
     if channel in ("slack", "both"):
         webhook = await _resolve_slack_webhook(u)
         if webhook:
@@ -7906,7 +7932,13 @@ async def eod_preview_now(current_user: dict = Depends(get_current_user)):
                 delivered_to.append("slack")
             except Exception:
                 pass
-    return {"ok": True, "sent": bool(delivered_to), "delivered_to": delivered_to, "counts": counts}
+    return {
+        "ok": True,
+        "sent": bool(delivered_to),
+        "delivered_to": delivered_to,
+        "counts": counts,
+        **({} if delivered_to else {"reason": "Couldn’t send the email — mail isn’t configured on the server, or Slack isn’t connected."}),
+    }
 
 
 # --- Transcript → task drafts (Google Meet flow) ---
@@ -11179,6 +11211,7 @@ async def _scheduler_loop():
             await _check_smart_reminders()
             await _sweep_ignored_slack_followups()
             await _sync_all_sheet_configs()
+            await send_due_eod_reports()
             await send_weekly_engagement_digest()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
