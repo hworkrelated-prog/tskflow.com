@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar, Image, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
-import { layoutTaskDescription } from '@/lib/taskDescription';
+import { displayTaskTitle, layoutTaskDescription } from '@/lib/taskDescription';
 
 const safeDate = (value, fmt = 'MMM dd') => {
     if (!value) return 'No date';
@@ -118,7 +118,7 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                                         data-testid={`quick-complete-${task.id}`}
                                     />
                                 )}
-                                <h3 className="font-semibold text-base sm:text-lg line-clamp-2 flex-1 text-foreground">{task.title}</h3>
+                                <h3 className="font-semibold text-base sm:text-lg line-clamp-2 flex-1 min-w-0 break-words text-foreground">{displayTaskTitle(task.title)}</h3>
                             </div>
                             {getStatusBadge(task.status)}
                         </div>

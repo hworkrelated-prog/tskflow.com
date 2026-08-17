@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, SELF_CHIP } from '@/lib/selfAssign';
-import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip } from '@/lib/taskDescription';
+import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
  * AIQuickCreate — text an assistant, not fill a form.
@@ -610,8 +610,7 @@ const AIQuickCreate = ({
             } else if (/\beod\b|end of day|report/i.test(seed)) {
                 title = 'Send EOD report';
             } else {
-                const cleaned = seed.replace(/^(an?|the)\s+/i, '').split(/\s+/).slice(0, 8).join(' ');
-                title = cleaned ? `Complete ${cleaned}` : '';
+                title = fallbackTaskTitle(seed);
             }
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
@@ -652,6 +651,7 @@ const AIQuickCreate = ({
             title = rewriteSelfAssignCopy(title);
             desc = rewriteSelfAssignCopy(desc);
         }
+        title = displayTaskTitle(title);
         desc = layoutTaskDescription(desc);
         setEditTitle(title || p.title || '');
         setEditDesc(desc || '');

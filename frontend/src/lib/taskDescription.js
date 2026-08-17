@@ -1,12 +1,103 @@
 /** Turn stored task copy into readable layout (numbered steps, Next steps). */
 
+function decodeEntities(s) {
+    return String(s || '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&quot;/gi, '"');
+}
+
+export function descriptionHasStructuredHtml(raw) {
+    return /<(ul|ol|li)[\s>]/i.test(String(raw || ''));
+}
+
 export function layoutTaskDescription(raw) {
     if (!raw) return '';
-    let s = String(raw).replace(/<[^>]*>/g, ' ');
-    s = s.replace(/\s*Next steps?:\s*/i, '\n\nNext steps:\n');
+    let s = String(raw);
+    s = s.replace(/<br\s*\/?>/gi, '\n');
+    s = s.replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n');
+    s = s.replace(/<li[^>]*>/gi, '');
+    s = s.replace(/<[^>]*>/g, ' ');
+    s = decodeEntities(s);
+    s = s.replace(/\s*((?:Next\s+)?steps?):\s*/i, (_, label) => {
+        const pretty = /^next/i.test(label) ? 'Next steps:' : 'Steps:';
+        return `\n\n${pretty}\n`;
+    });
     s = s.replace(/([^\n])[ \t]+(\d{1,2})[.)][ \t]+/g, '$1\n$2. ');
     s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+    s = s.replace(/[ \t]{2,}/g, ' ');
     return s.trim();
+}
+
+export function parseDescriptionBlocks(raw) {
+    const text = layoutTaskDescription(raw);
+    if (!text) return [];
+    const blocks = [];
+    let para = [];
+    let list = null;
+
+    const flushPara = () => {
+        const joined = para.join('\n').trim();
+        if (joined) blocks.push({ type: 'p', text: joined });
+        para = [];
+    };
+    const flushList = () => {
+        if (list?.items?.length) blocks.push({ type: 'ol', items: list.items });
+        list = null;
+    };
+
+    for (const line of text.split('\n')) {
+        const heading = line.trim().match(/^(next steps|steps):?$/i);
+        const item = line.match(/^\s*(\d{1,2})[.)]\s+(.*)$/);
+        if (heading) {
+            flushPara();
+            flushList();
+            blocks.push({ type: 'h', text: `${heading[1][0].toUpperCase()}${heading[1].slice(1).toLowerCase()}:` });
+            continue;
+        }
+        if (item) {
+            flushPara();
+            if (!list) list = { items: [] };
+            list.items.push(item[2].trim());
+            continue;
+        }
+        if (!line.trim()) {
+            flushPara();
+            flushList();
+            continue;
+        }
+        flushList();
+        para.push(line);
+    }
+    flushPara();
+    flushList();
+    return blocks;
+}
+
+/** Titles like "Complete This is a reminder…" — drop the glued command. */
+export function displayTaskTitle(raw) {
+    let s = String(raw || '').replace(/\s+/g, ' ').trim();
+    s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
+    if (!s) return '';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Last-resort title when the model returns junk — don't prefix sentences with "Complete". */
+export function fallbackTaskTitle(seed) {
+    const cleaned = String(seed || '')
+        .replace(/^(an?|the)\s+/i, '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 8)
+        .join(' ');
+    if (!cleaned) return '';
+    if (/^(complete|this|that|these|those|i|my|prepare|send|review|update|create|fix|draft|remind)\b/i.test(cleaned)) {
+        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return `Complete ${cleaned}`;
 }
 
 export function rewriteSelfAssignCopy(text) {
