@@ -155,7 +155,7 @@
 
 [data-theme="dark"] button[class*="outline"]:hover {
     background: hsl(var(--muted)) !important;
-    border-color: hsl(var(--ring)) !important;
+    border-color: hsl(222 10% 42%) !important;
 }
 
 [data-theme="dark"] button[class*="ghost"] {
@@ -246,7 +246,9 @@
 [data-theme="dark"] button.bg-white:hover,
 [data-theme="dark"] .bg-white.border:hover {
     background: hsl(var(--muted)) !important;
-    border-color: hsl(var(--ring)) !important;
+    /* Neutral hover border — --ring is brand teal and reads as a color glitch
+       on large surfaces (Catch up panel) and list rows. */
+    border-color: hsl(var(--border)) !important;
 }
 
 /* Toggle knobs stay white so they remain visible on the track */
@@ -391,6 +393,10 @@
 [data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900,
 [data-theme="dark"] .text-amber-950 { color: #fcd34d !important; }
 [data-theme="dark"] .text-red-700, [data-theme="dark"] .text-red-800, [data-theme="dark"] .text-red-900 { color: #fca5a5 !important; }
+[data-theme="dark"] .text-rose-600,
+[data-theme="dark"] .text-rose-700,
+[data-theme="dark"] .text-rose-800,
+[data-theme="dark"] .text-rose-900 { color: #fda4af !important; }
 [data-theme="dark"] .text-teal-950,
 [data-theme="dark"] .text-slate-950 {
     color: hsl(var(--foreground)) !important;
@@ -402,6 +408,18 @@
 [data-theme="dark"] .border-slate-200,
 [data-theme="dark"] .border-slate-100 {
     border-color: #2f2f2f !important;
+}
+[data-theme="dark"] .border-rose-100,
+[data-theme="dark"] .border-rose-200 {
+    border-color: #7f1d1d !important;
+}
+[data-theme="dark"] .border-amber-100,
+[data-theme="dark"] .border-amber-200 {
+    border-color: #78350f !important;
+}
+[data-theme="dark"] .border-teal-100,
+[data-theme="dark"] .border-teal-200 {
+    border-color: #134e4a !important;
 }
 [data-theme="dark"] .border-emerald-100,
 [data-theme="dark"] .border-emerald-200 {
