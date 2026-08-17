@@ -1874,7 +1874,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField('title')}
-                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-muted border border-transparent hover:border-border"
                                                             data-testid="ai-chip-title"
                                                             title="Edit task"
                                                         >
@@ -1893,7 +1893,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField('due')}
-                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-white border border-transparent hover:border-slate-200"
+                                                            className="font-semibold rounded-md px-1 py-0.5 hover:bg-muted border border-transparent hover:border-border"
                                                             data-testid="ai-chip-due"
                                                         >
                                                             {formatDue(editDue) || 'Pick a date'}
@@ -1981,7 +1981,7 @@ const AIQuickCreate = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditingField(editingField === 'desc' ? null : 'desc')}
-                                                            className="text-left text-slate-600 w-full rounded-md px-1.5 py-0.5 hover:bg-white"
+                                                            className="text-left text-muted-foreground w-full rounded-md px-1.5 py-0.5 hover:bg-muted"
                                                             data-testid="ai-chip-desc"
                                                         >
                                                             {editDesc || <span className="text-slate-400 italic">Add a note for them (optional)</span>}
