@@ -81,6 +81,7 @@ export function parseDescriptionBlocks(raw) {
 export function displayTaskTitle(raw) {
     let s = String(raw || '').replace(/\s+/g, ' ').trim();
     s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
+    s = s.replace(/^this is a reminder for myself\s+to\s+/i, '');
     if (!s) return '';
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -114,6 +115,9 @@ export function rewriteSelfAssignCopy(text) {
     s = s.replace(/\bwe\s+need\s+to\b/gi, 'I need to');
     s = s.replace(/\bwe\s+have\s+to\b/gi, 'I have to');
     s = s.replace(/\bwe\s+should\b/gi, 'I should');
+    s = s.replace(/Reply with a brief update when you are done\.?/gi, 'Mark this done when I finish.');
+    s = s.replace(/Complete the ask above\.?/gi, 'Do the work.');
+    s = s.replace(/^\s*\d{1,2}[.)]\s*Complete the\s*$/gim, '');
     return s;
 }
 

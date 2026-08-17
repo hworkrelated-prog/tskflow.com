@@ -170,19 +170,22 @@ def test_reminder_for_myself_is_personal_not_slack_them():
     title = (parsed.get("title") or "").lower()
     desc = (parsed.get("description") or "").lower()
     assert "reminder for myself" not in title
+    assert "complete this is" not in title
     assert "dmc" in title or "prepare" in title
     assert "please" not in desc.split("next steps:")[0]
     assert "them" not in desc
     assert "\n1." in (parsed.get("description") or "")
 
 
-def test_fast_path_wired_in_smart_parse():
+def test_self_assign_always_runs_llm_then_logic_pass():
     src = BE.read_text(encoding="utf-8")
     assert "_self_assign_hint" in src
-    assert "_should_fast_self_parse" in src
     chunk = src[src.index("async def smart_parse_task") : src.index("class QuickCreatePreviewRequest")]
-    assert "_should_fast_self_parse(text)" in chunk
+    assert "await _llm_parse" in chunk
+    assert "_should_fast_self_parse(text)" not in chunk
     assert 'hints = ["me"]' in chunk
+    assert "_llm_logical_copy" in chunk
+    assert 'parsed["self_assign"]' in chunk
     assert "in N minutes" in src or "in N minutes/mins" in src
 
 

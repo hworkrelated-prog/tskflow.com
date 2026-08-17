@@ -649,7 +649,7 @@ const AIQuickCreate = ({
         }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
-        if (selfParse || assigneesAreSelf(merged, user?.id)) {
+        if (selfParse || p.self_assign || assigneesAreSelf(merged, user?.id)) {
             title = rewriteSelfAssignCopy(title);
             desc = rewriteSelfAssignCopy(desc);
         }
@@ -869,7 +869,7 @@ const AIQuickCreate = ({
                 context_hint: recurringHintRef.current
                     ? 'User tapped Recurring in the plus menu. Treat this as a repeating series. Infer cadence if they said every/daily/weekly; otherwise ask how often in plain language.'
                     : undefined,
-            }, { timeout: 25000 });
+            }, { timeout: 35000 });
             const p = res.data;
             if (p.intent === 'question') {
                 await runQA(t, { alreadyLogged: true });

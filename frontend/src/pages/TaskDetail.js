@@ -925,7 +925,10 @@ const TaskDetail = () => {
 
                             <div className="min-w-0">
                                 <Label className="text-muted-foreground">Description</Label>
-                                <FormattedTaskDescription value={task.description} />
+                                <FormattedTaskDescription
+                                    value={task.description}
+                                    isSelf={task.assigned_to && task.created_by && task.assigned_to === task.created_by}
+                                />
                             </div>
 
                             {task.success_criteria && (

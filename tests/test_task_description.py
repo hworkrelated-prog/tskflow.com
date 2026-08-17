@@ -82,8 +82,12 @@ if (displayTaskTitle('Complete This is a reminder for myself') !== 'This is a re
   console.error('display title failed', displayTaskTitle('Complete This is a reminder for myself'));
   process.exit(1);
 }
-if (displayTaskTitle('Complete the Q3 deck') !== 'Complete the Q3 deck') {
-  console.error('kept complete-verb title', displayTaskTitle('Complete the Q3 deck'));
+if (displayTaskTitle('Complete This is a reminder for myself to review deals') !== 'Review deals') {
+  console.error('reminder wrapper title failed', displayTaskTitle('Complete This is a reminder for myself to review deals'));
+  process.exit(1);
+}
+if (rewriteSelfAssignCopy('1. Complete the ask above.\n2. Reply with a brief update when you are done.') !== '1. Do the work.\n2. Mark this done when I finish.') {
+  console.error('self steps rewrite failed', rewriteSelfAssignCopy('1. Complete the ask above.\n2. Reply with a brief update when you are done.'));
   process.exit(1);
 }
 
