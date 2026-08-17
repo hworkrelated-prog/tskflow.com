@@ -29,6 +29,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from phase_helpers import priority_followup_config, generate_ai_work_review
+from text_clean import clean_display_text, clean_tree
 from eod_report import (
     aggregate_leaderboard,
     eod_sends_on_weekday,
@@ -114,8 +115,12 @@ def is_personal_email(email: str) -> bool:
     domain = email.lower().split('@')[-1]
     return domain in BLOCKED_EMAIL_DOMAINS
 
+class CleanJSONResponse(JSONResponse):
+    def render(self, content: Any) -> bytes:
+        return super().render(clean_tree(content))
+
 # Create the main app
-app = FastAPI()
+app = FastAPI(default_response_class=CleanJSONResponse)
 api_router = APIRouter(prefix="/api")
 
 # Pydantic Models
@@ -894,10 +899,12 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
     # Auto-accept self-assigned tasks
     initial_status = "Accepted" if is_self_assigned else "Pending"
     accepted_at = get_pst_now().isoformat() if is_self_assigned else None
-    title = task.title
-    description = task.description or ""
+    title = clean_display_text(task.title)
+    description = clean_display_text(task.description or "")
     if is_self_assigned:
         title, description = _apply_self_assign_copy(title, description)
+        title = clean_display_text(title)
+        description = clean_display_text(description)
 
     task_doc = {
         "id": task_id,
@@ -1150,8 +1157,8 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
         await db.tasks.insert_one({
             "id": parent_id,
             "is_parent": True,
-            "title": task.title,
-            "description": task.description,
+            "title": clean_display_text(task.title),
+            "description": clean_display_text(task.description or ""),
             "created_by": current_user["id"],
             "assigned_to": current_user["id"],
             "due_date": task.due_date,
@@ -1692,8 +1699,8 @@ async def create_draft_task(task: DraftTaskCreate, current_user: dict = Depends(
     
     task_doc = {
         "id": task_id,
-        "title": task.title or "",
-        "description": task.description or "",
+        "title": clean_display_text(task.title or ""),
+        "description": clean_display_text(task.description or ""),
         "assigned_to": task.assigned_to or "",
         "assigned_to_email": None,
         "created_by": current_user["id"],
@@ -1915,7 +1922,7 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
         "id": str(uuid.uuid4()),
         "user_id": current_user["id"],
         "user_name": current_user["name"],
-        "content": comment.content,
+        "content": clean_display_text(comment.content),
         "mentions": comment.mentions or [],
         "created_at": get_pst_now().isoformat()
     }
@@ -2198,19 +2205,8 @@ async def list_activity_tasks(
 
 
 def _notify_text(s: Optional[str]) -> str:
-    """Normalize notification text for OS / browsers that mangle unicode dashes."""
-    if not s:
-        return ""
-    return (
-        str(s)
-        .replace("\u2014", "-")  # em dash
-        .replace("\u2013", "-")  # en dash
-        .replace("\u2018", "'")
-        .replace("\u2019", "'")
-        .replace("\u201c", '"')
-        .replace("\u201d", '"')
-        .replace("\xa0", " ")
-    )
+    """Normalize notification / UI text so mojibake never reaches the client."""
+    return clean_display_text(s)
 
 
 # ===== BROWSER NOTIFICATIONS (poll-based) =====
@@ -2864,15 +2860,7 @@ Status: {task.get('status')}"""
             chat.aask([UserMessage(content=prompt)]),
             timeout=10.0,
         )
-        summary = (getattr(response, "content", None) or str(response) or "").strip()
-        # Repair accidental mojibake if a model/path reintroduces it
-        summary = (
-            summary
-            .replace("\u00c3\u00a2\u00c2\u0080\u00c2\u0094", "\u2014")
-            .replace("\u00e2\u0080\u0094", "\u2014")
-            .replace("\u00e2\u20ac\u201d", "\u2014")
-            .replace("\u00e2\u20ac\u201c", "\u2013")
-        )
+        summary = clean_display_text((getattr(response, "content", None) or str(response) or "").strip())
         return {"summary": summary or _plain_task_blurb(task)}
     except asyncio.TimeoutError:
         return {"summary": _plain_task_blurb(task, note="(Summary timed out.)")}
@@ -3555,15 +3543,15 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
     changes = []  # Track before→after changes
     
     if task_update.title is not None:
-        update_data["title"] = task_update.title
-        if task_update.title != task.get("title"):
-            changes.append(f"<strong>Title:</strong> {task.get('title', 'None')} → {task_update.title}")
+        update_data["title"] = clean_display_text(task_update.title)
+        if update_data["title"] != task.get("title"):
+            changes.append(f"<strong>Title:</strong> {task.get('title', 'None')} → {update_data['title']}")
     
     if task_update.description is not None:
-        update_data["description"] = task_update.description
-        if task_update.description != task.get("description"):
+        update_data["description"] = clean_display_text(task_update.description)
+        if update_data["description"] != task.get("description"):
             old_desc = task.get("description", "None")[:50] + ("..." if len(task.get("description", "")) > 50 else "")
-            new_desc = task_update.description[:50] + ("..." if len(task_update.description) > 50 else "")
+            new_desc = update_data["description"][:50] + ("..." if len(update_data["description"]) > 50 else "")
             changes.append(f"<strong>Description:</strong> {old_desc} → {new_desc}")
     
     if task_update.due_date is not None:
@@ -3582,7 +3570,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
             changes.append(f"<strong>Category:</strong> {task.get('category', 'None')} → {task_update.category}")
 
     if task_update.success_criteria is not None:
-        cleaned = (task_update.success_criteria or "").strip() or None
+        cleaned = clean_display_text((task_update.success_criteria or "").strip()) or None
         update_data["success_criteria"] = cleaned
         if cleaned != task.get("success_criteria"):
             changes.append("<strong>Success criteria</strong> updated")
@@ -7081,7 +7069,7 @@ class WSConnectionManager:
         dead = []
         for ws in self.active.get(user_id, set()):
             try:
-                await ws.send_json(payload)
+                await ws.send_json(clean_tree(payload))
             except Exception:
                 dead.append(ws)
         for ws in dead:
@@ -7388,6 +7376,16 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
 @api_router.get("/notifications")
 async def get_notifications(current_user: dict = Depends(get_current_user), limit: int = 50):
     docs = await db.notifications.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    for d in docs:
+        nt = clean_display_text(d.get("title"))
+        nb = clean_display_text(d.get("body"))
+        if nt != (d.get("title") or "") or nb != (d.get("body") or ""):
+            await db.notifications.update_one(
+                {"id": d["id"], "user_id": current_user["id"]},
+                {"$set": {"title": nt, "body": nb}},
+            )
+        d["title"] = nt
+        d["body"] = nb
     unread = await db.notifications.count_documents({"user_id": current_user["id"], "read": {"$ne": True}})
     return {"notifications": docs, "unread": unread}
 

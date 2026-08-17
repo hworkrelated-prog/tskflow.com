@@ -3,6 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useNavigate } 
 import axios from 'axios';
 import { Toaster } from '@/components/ui/sonner';
 import '@/App.css';
+import { cleanDisplayText, cleanJsonTree } from '@/lib/cleanDisplayText';
+
+axios.interceptors.response.use((res) => {
+    if (res.data && (typeof res.data === 'object' || typeof res.data === 'string')) {
+        res.data = cleanJsonTree(res.data);
+    }
+    return res;
+});
 
 import LandingPage from '@/pages/LandingPage';
 import RegistrationPage from '@/pages/RegistrationPage';
@@ -93,10 +101,7 @@ const AuthProvider = ({ children }) => {
         if (!user) return;
         let cancelled = false;
 
-        const sanitize = (s) => (s || '')
-            .replace(/\u2014|\u2013/g, '-')
-            .replace(/\u2018|\u2019/g, "'")
-            .replace(/\u201c|\u201d/g, '"');
+        const sanitize = (s) => cleanDisplayText(s);
 
         const runCatchUp = async () => {
             if (cancelled) return;
@@ -222,7 +227,7 @@ const AuthProvider = ({ children }) => {
                 ws.onmessage = (ev) => {
                     try {
                         if (ev.data === 'pong') return;
-                        const data = JSON.parse(ev.data);
+                        const data = cleanJsonTree(JSON.parse(ev.data));
                         if (data.event === 'notification') {
                             window.dispatchEvent(new CustomEvent('tskflow:notification', { detail: data.notification }));
                             // Realtime OS toast for live events only — never for reminder backlog types
@@ -230,8 +235,8 @@ const AuthProvider = ({ children }) => {
                             const allowOs = nType && nType !== 'reminder';
                             if (allowOs && 'Notification' in window && Notification.permission === 'granted' && data.notification) {
                                 try {
-                                    const title = (data.notification.title || 'TskFlow').replace(/\u2014|\u2013/g, '-');
-                                    const body = (data.notification.body || '').replace(/\u2014|\u2013/g, '-');
+                                    const title = cleanDisplayText(data.notification.title || 'TskFlow');
+                                    const body = cleanDisplayText(data.notification.body || '');
                                     const n = new Notification(title, { body, tag: data.notification.id });
                                     n.onclick = () => { window.focus(); if (data.notification.task_id) window.location.href = `/task/${data.notification.task_id}`; };
                                 } catch (_) { /* noop */ }

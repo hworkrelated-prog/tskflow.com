@@ -1,4 +1,5 @@
 /** Turn stored task copy into readable layout (numbered steps, Next steps). */
+import { cleanDisplayText } from './cleanDisplayText.js';
 
 function decodeEntities(s) {
     return String(s || '')
@@ -16,7 +17,7 @@ export function descriptionHasStructuredHtml(raw) {
 
 export function layoutTaskDescription(raw) {
     if (!raw) return '';
-    let s = String(raw);
+    let s = cleanDisplayText(String(raw));
     s = s.replace(/<br\s*\/?>/gi, '\n');
     s = s.replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n');
     s = s.replace(/<li[^>]*>/gi, '');
@@ -79,7 +80,7 @@ export function parseDescriptionBlocks(raw) {
 
 /** Titles like "Complete This is a reminder…" — drop the glued command. */
 export function displayTaskTitle(raw) {
-    let s = String(raw || '').replace(/\s+/g, ' ').trim();
+    let s = cleanDisplayText(raw).replace(/\s+/g, ' ').trim();
     s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
     if (!s) return '';
     return s.charAt(0).toUpperCase() + s.slice(1);
