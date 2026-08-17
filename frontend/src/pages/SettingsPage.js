@@ -1485,7 +1485,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     aria-pressed={selected}
                                 >
                                     <span className={`text-sm font-semibold block ${selected ? 'text-white' : 'text-foreground'}`}>{p.label}</span>
-                                    <span className={`text-[11px] leading-snug block ${selected ? 'text-white/85' : 'text-muted-foreground'}`}>{p.help}</span>
+                                    <span className={`text-[11px] leading-snug block ${selected ? 'text-white' : 'text-muted-foreground'}`}>{p.help}</span>
                                 </button>
                             );
                         })}
