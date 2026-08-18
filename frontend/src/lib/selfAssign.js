@@ -9,33 +9,58 @@ const SELF_REMIND_RE = /\b(?:remind|nudge|ping|notify)\s+me\b/i;
 const SELF_ASSIGN_TO_RE = /\bassign(?:ed)?(?:\s+\w+){0,4}\s+to\s+(?:me|myself)\b/i;
 const SELF_TASK_FOR_RE = /\b(?:a\s+)?(?:task|reminder|todo|note)\s+for\s+(?:me|myself)\b/i;
 const SELF_FIRST_PERSON_RE = /\bi(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\b/i;
-const DELIVER_TO_ME_RE = /\b(?:send|give|email|forward|cc|show|tell|share|text)\s+me\b|\b(?:send|give|email|forward|share|draft|write)\b(?:\s+\S+){0,8}\s+(?:with|to)\s+me\b/i;
+const DELIVER_TO_ME_RE = /\b(?:send|give|email|forward|cc|show|tell|share|text|shoot|get|draft|write)\s+me\b|\b(?:send|give|email|forward|share|draft|write|shoot)\b(?:\s+\S+){0,10}\s+(?:with|to)\s+me\b|\b(?:share|send|email|draft|write)\b(?:\s+\S+){0,10}\s+for\s+me\b/i;
 const HAVE_NAME_RE = /\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:to|go|do|review|send|look|check|update|through)/gi;
+const ASKED_TO_NAME_RE = /\b(?:i(?:'ve| have|'d| had)?\s+)?(?:just\s+)?(?:please\s+)?(?:asked|told|ask|tell)\s+(?!me\b)([A-Za-z][A-Za-z']*)\s+to\b/gi;
+const WANT_PERSON_TO_RE = /\bi\s+(?:want|need|would like)\s+(?!my\b|the\b|our\b|to\b|them\b)([A-Za-z][A-Za-z']*)\s+to\b/gi;
+const HAVE_NAME_RUN_RE = /\b(?:have|had|get|got)\s+([A-Za-z][A-Za-z']*)\s+run\b/gi;
 const OWNER_NEEDS_RE = /\b([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\b/gi;
 const NAME_STOP = new Set([
     'my', 'the', 'our', 'this', 'that', 'them', 'him', 'her', 'he', 'she', 'they',
     'we', 'you', 'i', 'me', 'us', 'it', 'a', 'an', 'your', 'their', 'someone',
     'anyone', 'everyone', 'anybody', 'somebody', 'nobody', 'who', 'what', 'when',
-    'please', 'today', 'tomorrow', 'team', 'all', 'each', 'both',
+    'please', 'today', 'tomorrow', 'team', 'all', 'each', 'both', 'his', 'hers',
+    'just', 'also', 'then', 'can',
 ]);
+const NAME_TRAIL_STOP = new Set([...NAME_STOP, 'to', 'go', 'do', 'run', 'give', 'share', 'send', 'through', 'and']);
+
+function cleanNameHint(name) {
+    const tokens = String(name || '').trim().split(/\s+/).filter(Boolean);
+    while (tokens.length && NAME_STOP.has(tokens[0].toLowerCase().replace(/[.,;:]+$/g, ''))) tokens.shift();
+    while (tokens.length && NAME_TRAIL_STOP.has(tokens[tokens.length - 1].toLowerCase().replace(/[.,;:]+$/g, ''))) tokens.pop();
+    const first = (tokens[0] || '').toLowerCase().replace(/[.,;:]+$/g, '');
+    if (!tokens.length || NAME_STOP.has(first) || first.length < 2) return '';
+    return tokens.join(' ');
+}
 
 export function nameHintsFromText(text) {
     const t = String(text || '');
     if (!t.trim()) return [];
     const found = [];
-    for (const rx of [HAVE_NAME_RE, OWNER_NEEDS_RE]) {
+    for (const rx of [ASKED_TO_NAME_RE, WANT_PERSON_TO_RE, HAVE_NAME_RUN_RE, HAVE_NAME_RE, OWNER_NEEDS_RE]) {
         rx.lastIndex = 0;
         let m = rx.exec(t);
         while (m) {
-            const name = (m[1] || '').trim();
-            const first = (name.split(/\s+/)[0] || '').toLowerCase();
-            if (name && !NAME_STOP.has(first) && !found.some((n) => n.toLowerCase() === name.toLowerCase())) {
+            const name = cleanNameHint(m[1] || '');
+            if (name && !found.some((n) => n.toLowerCase() === name.toLowerCase())) {
                 found.push(name);
             }
             m = rx.exec(t);
         }
     }
     return found;
+}
+
+export function subjectForPhrase(text) {
+    const t = String(text || '');
+    const labeled = t.match(/\bfor\s+((?:the\s+)?[A-Za-z0-9][\w'.-]*(?:\s+[A-Za-z0-9][\w'.-]*){0,5}\s+(?:accounts?|clients?|deals?))\b/i);
+    if (labeled) return labeled[1].replace(/\s+/g, ' ').trim();
+    const poss = t.match(/\b((?:the\s+)?[A-Za-z][\w.-]*(?:\s+[A-Za-z][\w.-]*){0,3})(?:'s)?\s+account\b/i);
+    if (poss && !/^(his|her|their|the|my)$/i.test(poss[1].trim())) {
+        const name = poss[1].replace(/\s+/g, ' ').trim();
+        return /account/i.test(name) ? name : `${name} account`;
+    }
+    return '';
 }
 
 export function matchAssigneesFromPeople(text, people) {
@@ -67,6 +92,7 @@ export function promptNamesSomeoneElse(text) {
     if (TEAM_PHRASE_RE.test(t)) return true;
     if (/@[A-Za-z]/.test(t) && !/(^|\s)@me\b/i.test(t)) return true;
     if (nameHintsFromText(t).length) return true;
+    if (/\bi(?:'ve| have|'d| had)?\s+(?:asked|told)\s+(?!me\b)[A-Za-z]/i.test(t)) return true;
     return false;
 }
 

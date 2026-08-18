@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
-import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP } from '@/lib/selfAssign';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
@@ -600,14 +600,17 @@ const AIQuickCreate = ({
             .replace(/\b(by|before|due)\s+.+$/i, '')
             .replace(/\band\s+get\b/gi, 'and')
             .trim();
+        const account = subjectForPhrase(sourceText);
         const looksNamed = peopleNames.some((n) => {
             const last = (n || '').split(/\s+/).pop();
             return last && last.length > 2 && new RegExp(`\\b${last}\\b`, 'i').test(title);
         });
+        const titleMissesAccount = !!(account && title && !account.split(/\s+/).filter((w) => !/^(the|a|an|account|client|deal)$/i.test(w)).every((w) => title.toLowerCase().includes(w.toLowerCase())));
         const titleBad = !title
             || /^assign\b/i.test(title)
             || title.includes('@')
             || looksNamed
+            || titleMissesAccount
             || title.split(/\s+/).length > 12
             || title.split(/\s+/).length < 2
             || /^(an?|the)\b/i.test(title)
@@ -616,10 +619,10 @@ const AIQuickCreate = ({
         if (titleBad) {
             const seed = (actions[0] || work)
                 .replace(/\s+(?:with|to)\s+me\b/gi, '')
+                .replace(/\s+for\s+me\b/gi, '')
                 .replace(/\b(?:a|an)\s+(?:good|great|nice|solid|quick|strong)\s+/gi, '')
                 .replace(/\s{2,}/g, ' ')
                 .trim();
-            const account = (sourceText.match(/\bfor\s+((?:the\s+)?[A-Za-z0-9][\w'.-]*(?:\s+[A-Za-z0-9][\w'.-]*){0,5}\s+(?:accounts?|clients?|deals?))\b/i) || [])[1];
             const mShare = seed.match(/\b(share|send|draft|write|email)\b.*$/i);
             const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look|provide|share|write)\b.*$/i);
             if (mShare && /template|email|deck|update|report/i.test(mShare[0])) {
