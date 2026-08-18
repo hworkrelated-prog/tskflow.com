@@ -29,9 +29,18 @@ def test_composer_uses_plus_menu_and_arrow_send():
 
 def test_format_toolbar_is_overlay_only_when_open():
     src = _read("components", "AIQuickCreate.js")
+    css = _read("index.css")
     assert "{formatOpen ? (" in src
-    bar = src[src.index('data-testid="ai-format-toolbar"') - 180 : src.index('data-testid="ai-format-toolbar"') + 80]
+    bar = src[src.index('data-testid="ai-format-toolbar"') - 220 : src.index('data-testid="ai-format-toolbar"') + 120]
     assert "absolute" in bar
+    assert "bottom-full" in bar
+    assert "top-2" not in bar
+    assert "ai-format-toolbar" in bar
+    assert "bg-white/95" not in bar
+    assert ".ai-format-toolbar" in css
+    assert "[data-theme=\"dark\"] .ai-format-toolbar" in css
+    assert ".ai-dock-panel.is-active .ai-composer-shell" in css
+    assert "border-radius: 0" in css.split(".ai-composer-shell textarea")[1].split("}")[0]
 
 
 def test_composer_send_uses_themeable_class():
