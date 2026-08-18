@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
-import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP } from '@/lib/selfAssign';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
@@ -538,7 +538,8 @@ const AIQuickCreate = ({
         s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/g, '');
         s = s.replace(/\b(?:[Pp]lease\s+)?[Cc]an\s+you\s+/g, '');
         // Manager-voice: "get Hashim to review…" / "have Sarah do…" → keep the work clause
-        s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
+        s = s.replace(/\bi(?:'ve| have)\s+(?:asked|told)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
+        s = s.replace(/\b(?:asked|told|get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+/gi, '');
         s = s.replace(/\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+/gi, '');
         s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+(?:@[^\s]+(?:\s+[A-Za-z][\w'.-]*){0,2}\s+)?to\s+/gi, '');
         s = s.replace(/\bi\s+(?:need|want|would like)\s+(?:my|the|our)\s+to\s+/gi, '');
@@ -590,34 +591,51 @@ const AIQuickCreate = ({
             : [];
         const hintSelf = (p.assignee_hints || []).some((h) => /^(me|myself|self)$/i.test(String(h || '').trim()));
         const resolvedSelf = fromParse.length > 0 && fromParse.every((a) => isSelfAssigneeChip(a, user?.id));
-        const selfParse = promptMeansSelfAssign(sourceText) || hintSelf || resolvedSelf;
+        const namedSomeoneElse = promptNamesSomeoneElse(sourceText);
+        const selfParse = namedSomeoneElse
+            ? false
+            : (promptMeansSelfAssign(sourceText) || ((hintSelf || resolvedSelf) && !namedSomeoneElse));
 
         const work = stripPeopleNoise(sourceText || '', peopleNames)
             .replace(/\b(by|before|due)\s+.+$/i, '')
             .replace(/\band\s+get\b/gi, 'and')
             .trim();
+        const account = subjectForPhrase(sourceText);
         const looksNamed = peopleNames.some((n) => {
             const last = (n || '').split(/\s+/).pop();
             return last && last.length > 2 && new RegExp(`\\b${last}\\b`, 'i').test(title);
         });
+        const titleMissesAccount = !!(account && title && !account.split(/\s+/).filter((w) => !/^(the|a|an|account|client|deal)$/i.test(w)).every((w) => title.toLowerCase().includes(w.toLowerCase())));
         const titleBad = !title
             || /^assign\b/i.test(title)
             || title.includes('@')
             || looksNamed
+            || titleMissesAccount
             || title.split(/\s+/).length > 12
             || title.split(/\s+/).length < 2
             || /^(an?|the)\b/i.test(title)
             || /\b(can you|please can|get do)\b/i.test(title)
             || /\bget\s*$/i.test(title);
         if (titleBad) {
-            const seed = actions[0] || work;
+            const seed = (actions[0] || work)
+                .replace(/\s+(?:with|to)\s+me\b/gi, '')
+                .replace(/\s+for\s+me\b/gi, '')
+                .replace(/\b(?:a|an)\s+(?:good|great|nice|solid|quick|strong)\s+/gi, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            const mShare = seed.match(/\b(share|send|draft|write|email)\b.*$/i);
             const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look|provide|share|write)\b.*$/i);
-            if (m) {
+            if (mShare && /template|email|deck|update|report/i.test(mShare[0])) {
+                title = mShare[0].split(/\s+/).slice(0, 10).join(' ');
+            } else if (m) {
                 title = m[0].split(/\s+/).slice(0, 8).join(' ');
             } else if (/\beod\b|end of day|report/i.test(seed)) {
                 title = 'Send EOD report';
             } else {
                 title = fallbackTaskTitle(seed);
+            }
+            if (account && title && !title.toLowerCase().includes(account.toLowerCase())) {
+                title = `${title.replace(/\s+for\b.*$/i, '').trim()} for ${account}`;
             }
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
@@ -660,10 +678,13 @@ const AIQuickCreate = ({
         } else {
             merged = mergeAssigneeLists(editAssigneesRef.current, fromParse);
             merged = mergeAssigneeLists(merged, fromPeople);
+            if (namedSomeoneElse) {
+                merged = merged.filter((a) => a && a.id !== 'self' && !isSelfAssigneeChip(a, user?.id));
+            }
         }
         editAssigneesRef.current = merged;
         setEditAssignees(merged);
-        if (selfParse || p.self_assign || assigneesAreSelf(merged, user?.id)) {
+        if ((selfParse || p.self_assign) && !namedSomeoneElse) {
             title = rewriteSelfAssignCopy(title);
             desc = rewriteSelfAssignCopy(desc);
         }
