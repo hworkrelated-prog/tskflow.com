@@ -21,6 +21,25 @@ import FormattedTaskDescription from '@/components/FormattedTaskDescription';
 import RichTextEditor from '@/components/RichTextEditor';
 import GroupResponseReview from '@/components/GroupResponseReview';
 
+const REMINDER_KIND_LABELS = {
+    before_due: 'coming due soon',
+    '3h': 'due in about 3 hours',
+    '2h': 'due in about 2 hours',
+    '30min': 'due in 30 minutes',
+    overdue: 'overdue',
+    no_response: 'waiting on a response',
+    no_progress: 'no progress yet',
+};
+
+export function humanizeReminderBody(body) {
+    if (!body) return body;
+    const raw = String(body);
+    return raw.replace(
+        /\s*[—\-]\s*(before_due|3h|2h|30min|overdue|no_response|no_progress)\s*$/i,
+        (_, key) => ` — ${REMINDER_KIND_LABELS[key.toLowerCase()] || key.replace(/_/g, ' ')}`,
+    );
+}
+
 const TaskDetail = () => {
     const { taskId, token } = useParams();
     const { user } = useAuth();
@@ -1500,12 +1519,12 @@ const TaskDetail = () => {
                                                     <Badge variant="outline" className="text-[10px]">nudge</Badge>
                                                 )}
                                                 {a.actor_name && (
-                                                    <span className="text-xs text-muted-foreground">from {a.actor_name}</span>
+                                                    <span className="text-xs font-medium text-amber-900">from {a.actor_name}</span>
                                                 )}
                                             </div>
-                                            {a.body && <p className="text-sm text-amber-950/80 whitespace-pre-wrap">{a.body}</p>}
+                                            {a.body && <p className="text-sm text-amber-950 whitespace-pre-wrap">{humanizeReminderBody(a.body)}</p>}
                                             {a.recipient_name && (
-                                                <p className="text-xs text-muted-foreground mt-1">To: {a.recipient_name}</p>
+                                                <p className="text-xs font-medium text-amber-900 mt-1">To: {a.recipient_name}</p>
                                             )}
                                         </div>
                                     ))}
