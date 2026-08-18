@@ -9020,12 +9020,13 @@ ASSIGNEE HINTS:
 - If speaker refers to "my team" or "the team" or "our team", include the literal string "my team" (everyone under them)
 - If they say "my direct reports" or "my reports" include the literal string "my direct reports"
 - If they say "everyone under me" / "my whole team" include the literal string "everyone under me"
-- A first name is enough ("have Harold…", "ask Sarah to…", "Benjamin needs to review…") — put that name in assignee_hints. Do not ask who.
+- A first name is enough ("have Harold…", "ask Sarah to…", "I've asked Sam to…", "Benjamin needs to review…") — put that name in assignee_hints. Do not ask who.
 - "{Name} needs to / should / has to / will / must …" means that person owns the work. Example: "Benjamin needs to review opportunities by 1pm" → assignee_hints: ["Benjamin"]. Do NOT ask "Who should this be assigned to?"
+- Past tense still names the owner: "I've asked Sam to run…" / "I asked Maya to send…" → assignee_hints: ["Sam"] / ["Maya"]. The speaker is NOT the assignee.
 - SELF-ASSIGN: if the speaker says "remind me", "nudge me", "ping me", "notify me", "assign to me/myself",
   "@me", "I need to", "I have to", "I'll", "I will", "I should", "I must", they ARE the assignee.
   Put "me" in assignee_hints. Do NOT ask who. Do NOT leave assignee_hints empty.
-- "send me an update" / "tell me when" / "email me the deck" is NOT self-assign — someone else delivers to the speaker.
+- "send me an update" / "tell me when" / "email me the deck" / "share a template with me" is NOT self-assign — someone else delivers to the speaker. "with me" / "to me" is the destination, not the owner.
 - NEVER invent assignees. If none found, return empty array.
 
 INTENT DETECTION:
@@ -9047,10 +9048,12 @@ CLARIFYING QUESTIONS:
 - Goal: keep chatting until nothing important is left out, then return a ready task.
 
 TITLE RULES:
-- Crisp imperative 3–7 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
+- Crisp imperative 3–8 words summarizing the WORK itself (e.g. "Send EOD report", "Finalize opportunity action plans").
 - NEVER start with "Assign", never include @handles, person names, last names, emails, dates, or priority words.
 - Completely ignore leading @mentions like "@Mark Sibghat @Benjamin White …" — those are assignees, not title words.
 - Keep compound phrases intact (e.g. "action plans", not truncated "action").
+- Keep the subject/account in the title when the user named one: "for Beck bus account" must survive. Drop filler ("a good", "with me") before you drop the account.
+- Spoken run-ons list several actions ("run it through the AI agent give it context and share a template"). Title the deliverable (the template/email) AND keep the account; put the other clauses in description / action_items / Next steps — never "Do the work."
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
 - Never start with Tell/Ask/Have/Need or leave "we need to" in the title.
 - Speech/dictation is often broken ("Please can you Mahmood an EOD report"). Infer the intent:
@@ -9074,6 +9077,7 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - If the prompt is truncated ("…we need to" with no object), still rewrite into an assignee-facing ask
   ("On Monday, please complete this.") — do not echo "Tell that… we need to".
 - If the user listed steps (1. 2. 3. or bullets), preserve them as a clear numbered list in description.
+- If they spoke several actions without numbers ("run X through the AI agent, give it context, and share a template"), turn each action into an action_item and a Next steps line. Do not collapse that into generic "Do the work."
 - Also fill action_items with those assignee-facing steps.
 - Only leave description empty for a trivial one-liner where the title alone is enough.
 - Never leave description empty when the input is longer than ~1 sentence or contains multiple requirements.
@@ -9282,7 +9286,7 @@ _EVERYONE_HINTS = {
     "whole team", "all my reports", "indirect reports", "all reports",
 }
 _HAVE_NAME_RE = re.compile(
-    r"\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+"
+    r"\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+"
     r"([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+"
     r"(?:to|go|do|review|send|look|check|update|through)",
     re.I,
@@ -9349,6 +9353,7 @@ _SELF_FIRST_PERSON_RE = re.compile(
 )
 _NOT_SELF_DELIVER_TO_ME_RE = re.compile(
     r"(?i)\b(?:send|give|email|forward|cc|show|tell|share|text)\s+me\b"
+    r"|\b(?:send|give|email|forward|share|draft|write)\b(?:\s+\S+){0,8}\s+(?:with|to)\s+me\b"
 )
 _OTHER_ASSIGNEE_RE = re.compile(
     r"(?i)\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b|\beveryone under me\b"
@@ -9366,7 +9371,7 @@ def _prompt_names_other_assignee(text: str) -> bool:
     if _OTHER_ASSIGNEE_RE.search(text):
         return True
     if re.search(
-        r"(?i)\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+(?!me\b)(?-i:[A-Z][A-Za-z'.-]*)",
+        r"(?i)\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+(?!me\b)(?-i:[A-Z][A-Za-z'.-]*)",
         text,
     ):
         return True
@@ -9657,11 +9662,51 @@ _NEED_TO_RE = re.compile(r"(?i)\b(?:we|they|you)\s+need\s+to\s*")
 _ON_WEEKDAY_RE = re.compile(
     r"(?i)\bon\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
 )
+_SUBJECT_FOR_RE = re.compile(
+    r"(?i)\bfor\s+((?:the\s+)?[A-Za-z0-9][\w'.-]*(?:\s+[A-Za-z0-9][\w'.-]*){0,5}\s+"
+    r"(?:accounts?|clients?|deals?|opportunit(?:y|ies)|opps?))\b"
+)
+
+
+def _normalize_spoken_ask(text: str) -> str:
+    """Fix dictation glue so clauses and owners parse as a human would hear them."""
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"(?i)\bi(?:'ve| have)\s+(asked|told)\s+", r"\1 ", s)
+    s = re.sub(
+        r"(?i)\b(the\s+(?:ai\s+)?agent)\s+(give|add|share|send|include|provide)\b",
+        r"\1 and \2",
+        s,
+    )
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _subject_for_phrase(text: str) -> str:
+    """Account/client named with 'for X account' — keep this in the title."""
+    m = _SUBJECT_FOR_RE.search(text or "")
+    if not m:
+        return ""
+    return re.sub(r"\s+", " ", m.group(1)).strip()
+
+
+def _ground_account_refs(text: str, raw: str) -> str:
+    subj = _subject_for_phrase(raw)
+    if not subj or not text:
+        return text or ""
+    return re.sub(r"(?i)\b(?:his|her|their|the)\s+account\b", subj, text, count=1)
+
+
+def _compact_title_work(s: str) -> str:
+    t = s or ""
+    t = re.sub(r"(?i)\s+(?:with|to)\s+me\b", "", t)
+    t = re.sub(r"(?i)\b(?:a|an)\s+(?:good|great|nice|solid|quick|strong)\s+", "", t)
+    return re.sub(r"\s+", " ", t).strip(" .,:;-")
 
 
 def _strip_manager_voice(text: str) -> str:
     """Remove routing wrappers so only the work remains."""
-    s = (text or "").strip()
+    s = _normalize_spoken_ask(text)
     if not s:
         return ""
     s = re.sub(r"(?i)^(please|kindly)\s+", "", s)
@@ -9670,6 +9715,14 @@ def _strip_manager_voice(text: str) -> str:
     s = _NEED_MY_TO_RE.sub("", s, count=1)
     s = re.sub(r"(?i)^let\s+(?:(?:my|the|our)\s+)?(?:team|them)\s+know\s+(?:that\s+)?", "", s)
     s = re.sub(r"(?i)^tell\s+that\s+", "", s)
+    # "I've asked Sam to run…" / leftover "asked to run…" after names are stripped
+    s = re.sub(
+        r"(?i)^(?:i(?:'ve| have)\s+)?(?:asked|told|ask|tell|have|get|got)\s+"
+        r"(?!me\b)(?:[A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2}\s+)?to\s+",
+        "",
+        s,
+        count=1,
+    )
     s = re.sub(
         r"(?i)^(?:this\s+is\s+)?(?:a\s+)?reminder\s+for\s+(?:me|myself)\s+(?:to\s+)?(?:make\s+sure\s+(?:that\s+)?)?(?:i\s+)?",
         "",
@@ -9762,6 +9815,8 @@ def _apply_self_assign_copy(title: str, description: str) -> tuple:
 
 
 def _parse_is_self_assign(parsed: dict, raw_text: str, current_user: Optional[dict] = None) -> bool:
+    if _prompt_names_other_assignee(raw_text):
+        return False
     if _self_assign_hint(raw_text):
         return True
     hints = [str(h).strip().lower() for h in (parsed.get("assignee_hints") or []) if h]
@@ -9885,7 +9940,7 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+", "Please "),
         (r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+", "Please "),
         # "get Hashim to review the recording" → "review the recording"
-        (r"(?i)\b(?:get|have|ask|tell)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+", ""),
+        (r"(?i)\b(?:get|have|ask|asked|tell|told)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+to\s+", ""),
         (r"(?i)\bget\s+do\b", "do"),
         (r"(?i)\band\s+get\b", "and"),
         (r"(?i)\bsend\s+me\b", f"send {mgr}"),
@@ -9893,6 +9948,7 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         (r"(?i)\bupdate\s+me\b", f"update {mgr}"),
         (r"(?i)\blet\s+me\s+know\b", f"let {mgr} know"),
         (r"(?i)\bshare\s+(?:it|this|them)?\s*with\s+me\b", f"share with {mgr}"),
+        (r"(?i)\bshare\b(.{0,80}?)\s+with\s+me\b", lambda m: f"share{m.group(1)} with {mgr}"),
         (r"(?i)\bemail\s+me\b", f"email {mgr}"),
     ]
     for pat, repl in replacements:
@@ -9923,6 +9979,8 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
 
 def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> List[str]:
     blob = f"{title} {desc}".strip()
+    subj = _subject_for_phrase(blob)
+    account = subj or "the account"
     if self_assign:
         if re.search(r"(?i)\b(1\s*:\s*1|one[\s-]?on[\s-]?one|meeting|prep)\b", blob):
             return [
@@ -9934,16 +9992,33 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
                 "Gather what you need for each deal.",
                 "Mark this done when everything is ready.",
             ]
+        if re.search(r"(?i)\b(ai agent|email template|template)\b", blob):
+            steps = []
+            if re.search(r"(?i)\b(ai agent|run)\b", blob):
+                steps.append(f"Run {account} through the AI agent and give it the context.")
+            if re.search(r"(?i)\btemplate\b", blob):
+                steps.append(
+                    f"Share a strong email template for {subj}." if subj else "Share a strong email template."
+                )
+            steps.append("Mark this done when I finish.")
+            return steps[:4]
         return [
             "Do the work.",
             "Mark this done when I finish.",
         ]
     steps = []
+    if re.search(r"(?i)\b(ai agent|(?:run|put)\b.{0,40}\baccount)\b", blob):
+        steps.append(f"Run {account} through the AI agent and give it the context.")
+    if re.search(r"(?i)\b(email )?template\b", blob):
+        if subj:
+            steps.append(f"Share a strong email template for {subj}.")
+        else:
+            steps.append("Share a strong email template.")
     if re.search(r"(?i)\bsubmit\b", blob):
         steps.append("Submit it and confirm it went through.")
         if re.search(r"(?i)\bmanagers?\b", blob):
             steps.append("Make sure the submission reached them.")
-    elif re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob):
+    elif re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob) and not steps:
         steps.append("Review the material and note anything that needs a decision.")
     if re.search(r"(?i)\b(update|report|eod|summary)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append(f"Send a short update to {('your manager')} with what you found and any blockers.")
@@ -9954,7 +10029,9 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
     if not steps:
         steps.append("Complete the ask above.")
         steps.append("Reply with a brief update when you are done.")
-    return steps[:3]
+    elif not any(re.search(r"(?i)\breply|when you are done|when I finish", st) for st in steps):
+        steps.append("Reply with a brief update when you are done.")
+    return steps[:4]
 
 
 def _carnegie_format_description(desc: str, title: str = "", manager_name: Optional[str] = None, self_assign: bool = False) -> str:
@@ -10090,7 +10167,8 @@ def _title_from_work_text(work: str) -> str:
     """Build a short imperative title from cleaned work text."""
     if not work:
         return ""
-    s = work
+    raw_work = work
+    s = _compact_title_work(_normalize_spoken_ask(work))
     s = re.sub(
         r"(?i)^i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+",
         "",
@@ -10123,12 +10201,18 @@ def _title_from_work_text(work: str) -> str:
     if re.match(r"(?i)^on\s+\w+$", s) or s.lower() in _WEEKDAYS:
         day = re.sub(r"(?i)^on\s+", "", s).strip()
         return f"Complete this by {day.capitalize()}" if day else "Complete this"
-    # Prefer starting at a strong verb when present
+    # Prefer the deliverable verb (share/send/draft) over earlier setup verbs (run)
+    m_deliver = re.search(
+        r"(?i)\b(share|send|draft|write|email)\b.*$",
+        s,
+    )
     m = re.search(
         r"(?i)\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|provide|share|write|finish|start|begin|handle)\b.*$",
         s,
     )
-    if m:
+    if m_deliver and re.search(r"(?i)\b(template|email|deck|update|report)\b", m_deliver.group(0)):
+        s = m_deliver.group(0)
+    elif m:
         s = m.group(0)
     elif s and re.match(r"(?i)^(this|that|these|those|it|i|my)\b", s):
         # A sentence leftover, not a noun phrase — never "Complete This is a reminder…"
@@ -10137,7 +10221,19 @@ def _title_from_work_text(work: str) -> str:
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
     s = re.sub(r"(?i)\s+to\s+(?:their|your|his|her)\s+managers?\s*$", "", s).strip(" .,:;-")
-    words = [w for w in s.split() if w][:7]
+    s = _compact_title_work(s)
+    subj = _subject_for_phrase(raw_work) or _subject_for_phrase(s)
+    words = [w for w in s.split() if w]
+    # Keep a trailing "for {account}" even if it pushes past 7 words.
+    if subj and subj.lower() not in " ".join(words).lower():
+        words = words[:6] + ["for"] + subj.split()
+    else:
+        max_words = 10 if subj else 7
+        words = words[:max_words]
+        # If we sliced off the account, glue it back
+        if subj and subj.lower() not in " ".join(words).lower():
+            words = [w for w in words if w.lower() not in {"for"}][:5]
+            words = words + ["for"] + subj.split()
     title = " ".join(words)
     if title and title[0].islower():
         title = title[0].upper() + title[1:]
@@ -10168,6 +10264,10 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
         or re.search(r"(?i)\bthis is a reminder\b", title)
         or _too_close_to_prompt(title, raw_text)
         or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
+        or (
+            bool(_subject_for_phrase(raw_text or ""))
+            and _subject_for_phrase(raw_text or "").lower() not in title_l
+        )
     )
 
 
@@ -10198,6 +10298,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     work = _strip_manager_voice(_strip_people_noise(source_text, people))
     when, distilled_work = _split_when_and_work(work)
     distilled_work = _strip_due_phrases(distilled_work)
+    distilled_work = _ground_account_refs(_normalize_spoken_ask(distilled_work), source_text)
     title_seed = _strip_manager_voice(title)
     title_seed_when, title_seed_work = _split_when_and_work(title_seed)
     when = when or title_seed_when
@@ -10522,8 +10623,11 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         if key not in hint_keys:
             hints.append(name)
             hint_keys.add(key)
+    self_tokens = {"me", "myself", "self"}
     if _self_assign_hint(text):
         hints = ["me"]
+    elif _prompt_names_other_assignee(text) or _NOT_SELF_DELIVER_TO_ME_RE.search(text or ""):
+        hints = [h for h in hints if str(h).strip().lstrip("@").lower() not in self_tokens]
     parsed["assignee_hints"] = _drop_destination_assignee_hints(hints, text)
 
     # Resolve assignees before title scrub so known names can be removed from title/description

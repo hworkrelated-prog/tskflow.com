@@ -118,7 +118,7 @@ def test_classify_team_hint_and_name_extract():
 
 def test_carnegie_adds_next_steps():
     src = _read(BE)
-    start = src.index("def _normalize_description_layout")
+    start = src.index("_SUBJECT_FOR_RE = ")
     end = src.index("def _assignee_name_list")
     ns = {}
     exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)

@@ -9,8 +9,8 @@ const SELF_REMIND_RE = /\b(?:remind|nudge|ping|notify)\s+me\b/i;
 const SELF_ASSIGN_TO_RE = /\bassign(?:ed)?(?:\s+\w+){0,4}\s+to\s+(?:me|myself)\b/i;
 const SELF_TASK_FOR_RE = /\b(?:a\s+)?(?:task|reminder|todo|note)\s+for\s+(?:me|myself)\b/i;
 const SELF_FIRST_PERSON_RE = /\bi(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\b/i;
-const DELIVER_TO_ME_RE = /\b(?:send|give|email|forward|cc|show|tell|share|text)\s+me\b/i;
-const HAVE_NAME_RE = /\b(?:have|ask|tell|get|assign(?:ed)?(?:\s+to)?)\s+([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:to|go|do|review|send|look|check|update|through)/gi;
+const DELIVER_TO_ME_RE = /\b(?:send|give|email|forward|cc|show|tell|share|text)\s+me\b|\b(?:send|give|email|forward|share|draft|write)\b(?:\s+\S+){0,8}\s+(?:with|to)\s+me\b/i;
+const HAVE_NAME_RE = /\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:to|go|do|review|send|look|check|update|through)/gi;
 const OWNER_NEEDS_RE = /\b([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\b/gi;
 const NAME_STOP = new Set([
     'my', 'the', 'our', 'this', 'that', 'them', 'him', 'her', 'he', 'she', 'they',
