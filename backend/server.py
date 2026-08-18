@@ -2061,6 +2061,11 @@ async def get_task_activity(
             "meta": {"legacy": True},
         }]
 
+    for row in rows:
+        if row.get("event_type") in ("reminder", "nudge"):
+            meta = row.get("meta") or row.get("metadata") or {}
+            row["body"] = _humanize_reminder_body(row.get("body") or "", meta.get("fired_kind"))
+
     return {"activity": rows, "count": len(rows)}
 
 
@@ -2091,6 +2096,10 @@ async def list_org_activity(
         filt["event_type"] = "chatter"
 
     rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    for row in rows:
+        if row.get("event_type") in ("reminder", "nudge"):
+            meta = row.get("meta") or row.get("metadata") or {}
+            row["body"] = _humanize_reminder_body(row.get("body") or "", meta.get("fired_kind"))
     return {"activity": rows, "count": len(rows)}
 
 
@@ -11067,7 +11076,7 @@ async def _check_smart_reminders():
                         recipient_email=user.get("email"),
                         company_domain=user.get("company_domain") or t.get("company_domain"),
                         title=wording.get("title") or "Reminder",
-                        body=f"{t.get('title')} — {fired_kind}",
+                        body=f"{t.get('title')} — {_reminder_kind_label(fired_kind)}",
                         meta={"fired_kind": fired_kind, "priority": t.get("priority"), "bucket": bucket},
                         created_at=now.isoformat(),
                     )
@@ -11229,6 +11238,39 @@ _REMINDER_LINES = {
         {"title": "Quick check-in", "line": "The deadline's approaching and there's been no update. Is anything blocking you?"},
     ],
 }
+
+
+def _reminder_kind_label(kind: str) -> str:
+    """Human label for reminder buckets — never show raw keys like before_due."""
+    labels = {
+        "before_due": "coming due soon",
+        "3h": "due in about 3 hours",
+        "2h": "due in about 2 hours",
+        "30min": "due in 30 minutes",
+        "overdue": "overdue",
+        "no_response": "waiting on a response",
+        "no_progress": "no progress yet",
+    }
+    key = str(kind or "").strip()
+    return labels.get(key) or key.replace("_", " ") or "reminder"
+
+
+def _humanize_reminder_body(body: str, kind: Optional[str] = None) -> str:
+    """Rewrite leftover activity rows that logged the raw bucket key."""
+    s = str(body or "").strip()
+    key_alt = r"before_due|3h|2h|30min|overdue|no_response|no_progress"
+    s = re.sub(
+        rf"\s*[—\-]\s*({key_alt})\s*$",
+        lambda m: f" — {_reminder_kind_label(m.group(1).lower())}",
+        s,
+        flags=re.I,
+    )
+    k = str(kind or "").strip().lower()
+    if k and re.fullmatch(key_alt, k) and re.search(rf"(?i)(?:^|[—\-]\s*){re.escape(k)}\s*$", s):
+        s = re.sub(rf"(?i)(?:\s*[—\-]\s*)?{re.escape(k)}\s*$", "", s).rstrip(" —-")
+        label = _reminder_kind_label(k)
+        s = f"{s} — {label}" if s else label
+    return s
 
 
 def _reminder_wording(kind: str, task: dict) -> dict:
