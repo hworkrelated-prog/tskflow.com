@@ -2344,11 +2344,11 @@ const AIQuickCreate = ({
                             data-testid="ai-quick-composer"
                         >
                             {formatOpen ? (
-                            <div className="absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-white/95 px-0.5 py-0.5 shadow-sm" data-testid="ai-format-toolbar">
+                            <div className="ai-format-toolbar absolute left-2 bottom-full z-20 mb-1.5 flex items-center gap-0.5 rounded-full px-1 py-0.5" data-testid="ai-format-toolbar">
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); wrapSelection('**', '**'); }}
-                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="ai-format-toolbar-btn h-7 w-7 rounded-full inline-flex items-center justify-center"
                                     title="Bold"
                                     aria-label="Bold"
                                 >
@@ -2357,7 +2357,7 @@ const AIQuickCreate = ({
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); wrapSelection('_', '_'); }}
-                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="ai-format-toolbar-btn h-7 w-7 rounded-full inline-flex items-center justify-center"
                                     title="Italic"
                                     aria-label="Italic"
                                 >
@@ -2366,7 +2366,7 @@ const AIQuickCreate = ({
                                 <button
                                     type="button"
                                     onMouseDown={(e) => { e.preventDefault(); prefixLine('- '); }}
-                                    className="h-6 w-6 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 inline-flex items-center justify-center"
+                                    className="ai-format-toolbar-btn h-7 w-7 rounded-full inline-flex items-center justify-center"
                                     title="Bullet list"
                                     aria-label="Bullet list"
                                 >
@@ -2473,7 +2473,7 @@ const AIQuickCreate = ({
                                 placeholder={listening ? 'Listening…' : ''}
                                 aria-label="Create, search, or go to"
                                 rows={1}
-                                className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
+                                className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
                                 data-testid="ai-quick-input"
                                 disabled={loading || sending || answerLoading || listening}
                             />
