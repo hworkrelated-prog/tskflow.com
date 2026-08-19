@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -40,8 +40,68 @@ export function humanizeReminderBody(body) {
     );
 }
 
+const CHANNEL_BADGE = {
+    in_app: 'bg-amber-100 text-amber-900 border-amber-200',
+    email: 'bg-sky-100 text-sky-900 border-sky-200',
+    slack: 'bg-[#4A154B]/10 text-[#4A154B] border-[#4A154B]/25',
+};
+
+/** Consistent card tones: severity first, then channel (Slack only when it was actually Slack). */
+export function reminderActivityTone(a) {
+    const meta = a?.meta || {};
+    const kind = String(meta.fired_kind || meta.bucket || '').toLowerCase();
+    const channels = Array.isArray(meta.channels) && meta.channels.length
+        ? meta.channels.map((c) => String(c).toLowerCase())
+        : [String(a?.channel || 'in_app').toLowerCase()];
+    const title = String(a?.title || '');
+    const isOverdue = kind === 'overdue' || /overdue/i.test(title);
+    const isImminent = kind === '30min' || kind === '2h';
+    const isSlack = channels.includes('slack') || String(a?.channel || '').toLowerCase() === 'slack';
+    const isManagerNudge = a?.event_type === 'nudge' && !isSlack;
+
+    if (isSlack) {
+        return {
+            card: 'bg-[#f7f0f7] border-[#4A154B]/30',
+            title: 'text-[#4A154B]',
+            meta: 'text-[#4A154B]/70',
+            body: 'text-[#3b0f3c]',
+        };
+    }
+    if (isOverdue) {
+        return {
+            card: 'bg-rose-50/80 border-rose-200',
+            title: 'text-rose-950',
+            meta: 'text-rose-800/70',
+            body: 'text-rose-950',
+        };
+    }
+    if (isImminent) {
+        return {
+            card: 'bg-orange-50/80 border-orange-200',
+            title: 'text-orange-950',
+            meta: 'text-orange-800/70',
+            body: 'text-orange-950',
+        };
+    }
+    if (isManagerNudge) {
+        return {
+            card: 'bg-indigo-50/70 border-indigo-100',
+            title: 'text-indigo-950',
+            meta: 'text-indigo-800/70',
+            body: 'text-indigo-950',
+        };
+    }
+    return {
+        card: 'bg-amber-50/70 border-amber-100',
+        title: 'text-amber-950',
+        meta: 'text-amber-800/70',
+        body: 'text-amber-950',
+    };
+}
+
 const TaskDetail = () => {
     const { taskId, token } = useParams();
+    const [searchParams] = useSearchParams();
     const { user } = useAuth();
     const isFreeUser = user?.subscription_tier === 'free';
     const [task, setTask] = useState(null);
@@ -81,7 +141,7 @@ const TaskDetail = () => {
     const [newComment, setNewComment] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
-    const [sideTab, setSideTab] = useState('chatter'); // chatter | reminders
+    const [sideTab, setSideTab] = useState(() => (searchParams.get('tab') === 'reminders' ? 'reminders' : 'chatter'));
     const [reminderActivity, setReminderActivity] = useState([]);
     const [reminderLoading, setReminderLoading] = useState(false);
     const [aiSummary, setAiSummary] = useState(null);
@@ -100,23 +160,29 @@ const TaskDetail = () => {
         if (taskId) fetchComments();
     }, [taskId, token]);
 
+    // Prefetch reminders on open so the tab count is real and the list is ready
+    // (previously lazy-loaded only after clicking Reminders — looked empty until then).
     useEffect(() => {
-        if (sideTab === 'reminders' && (task?.id || taskId)) fetchReminderActivity();
+        if (task?.id || taskId) fetchReminderActivity();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sideTab, task?.id, taskId]);
+    }, [task?.id, taskId]);
+
+    useEffect(() => {
+        if (searchParams.get('tab') === 'reminders') setSideTab('reminders');
+    }, [searchParams]);
 
     // Real-time chatter — refresh when server pushes a new_comment for this task
     useEffect(() => {
         const handler = (e) => {
             if (e.detail?.task_id === (task?.id || taskId)) {
                 fetchComments();
-                if (sideTab === 'reminders') fetchReminderActivity();
+                fetchReminderActivity();
             }
         };
         window.addEventListener('tskflow:new_comment', handler);
         return () => window.removeEventListener('tskflow:new_comment', handler);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [task?.id, taskId, sideTab]);
+    }, [task?.id, taskId]);
 
     // Mark task viewed by assignee on open (populates the "Viewed" status column)
     useEffect(() => {
@@ -229,7 +295,8 @@ const TaskDetail = () => {
             });
             if (!token) {
                 axios.get(`${API}/tasks/${response.data.id}/slack-followup`).then((r) => {
-                    setSlackFollowup(r.data);
+                    const via = r.data?.via;
+                    setSlackFollowup(via === 'slack_dm' || via === 'webhook' ? r.data : null);
                 }).catch(() => setSlackFollowup(null));
             } else {
                 setSlackFollowup(null);
@@ -1501,33 +1568,45 @@ const TaskDetail = () => {
                                             No reminders logged yet. Email, Slack, and in-app nudges for this person show up here.
                                         </p>
                                     )}
-                                    {!reminderLoading && reminderActivity.map((a) => (
-                                        <div key={a.id} className="bg-amber-50/70 border border-amber-100 p-3 rounded-lg">
+                                    {!reminderLoading && reminderActivity.map((a) => {
+                                        const tone = reminderActivityTone(a);
+                                        const channels = Array.isArray(a.meta?.channels) && a.meta.channels.length
+                                            ? a.meta.channels
+                                            : [a.channel || 'in_app'];
+                                        return (
+                                        <div key={a.id} className={`${tone.card} border p-3 rounded-lg`}>
                                             <div className="flex items-center justify-between mb-1 gap-2">
-                                                <span className="font-semibold text-sm text-amber-950 truncate">
+                                                <span className={`font-semibold text-sm truncate ${tone.title}`}>
                                                     {a.title || (a.event_type === 'nudge' ? 'Nudge' : 'Reminder')}
                                                 </span>
-                                                <span className="text-xs text-amber-800/70 shrink-0">
+                                                <span className={`text-xs shrink-0 ${tone.meta}`}>
                                                     {a.created_at && format(new Date(a.created_at), 'MMM d, h:mm a')}
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                                                <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                                                    {(a.channel || 'in_app').replace('_', ' ')}
-                                                </Badge>
+                                                {channels.map((ch) => (
+                                                    <Badge
+                                                        key={ch}
+                                                        variant="outline"
+                                                        className={`text-[10px] uppercase tracking-wide ${CHANNEL_BADGE[ch] || ''}`}
+                                                    >
+                                                        {String(ch).replace('_', ' ')}
+                                                    </Badge>
+                                                ))}
                                                 {a.event_type === 'nudge' && (
-                                                    <Badge variant="outline" className="text-[10px]">nudge</Badge>
+                                                    <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-800 border-indigo-200">nudge</Badge>
                                                 )}
                                                 {a.actor_name && (
-                                                    <span className="text-xs font-medium text-amber-900">from {a.actor_name}</span>
+                                                    <span className={`text-xs font-medium ${tone.title}`}>from {a.actor_name}</span>
                                                 )}
                                             </div>
-                                            {a.body && <p className="text-sm text-amber-950 whitespace-pre-wrap">{humanizeReminderBody(a.body)}</p>}
+                                            {a.body && <p className={`text-sm whitespace-pre-wrap ${tone.body}`}>{humanizeReminderBody(a.body)}</p>}
                                             {a.recipient_name && (
-                                                <p className="text-xs font-medium text-amber-900 mt-1">To: {a.recipient_name}</p>
+                                                <p className={`text-xs font-medium mt-1 ${tone.title}`}>To: {a.recipient_name}</p>
                                             )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </CardContent>
@@ -1985,7 +2064,8 @@ const SlackFollowupCard = ({ thread }) => {
                 <MessageSquare className="w-4 h-4" />
                 <h3 className="font-semibold text-sm">Slack thread</h3>
                 <span className="ml-auto text-[11px] text-white/70">
-                    {thread?.status === 'resolved' ? 'Resolved' : 'Open'}{thread?.via === 'slack_dm' ? ' · DM' : ''}
+                    {thread?.status === 'resolved' ? 'Resolved' : 'Open'}
+                    {thread?.via === 'slack_dm' ? ' · DM' : thread?.via === 'webhook' ? ' · Webhook' : ''}
                 </span>
             </div>
             <CardContent className="pt-4 space-y-3">

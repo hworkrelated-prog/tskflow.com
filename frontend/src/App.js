@@ -160,7 +160,7 @@ const AuthProvider = ({ children }) => {
                         });
                         notif.onclick = () => {
                             window.focus();
-                            if (n.task_id) window.location.href = `/task/${n.task_id}`;
+                            if (n.task_id) window.location.href = `/task/${n.task_id}${n.type === 'reminder' || n.type === 'nudge' ? '?tab=reminders' : ''}`;
                             notif.close();
                         };
                     } catch (_) { /* silent */ }
@@ -238,7 +238,7 @@ const AuthProvider = ({ children }) => {
                                     const title = cleanDisplayText(data.notification.title || 'TskFlow');
                                     const body = cleanDisplayText(data.notification.body || '');
                                     const n = new Notification(title, { body, tag: data.notification.id });
-                                    n.onclick = () => { window.focus(); if (data.notification.task_id) window.location.href = `/task/${data.notification.task_id}`; };
+                                    n.onclick = () => { window.focus(); if (data.notification.task_id) window.location.href = `/task/${data.notification.task_id}${data.notification.type === 'reminder' || data.notification.type === 'nudge' ? '?tab=reminders' : ''}`; };
                                 } catch (_) { /* noop */ }
                             }
                         } else if (data.event === 'new_comment') {

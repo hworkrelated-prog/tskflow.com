@@ -101,10 +101,11 @@ export const CatchUpReview = () => {
         setOpen(false);
     };
 
-    const goTask = (id) => {
+    const goTask = (id, opts = {}) => {
         if (!id) return;
         setOpen(false);
-        navigate(`/task/${id}`);
+        const tab = opts.tab ? `?tab=${opts.tab}` : '';
+        navigate(`/task/${id}${tab}`);
     };
 
     if (!open || !data?.has_items) return null;
@@ -208,7 +209,7 @@ export const CatchUpReview = () => {
                                 key={n.id}
                                 title={n.title}
                                 meta={n.body}
-                                onClick={() => goTask(n.task_id)}
+                                onClick={() => goTask(n.task_id, { tab: 'reminders' })}
                                 testId={`catch-up-nudge-${n.id}`}
                             />
                         ))}

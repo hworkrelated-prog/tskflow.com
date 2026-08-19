@@ -2046,6 +2046,19 @@ async def get_task_activity(
 
     rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
+    # Hide legacy fake Slack follow-ups that were logged without real Slack delivery
+    if k in ("reminders", "reminder"):
+        cleaned = []
+        for row in rows:
+            meta = row.get("meta") or row.get("metadata") or {}
+            title = (row.get("title") or "").lower()
+            if "slack follow-up" in title:
+                via = meta.get("via")
+                if via not in ("slack_dm", "webhook"):
+                    continue
+            cleaned.append(row)
+        rows = cleaned
+
     # Fallback: if reminders tab empty, surface last_smart_reminder_sent as a synthetic row
     if k in ("reminders", "reminder") and not rows and task.get("last_smart_reminder_sent"):
         rows = [{
@@ -7165,7 +7178,11 @@ async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict
 
 
 async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
-    """After two ignored pings, Jarvis DMs the assignee on Slack and talks like a person."""
+    """After two ignored pings, Jarvis DMs the assignee on Slack and talks like a person.
+
+    Requires a real Slack connection (bot token or org Incoming Webhook). If Slack
+    is not connected, this is a no-op — no fake thread, no “Slack follow-up” activity.
+    """
     if not should_open_slack_followup(task):
         return None
     aid = task.get("assigned_to")
@@ -7178,15 +7195,20 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     if task.get("created_by"):
         assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
 
-    async def post_webhook(text: str):
+    webhook_preview = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
+    if not slack_bot_token() and not webhook_preview:
+        return None
+
+    async def post_webhook(text: str) -> bool:
         webhook = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
-        if webhook:
-            await _post_to_slack(webhook, text)
+        if not webhook:
+            return False
+        return await _post_to_slack(webhook, text)
 
     thread = await open_ignored_task_thread(
         db, task, assignee, assigner, get_pst_now(), post_webhook=post_webhook
     )
-    if not thread:
+    if not thread or thread.get("via") not in ("slack_dm", "webhook"):
         return None
     title = task.get("title") or "a task"
     name = assignee.get("name") or "them"
@@ -8460,12 +8482,17 @@ async def _consume_slack_event(payload: dict) -> None:
 
 @api_router.get("/tasks/{task_id}/slack-followup")
 async def get_slack_followup(task_id: str, current_user: dict = Depends(get_current_user)):
-    """Conversation Jarvis had with the assignee after ignored pings."""
+    """Conversation Jarvis had with the assignee after ignored pings.
+
+    Only returns threads that were actually delivered via Slack (DM or webhook).
+    Legacy local/fake threads are hidden so the UI never claims Slack ran when
+    Slack is not connected.
+    """
     task = await db.tasks.find_one({"id": task_id, "deleted": {"$ne": True}}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     thread = await db.slack_threads.find_one({"task_id": task_id}, {"_id": 0})
-    if not thread:
+    if not thread or thread.get("via") not in ("slack_dm", "webhook"):
         raise HTTPException(status_code=404, detail="No Slack follow-up yet")
     uid = current_user["id"]
     allowed = uid in {
@@ -10963,6 +10990,43 @@ KNOWLEDGE BASE:
 # SMART REMINDERS
 # ==========================================================================
 
+# Absolute floor so smart reminders never fire back-to-back (scheduler is 5 min).
+MIN_NUDGE_GAP_HOURS = 2
+
+
+def _parse_task_ts(value: Optional[str], now: datetime) -> Optional[datetime]:
+    """Parse a stored ISO timestamp into an aware datetime, or None if unusable."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=PST)
+        # Guard against inverted / far-future clocks so gap checks stay sane
+        if dt > now + timedelta(hours=1):
+            return None
+        return dt
+    except Exception:
+        return None
+
+
+def _gap_blocks(last_iso: Optional[str], now: datetime, gap_hours: float) -> bool:
+    """True when we should NOT fire again yet.
+
+    Fail closed: unparseable last-sent stamps block another fire (avoids 5-min spam
+    when timestamps are corrupted).
+    """
+    if not last_iso:
+        return False
+    last_dt = _parse_task_ts(last_iso, now)
+    if last_dt is None:
+        return True
+    try:
+        return (now - last_dt).total_seconds() < float(gap_hours) * 3600.0
+    except Exception:
+        return True
+
+
 class ReminderRule(BaseModel):
     """User-controllable smart reminder preferences.
 
@@ -10978,6 +11042,20 @@ class ReminderRule(BaseModel):
     quiet_hours_start: Optional[int] = 21  # 9pm local/PST — suppress Low/Medium-style noise; Urgent ignores
     quiet_hours_end: Optional[int] = 8    # 8am
     max_emails_per_day: int = 5           # hard cap so email never overwhelms
+
+    @validator("frequency_hours", pre=True)
+    def _clamp_frequency_hours(cls, v):
+        try:
+            return max(MIN_NUDGE_GAP_HOURS, min(72, int(v)))
+        except Exception:
+            return 12
+
+    @validator("hours_before_due", pre=True)
+    def _clamp_hours_before(cls, v):
+        try:
+            return max(1, min(72, int(v)))
+        except Exception:
+            return 4
 
 
 @api_router.get("/reminders/rules")
@@ -11107,15 +11185,13 @@ async def _check_smart_reminders():
                 continue
 
             last = t.get("last_smart_reminder_sent")
-            # User frequency is the floor; priority config can only make it *more* frequent up to that floor.
+            # User frequency is the cadence floor (Quiet=12h, Balanced=8h, Assertive=4h).
+            # Absolute MIN_NUDGE_GAP_HOURS stops back-to-back fires if someone sets 1h.
             try:
-                user_gap = max(1, int(r.get("frequency_hours", 12)))
+                user_gap = max(MIN_NUDGE_GAP_HOURS, int(r.get("frequency_hours", 12)))
             except Exception:
                 user_gap = 12
-            gap_hours = max(user_gap, 1)
-            # Still allow High/Urgent to come a bit sooner than Low, but never below user's floor
-            # unless user set a very high floor — user wins.
-            _ = pcfg  # priority config still used for no_response / no_progress thresholds
+            gap_hours = user_gap
 
             triggers = r.get("triggers") or []
             try:
@@ -11156,15 +11232,8 @@ async def _check_smart_reminders():
             # If bucket already fired, skip UNLESS overdue (overdue rotates every gap_hours)
             if bucket and bucket != "overdue" and bucket in fired_buckets:
                 bucket = None
-            if bucket == "overdue" and last:
-                try:
-                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                    if last_dt.tzinfo is None:
-                        last_dt = last_dt.replace(tzinfo=PST)
-                    if (now - last_dt).total_seconds() < gap_hours * 3600:
-                        bucket = None
-                except Exception:
-                    pass
+            if bucket == "overdue" and _gap_blocks(last, now, gap_hours):
+                bucket = None
 
             fired_kind = None
             if bucket:
@@ -11177,12 +11246,8 @@ async def _check_smart_reminders():
                         if cdt.tzinfo is None:
                             cdt = cdt.replace(tzinfo=PST)
                         if (now - cdt).total_seconds() >= float(pcfg["no_response_hours"]) * 3600:
-                            if last:
-                                last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                                if last_dt.tzinfo is None:
-                                    last_dt = last_dt.replace(tzinfo=PST)
-                                if (now - last_dt).total_seconds() < gap_hours * 3600:
-                                    continue
+                            if _gap_blocks(last, now, gap_hours):
+                                continue
                             fired_kind = "no_response"
                     except Exception:
                         pass
@@ -11194,12 +11259,8 @@ async def _check_smart_reminders():
                         if adt.tzinfo is None:
                             adt = adt.replace(tzinfo=PST)
                         if (now - adt).total_seconds() >= float(pcfg["no_progress_hours"]) * 3600 and hours_to_due < 48:
-                            if last:
-                                last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                                if last_dt.tzinfo is None:
-                                    last_dt = last_dt.replace(tzinfo=PST)
-                                if (now - last_dt).total_seconds() < gap_hours * 3600:
-                                    continue
+                            if _gap_blocks(last, now, gap_hours):
+                                continue
                             fired_kind = "no_progress"
                     except Exception:
                         pass
@@ -11208,15 +11269,8 @@ async def _check_smart_reminders():
                 continue
 
             # Global gap check for non-overdue kinds that skipped the earlier last check
-            if fired_kind not in ("overdue",) and last and fired_kind not in ("no_response", "no_progress"):
-                try:
-                    last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                    if last_dt.tzinfo is None:
-                        last_dt = last_dt.replace(tzinfo=PST)
-                    if (now - last_dt).total_seconds() < gap_hours * 3600:
-                        continue
-                except Exception:
-                    pass
+            if fired_kind not in ("overdue", "no_response", "no_progress") and _gap_blocks(last, now, gap_hours):
+                continue
 
             wording = _reminder_wording(fired_kind, t)
             user = users_by_id.get(aid) or await db.users.find_one({"id": aid}, {"_id": 0})
@@ -11296,13 +11350,16 @@ async def _check_smart_reminders():
                 except Exception as slack_err:
                     logging.warning(f"[smart_reminders] slack post failed: {slack_err}")
 
-            for ch in channels_sent:
+            # One activity row per fire (not per channel) so the Reminders tab
+            # doesn't look like back-to-back spam when email+in-app both send.
+            if channels_sent:
+                primary_ch = channels_sent[0]
                 try:
                     await log_task_activity(
                         db,
                         task_id=t["id"],
                         event_type="reminder",
-                        channel=ch,
+                        channel=primary_ch,
                         actor_id=None,
                         actor_name="Smart Reminders",
                         recipient_id=aid,
@@ -11311,7 +11368,12 @@ async def _check_smart_reminders():
                         company_domain=user.get("company_domain") or t.get("company_domain"),
                         title=wording.get("title") or "Reminder",
                         body=f"{t.get('title')} — {_reminder_kind_label(fired_kind)}",
-                        meta={"fired_kind": fired_kind, "priority": t.get("priority"), "bucket": bucket},
+                        meta={
+                            "fired_kind": fired_kind,
+                            "priority": t.get("priority"),
+                            "bucket": bucket,
+                            "channels": channels_sent,
+                        },
                         created_at=now.isoformat(),
                     )
                 except Exception as log_err:
@@ -11710,26 +11772,30 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
             child = next((c for c in children if c.get("assigned_to") == uid), None)
             if child:
                 log_task_id = child["id"]
-        for ch in ("in_app", "email"):
-            try:
-                await log_task_activity(
-                    db,
-                    task_id=log_task_id,
-                    event_type="nudge",
-                    channel=ch,
-                    actor_id=current_user["id"],
-                    actor_name=current_user.get("name"),
-                    recipient_id=uid,
-                    recipient_name=u.get("name"),
-                    recipient_email=u.get("email"),
-                    company_domain=current_user.get("company_domain"),
-                    title=headline,
-                    body=f"{current_user.get('name')}: {task.get('title')}",
-                    meta={"preset": preset_key, "parent_task_id": task_id if log_task_id != task_id else None},
-                    created_at=now.isoformat(),
-                )
-            except Exception as e:
-                logging.warning(f"Failed to log nudge activity: {e}")
+        try:
+            await log_task_activity(
+                db,
+                task_id=log_task_id,
+                event_type="nudge",
+                channel="in_app",
+                actor_id=current_user["id"],
+                actor_name=current_user.get("name"),
+                recipient_id=uid,
+                recipient_name=u.get("name"),
+                recipient_email=u.get("email"),
+                company_domain=current_user.get("company_domain"),
+                title=headline,
+                body=f"{current_user.get('name')}: {task.get('title')}",
+                meta={
+                    "preset": preset_key,
+                    "parent_task_id": task_id if log_task_id != task_id else None,
+                    "channels": ["in_app", "email"],
+                    "color": color,
+                },
+                created_at=now.isoformat(),
+            )
+        except Exception as e:
+            logging.warning(f"Failed to log nudge activity: {e}")
         sent += 1
         try:
             ping_src = child if child else task
