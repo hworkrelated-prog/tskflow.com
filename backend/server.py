@@ -42,6 +42,8 @@ from response_review import generate_group_response_review
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
 from slack_followup import (
     group_accountability,
+    is_live_slack_thread,
+    is_slack_followup_notification,
     open_ignored_task_thread,
     process_assignee_slack_event,
     record_ping,
@@ -2046,15 +2048,19 @@ async def get_task_activity(
 
     rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
-    # Hide legacy fake Slack follow-ups that were logged without real Slack delivery
+    # Hide legacy fake Slack follow-ups that were logged without a real Slack DM
     if k in ("reminders", "reminder"):
         cleaned = []
         for row in rows:
             meta = row.get("meta") or row.get("metadata") or {}
             title = (row.get("title") or "").lower()
-            if "slack follow-up" in title:
+            if "slack follow-up" in title or (
+                row.get("channel") == "slack" and "slack" in title
+            ):
                 via = meta.get("via")
-                if via not in ("slack_dm", "webhook"):
+                if via != "slack_dm":
+                    continue
+                if not slack_bot_token():
                     continue
             cleaned.append(row)
         rows = cleaned
@@ -2231,6 +2237,33 @@ def _notify_text(s: Optional[str]) -> str:
     return clean_display_text(s)
 
 
+async def _filter_slack_notifs_if_disconnected(rows: list, slack_ok: bool = False) -> list:
+    """Drop Jarvis Slack follow-up notifications unless a live Slack DM exists for the task.
+
+    Covers the legacy bug where via=webhook / local threads still created
+    “Jarvis started a Slack thread” Catch Up rows while Slack was disconnected.
+    """
+    if not rows:
+        return rows
+    out = []
+    for n in rows:
+        if not is_slack_followup_notification(n.get("title"), n.get("body")):
+            out.append(n)
+            continue
+        if not slack_bot_token():
+            continue
+        tid = n.get("task_id")
+        if not tid:
+            continue
+        try:
+            thread = await db.slack_threads.find_one({"task_id": tid}, {"_id": 0})
+        except Exception:
+            continue
+        if is_live_slack_thread(thread):
+            out.append(n)
+    return out
+
+
 # ===== BROWSER NOTIFICATIONS (poll-based) =====
 @api_router.get("/notifications/pending")
 async def get_pending_notifications(current_user: dict = Depends(get_current_user)):
@@ -2319,6 +2352,12 @@ async def notifications_catch_up(current_user: dict = Depends(get_current_user))
         n for n in unread
         if n.get("type") not in ("reminder", "mention", "nudge")
     ])
+
+    # Never surface “Jarvis started a Slack thread” without a live Slack DM.
+    reminders = await _filter_slack_notifs_if_disconnected(reminders)
+    nudges = await _filter_slack_notifs_if_disconnected(nudges)
+    other = await _filter_slack_notifs_if_disconnected(other)
+    mentions = await _filter_slack_notifs_if_disconnected(mentions)
 
     # Live task snapshot for assignee — what's overdue / due soon
     open_tasks = await db.tasks.find(
@@ -7180,10 +7219,13 @@ async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict
 async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     """After two ignored pings, Jarvis DMs the assignee on Slack and talks like a person.
 
-    Requires a real Slack connection (bot token or org Incoming Webhook). If Slack
-    is not connected, this is a no-op — no fake thread, no “Slack follow-up” activity.
+    Requires SLACK_BOT_TOKEN and a successful DM. Incoming Webhook alone never
+    creates a “Slack thread” (it cannot receive replies and previously produced
+    fake via=webhook cards when Slack was not connected).
     """
     if not should_open_slack_followup(task):
+        return None
+    if not slack_bot_token():
         return None
     aid = task.get("assigned_to")
     if not aid or str(aid).startswith("email_"):
@@ -7195,10 +7237,6 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     if task.get("created_by"):
         assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
 
-    webhook_preview = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
-    if not slack_bot_token() and not webhook_preview:
-        return None
-
     async def post_webhook(text: str) -> bool:
         webhook = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
         if not webhook:
@@ -7208,7 +7246,7 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     thread = await open_ignored_task_thread(
         db, task, assignee, assigner, get_pst_now(), post_webhook=post_webhook
     )
-    if not thread or thread.get("via") not in ("slack_dm", "webhook"):
+    if not is_live_slack_thread(thread):
         return None
     title = task.get("title") or "a task"
     name = assignee.get("name") or "them"
@@ -7417,7 +7455,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user), limi
             )
         d["title"] = nt
         d["body"] = nb
-    unread = await db.notifications.count_documents({"user_id": current_user["id"], "read": {"$ne": True}})
+    docs = await _filter_slack_notifs_if_disconnected(docs)
+    unread = sum(1 for d in docs if d.get("read") is not True)
     return {"notifications": docs, "unread": unread}
 
 @api_router.post("/notifications/{notif_id}/read")
@@ -8484,15 +8523,17 @@ async def _consume_slack_event(payload: dict) -> None:
 async def get_slack_followup(task_id: str, current_user: dict = Depends(get_current_user)):
     """Conversation Jarvis had with the assignee after ignored pings.
 
-    Only returns threads that were actually delivered via Slack (DM or webhook).
-    Legacy local/fake threads are hidden so the UI never claims Slack ran when
-    Slack is not connected.
+    Only returns live Slack DM follow-ups. Legacy local / false-webhook threads
+    are hidden so the UI never claims Slack ran when Slack is not connected.
     """
     task = await db.tasks.find_one({"id": task_id, "deleted": {"$ne": True}}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     thread = await db.slack_threads.find_one({"task_id": task_id}, {"_id": 0})
-    if not thread or thread.get("via") not in ("slack_dm", "webhook"):
+    if not is_live_slack_thread(thread):
+        raise HTTPException(status_code=404, detail="No Slack follow-up yet")
+    # Slack must still be configured (bot) — otherwise hide leftover DM records too.
+    if not slack_bot_token():
         raise HTTPException(status_code=404, detail="No Slack follow-up yet")
     uid = current_user["id"]
     allowed = uid in {

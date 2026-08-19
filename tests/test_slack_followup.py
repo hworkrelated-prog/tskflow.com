@@ -189,5 +189,7 @@ def test_server_and_ui_are_wired():
     assert "SLACK_BOT_TOKEN" in settings
     assert "landing-sim-slack" in landing
     assert "Pinged twice" in landing
-    # Must not invent Slack threads when delivery fails
-    assert 'if via not in ("slack_dm", "webhook")' in follow or "if via not in ('slack_dm', 'webhook')" in follow
+    # Must not invent Slack threads when delivery fails / webhook-only
+    assert "is_live_slack_thread" in follow
+    assert "if not token:" in follow or "if not slack_bot_token()" in follow
+    assert 'via != "slack_dm"' in server or "is_live_slack_thread" in server
