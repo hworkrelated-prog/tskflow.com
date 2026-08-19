@@ -1636,10 +1636,10 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     <Label className="text-xs text-muted-foreground">Min hours between nudges</Label>
                                     <Input
                                         type="number"
-                                        min={1}
+                                        min={2}
                                         max={72}
                                         value={rule.frequency_hours}
-                                        onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '1', 10) })}
+                                        onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '2', 10) })}
                                         className="rounded-xl mt-1 bg-white"
                                         data-testid="reminder-frequency"
                                     />

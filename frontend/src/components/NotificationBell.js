@@ -81,7 +81,10 @@ export const NotificationBell = () => {
             setOpen(false);
             return;
         }
-        if (n.task_id) navigate(`/task/${n.task_id}`);
+        if (n.task_id) {
+            const tab = (n.type === 'reminder' || n.type === 'nudge') ? '?tab=reminders' : '';
+            navigate(`/task/${n.task_id}${tab}`);
+        }
         setOpen(false);
     };
 

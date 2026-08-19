@@ -44,5 +44,5 @@ def test_activity_log_uses_kind_label_not_raw_key():
 def test_task_detail_humanizes_legacy_reminder_body():
     src = FE.read_text(encoding="utf-8")
     assert "humanizeReminderBody(a.body)" in src
-    assert "text-amber-900" in src
+    assert "reminderActivityTone" in src
     assert "from {a.actor_name}" in src

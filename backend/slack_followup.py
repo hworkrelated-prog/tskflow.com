@@ -366,7 +366,13 @@ async def open_ignored_task_thread(
     now: datetime,
     post_webhook=None,
 ) -> Optional[dict]:
-    """Open a Slack DM (or local thread) after ignored pings."""
+    """Open a Slack DM or webhook follow-up after ignored pings.
+
+    Only creates a thread when Slack delivery actually succeeds (bot DM or
+    Incoming Webhook). Never invents a fake “Slack” thread when Slack is not
+    connected — that previously showed “Slack follow-up opened” with via=local
+    or a false via=webhook.
+    """
     if not should_open_slack_followup(task):
         return None
     token = slack_bot_token()
@@ -375,7 +381,7 @@ async def open_ignored_task_thread(
     channel_id = None
     thread_ts = None
     slack_user_id = assignee.get("slack_user_id")
-    via = "local"
+    via = None
 
     if token:
         if not slack_user_id:
@@ -392,10 +398,15 @@ async def open_ignored_task_thread(
 
     if via != "slack_dm" and callable(post_webhook):
         try:
-            await post_webhook(text)
-            via = "webhook"
+            ok = await post_webhook(text)
+            if ok:
+                via = "webhook"
         except Exception as e:
             logger.warning("webhook follow-up failed: %s", e)
+
+    if via not in ("slack_dm", "webhook"):
+        # Slack is not connected / delivery failed — do not pretend a thread started.
+        return None
 
     thread = {
         "id": str(uuid.uuid4()),
