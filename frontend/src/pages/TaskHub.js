@@ -362,65 +362,6 @@ const TaskHub = () => {
     }, [dashboard]);
 
     useEffect(() => {
-        const playNotificationSound = () => {
-            const audio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYNbrMnAAAAAAD/+9DEAAAIAANIAAAAFZYhKjyigABMSTVu+d3vcQ/8+gMBjp0Bg+sEP/E4Pv/WCH/5cEwfWD7+oCYPv/Lg+//1g+/+D4f///E4Pg+D/8uCHBAMHQQAAAgAAAAA8PDw8PDw8A8QAHD4f1A+H9YPh//0B//qA//+AwAAJxyOBwOBgHwfAgAAACTP//5M///JM///km//+Sf/5Jv//JN//8k3//5Jv//ySb//5N//8m//+Tb//5N//8m3//yb//5N//8k3//yTf//JN//8m//+Sf/5Jv//km//+Sb//5Jv//JN//8k2//+Sb//5N//8m3//yb/');
-            audio.volume = 0.3;
-            audio.play().catch(() => {});
-        };
-
-        const pollForNewTasks = async () => {
-            try {
-                const params = new URLSearchParams();
-                params.append('status_filter', viewMode);
-                const response = await axios.get(`${API}/dashboard?${params.toString()}`);
-                const newData = response.data;
-                
-                const currentTotal = (newData.assigned_to_me?.length || 0) + (newData.created_by_me?.length || 0);
-                
-                if (lastTaskCountRef.current !== null && currentTotal > lastTaskCountRef.current) {
-                    playNotificationSound();
-                    toast.success('New task received!');
-                    setDashboard(newData);
-                }
-                
-                lastTaskCountRef.current = currentTotal;
-            } catch (error) {
-                // Silent fail for polling
-            }
-        };
-
-        // Poll every 10 seconds while visible; wake instantly when the tab returns
-        let interval = null;
-        const start = () => {
-            if (interval) return;
-            interval = setInterval(() => {
-                if (document.visibilityState === 'visible') pollForNewTasks();
-            }, 10000);
-        };
-        const stop = () => {
-            if (interval) { clearInterval(interval); interval = null; }
-        };
-        const onWake = () => {
-            pollForNewTasks();
-            fetchDashboard();
-            fetchParentGroups();
-            start();
-        };
-        const onVis = () => {
-            if (document.visibilityState === 'visible') onWake();
-            else stop();
-        };
-        if (document.visibilityState === 'visible') start();
-        document.addEventListener('visibilitychange', onVis);
-        window.addEventListener('tskflow:app-wake', onWake);
-        return () => {
-            stop();
-            document.removeEventListener('visibilitychange', onVis);
-            window.removeEventListener('tskflow:app-wake', onWake);
-        };
-    }, [viewMode]);
-
-    useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setShowUserDropdown(false);
@@ -430,7 +371,7 @@ const TaskHub = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const fetchDashboard = async () => {
+    const fetchDashboard = async ({ quiet = false } = {}) => {
         try {
             const params = new URLSearchParams();
             params.append('status_filter', viewMode);
@@ -441,8 +382,16 @@ const TaskHub = () => {
             
             const response = await axios.get(`${API}/dashboard?${params.toString()}`);
             setDashboard(response.data);
+            const currentTotal = (response.data.assigned_to_me?.length || 0) + (response.data.created_by_me?.length || 0);
+            lastTaskCountRef.current = currentTotal;
+            return true;
         } catch (error) {
-            toast.error('Failed to load dashboard');
+            // Wake/background reloads often fail once while the laptop/network is still coming back.
+            // Don't spam "Failed to load dashboard" — retry quietly instead.
+            if (!quiet) {
+                toast.error('Failed to load dashboard', { id: 'dashboard-load' });
+            }
+            return false;
         } finally {
             setLoading(false);
         }
@@ -495,6 +444,74 @@ const TaskHub = () => {
             // Silent
         }
     };
+
+    useEffect(() => {
+        const playNotificationSound = () => {
+            const audio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYNbrMnAAAAAAD/+9DEAAAIAANIAAAAFZYhKjyigABMSTVu+d3vcQ/8+gMBjp0Bg+sEP/E4Pv/WCH/5cEwfWD7+oCYPv/Lg+//1g+/+D4f///E4Pg+D/8uCHBAMHQQAAAgAAAAA8PDw8PDw8A8QAHD4f1A+H9YPh//0B//qA//+AwAAJxyOBwOBgHwfAgAAACTP//5M///JM///km//+Sf/5Jv//JN//8k3//5Jv//ySb//5N//8m//+Tb//5N//8m3//yb//5N//8k3//yTf//JN//8m//+Sf/5Jv//km//+Sb//5Jv//JN//8k2//+Sb//5N//8m3//yb/');
+            audio.volume = 0.3;
+            audio.play().catch(() => {});
+        };
+
+        const pollForNewTasks = async () => {
+            try {
+                const params = new URLSearchParams();
+                params.append('status_filter', viewMode);
+                const response = await axios.get(`${API}/dashboard?${params.toString()}`);
+                const newData = response.data;
+                const currentTotal = (newData.assigned_to_me?.length || 0) + (newData.created_by_me?.length || 0);
+                if (lastTaskCountRef.current !== null && currentTotal > lastTaskCountRef.current) {
+                    playNotificationSound();
+                    toast.success('New task received!');
+                    setDashboard(newData);
+                }
+                lastTaskCountRef.current = currentTotal;
+            } catch (error) {
+                // Silent fail for polling
+            }
+        };
+
+        // One coalesced refresh when the tab/network wakes — sleep often fires
+        // visibilitychange + online + tskflow:app-wake together, and the first
+        // request can fail before the NIC is back.
+        let interval = null;
+        let wakeTimer = null;
+        let retryTimer = null;
+        const start = () => {
+            if (interval) return;
+            interval = setInterval(() => {
+                if (document.visibilityState === 'visible') pollForNewTasks();
+            }, 10000);
+        };
+        const stop = () => {
+            if (interval) { clearInterval(interval); interval = null; }
+        };
+        const scheduleWakeRefresh = () => {
+            if (wakeTimer) return;
+            wakeTimer = setTimeout(async () => {
+                wakeTimer = null;
+                start();
+                const ok = await fetchDashboard({ quiet: true });
+                fetchParentGroups();
+                if (!ok && document.visibilityState === 'visible') {
+                    retryTimer = setTimeout(() => fetchDashboard({ quiet: true }), 1600);
+                }
+            }, 400);
+        };
+        const onVis = () => {
+            if (document.visibilityState === 'visible') scheduleWakeRefresh();
+            else stop();
+        };
+        if (document.visibilityState === 'visible') start();
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('tskflow:app-wake', scheduleWakeRefresh);
+        return () => {
+            stop();
+            if (wakeTimer) clearTimeout(wakeTimer);
+            if (retryTimer) clearTimeout(retryTimer);
+            document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('tskflow:app-wake', scheduleWakeRefresh);
+        };
+    }, [viewMode, dateFilter, customDateRange]);
 
     const addGroupEmail = () => {
         const input = groupEmailInput.trim();

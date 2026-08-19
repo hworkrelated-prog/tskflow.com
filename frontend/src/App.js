@@ -257,13 +257,18 @@ const AuthProvider = ({ children }) => {
         };
         connect();
 
+        let wakeBurst = null;
         const onVis = () => {
             if (document.visibilityState !== 'visible') return;
             // Wake from sleep / background: reconnect if the socket died
             if (!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
                 connect();
             }
-            window.dispatchEvent(new CustomEvent('tskflow:app-wake'));
+            if (wakeBurst) return;
+            wakeBurst = setTimeout(() => {
+                wakeBurst = null;
+                window.dispatchEvent(new CustomEvent('tskflow:app-wake'));
+            }, 250);
         };
         document.addEventListener('visibilitychange', onVis);
         window.addEventListener('online', onVis);
@@ -271,6 +276,7 @@ const AuthProvider = ({ children }) => {
         return () => {
             intentionalClose = true;
             clearTimers();
+            if (wakeBurst) clearTimeout(wakeBurst);
             document.removeEventListener('visibilitychange', onVis);
             window.removeEventListener('online', onVis);
             try { ws && ws.close(); } catch (_) { /* noop */ }
