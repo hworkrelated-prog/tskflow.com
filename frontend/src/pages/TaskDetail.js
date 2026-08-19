@@ -296,7 +296,8 @@ const TaskDetail = () => {
             if (!token) {
                 axios.get(`${API}/tasks/${response.data.id}/slack-followup`).then((r) => {
                     const via = r.data?.via;
-                    setSlackFollowup(via === 'slack_dm' || via === 'webhook' ? r.data : null);
+                    const live = via === 'slack_dm' && (r.data?.slack_channel_id || r.data?.slack_thread_ts);
+                    setSlackFollowup(live ? r.data : null);
                 }).catch(() => setSlackFollowup(null));
             } else {
                 setSlackFollowup(null);
@@ -2065,7 +2066,7 @@ const SlackFollowupCard = ({ thread }) => {
                 <h3 className="font-semibold text-sm">Slack thread</h3>
                 <span className="ml-auto text-[11px] text-white/70">
                     {thread?.status === 'resolved' ? 'Resolved' : 'Open'}
-                    {thread?.via === 'slack_dm' ? ' · DM' : thread?.via === 'webhook' ? ' · Webhook' : ''}
+                    {thread?.via === 'slack_dm' ? ' · DM' : ''}
                 </span>
             </div>
             <CardContent className="pt-4 space-y-3">
