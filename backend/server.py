@@ -5090,7 +5090,7 @@ async def send_daily_analytics():
     
     try:
         resend.emails.send({
-            "from": f"Jarvis Analytics <{EMAIL_FROM_ADDR}>",
+            "from": f"TskFlow Analytics <{EMAIL_FROM_ADDR}>",
             "to": [admin_email],
             "subject": f"Tskflow Daily Analytics - {today.strftime('%b %d')}",
             "html": email_content
