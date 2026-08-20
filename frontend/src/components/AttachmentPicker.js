@@ -616,7 +616,7 @@ export const AttachmentPicker = forwardRef(({
                 </div>
             )}
 
-            {attachments.length > 0 && (
+            {!compact && attachments.length > 0 && (
                 <div className="space-y-2">
                     {attachments.map((att) => (
                         <div key={att.id} className="flex items-center justify-between gap-2 bg-teal-50 border border-teal-200 p-2 rounded-xl text-sm">
