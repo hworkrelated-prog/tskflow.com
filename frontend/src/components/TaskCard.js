@@ -148,8 +148,8 @@ const TaskCard = ({ task, index = 0, showAssignee = false, onComplete, selected 
                                     const d = new Date(task.due_date);
                                     if (isNaN(d.getTime()) || d >= new Date()) return null;
                                     return (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded" data-testid={`overdue-badge-${task.id}`}>
-                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Overdue
+                                        <span className="overdue-badge" data-testid={`overdue-badge-${task.id}`}>
+                                            <span className="overdue-dot" aria-hidden /> Overdue
                                         </span>
                                     );
                                 })()}
