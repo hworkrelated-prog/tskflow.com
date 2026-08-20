@@ -97,8 +97,8 @@
 
 /* Dark Theme — surfaces follow tokens; do not force font-weight colors
    (that painted light text onto leftover light cards). */
-[data-theme="dark"] body,
-[data-theme="dark"] .min-h-screen {
+[data-theme="dark"] body:not(.landing-active),
+[data-theme="dark"] .min-h-screen:not(.landing-page) {
     background: hsl(var(--background)) !important;
     color: hsl(var(--foreground)) !important;
 }
@@ -465,8 +465,8 @@
     background: #ffffff;
     color: #0a0a0a;
 }
-[data-theme="minimal"] body,
-[data-theme="minimal"] .min-h-screen {
+[data-theme="minimal"] body:not(.landing-active),
+[data-theme="minimal"] .min-h-screen:not(.landing-page) {
     background: #ffffff !important;
     color: #0a0a0a !important;
 }
@@ -515,4 +515,21 @@
 .clean-scroll::-webkit-scrollbar-thumb:hover {
     background-color: rgba(99, 102, 241, 0.55);
     background-clip: content-box;
+}
+
+/* Marketing landing is always brand-dark — app light/minimal must not bleach it. */
+body.landing-active {
+    background: #050807 !important;
+    color: #ffffff !important;
+}
+.landing-page,
+.landing-page.min-h-screen,
+[data-theme="light"] .landing-page,
+[data-theme="dark"] .landing-page,
+[data-theme="minimal"] .landing-page,
+[data-theme="light"] .landing-page.min-h-screen,
+[data-theme="dark"] .landing-page.min-h-screen,
+[data-theme="minimal"] .landing-page.min-h-screen {
+    background: #050807 !important;
+    color: #ffffff !important;
 }

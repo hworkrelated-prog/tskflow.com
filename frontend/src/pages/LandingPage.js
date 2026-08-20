@@ -12,6 +12,7 @@ import {
     DEMO_SLACK,
     isLargeTeamPrompt,
 } from '@/lib/landingAssignDemo';
+import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
 
 const initials = (name) =>
     String(name || 'U')
@@ -266,6 +267,17 @@ const LandingPage = () => {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
+    // Marketing page is always brand-dark. Do not follow the app light/dark preference
+    // (that preference lives in localStorage and was repainting this page).
+    useEffect(() => {
+        pinDocumentTheme('dark');
+        document.body.classList.add('landing-active');
+        return () => {
+            document.body.classList.remove('landing-active');
+            restoreDocumentTheme();
+        };
+    }, []);
+
     const jumpToTry = () => {
         document.getElementById('try')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         window.setTimeout(() => {
@@ -274,7 +286,7 @@ const LandingPage = () => {
     };
 
     return (
-        <div className="min-h-screen text-white" style={{ background: '#050807' }} data-testid="landing-page">
+        <div className="landing-page min-h-screen text-white" style={{ background: '#050807' }} data-testid="landing-page">
             <div className="pointer-events-none fixed inset-0 overflow-hidden">
                 <div className="absolute -top-40 right-[-20%] w-[620px] h-[620px] rounded-full bg-teal-500/15 blur-[120px]" />
                 <div className="absolute bottom-[-20%] left-[-10%] w-[520px] h-[420px] rounded-full bg-cyan-700/10 blur-[100px]" />

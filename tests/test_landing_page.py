@@ -86,6 +86,23 @@ console.log('ok');
     assert "ok" in result.stdout
 
 
+def test_landing_ignores_app_theme_preference():
+    """App light/dark must not bleach the marketing landing page."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    theme = (FRONT / "lib" / "theme.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert "pinDocumentTheme('dark')" in landing
+    assert "restoreDocumentTheme" in landing
+    assert "landing-page" in landing
+    assert "landing-active" in landing
+    assert "pinDocumentTheme" in theme
+    assert "restoreDocumentTheme" in theme
+    assert "localStorage.setItem" not in theme.split("pinDocumentTheme")[1].split("restoreDocumentTheme")[0]
+    assert "body.landing-active" in css
+    assert ".min-h-screen:not(.landing-page)" in css
+    assert "[data-theme=\"light\"] .landing-page" in css
+
+
 def test_prompt_border_is_inset_so_sides_cannot_clip():
     css = (FRONT / "index.css").read_text(encoding="utf-8")
     shell = css.split(".ai-composer-shell {")[1].split(".ai-composer-shell--inset")[0]
