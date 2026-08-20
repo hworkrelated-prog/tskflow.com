@@ -21,3 +21,12 @@ def test_email_shell_uses_teal_tf_mark():
     assert "#4F46E5" not in shell
     assert "#7C3AED" not in shell
     assert "TskFlow" in shell
+
+
+def test_email_templates_drop_purple_brand_for_teal():
+    """Purple/indigo email chrome was hard to read; brand is teal now."""
+    for bad in ("#4F46E5", "#7C3AED", "#6366F1", "#8B5CF6", "#4338CA", "#E0E7FF"):
+        assert bad not in BE, f"leftover purple token {bad}"
+    assert "linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)" in BE
+    assert '"color": "#0d9488"' in BE  # gentle nudge / brand accent
+    assert "color: white" in BE or "color:white" in BE or "color:#fff" in BE
