@@ -13,6 +13,8 @@ def test_theme_helper_persists_and_validates():
     src = _read("lib", "theme.js")
     assert "tsk_theme" in src
     assert "applyTheme" in src
+    assert "pinDocumentTheme" in src
+    assert "restoreDocumentTheme" in src
     assert "colorScheme" in src
     assert "['light', 'dark', 'minimal']" in src or '"light", "dark", "minimal"' in src
 
