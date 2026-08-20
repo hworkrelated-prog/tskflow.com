@@ -281,7 +281,12 @@ const AuthProvider = ({ children }) => {
             setUser(response.data);
         } catch (error) {
             console.error('Failed to fetch user', error);
-            logout();
+            // Only clear the session on real auth failure — network blips
+            // while offline / waking the PWA must not force a re-login.
+            const status = error?.response?.status;
+            if (status === 401 || status === 403) {
+                logout();
+            }
         } finally {
             setLoading(false);
         }
@@ -345,8 +350,9 @@ const ProtectedRoute = ({ children }) => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen gradient-mesh">
-                <div className="text-lg font-medium">Loading...</div>
+            <div className="flex flex-col items-center justify-center min-h-screen gradient-mesh app-boot-splash gap-3" data-testid="app-boot-splash">
+                <div className="w-10 h-10 rounded-xl bg-teal-500/90 flex items-center justify-center text-white font-bold text-sm">TF</div>
+                <div className="text-lg font-medium text-foreground">Loading…</div>
             </div>
         );
     }
@@ -373,8 +379,9 @@ const PublicRoute = ({ children }) => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen gradient-mesh">
-                <div className="text-lg font-medium">Loading...</div>
+            <div className="flex flex-col items-center justify-center min-h-screen gradient-mesh app-boot-splash gap-3" data-testid="app-boot-splash">
+                <div className="w-10 h-10 rounded-xl bg-teal-500/90 flex items-center justify-center text-white font-bold text-sm">TF</div>
+                <div className="text-lg font-medium text-foreground">Loading…</div>
             </div>
         );
     }

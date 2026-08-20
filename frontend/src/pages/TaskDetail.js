@@ -40,63 +40,59 @@ export function humanizeReminderBody(body) {
     );
 }
 
-const CHANNEL_BADGE = {
-    in_app: 'bg-amber-100 text-amber-900 border-amber-200',
-    email: 'bg-sky-100 text-sky-900 border-sky-200',
-    slack: 'bg-[#4A154B]/10 text-[#4A154B] border-[#4A154B]/25',
+const CHANNEL_LABEL = {
+    in_app: 'In-app',
+    email: 'Email',
+    slack: 'Slack',
 };
 
-/** Consistent card tones: severity first, then channel (Slack only when it was actually Slack). */
-export function reminderActivityTone(a) {
+/** Normalize + filter reminder channels for display (hide Slack unless it actually went out). */
+export function reminderChannels(a, { slackConnected = false } = {}) {
     const meta = a?.meta || {};
-    const kind = String(meta.fired_kind || meta.bucket || '').toLowerCase();
-    const channels = Array.isArray(meta.channels) && meta.channels.length
+    let channels = Array.isArray(meta.channels) && meta.channels.length
         ? meta.channels.map((c) => String(c).toLowerCase())
         : [String(a?.channel || 'in_app').toLowerCase()];
+    channels = channels
+        .map((c) => {
+            const key = String(c || '').replace(/-/g, '_').replace(/\s+/g, '_');
+            if (['inapp', 'app', 'notification', 'notif'].includes(key)) return 'in_app';
+            return key;
+        })
+        .filter((c) => c && c !== 'unknown' && c !== 'multi');
+    if (!slackConnected) {
+        channels = channels.filter((c) => c !== 'slack');
+    }
+    if (!channels.length) channels = ['in_app'];
+    // Stable order: in-app → email → slack
+    const order = { in_app: 0, email: 1, slack: 2 };
+    return [...new Set(channels)].sort((a, b) => (order[a] ?? 9) - (order[b] ?? 9));
+}
+
+/** Count emails delivered across reminder activity rows. */
+export function reminderEmailCount(activities, { slackConnected = false } = {}) {
+    if (!Array.isArray(activities)) return 0;
+    return activities.reduce((n, a) => (
+        n + (reminderChannels(a, { slackConnected }).includes('email') ? 1 : 0)
+    ), 0);
+}
+
+/** Semantic tone class — readable in light and dark (see App.css .reminder-tone-*). */
+export function reminderActivityTone(a, { slackConnected = false } = {}) {
+    const meta = a?.meta || {};
+    const kind = String(meta.fired_kind || meta.bucket || '').toLowerCase();
+    const channels = reminderChannels(a, { slackConnected });
     const title = String(a?.title || '');
     const isOverdue = kind === 'overdue' || /overdue/i.test(title);
     const isImminent = kind === '30min' || kind === '2h';
-    const isSlack = channels.includes('slack') || String(a?.channel || '').toLowerCase() === 'slack';
+    const isSlack = slackConnected && channels.includes('slack') && a?.event_type === 'nudge';
     const isManagerNudge = a?.event_type === 'nudge' && !isSlack;
 
-    if (isSlack) {
-        return {
-            card: 'bg-[#f7f0f7] border-[#4A154B]/30',
-            title: 'text-[#4A154B]',
-            meta: 'text-[#4A154B]/70',
-            body: 'text-[#3b0f3c]',
-        };
-    }
-    if (isOverdue) {
-        return {
-            card: 'bg-rose-50/80 border-rose-200',
-            title: 'text-rose-950',
-            meta: 'text-rose-800/70',
-            body: 'text-rose-950',
-        };
-    }
-    if (isImminent) {
-        return {
-            card: 'bg-orange-50/80 border-orange-200',
-            title: 'text-orange-950',
-            meta: 'text-orange-800/70',
-            body: 'text-orange-950',
-        };
-    }
-    if (isManagerNudge) {
-        return {
-            card: 'bg-indigo-50/70 border-indigo-100',
-            title: 'text-indigo-950',
-            meta: 'text-indigo-800/70',
-            body: 'text-indigo-950',
-        };
-    }
-    return {
-        card: 'bg-amber-50/70 border-amber-100',
-        title: 'text-amber-950',
-        meta: 'text-amber-800/70',
-        body: 'text-amber-950',
-    };
+    if (isSlack) return 'reminder-tone-slack';
+    if (isOverdue) return 'reminder-tone-overdue';
+    if (isImminent) return 'reminder-tone-soon';
+    if (isManagerNudge) return 'reminder-tone-nudge';
+    if (channels.includes('email')) return 'reminder-tone-email';
+    return 'reminder-tone-default';
 }
 
 const TaskDetail = () => {
@@ -111,6 +107,7 @@ const TaskDetail = () => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [groupRollup, setGroupRollup] = useState(null);
     const [slackFollowup, setSlackFollowup] = useState(null);
+    const [slackConnected, setSlackConnected] = useState(false);
     const [showAllParticipants, setShowAllParticipants] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
@@ -144,6 +141,7 @@ const TaskDetail = () => {
     const [sideTab, setSideTab] = useState(() => (searchParams.get('tab') === 'reminders' ? 'reminders' : 'chatter'));
     const [reminderActivity, setReminderActivity] = useState([]);
     const [reminderLoading, setReminderLoading] = useState(false);
+    const [emailCount, setEmailCount] = useState(0);
     const [aiSummary, setAiSummary] = useState(null);
     const [loadingAiSummary, setLoadingAiSummary] = useState(false);
     // Chatter mention state
@@ -347,11 +345,29 @@ const TaskDetail = () => {
         if (!id) return;
         setReminderLoading(true);
         try {
-            const response = await axios.get(`${API}/tasks/${id}/activity`, { params: { kind: 'reminders' } });
-            setReminderActivity(response.data.activity || []);
+            const [activityRes, prefsRes] = await Promise.all([
+                axios.get(`${API}/tasks/${id}/activity`, { params: { kind: 'reminders' } }),
+                axios.get(`${API}/auth/preferences`).catch(() => null),
+            ]);
+            const items = activityRes.data.activity || [];
+            setReminderActivity(items);
+            const connected = Boolean(prefsRes?.data?.slack_team_connected);
+            if (prefsRes?.data) {
+                setSlackConnected(connected);
+            }
+            const fromServer = Number(activityRes.data.email_count);
+            setEmailCount(
+                Number.isFinite(fromServer)
+                    ? fromServer
+                    : items.reduce((n, a) => {
+                        const ch = Array.isArray(a?.meta?.channels) ? a.meta.channels : [];
+                        return n + (ch.includes('email') ? 1 : 0);
+                    }, 0),
+            );
         } catch (error) {
             console.error('Failed to fetch reminder activity', error);
             setReminderActivity([]);
+            setEmailCount(0);
         } finally {
             setReminderLoading(false);
         }
@@ -1508,7 +1524,12 @@ const TaskDetail = () => {
                                 >
                                     <Bell className="w-4 h-4" />
                                     Reminders
-                                    <span className="text-xs text-muted-foreground">{reminderActivity.length}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                        {reminderActivity.length}
+                                        {emailCount > 0 && (
+                                            <> · {emailCount} email{emailCount === 1 ? '' : 's'}</>
+                                        )}
+                                    </span>
                                 </button>
                             </div>
 
@@ -1566,21 +1587,20 @@ const TaskDetail = () => {
                                     )}
                                     {!reminderLoading && reminderActivity.length === 0 && (
                                         <p className="text-sm text-muted-foreground text-center py-6">
-                                            No reminders logged yet. Email, Slack, and in-app nudges for this person show up here.
+                                            No reminders logged yet. In-app and email nudges for this person show up here
+                                            {slackConnected ? ', plus Slack when it was delivered' : ''}.
                                         </p>
                                     )}
                                     {!reminderLoading && reminderActivity.map((a) => {
-                                        const tone = reminderActivityTone(a);
-                                        const channels = Array.isArray(a.meta?.channels) && a.meta.channels.length
-                                            ? a.meta.channels
-                                            : [a.channel || 'in_app'];
+                                        const tone = reminderActivityTone(a, { slackConnected });
+                                        const channels = reminderChannels(a, { slackConnected });
                                         return (
-                                        <div key={a.id} className={`${tone.card} border p-3 rounded-lg`}>
+                                        <div key={a.id} className={`${tone} reminder-card border p-3 rounded-lg`} data-testid="reminder-activity-card">
                                             <div className="flex items-center justify-between mb-1 gap-2">
-                                                <span className={`font-semibold text-sm truncate ${tone.title}`}>
+                                                <span className="reminder-tone-title font-semibold text-sm truncate">
                                                     {a.title || (a.event_type === 'nudge' ? 'Nudge' : 'Reminder')}
                                                 </span>
-                                                <span className={`text-xs shrink-0 ${tone.meta}`}>
+                                                <span className="reminder-tone-meta text-xs shrink-0">
                                                     {a.created_at && format(new Date(a.created_at), 'MMM d, h:mm a')}
                                                 </span>
                                             </div>
@@ -1589,21 +1609,21 @@ const TaskDetail = () => {
                                                     <Badge
                                                         key={ch}
                                                         variant="outline"
-                                                        className={`text-[10px] uppercase tracking-wide ${CHANNEL_BADGE[ch] || ''}`}
+                                                        className={`reminder-channel-badge reminder-channel-${ch} text-[10px] tracking-wide`}
                                                     >
-                                                        {String(ch).replace('_', ' ')}
+                                                        {CHANNEL_LABEL[ch] || String(ch).replace(/_/g, ' ')}
                                                     </Badge>
                                                 ))}
                                                 {a.event_type === 'nudge' && (
-                                                    <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-800 border-indigo-200">nudge</Badge>
+                                                    <Badge variant="outline" className="reminder-channel-badge text-[10px]">nudge</Badge>
                                                 )}
                                                 {a.actor_name && (
-                                                    <span className={`text-xs font-medium ${tone.title}`}>from {a.actor_name}</span>
+                                                    <span className="reminder-tone-title text-xs font-medium">from {a.actor_name}</span>
                                                 )}
                                             </div>
-                                            {a.body && <p className={`text-sm whitespace-pre-wrap ${tone.body}`}>{humanizeReminderBody(a.body)}</p>}
+                                            {a.body && <p className="reminder-tone-body text-sm whitespace-pre-wrap">{humanizeReminderBody(a.body)}</p>}
                                             {a.recipient_name && (
-                                                <p className={`text-xs font-medium mt-1 ${tone.title}`}>To: {a.recipient_name}</p>
+                                                <p className="reminder-tone-title text-xs font-medium mt-1">To: {a.recipient_name}</p>
                                             )}
                                         </div>
                                         );

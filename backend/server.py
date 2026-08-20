@@ -99,7 +99,8 @@ db = client[os.environ['DB_NAME']]
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+# 30 days — returning to the PWA after overnight / next-day should stay signed in
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 security = HTTPBearer()
 
 # PST Timezone
@@ -2048,6 +2049,10 @@ async def get_task_activity(
 
     rows = await db.task_activity.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
 
+    # Slack only when the viewer's team actually has Slack connected
+    team_webhook = await _resolve_slack_webhook(current_user)
+    slack_ok = bool(slack_bot_token() or team_webhook)
+
     # Hide legacy fake Slack follow-ups that were logged without a real Slack DM
     if k in ("reminders", "reminder"):
         cleaned = []
@@ -2071,21 +2076,58 @@ async def get_task_activity(
             "id": "legacy-last-reminder",
             "task_id": task_id,
             "event_type": "reminder",
-            "channel": "unknown",
+            "channel": "in_app",
             "actor_name": "Smart Reminders",
             "recipient_id": task.get("assigned_to"),
             "title": "Reminder sent",
             "body": task.get("title"),
             "created_at": task.get("last_smart_reminder_sent"),
-            "meta": {"legacy": True},
+            "meta": {"legacy": True, "channels": ["in_app"]},
         }]
 
+    email_count = 0
     for row in rows:
+        meta = dict(row.get("meta") or row.get("metadata") or {})
+        raw_channels = meta.get("channels")
+        if not isinstance(raw_channels, list) or not raw_channels:
+            inferred = []
+            ch = str(row.get("channel") or "").lower()
+            if ch in ("email", "slack", "in_app"):
+                inferred.append(ch)
+            elif ch and ch not in ("unknown", "multi"):
+                inferred.append("in_app")
+            else:
+                inferred.append("in_app")
+            raw_channels = inferred
+        norm = []
+        for ch in raw_channels:
+            key = str(ch or "").strip().lower().replace("-", "_").replace(" ", "_")
+            if key in ("inapp", "app", "notification", "notif"):
+                key = "in_app"
+            if key == "slack" and not slack_ok:
+                continue
+            if key in ("email", "slack", "in_app") and key not in norm:
+                norm.append(key)
+        if not norm:
+            norm = ["in_app"]
+        if "email" in norm:
+            email_count += 1
+        meta["channels"] = norm
+        row["meta"] = meta
+        # Keep top-level channel aligned with first delivered channel
+        row["channel"] = norm[0]
+        # Normalize timestamps so the UI matches when the email/notif went out
+        ca = row.get("created_at")
+        if hasattr(ca, "isoformat"):
+            row["created_at"] = ca.isoformat()
         if row.get("event_type") in ("reminder", "nudge"):
-            meta = row.get("meta") or row.get("metadata") or {}
             row["body"] = _humanize_reminder_body(row.get("body") or "", meta.get("fired_kind"))
 
-    return {"activity": rows, "count": len(rows)}
+    return {
+        "activity": rows,
+        "count": len(rows),
+        "email_count": email_count,
+    }
 
 
 @api_router.get("/activity")
