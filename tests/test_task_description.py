@@ -65,6 +65,16 @@ if (!laid.includes('\n1. ') || !laid.includes('\n2. ') || !laid.includes('Next s
   process.exit(1);
 }
 
+const illogical = layoutTaskDescription('Today, please benjamin needs to review and clear all redundant open opportunities.\n\nNext steps:\n1. Review the material.');
+if (/benjamin needs to/i.test(illogical) || /please needs to/i.test(illogical)) {
+  console.error('illogical ask not cleaned', JSON.stringify(illogical));
+  process.exit(1);
+}
+if (!/^Today, please review/i.test(illogical)) {
+  console.error('expected logical today ask', JSON.stringify(illogical));
+  process.exit(1);
+}
+
 const html = layoutTaskDescription('<p>This is a reminder for myself to make sure I for all deals I steps: 1. Complete the 2. Reply with a brief update when you are done.</p>');
 if (!html.includes('Steps:') || !html.includes('\n1. ') || !html.includes('\n2. ')) {
   console.error('html layout failed', JSON.stringify(html));

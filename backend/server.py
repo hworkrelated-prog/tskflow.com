@@ -9967,6 +9967,23 @@ def _strip_manager_voice(text: str) -> str:
         s,
         count=1,
     )
+    # "{Name} needs to / should / must …" → keep the work (skip time words like Today)
+    def _drop_owner_needs(m):
+        name = (m.group(1) or "").strip()
+        first = name.split()[0].lower() if name else ""
+        if first in _NAME_STOP or name.lower() in _NAME_STOP:
+            return m.group(0)
+        return ""
+
+    s = _OWNER_NEEDS_RE.sub(_drop_owner_needs, s, count=1)
+    # After a name was stripped: "Today needs to review…" → "Today review…"
+    s = re.sub(
+        r"(?i)^((?:today|tomorrow|tonight|on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\s+)?"
+        r"(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\s+",
+        lambda m: (m.group(1) or ""),
+        s,
+        count=1,
+    )
     s = _NEED_TO_RE.sub(" ", s)
     return re.sub(r"\s+", " ", s).strip(" .,:;-")
 
@@ -10131,6 +10148,20 @@ def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = Non
     """Assigner talking directly to the people who will do the work."""
     mgr = (manager_name or "your manager").strip() or "your manager"
     body = (work or "").strip()
+    # Drop leftover owner phrasing so we never emit "please benjamin needs to…"
+    body = re.sub(
+        r"(?i)^(?:please\s+)?[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+"
+        r"(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\s+",
+        "",
+        body,
+        count=1,
+    )
+    body = re.sub(
+        r"(?i)^(?:please\s+)?(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\s+",
+        "",
+        body,
+        count=1,
+    )
     if body:
         ask = _rewrite_description_for_assignee(body, mgr)
     else:
@@ -10154,6 +10185,21 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         return desc
     s = str(desc).strip()
     mgr = (manager_name or "your manager").strip() or "your manager"
+
+    # "{Name} needs to review…" / "please benjamin needs to…" → imperative ask
+    s = re.sub(
+        r"(?i)^(?:please\s+)?[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+"
+        r"(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\s+",
+        "",
+        s,
+        count=1,
+    )
+    s = re.sub(
+        r"(?i)^(?:please\s+)?(?:needs to|has to|gotta|got to|should|must|will|is going to|is supposed to)\s+",
+        "",
+        s,
+        count=1,
+    )
 
     replacements = [
         (r"(?i)^(?:please\s+)?ask\s+to\s+", "Please "),
@@ -10303,6 +10349,8 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
     if _looks_truncated(lead.split("\n")[0] if lead else ""):
         return True
     if re.search(r"(?i)\bi need my\b|please i\b|need my submit\b", description or ""):
+        return True
+    if re.search(r"(?i)\bplease\s+[A-Za-z][\w'.-]*\s+needs?\s+to\b|\bplease\s+needs?\s+to\b", description or ""):
         return True
     if re.search(r"(?m)^\s*\d+[.)]\s*(complete the|the)\s*$", description or ""):
         return True

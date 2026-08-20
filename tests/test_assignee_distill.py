@@ -129,3 +129,35 @@ def test_preview_panel_is_opaque():
     block = css.split(".ai-dock-panel.is-active")[1].split("[data-theme")[0]
     assert "background: rgba(255, 255, 255, 0.9)" not in block
     assert "background: #fff" in block
+
+
+def test_name_needs_to_becomes_direct_please_ask():
+    ns = _ns()
+    raw = "Today Benjamin needs to review and clear all redundant open opportunities"
+    parsed = {
+        "title": "Review and clear all redundant open opportunities",
+        "description": raw,
+        "action_items": [],
+        "assignee_hints": ["Benjamin"],
+    }
+    ns["_enrich_parse_title_description"](parsed, raw, manager_name="Henrik")
+    desc = (parsed.get("description") or "").lower()
+    assert "benjamin" not in desc.split("next steps:")[0]
+    assert "please needs to" not in desc
+    assert "needs to review" not in desc.split("next steps:")[0]
+    assert "today" in desc
+    assert "please review" in desc
+    assert "redundant open opportunities" in desc
+
+    # Even if the name is still in the work text, rewrite to an imperative ask.
+    ask = ns["_assignee_facing_ask"](
+        "Today",
+        "Benjamin needs to review and clear all redundant open opportunities",
+        "Henrik",
+    ).lower()
+    assert "benjamin" not in ask
+    assert "please needs to" not in ask
+    assert ask.startswith("today, please review")
+
+    leftover = ns["_strip_manager_voice"]("needs to review and clear all redundant open opportunities")
+    assert leftover.lower().startswith("review")

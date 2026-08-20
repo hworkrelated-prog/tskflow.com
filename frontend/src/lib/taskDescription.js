@@ -23,6 +23,19 @@ export function layoutTaskDescription(raw) {
     s = s.replace(/<li[^>]*>/gi, '');
     s = s.replace(/<[^>]*>/g, ' ');
     s = decodeEntities(s);
+    // "Today, please benjamin needs to review…" → "Today, please review…"
+    s = s.replace(
+        /^((?:Today|Tomorrow|Tonight|On\s+\w+)\s*,\s*)?please\s+[A-Za-z][\w'.-]*(?:\s+[A-Za-z][\w'.-]*){0,2}\s+needs?\s+to\s+/i,
+        (_, when) => `${when || ''}please `,
+    );
+    s = s.replace(
+        /^((?:Today|Tomorrow|Tonight|On\s+\w+)\s*,\s*)?please\s+needs?\s+to\s+/i,
+        (_, when) => `${when || ''}please `,
+    );
+    s = s.replace(
+        /^([A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})\s+(?:needs to|has to|should|must|will)\s+/i,
+        '',
+    );
     s = s.replace(/\s*((?:Next\s+)?steps?):\s*/i, (_, label) => {
         const pretty = /^next/i.test(label) ? 'Next steps:' : 'Steps:';
         return `\n\n${pretty}\n`;
@@ -30,6 +43,9 @@ export function layoutTaskDescription(raw) {
     s = s.replace(/([^\n])[ \t]+(\d{1,2})[.)][ \t]+/g, '$1\n$2. ');
     s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
     s = s.replace(/[ \t]{2,}/g, ' ');
+    // Capitalize the ask after a when-clause: "Today, please review…"
+    s = s.replace(/^((?:Today|Tomorrow|Tonight|On\s+\w+)\s*,\s*)([a-z])/i, (_, when, ch) => `${when}${ch.toLowerCase()}`);
+    s = s.replace(/^(please\s+)([a-z])/i, (_, p, ch) => `Please ${ch}`);
     return s.trim();
 }
 
