@@ -179,7 +179,6 @@ const AIQuickCreate = ({
     const [editScreenRecording, setEditScreenRecording] = useState(false);
     const [attachments, setAttachments] = useState([]);
     const [uploadingPaste, setUploadingPaste] = useState(false);
-    const [showRecordPicker, setShowRecordPicker] = useState(false);
     const recordPickerRef = useRef(null);
     const [plusOpen, setPlusOpen] = useState(false);
     const [showAttachPrompt, setShowAttachPrompt] = useState(false);
@@ -796,6 +795,13 @@ const AIQuickCreate = ({
         focusInput();
     };
 
+    // One-click capture from either Record control — must stay in the click
+    // gesture so Chrome keeps user-activation for getDisplayMedia + Document PiP.
+    const startComposerRecording = () => {
+        setPlusOpen(false);
+        recordPickerRef.current?.startRecording?.();
+    };
+
     const runQA = async (question, { alreadyLogged } = {}) => {
         const q = (question || '').trim();
         if (!q) return;
@@ -1069,7 +1075,6 @@ const AIQuickCreate = ({
         setEditSales(false);
         setEditScreenRecording(false);
         setAttachments([]);
-        setShowRecordPicker(false);
         setPlusOpen(false);
         setFormatOpen(false);
         setTeamScopePrompt(null);
@@ -2726,14 +2731,10 @@ const AIQuickCreate = ({
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setPlusOpen(false);
-                                            setShowRecordPicker((v) => !v);
-                                        }}
-                                        className={`ai-composer-icon-btn h-8 rounded-lg inline-flex items-center justify-center gap-1 px-2 transition-colors ${showRecordPicker ? 'is-open' : ''}`}
+                                        onClick={startComposerRecording}
+                                        className="ai-composer-icon-btn h-8 rounded-lg inline-flex items-center justify-center gap-1 px-2 transition-colors"
                                         title="Record screen"
                                         aria-label="Record screen"
-                                        aria-pressed={showRecordPicker}
                                         data-testid="ai-record-btn"
                                     >
                                         <Video className="w-4 h-4" strokeWidth={1.75} />
@@ -2748,12 +2749,7 @@ const AIQuickCreate = ({
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                onClick={() => {
-                                                    setPlusOpen(false);
-                                                    setShowRecordPicker(true);
-                                                    // Call from the click gesture so Chrome keeps activation for PiP + picker.
-                                                    recordPickerRef.current?.startRecording?.();
-                                                }}
+                                                onClick={startComposerRecording}
                                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                                 data-testid="ai-screen-record-btn"
                                             >
@@ -2848,11 +2844,9 @@ const AIQuickCreate = ({
                             </div>
                         </div>
 
-                        {/* Keep mounted so Record can start from the plus-menu click gesture. */}
-                        <div
-                            className={showRecordPicker ? 'mt-2 rounded-xl border border-slate-200 bg-white p-3' : ''}
-                            data-testid="ai-inline-recorder"
-                        >
+                        {/* Keep mounted so Record can start from the click gesture.
+                            No bordered panel — capture UI is the system picker + floating HUD. */}
+                        <div data-testid="ai-inline-recorder">
                             <AttachmentPicker
                                 ref={recordPickerRef}
                                 compact
