@@ -358,6 +358,31 @@ async def record_ping(db, task: dict, now: datetime, reason: str = "nudge") -> d
     return next_task
 
 
+def is_live_slack_thread(thread: Optional[dict]) -> bool:
+    """True only for follow-ups that were actually delivered as a Slack DM.
+
+    Incoming Webhook / local stubs are one-way or fake — they must not show a
+    “Slack thread” card or Catch Up claim that Jarvis started a Slack conversation.
+    """
+    if not thread or not isinstance(thread, dict):
+        return False
+    if thread.get("via") != "slack_dm":
+        return False
+    return bool(thread.get("slack_channel_id") or thread.get("slack_thread_ts"))
+
+
+def is_slack_followup_notification(title: Optional[str], body: Optional[str] = None) -> bool:
+    """Detect Jarvis Slack follow-up notifications (legacy + current copy)."""
+    blob = f"{title or ''} {body or ''}".lower()
+    if "slack thread" in blob:
+        return True
+    if "messaged you on slack" in blob:
+        return True
+    if "jarvis" in blob and "slack" in blob:
+        return True
+    return False
+
+
 async def open_ignored_task_thread(
     db,
     task: dict,
@@ -366,47 +391,43 @@ async def open_ignored_task_thread(
     now: datetime,
     post_webhook=None,
 ) -> Optional[dict]:
-    """Open a Slack DM or webhook follow-up after ignored pings.
+    """Open a Slack DM follow-up after ignored pings.
 
-    Only creates a thread when Slack delivery actually succeeds (bot DM or
-    Incoming Webhook). Never invents a fake “Slack” thread when Slack is not
-    connected — that previously showed “Slack follow-up opened” with via=local
-    or a false via=webhook.
+    Requires a successful Slack bot DM. Incoming Webhook alone is not enough —
+    it cannot receive replies, and previously produced fake “Slack thread” UI
+    (including via=webhook with no real delivery).
     """
     if not should_open_slack_followup(task):
         return None
     token = slack_bot_token()
+    if not token:
+        return None
     iso = now.isoformat() if hasattr(now, "isoformat") else str(now)
     text = opening_message(task, assignee.get("name") or "", (assigner or {}).get("name") or "your manager")
     channel_id = None
     thread_ts = None
     slack_user_id = assignee.get("slack_user_id")
-    via = None
 
-    if token:
-        if not slack_user_id:
-            slack_user_id = await lookup_slack_user_id(token, assignee.get("email") or "")
-            if slack_user_id and assignee.get("id"):
-                await db.users.update_one({"id": assignee["id"]}, {"$set": {"slack_user_id": slack_user_id}})
-        if slack_user_id:
-            channel_id = await open_dm_channel(token, slack_user_id)
-        if channel_id:
-            posted = await post_slack_message(token, channel_id, text)
-            if posted.get("ok"):
-                thread_ts = posted.get("ts")
-                via = "slack_dm"
-
-    if via != "slack_dm" and callable(post_webhook):
-        try:
-            ok = await post_webhook(text)
-            if ok:
-                via = "webhook"
-        except Exception as e:
-            logger.warning("webhook follow-up failed: %s", e)
-
-    if via not in ("slack_dm", "webhook"):
-        # Slack is not connected / delivery failed — do not pretend a thread started.
+    if not slack_user_id:
+        slack_user_id = await lookup_slack_user_id(token, assignee.get("email") or "")
+        if slack_user_id and assignee.get("id"):
+            await db.users.update_one({"id": assignee["id"]}, {"$set": {"slack_user_id": slack_user_id}})
+    if slack_user_id:
+        channel_id = await open_dm_channel(token, slack_user_id)
+    if not channel_id:
         return None
+    posted = await post_slack_message(token, channel_id, text)
+    if not posted.get("ok"):
+        return None
+    thread_ts = posted.get("ts")
+    via = "slack_dm"
+
+    # Optional channel FYI via Incoming Webhook — never creates a fake thread by itself.
+    if callable(post_webhook):
+        try:
+            await post_webhook(text)
+        except Exception as e:
+            logger.warning("webhook follow-up fanout failed: %s", e)
 
     thread = {
         "id": str(uuid.uuid4()),

@@ -96,12 +96,25 @@ const AuthProvider = ({ children }) => {
     }, [user]);
 
     // Smart catch-up on login (replaces spammy per-task Chrome popups for backlog).
+    // In-app sheet only — never fire an OS toast when the user just opened the app.
     // Also poll only for *very recent* live events (mentions/nudges) — never reminders.
     useEffect(() => {
         if (!user) return;
         let cancelled = false;
 
         const sanitize = (s) => cleanDisplayText(s);
+
+        const catchUpIsMeaningful = (data) => {
+            const s = data?.summary || {};
+            // Don't auto-interrupt for vague “other” rows alone (legacy Slack noise, etc.)
+            return Boolean(
+                s.overdue_tasks ||
+                s.due_soon_tasks ||
+                s.unread_mentions ||
+                s.unread_nudges ||
+                s.unread_reminders
+            );
+        };
 
         const runCatchUp = async () => {
             if (cancelled) return;
@@ -110,41 +123,23 @@ const AuthProvider = ({ children }) => {
                 const res = await axios.get(`${API}/notifications/catch-up`);
                 if (cancelled) return;
                 const data = res.data;
-                if (!data?.has_items) return;
+                if (!data?.has_items || !catchUpIsMeaningful(data)) return;
 
-                // Open the in-app review once per browser session
+                // Open the in-app review once per browser session — no OS banner.
+                // (OS toasts on open felt like spam: user is already looking at the app.)
                 if (!sessionStorage.getItem(sessionKey)) {
                     sessionStorage.setItem(sessionKey, '1');
                     window.dispatchEvent(new CustomEvent('tskflow:catch-up', { detail: data }));
-
-                    // At most ONE summary OS toast (same tag collapses duplicates)
-                    if ('Notification' in window && Notification.permission === 'granted') {
-                        const s = data.summary || {};
-                        const parts = [];
-                        if (s.overdue_tasks) parts.push(`${s.overdue_tasks} overdue`);
-                        if (s.due_soon_tasks) parts.push(`${s.due_soon_tasks} due soon`);
-                        if (s.unread_mentions) parts.push(`${s.unread_mentions} mentions`);
-                        if (s.unread_nudges) parts.push(`${s.unread_nudges} nudges`);
-                        if (!parts.length && s.unread_reminders) parts.push(`${s.unread_reminders} reminders`);
-                        try {
-                            const notif = new Notification('Catch up on your work', {
-                                body: parts.join(' · ') || 'You have updates waiting in TskFlow',
-                                icon: '/icon-192.png',
-                                tag: 'tsk-catch-up',
-                            });
-                            notif.onclick = () => {
-                                window.focus();
-                                window.dispatchEvent(new CustomEvent('tskflow:open-catch-up'));
-                                notif.close();
-                            };
-                        } catch (_) { /* silent */ }
-                    }
                 }
             } catch (_) { /* silent */ }
         };
 
         const pollLive = async () => {
             if (cancelled) return;
+            // Never OS-toast while the user is actively looking at the app after a return —
+            // catch-up / the bell cover backlog. Live toasts are for events that arrive
+            // while already focused (WebSocket path) or the rare pending poll hit.
+            if (document.visibilityState !== 'visible') return;
             try {
                 const res = await axios.get(`${API}/notifications/pending`);
                 const items = (res.data && res.data.notifications) || [];
@@ -170,7 +165,8 @@ const AuthProvider = ({ children }) => {
 
         runCatchUp();
         // Live poll is infrequent and only for brand-new non-reminder events.
-        // Pause while the tab is hidden so background timer throttling doesn't stall the app.
+        // Do NOT poll immediately on tab-focus — that re-toasts backlog the moment
+        // you open the app after being away. Interval-only is enough.
         let interval = null;
         const startPoll = () => {
             if (interval) return;
@@ -182,12 +178,8 @@ const AuthProvider = ({ children }) => {
             if (interval) { clearInterval(interval); interval = null; }
         };
         const onVis = () => {
-            if (document.visibilityState === 'visible') {
-                pollLive();
-                startPoll();
-            } else {
-                stopPoll();
-            }
+            if (document.visibilityState === 'visible') startPoll();
+            else stopPoll();
         };
         if (document.visibilityState === 'visible') startPoll();
         document.addEventListener('visibilitychange', onVis);
