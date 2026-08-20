@@ -56,9 +56,11 @@ const LoomPlayer = ({
 
     const scheduleHide = useCallback(() => {
         clearHide();
+        // Keep chrome visible while playing so scrubber/progress stay readable.
+        // Only fade after a long idle period when the user clearly isn't interacting.
         hideTimer.current = setTimeout(() => {
             if (videoRef.current && !videoRef.current.paused) setShowChrome(false);
-        }, 2200);
+        }, 8000);
     }, []);
 
     const reveal = useCallback(() => {
@@ -271,7 +273,7 @@ const LoomPlayer = ({
 
     const progress = duration > 0 ? (current / duration) * 100 : 0;
     const bufPct = duration > 0 ? (buffered / duration) * 100 : 0;
-    const chromeVisible = showChrome || !playing || showSpeed;
+    const chromeVisible = true; // Keep controls consistent while the recording plays
 
     return (
         <div
@@ -306,16 +308,16 @@ const LoomPlayer = ({
                 </button>
             )}
 
-            {/* Gradient + controls */}
+            {/* Gradient + controls — scrubber stays high-contrast so playhead is never camouflaged */}
             <div
                 className={`absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
                     chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                 }`}
             >
-                <div className="bg-gradient-to-t from-black/85 via-black/45 to-transparent pt-16 px-3 sm:px-4 pb-3">
+                <div className="bg-gradient-to-t from-black/90 via-black/55 to-transparent pt-16 px-3 sm:px-4 pb-3">
                     {/* Scrubber */}
                     <div
-                        className="relative h-5 flex items-center cursor-pointer group/bar mb-1"
+                        className="relative h-6 flex items-center cursor-pointer group/bar mb-1.5"
                         onMouseDown={onBarDown}
                         onTouchStart={onBarDown}
                         onMouseMove={(e) => setHoverPct(pctFromEvent(e, e.currentTarget))}
@@ -327,17 +329,22 @@ const LoomPlayer = ({
                         aria-valuenow={current}
                         aria-label="Seek"
                     >
-                        <div className="absolute inset-x-0 h-1 rounded-full bg-white/25 overflow-hidden">
-                            <div className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${bufPct}%` }} />
-                            <div className="absolute inset-y-0 left-0 bg-rose-500" style={{ width: `${progress}%` }} />
+                        <div className="absolute inset-x-0 h-2 rounded-full bg-white/40 ring-1 ring-black/50 overflow-hidden shadow-inner">
+                            <div className="absolute inset-y-0 left-0 bg-white/55" style={{ width: `${bufPct}%` }} />
+                            <div
+                                className="absolute inset-y-0 left-0 bg-rose-400"
+                                style={{ width: `${progress}%` }}
+                                data-testid={`${testId}-progress-fill`}
+                            />
                         </div>
                         <div
-                            className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-md opacity-0 group-hover/bar:opacity-100 transition-opacity"
-                            style={{ left: `calc(${progress}% - 7px)` }}
+                            className="absolute top-1/2 -translate-y-1/2 w-4 h-3.5 rounded-full bg-white border-2 border-rose-500 shadow-md shadow-black/40 opacity-100"
+                            style={{ left: `calc(${progress}% - 8px)` }}
+                            data-testid={`${testId}-progress-thumb`}
                         />
                         {hoverPct != null && duration > 0 && (
                             <div
-                                className="absolute -top-7 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white tabular-nums pointer-events-none"
+                                className="absolute -top-7 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/90 text-[10px] text-white tabular-nums pointer-events-none"
                                 style={{ left: `${hoverPct * 100}%` }}
                             >
                                 {fmt(hoverPct * duration)}
