@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Paperclip, Video, Square, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Pause, Trash2, RotateCw } from 'lucide-react';
+import { Paperclip, Video, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob, fileUrl } from '@/lib/upload';
-import { openRecordingControlsOverlay, closeRecordingControlsOverlay, recordingOverlayNeeded } from '@/lib/recordingControlsOverlay';
-import { openRecordingCameraOverlay, closeRecordingCameraOverlay, setCameraOverlayVisible } from '@/lib/recordingCameraOverlay';
+import { openRecordingHudOverlay, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import { saveRecordingBlob } from '@/lib/recordingStore';
+import RecordingFloatingHud from '@/components/RecordingFloatingHud';
+import LoomPlayer from '@/components/LoomPlayer';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -37,44 +38,60 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     const [seconds, setSeconds] = useState(0);
     const [opts, setOpts] = useState({ mic: true, camera: true, systemAudio: true });
     const [permissionState, setPermissionState] = useState({ mic: null, camera: null });
+    const [showAdvancedOpts, setShowAdvancedOpts] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [previewBlob, setPreviewBlob] = useState(null);
     const [previewUrl, setPreviewUrl] = useState('');
     const [savedAttachment, setSavedAttachment] = useState(null);
     const [savingPreview, setSavingPreview] = useState(false);
-    const [camOverlayOpen, setCamOverlayOpen] = useState(false);
+    const [camStream, setCamStream] = useState(null);
     const [replaySrc, setReplaySrc] = useState('');
 
     const recorderRef = useRef(null);
     const streamsRef = useRef({ screen: null, mic: null, camera: null, composed: null });
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
-    const canvasRef = useRef(null);
-    const videoRefs = useRef({ screen: null, camera: null });
     const rafRef = useRef(null);
-    const cameraPreviewRef = useRef(null);
     const discardOnStopRef = useRef(false);
 
     useEffect(() => {
         return () => {
             cleanupStreams();
-            closeRecordingControlsOverlay();
-            closeRecordingCameraOverlay();
+            closeRecordingHudOverlay();
             try { if (window.__tskRecorderApi) delete window.__tskRecorderApi; } catch { /* noop */ }
         };
     }, []);
 
-    // Wire webcam preview after the floating <video> mounts (refs are null during startRecording).
+    // Probe mic/camera permissions so we can hide toggles that are already allowed.
     useEffect(() => {
-        if (!recording) return undefined;
-        const el = cameraPreviewRef.current;
-        const cam = streamsRef.current.camera;
-        if (el && cam) {
-            el.srcObject = cam;
-            el.play().catch(() => {});
-        }
-        return undefined;
-    }, [recording]);
+        if (!showOptions) return undefined;
+        let cancelled = false;
+        (async () => {
+            const next = { mic: null, camera: null };
+            try {
+                if (navigator.permissions?.query) {
+                    try {
+                        const mic = await navigator.permissions.query({ name: 'microphone' });
+                        if (!cancelled) next.mic = mic.state;
+                    } catch { /* unsupported name in some browsers */ }
+                    try {
+                        const cam = await navigator.permissions.query({ name: 'camera' });
+                        if (!cancelled) next.camera = cam.state;
+                    } catch { /* unsupported name in some browsers */ }
+                }
+            } catch { /* noop */ }
+            if (!cancelled) {
+                setPermissionState(next);
+                // Already allowed → keep toggles collapsed unless the user expands them.
+                if (next.mic === 'granted' && next.camera === 'granted') {
+                    setShowAdvancedOpts(false);
+                } else {
+                    setShowAdvancedOpts(true);
+                }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [showOptions]);
 
     useEffect(() => {
         if (!previewBlob) {
@@ -116,6 +133,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             if (s) { try { s.getTracks().forEach(t => t.stop()); } catch (_) { /* ignore */ } }
         });
         streamsRef.current = { screen: null, mic: null, camera: null, composed: null };
+        setCamStream(null);
     };
 
     const doUpload = async (blob, filename, contentType) => {
@@ -182,6 +200,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             const { mic: micStream, camera: cameraStream } = await requestMediaPermissions();
             streamsRef.current.mic = micStream;
             streamsRef.current.camera = cameraStream;
+            setCamStream(cameraStream);
 
             const screenStream = await navigator.mediaDevices.getDisplayMedia({
                 video: { frameRate: 30 }, // Fixed: consistent 30fps for smoother recording
@@ -229,9 +248,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 setRecording(false);
                 setPaused(false);
                 setSeconds(0);
-                closeRecordingControlsOverlay();
-                closeRecordingCameraOverlay();
-                setCamOverlayOpen(false);
+                closeRecordingHudOverlay();
                 const wasDiscard = discardOnStopRef.current;
                 discardOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
@@ -265,23 +282,17 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             setShowOptions(false);
             setSeconds(0);
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-            if (cameraStream) {
-                const camOverlay = await openRecordingCameraOverlay({
-                    stream: cameraStream,
-                    trackSettings: settings,
-                });
-                setCamOverlayOpen(camOverlay.mode !== 'none');
-                if (camOverlay.placedOnOtherDisplay) {
-                    toast.success('Camera moved to the screen you are recording.');
-                } else if (camOverlay.mode === 'popup' && screens.length > 1) {
-                    toast.info('Drag the camera onto the screen you are recording if it landed on the wrong display.');
-                }
-            }
 
-            const overlay = await openRecordingControlsOverlay({
-                needed: recordingOverlayNeeded(settings.displaySurface, matched.screen),
+            const needed = recordingOverlayNeeded(settings.displaySurface, matched.screen);
+            const hud = await openRecordingHudOverlay({
+                stream: cameraStream,
+                trackSettings: settings,
+                needed,
+                showCamera: !!cameraStream,
             });
-            if (overlay?.mode === 'none' && recordingOverlayNeeded(settings.displaySurface, matched.screen)) {
+            if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
+                toast.success('Drag the recording controls onto the screen you are capturing.');
+            } else if (hud.mode === 'none' && needed) {
                 toast.info('Using the in-tab toolbar — Chrome can also show a Stop sharing bar.');
             }
         } catch (e) {
@@ -306,9 +317,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
     const stopRecording = () => {
         discardOnStopRef.current = false;
         if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
-        closeRecordingControlsOverlay();
-        closeRecordingCameraOverlay();
-        setCamOverlayOpen(false);
+        closeRecordingHudOverlay();
     };
 
     const pauseResume = () => {
@@ -336,7 +345,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         setOpts((prev) => {
             const on = !prev.camera;
             streamsRef.current.camera?.getVideoTracks?.().forEach((t) => { t.enabled = on; });
-            setCameraOverlayVisible(on);
+            setHudCameraVisible(on);
             return { ...prev, camera: on };
         });
     };
@@ -382,7 +391,6 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
 
     const removeAttachment = (id) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
-    const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     const uploadList = Object.entries(uploads);
 
     return (
@@ -408,34 +416,81 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             </div>
 
             {showOptions && !recording && (
-                <div className="p-3 bg-slate-50 rounded-xl border space-y-3">
-                    <p className="text-xs font-medium text-muted-foreground">Recording options:</p>
-                    <div className="flex flex-wrap gap-2">
-                        <OptionToggle
-                            on={opts.mic}
-                            onClick={() => setOpts({ ...opts, mic: !opts.mic })}
-                            iconOn={<Mic className="w-3 h-3" />}
-                            iconOff={<MicOff className="w-3 h-3" />}
-                            label="Microphone"
-                            dataTestId="toggle-mic"
-                        />
-                        <OptionToggle
-                            on={opts.camera}
-                            onClick={() => setOpts({ ...opts, camera: !opts.camera })}
-                            iconOn={<Camera className="w-3 h-3" />}
-                            iconOff={<CameraOff className="w-3 h-3" />}
-                            label="Camera"
-                            dataTestId="toggle-camera"
-                        />
-                        <OptionToggle
-                            on={opts.systemAudio}
-                            onClick={() => setOpts({ ...opts, systemAudio: !opts.systemAudio })}
-                            iconOn={<Volume2 className="w-3 h-3" />}
-                            iconOff={<VolumeX className="w-3 h-3" />}
-                            label="System Audio"
-                            dataTestId="toggle-system-audio"
-                        />
-                    </div>
+                <div className="p-3 bg-slate-50 rounded-xl border space-y-3" data-testid="recording-options-panel">
+                    {(() => {
+                        const micGranted = permissionState.mic === 'granted';
+                        const camGranted = permissionState.camera === 'granted';
+                        const allAllowed = micGranted && camGranted;
+                        const showMic = showAdvancedOpts || !micGranted;
+                        const showCam = showAdvancedOpts || !camGranted;
+                        const showSys = showAdvancedOpts || !allAllowed;
+                        const anyToggle = showMic || showCam || showSys;
+                        return (
+                            <>
+                                {allAllowed && !showAdvancedOpts ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Mic &amp; camera already allowed — start when ready.
+                                        {' '}
+                                        <button
+                                            type="button"
+                                            className="underline underline-offset-2 hover:text-foreground"
+                                            onClick={() => setShowAdvancedOpts(true)}
+                                            data-testid="show-recording-options"
+                                        >
+                                            Change options
+                                        </button>
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="text-xs font-medium text-muted-foreground">Recording options:</p>
+                                        {anyToggle && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {showMic && (
+                                                    <OptionToggle
+                                                        on={opts.mic}
+                                                        onClick={() => setOpts({ ...opts, mic: !opts.mic })}
+                                                        iconOn={<Mic className="w-3 h-3" />}
+                                                        iconOff={<MicOff className="w-3 h-3" />}
+                                                        label="Microphone"
+                                                        dataTestId="toggle-mic"
+                                                    />
+                                                )}
+                                                {showCam && (
+                                                    <OptionToggle
+                                                        on={opts.camera}
+                                                        onClick={() => setOpts({ ...opts, camera: !opts.camera })}
+                                                        iconOn={<Camera className="w-3 h-3" />}
+                                                        iconOff={<CameraOff className="w-3 h-3" />}
+                                                        label="Camera"
+                                                        dataTestId="toggle-camera"
+                                                    />
+                                                )}
+                                                {showSys && (
+                                                    <OptionToggle
+                                                        on={opts.systemAudio}
+                                                        onClick={() => setOpts({ ...opts, systemAudio: !opts.systemAudio })}
+                                                        iconOn={<Volume2 className="w-3 h-3" />}
+                                                        iconOff={<VolumeX className="w-3 h-3" />}
+                                                        label="System Audio"
+                                                        dataTestId="toggle-system-audio"
+                                                    />
+                                                )}
+                                            </div>
+                                        )}
+                                        {allAllowed && showAdvancedOpts && (
+                                            <button
+                                                type="button"
+                                                className="text-xs text-muted-foreground underline underline-offset-2"
+                                                onClick={() => setShowAdvancedOpts(false)}
+                                            >
+                                                Hide options
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </>
+                        );
+                    })()}
                     <Button type="button" onClick={startRecording} disabled={starting} className="w-full rounded-full" size="sm">
                         {starting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting...</> : 'Start Recording'}
                     </Button>
@@ -443,41 +498,20 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             )}
 
             {recording && (
-                <>
-                    <div
-                        className="fixed bottom-4 left-3 z-[2147483647] bg-slate-900/35 backdrop-blur-xl text-white rounded-full shadow-lg shadow-black/10 border border-white/20 flex items-center gap-2 pl-2.5 pr-1 py-1 select-none"
-                        data-testid="attachment-recording-bar"
-                    >
-                        <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-amber-300' : 'bg-rose-400 animate-pulse'}`} />
-                        <span className="font-mono text-[11px] font-medium tabular-nums">{fmt(seconds)}</span>
-                        <button
-                            type="button"
-                            onClick={pauseResume}
-                            className="h-7 w-7 rounded-full text-white/90 hover:bg-white/15 inline-flex items-center justify-center"
-                            title={paused ? 'Resume' : 'Pause'}
-                        >
-                            {paused ? <Play className="w-3 h-3" fill="currentColor" /> : <Pause className="w-3 h-3" />}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={stopRecording}
-                            className="h-7 px-2.5 rounded-full bg-rose-500/85 hover:bg-rose-400 text-white text-[11px] font-semibold inline-flex items-center gap-1"
-                        >
-                            <Square className="w-3 h-3" fill="currentColor" /> Stop
-                        </button>
-                    </div>
-                    {opts.camera && !camOverlayOpen && (
-                        <div className="fixed top-4 right-4 z-[2147483646] w-20 h-20 rounded-full overflow-hidden border-2 border-white/70 shadow-lg bg-black/80">
-                            <video
-                                ref={cameraPreviewRef}
-                                autoPlay
-                                muted
-                                playsInline
-                                className="w-full h-full object-cover"
-                            />
-                        </div>
-                    )}
-                </>
+                <RecordingFloatingHud
+                    seconds={seconds}
+                    paused={paused}
+                    micOn={opts.mic}
+                    camOn={opts.camera}
+                    cameraStream={camStream}
+                    showCamera={opts.camera || !!camStream}
+                    onPauseResume={pauseResume}
+                    onRestart={restartRecording}
+                    onToggleMic={toggleMic}
+                    onToggleCam={toggleCam}
+                    onStop={stopRecording}
+                    storageKey="tsk_att_rec_hud_pos"
+                />
             )}
 
             {/* Preview Dialog */}
@@ -488,12 +522,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                     </DialogHeader>
                     <div className="space-y-4">
                         {(replaySrc || previewUrl) && (
-                            <video
-                                key={replaySrc || previewUrl}
+                            <LoomPlayer
                                 src={replaySrc || previewUrl}
-                                controls
                                 autoPlay
-                                className="w-full rounded-lg bg-black"
+                                className="rounded-lg"
+                                videoClassName="max-h-[50vh]"
                                 data-testid="recording-preview-video"
                             />
                         )}
