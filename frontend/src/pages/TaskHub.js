@@ -1168,8 +1168,8 @@ const TaskHub = () => {
                         <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
                             Welcome, {user?.name}
                         </h2>
-                        <p className="text-sm sm:text-base text-muted-foreground mt-0.5">
-                            Tell Jarvis what needs doing — he&apos;ll follow up so nothing slips.
+                        <p className="text-sm text-muted-foreground/80 mt-1 tracking-wide">
+                            When something needs doing, start below.
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
