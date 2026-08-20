@@ -80,8 +80,8 @@ from engagement import (
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
 
-# Email sender persona ("Jarvis" per product spec)
-EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Jarvis")
+# Email sender brand (inbox avatar uses the From display name — avoid a lone "J")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "TskFlow")
 EMAIL_FROM_ADDR = os.getenv("EMAIL_FROM_ADDR", "notifications@notifications.unbiassly.com")
 EMAIL_FROM = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDR}>"
 
@@ -7370,32 +7370,36 @@ async def create_notification(
 
 
 def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_label: Optional[str] = None) -> str:
-    """Wrap content in the Jarvis branded HTML shell."""
+    """Wrap content in the TskFlow branded HTML shell (teal TF mark)."""
     cta = ""
     if cta_url and cta_label:
-        cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#4F46E5;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
+        cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
     return f"""
 <html>
-<body style="margin:0;padding:0;background:#f5f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f6fb;padding:32px 12px;">
+<body style="margin:0;padding:0;background:#f3f6f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f6f5;padding:32px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(24,24,50,0.06);">
-        <tr><td style="background:linear-gradient(135deg,#4F46E5,#7C3AED);padding:28px 32px;color:#fff;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:36px;height:36px;background:#ffffff33;border-radius:10px;display:inline-block;text-align:center;line-height:36px;font-weight:700;">J</div>
-            <div style="display:inline-block;vertical-align:middle;margin-left:10px;">
-              <div style="font-weight:700;font-size:16px;">Jarvis</div>
-              <div style="opacity:0.85;font-size:12px;">Your Tskflow assistant</div>
-            </div>
-          </div>
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,55,48,0.07);">
+        <tr><td style="background:linear-gradient(135deg,#0f766e,#14b8a6 55%,#2dd4bf);padding:28px 32px;color:#fff;">
+          <table role="presentation" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="40" height="40" align="center" valign="middle" style="width:40px;height:40px;background:rgba(255,255,255,0.2);border-radius:12px;border:1px solid rgba(255,255,255,0.28);">
+                <span style="font-family:Outfit,Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.04em;color:#ffffff;line-height:40px;">TF</span>
+              </td>
+              <td valign="middle" style="padding-left:12px;">
+                <div style="font-weight:700;font-size:16px;letter-spacing:-0.01em;">TskFlow</div>
+                <div style="opacity:0.88;font-size:12px;">Assign it. See who did it.</div>
+              </td>
+            </tr>
+          </table>
         </td></tr>
         <tr><td style="padding:32px;color:#1f2937;font-size:15px;line-height:1.6;">
           {inner_html}
           {cta}
         </td></tr>
-        <tr><td style="background:#f9fafb;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #eef0f3;">
-          <div>— <strong>Jarvis</strong>, Tskflow assistant</div>
-          <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#4F46E5;text-decoration:none;">Manage notifications</a></div>
+        <tr><td style="background:#f8faf9;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #e8eeec;">
+          <div>— <strong>TskFlow</strong></div>
+          <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#0d9488;text-decoration:none;">Manage notifications</a></div>
         </td></tr>
       </table>
     </td></tr>
