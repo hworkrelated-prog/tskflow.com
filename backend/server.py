@@ -80,8 +80,8 @@ from engagement import (
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
 
-# Email sender persona ("Jarvis" per product spec)
-EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Jarvis")
+# Email sender brand (inbox avatar uses the From display name — avoid a lone "J")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "TskFlow")
 EMAIL_FROM_ADDR = os.getenv("EMAIL_FROM_ADDR", "notifications@notifications.unbiassly.com")
 EMAIL_FROM = f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDR}>"
 
@@ -443,7 +443,7 @@ async def check_and_send_reminders():
                                 <p style="color: #6B7280; margin: 0 0 15px 0;">Due: <strong>{task['due_date'].replace('T', ' at ').split('.')[0]}</strong></p>
                             </div>
                             <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/task/{task['id']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                <a href="{app_url}/task/{task['id']}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                                     View Task
                                 </a>
                             </div>
@@ -554,7 +554,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+            <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                 <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome to Tskflow</h1>
                 <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Your task management journey begins here</p>
             </div>
@@ -565,13 +565,13 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
                 </p>
                 <div style="background: #F3F4F6; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0;">
                     <p style="font-size: 14px; color: #6B7280; margin: 0 0 10px 0;">Your Verification Code</p>
-                    <p style="font-size: 36px; font-weight: 700; color: #4F46E5; margin: 0; letter-spacing: 4px;">{verification_code}</p>
+                    <p style="font-size: 36px; font-weight: 700; color: #0d9488; margin: 0; letter-spacing: 4px;">{verification_code}</p>
                 </div>
                 <p style="font-size: 14px; color: #6B7280; line-height: 1.6;">
                     This code will expire in 24 hours. If you didn't create an account with Tskflow, please disregard this email.
                 </p>
                 <div style="margin-top: 30px; text-align: center;">
-                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                         Verify Your Account
                     </a>
                 </div>
@@ -644,7 +644,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+            <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                 <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Tskflow</h1>
                 <p style="color: rgba(255,255,255,0.9); margin-top: 10px;">Email Verification</p>
             </div>
@@ -654,10 +654,10 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
                     Here is your new verification code:
                 </p>
                 <div style="background: #F3F4F6; border-radius: 12px; padding: 25px; text-align: center; margin: 25px 0;">
-                    <p style="font-size: 36px; font-weight: 700; color: #4F46E5; margin: 0; letter-spacing: 4px;">{verification_code}</p>
+                    <p style="font-size: 36px; font-weight: 700; color: #0d9488; margin: 0; letter-spacing: 4px;">{verification_code}</p>
                 </div>
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                         Verify Your Account
                     </a>
                 </div>
@@ -952,7 +952,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         email_content = f"""
         <html>
             <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                 </div>
                 <div style="padding: 40px 30px; background: white;">
@@ -960,11 +960,11 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     <p style="font-size: 16px; color: #374151; line-height: 1.6;">
                         You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below and take appropriate action.
                     </p>
-                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                         <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
                         <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
                         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                            <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+                            <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#ccfbf1'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#0f766e'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
                                 {task.priority} Priority
                             </div>
                             <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
@@ -973,7 +973,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                         </div>
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                             View Task in Tskflow
                         </a>
                     </div>
@@ -1099,7 +1099,7 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                 email_content = f"""
                 <html>
                     <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                        <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                        <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                             <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                         </div>
                         <div style="padding: 40px 30px; background: white;">
@@ -1107,18 +1107,18 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                             <p style="font-size: 16px; color: #374151; line-height: 1.6;">
                                 You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below.
                             </p>
-                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                                 <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
                                 <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
                                 <div>
-                                    <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
+                                    <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#ccfbf1'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#0f766e'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
                                         {task.priority} Priority
                                     </span>
                                     <span style="color: #6B7280; font-size: 14px;">Due: {task.due_date.replace('T', ' at ').split('.')[0]}</span>
                                 </div>
                             </div>
                             <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                                <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                                     View Task in Tskflow
                                 </a>
                             </div>
@@ -1358,7 +1358,7 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
                 <p><strong>{current_user['name']}</strong> is waiting on this task: <strong>{parent['title']}</strong>.</p>
                 <p>It's still outstanding — please take a look when you can.</p>
                 <div style="text-align: center; margin-top: 20px;">
-                    <a href="{app_url}/task/{c['id']}" style="background: #4F46E5; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
+                    <a href="{app_url}/task/{c['id']}" style="background: #0d9488; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Task</a>
                 </div>
             </div>
         </body></html>
@@ -1490,11 +1490,11 @@ async def add_assignees_to_parent(parent_id: str, body: AssigneesAddRequest, bac
             recipient_name = (assigned_user or {}).get("name") or assigned_to_email.split('@')[0]
             content = f"""
             <html><body style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">
-                <div style=\"background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 30px; text-align: center;\"><h1 style=\"color:white;margin:0;\">You've been added to a task</h1></div>
+                <div style=\"background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 30px; text-align: center;\"><h1 style=\"color:white;margin:0;\">You've been added to a task</h1></div>
                 <div style=\"padding: 30px;\">
                     <p>Hi {recipient_name},</p>
                     <p><strong>{current_user['name']}</strong> added you to the task <strong>{parent.get('title','')}</strong>.</p>
-                    <div style=\"text-align:center;margin-top:20px;\"><a href=\"{APP_BASE_URL}/invite?token={invite_token}\" style=\"background:#4F46E5;color:white;padding:12px 24px;border-radius:20px;text-decoration:none;\">Open task</a></div>
+                    <div style=\"text-align:center;margin-top:20px;\"><a href=\"{APP_BASE_URL}/invite?token={invite_token}\" style=\"background:#0d9488;color:white;padding:12px 24px;border-radius:20px;text-decoration:none;\">Open task</a></div>
                 </div>
             </body></html>
             """
@@ -1862,7 +1862,7 @@ async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, c
         email_content = f"""
         <html>
             <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                 </div>
                 <div style="padding: 40px 30px; background: white;">
@@ -1870,7 +1870,7 @@ async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, c
                     <p style="font-size: 16px; color: #374151; line-height: 1.6;">
                         You have been assigned a new task by <strong>{current_user['name']}</strong>.
                     </p>
-                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                         <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{draft['title']}</h2>
                         <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{draft.get('description', '')[:300]}</p>
                         <div style="color: #6B7280; font-size: 14px;">
@@ -1878,7 +1878,7 @@ async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, c
                         </div>
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/invite?token={draft['invite_token']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        <a href="{app_url}/invite?token={draft['invite_token']}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                             View Task in Tskflow
                         </a>
                     </div>
@@ -1975,7 +1975,7 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
                 inner_html = f"""
                 <h2 style="margin:0 0 8px;font-size:20px;">You were mentioned</h2>
                 <p><strong>{current_user['name']}</strong> mentioned you in <strong>{task['title']}</strong>:</p>
-                <blockquote style="border-left:4px solid #4F46E5;padding:12px 16px;background:#f5f6fb;border-radius:8px;color:#374151;margin:14px 0;">{comment.content}</blockquote>
+                <blockquote style="border-left:4px solid #0d9488;padding:12px 16px;background:#f3f6f5;border-radius:8px;color:#374151;margin:14px 0;">{comment.content}</blockquote>
                 """
                 email_html = _jarvis_email_shell(inner_html, cta_url=f"{app_url}/task/{task_id}", cta_label="View task")
                 background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_html)
@@ -2456,7 +2456,7 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-            <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 40px 30px; text-align: center;">
+            <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
                 <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">Task Update</h1>
             </div>
             <div style="padding: 40px 30px; background: white;">
@@ -2464,11 +2464,11 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
                 <p style="font-size: 16px; color: #374151; line-height: 1.6;">
                     <strong>{current_user['name']}</strong> sent you an update about the following task:
                 </p>
-                <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #4F46E5;">
+                <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                     <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task['title']}</h2>
                     <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{task.get('description', '')[:300]}</p>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 15px;">
-                        <div style="background: {'#FEF3C7' if task['priority'] in ['High', 'Urgent'] else '#E0E7FF'}; color: {'#92400E' if task['priority'] in ['High', 'Urgent'] else '#4338CA'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+                        <div style="background: {'#FEF3C7' if task['priority'] in ['High', 'Urgent'] else '#ccfbf1'}; color: {'#92400E' if task['priority'] in ['High', 'Urgent'] else '#0f766e'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
                             {task['priority']} Priority
                         </div>
                         <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
@@ -2480,7 +2480,7 @@ async def send_email_to_assignee(task_id: str, background_tasks: BackgroundTasks
                     </div>
                 </div>
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                    <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                         View Task
                     </a>
                 </div>
@@ -3016,7 +3016,7 @@ async def bulk_approve_tasks(background_tasks: BackgroundTasks, current_user: di
                             <strong>{current_user['name']}</strong> has approved your completion of: <strong>{task['title']}</strong>
                         </p>
                         <div style="text-align: center; margin-top: 30px;">
-                            <a href="{app_url}/task/{task['id']}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            <a href="{app_url}/task/{task['id']}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                                 View Task
                             </a>
                         </div>
@@ -3230,7 +3230,7 @@ async def accept_counter_proposal(task_id: str, background_tasks: BackgroundTask
                         <p style="color: #065F46; margin: 0;">Status: <strong>Accepted</strong></p>
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                        <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                             View Task
                         </a>
                     </div>
@@ -3631,7 +3631,7 @@ async def update_task(task_id: str, task_update: TaskUpdate, background_tasks: B
                             <ul style="color: #374151; margin: 0; padding-left: 20px;">{changes_html}</ul>
                         </div>
                         <div style="text-align: center; margin-top: 30px;">
-                            <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            <a href="{app_url}/task/{task_id}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                                 View Updated Task
                             </a>
                         </div>
@@ -5042,7 +5042,7 @@ async def send_daily_analytics():
     email_content = f"""
     <html>
         <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
-            <h1 style="color: #4F46E5;">Tskflow Daily Analytics</h1>
+            <h1 style="color: #0d9488;">Tskflow Daily Analytics</h1>
             <p style="color: #6B7280;">{today.strftime('%B %d, %Y')}</p>
             
             <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px;">Core Metrics</h2>
@@ -5090,7 +5090,7 @@ async def send_daily_analytics():
     
     try:
         resend.emails.send({
-            "from": f"Jarvis Analytics <{EMAIL_FROM_ADDR}>",
+            "from": f"TskFlow Analytics <{EMAIL_FROM_ADDR}>",
             "to": [admin_email],
             "subject": f"Tskflow Daily Analytics - {today.strftime('%b %d')}",
             "html": email_content
@@ -5125,7 +5125,7 @@ async def send_trial_reminders():
             email_content = f"""
             <html>
                 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h1 style="color: #4F46E5;">Your Teams Trial Ends in {days_left} Day{'s' if days_left > 1 else ''}</h1>
+                    <h1 style="color: #0d9488;">Your Teams Trial Ends in {days_left} Day{'s' if days_left > 1 else ''}</h1>
                     
                     <div style="background: #F9FAFB; padding: 20px; border-radius: 12px; margin: 20px 0;">
                         <p><strong>Trial End Date:</strong> {user.get('trial_ends', 'N/A')[:10]}</p>
@@ -5134,7 +5134,7 @@ async def send_trial_reminders():
                     </div>
                     
                     <div style="text-align: center; margin: 30px 0;">
-                        <a href="{APP_BASE_URL}/settings" style="background: #4F46E5; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block; margin: 5px;">
+                        <a href="{APP_BASE_URL}/settings" style="background: #0d9488; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block; margin: 5px;">
                             Continue & Pay
                         </a>
                         <a href="{APP_BASE_URL}/settings?action=cancel" style="background: #EF4444; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block; margin: 5px;">
@@ -5457,7 +5457,7 @@ async def remove_access_grant(grant: AccessGrant, admin: bool = Depends(verify_a
         try:
             email_content = f"""
             <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); padding: 30px; text-align: center;">
+                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 30px; text-align: center;">
                     <h1 style="color: white; margin: 0;">Access Update</h1>
                 </div>
                 <div style="padding: 30px;">
@@ -5465,7 +5465,7 @@ async def remove_access_grant(grant: AccessGrant, admin: bool = Depends(verify_a
                     <p>Your complimentary access to Tskflow has ended. You've been moved to the Free plan.</p>
                     <p>You can continue using Tskflow with unlimited tasks, or upgrade to Pro/Teams for additional features.</p>
                     <div style="text-align: center; margin-top: 20px;">
-                        <a href="{APP_BASE_URL}/settings" style="background: #6366F1; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Plans</a>
+                        <a href="{APP_BASE_URL}/settings" style="background: #0d9488; color: white; padding: 12px 24px; border-radius: 20px; text-decoration: none;">View Plans</a>
                     </div>
                 </div>
             </body></html>
@@ -7370,32 +7370,36 @@ async def create_notification(
 
 
 def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_label: Optional[str] = None) -> str:
-    """Wrap content in the Jarvis branded HTML shell."""
+    """Wrap content in the TskFlow branded HTML shell (teal TF mark)."""
     cta = ""
     if cta_url and cta_label:
-        cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#4F46E5;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
+        cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
     return f"""
 <html>
-<body style="margin:0;padding:0;background:#f5f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f6fb;padding:32px 12px;">
+<body style="margin:0;padding:0;background:#f3f6f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f6f5;padding:32px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(24,24,50,0.06);">
-        <tr><td style="background:linear-gradient(135deg,#4F46E5,#7C3AED);padding:28px 32px;color:#fff;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:36px;height:36px;background:#ffffff33;border-radius:10px;display:inline-block;text-align:center;line-height:36px;font-weight:700;">J</div>
-            <div style="display:inline-block;vertical-align:middle;margin-left:10px;">
-              <div style="font-weight:700;font-size:16px;">Jarvis</div>
-              <div style="opacity:0.85;font-size:12px;">Your Tskflow assistant</div>
-            </div>
-          </div>
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,55,48,0.07);">
+        <tr><td style="background:linear-gradient(135deg,#0f766e,#14b8a6 55%,#2dd4bf);padding:28px 32px;color:#fff;">
+          <table role="presentation" cellspacing="0" cellpadding="0">
+            <tr>
+              <td width="40" height="40" align="center" valign="middle" style="width:40px;height:40px;background:rgba(255,255,255,0.2);border-radius:12px;border:1px solid rgba(255,255,255,0.28);">
+                <span style="font-family:Outfit,Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.04em;color:#ffffff;line-height:40px;">TF</span>
+              </td>
+              <td valign="middle" style="padding-left:12px;">
+                <div style="font-weight:700;font-size:16px;letter-spacing:-0.01em;">TskFlow</div>
+                <div style="opacity:0.88;font-size:12px;">Assign it. See who did it.</div>
+              </td>
+            </tr>
+          </table>
         </td></tr>
         <tr><td style="padding:32px;color:#1f2937;font-size:15px;line-height:1.6;">
           {inner_html}
           {cta}
         </td></tr>
-        <tr><td style="background:#f9fafb;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #eef0f3;">
-          <div>— <strong>Jarvis</strong>, Tskflow assistant</div>
-          <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#4F46E5;text-decoration:none;">Manage notifications</a></div>
+        <tr><td style="background:#f8faf9;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #e8eeec;">
+          <div>— <strong>TskFlow</strong></div>
+          <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#0d9488;text-decoration:none;">Manage notifications</a></div>
         </td></tr>
       </table>
     </td></tr>
@@ -11585,7 +11589,7 @@ def render_reminder_email(user_name: str, task: dict, wording: dict, app_url: st
     priority = task.get("priority", "")
     task_id = task.get("id", "")
     title = task.get("title", "")
-    color = "#EF4444" if kind_is_overdue(wording["title"]) else "#4F46E5"
+    color = "#EF4444" if kind_is_overdue(wording["title"]) else "#0d9488"
 
     return f"""<html><body style="margin:0;padding:0;background:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:24px;">
@@ -11638,7 +11642,7 @@ NUDGE_PRESETS = {
         "subject": "Quick check-in: {task_title}",
         "headline": "Just a gentle nudge",
         "body": "We're still waiting on <strong>{task_title}</strong>. When you get a moment, please jump in and close it out — even a status update helps the whole team.",
-        "color": "#4F46E5",
+        "color": "#0d9488",
     },
     "urgent_reminder": {
         "subject": "URGENT: {task_title} needs your attention",
@@ -11727,7 +11731,7 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
         subject = req.custom_subject or f"Message about: {task['title']}"
         headline = "A message from your team"
         body_html = req.custom_message or "Please give this task your attention."
-        color = "#4F46E5"
+        color = "#0d9488"
     else:
         p = NUDGE_PRESETS.get(preset_key) or NUDGE_PRESETS["gentle_nudge"]
         subject = p["subject"].format(task_title=task["title"])
