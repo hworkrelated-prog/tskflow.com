@@ -8,11 +8,11 @@ def _read(*parts: str) -> str:
     return (ROOT.joinpath(*parts)).read_text(encoding="utf-8")
 
 
-def test_chips_stay_mounted_and_toggle_open_class():
+def test_command_chips_are_disabled():
     src = _read("components", "AIQuickCreate.js")
+    # Chips stay in the DOM for layout stability but never open.
     assert "ai-command-chips-wrap" in src
-    assert "showCommandChips" in src
-    assert "composerFocused && (" not in src
+    assert "showCommandChips = false" in src
     assert src.index("ai-command-chips-wrap") < src.index("ai-quick-composer")
 
 

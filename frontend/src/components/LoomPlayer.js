@@ -79,11 +79,33 @@ const LoomPlayer = ({
         const onTime = () => { if (!dragging.current) setCurrent(v.currentTime || 0); };
         const onMeta = () => {
             const d = v.duration;
-            if (Number.isFinite(d)) {
+            if (Number.isFinite(d) && d > 0 && d !== Infinity) {
                 setDuration(d);
                 onDuration?.(d);
             }
             setReady(true);
+        };
+        // MediaRecorder WebM often reports Infinity until we seek near the end.
+        const fixWebmDuration = () => {
+            try {
+                if (!Number.isFinite(v.duration) || v.duration === Infinity) {
+                    const onTemp = () => {
+                        v.removeEventListener('timeupdate', onTemp);
+                        const d = v.duration;
+                        if (Number.isFinite(d) && d > 0 && d !== Infinity) {
+                            setDuration(d);
+                            onDuration?.(d);
+                        }
+                        try { v.currentTime = 0; } catch { /* noop */ }
+                    };
+                    v.addEventListener('timeupdate', onTemp);
+                    v.currentTime = 1e101;
+                }
+            } catch { /* noop */ }
+        };
+        const onLoaded = () => {
+            onMeta();
+            fixWebmDuration();
         };
         const onProg = () => {
             try {
@@ -99,7 +121,7 @@ const LoomPlayer = ({
         v.addEventListener('play', onPlay);
         v.addEventListener('pause', onPause);
         v.addEventListener('timeupdate', onTime);
-        v.addEventListener('loadedmetadata', onMeta);
+        v.addEventListener('loadedmetadata', onLoaded);
         v.addEventListener('durationchange', onMeta);
         v.addEventListener('progress', onProg);
         v.addEventListener('volumechange', onVol);
@@ -111,7 +133,7 @@ const LoomPlayer = ({
             v.removeEventListener('play', onPlay);
             v.removeEventListener('pause', onPause);
             v.removeEventListener('timeupdate', onTime);
-            v.removeEventListener('loadedmetadata', onMeta);
+            v.removeEventListener('loadedmetadata', onLoaded);
             v.removeEventListener('durationchange', onMeta);
             v.removeEventListener('progress', onProg);
             v.removeEventListener('volumechange', onVol);

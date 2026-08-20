@@ -141,8 +141,10 @@ const wireHudDocument = (doc, { showCamera }) => {
 };
 
 /**
- * Open a single movable HUD (camera + controls) via Document PiP when the
- * in-tab pill would not sit on the recorded surface.
+ * Open a single movable HUD (camera + controls) via Document Picture-in-Picture.
+ * Call prepareRecordingHudOverlay() synchronously from a click handler so Chrome
+ * still has a user gesture — getDisplayMedia alone consumes activation and PiP
+ * then fails, leaving controls stuck on the wrong surface.
  * @returns {{ mode: 'pip'|'none', win: Window|null, placedOnOtherDisplay: boolean, reason?: string }}
  */
 export async function openRecordingHudOverlay({
@@ -150,9 +152,8 @@ export async function openRecordingHudOverlay({
     trackSettings = {},
     needed = true,
     showCamera = true,
+    reuseExisting = false,
 } = {}) {
-    closeRecordingHudOverlay();
-
     const screens = await listScreens();
     const { screen, reason } = matchScreenToCapture(trackSettings || {}, screens);
     const placedOnOtherDisplay = !!(screen && !screen.isCurrent);
@@ -161,10 +162,25 @@ export async function openRecordingHudOverlay({
         try { window.__tskCameraStream = stream; } catch { /* noop */ }
     }
 
-    const wantCamera = !!(showCamera && stream);
+    const wantCamera = !!(showCamera && (stream || reuseExisting));
     if (!needed && !placedOnOtherDisplay) {
+        if (!reuseExisting) closeRecordingHudOverlay();
         return { mode: 'none', win: null, placedOnOtherDisplay: false, reason };
     }
+
+    const existing = window.__tskRecHudWin || window.documentPictureInPicture?.window;
+    if (reuseExisting && existing && !existing.closed) {
+        try {
+            existing.document.body?.classList.toggle('cam-hidden', !wantCamera);
+            if (stream) {
+                existing.__tskCameraStream = stream;
+                window.__tskCameraStream = stream;
+            }
+        } catch { /* noop */ }
+        return { mode: 'pip', win: existing, placedOnOtherDisplay, reason };
+    }
+
+    closeRecordingHudOverlay();
 
     try {
         if (window.documentPictureInPicture?.requestWindow) {
@@ -176,7 +192,6 @@ export async function openRecordingHudOverlay({
             });
             wireHudDocument(pip.document, { showCamera: wantCamera });
             try { window.__tskRecHudWin = pip; } catch { /* noop */ }
-            // Also alias for older close helpers
             try { window.__tskRecControlsWin = pip; } catch { /* noop */ }
             try { window.__tskCameraOverlayWin = pip; } catch { /* noop */ }
             return {
@@ -192,6 +207,33 @@ export async function openRecordingHudOverlay({
 
     // Do not fall back to window.open — Chrome draws that as a shortened tab.
     return { mode: 'none', win: null, placedOnOtherDisplay, reason };
+}
+
+/**
+ * Open the HUD immediately from a click (before await getDisplayMedia).
+ * Returns a promise; callers should keep the handle and pass reuseExisting later.
+ */
+export function prepareRecordingHudOverlay({ showCamera = true } = {}) {
+    return openRecordingHudOverlay({
+        stream: null,
+        trackSettings: {},
+        needed: true,
+        showCamera,
+        reuseExisting: false,
+    });
+}
+
+export function attachRecordingHudStream(stream) {
+    if (!stream) return;
+    try { window.__tskCameraStream = stream; } catch { /* noop */ }
+    const win = window.__tskRecHudWin || window.__tskCameraOverlayWin;
+    try {
+        if (win) win.__tskCameraStream = stream;
+        if (win?.document?.body) {
+            win.document.body.classList.remove('cam-hidden');
+            win.document.body.classList.remove('cam-off');
+        }
+    } catch { /* noop */ }
 }
 
 export function setHudCameraVisible(visible) {

@@ -4,7 +4,7 @@ import { Video, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import { uploadBlob } from '@/lib/upload';
-import { openRecordingHudOverlay, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
+import { openRecordingHudOverlay, prepareRecordingHudOverlay, attachRecordingHudStream, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import RecordingFloatingHud from '@/components/RecordingFloatingHud';
 
@@ -142,6 +142,8 @@ export const ScreenRecorder = ({ onSaved }) => {
         setStarting(true);
         let micErr = null;
         let camErr = null;
+        // Open PiP from the click gesture before awaits consume activation.
+        const hudPrep = prepareRecordingHudOverlay({ showCamera: camOn });
         try {
             if (camOn) {
                 try {
@@ -150,6 +152,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                     });
                     camStreamRef.current = cam;
                     setCamStream(cam);
+                    attachRecordingHudStream(cam);
                 } catch (e) { camErr = e; }
             }
             if (micOn) {
@@ -174,13 +177,14 @@ export const ScreenRecorder = ({ onSaved }) => {
             const screens = await listScreens();
             const matched = matchScreenToCapture(settings, screens);
 
-            // Open follow-screen HUD now — still inside the picker gesture.
             const needed = recordingOverlayNeeded(settings.displaySurface, matched.screen);
-            const hud = await openRecordingHudOverlay({
+            let hud = await hudPrep.catch(() => ({ mode: 'none', win: null }));
+            hud = await openRecordingHudOverlay({
                 stream: camStreamRef.current,
                 trackSettings: settings,
-                needed,
+                needed: true,
                 showCamera: !!camStreamRef.current,
+                reuseExisting: hud?.mode === 'pip',
             });
             setHudOverlayOpen(hud.mode !== 'none');
             if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
@@ -262,6 +266,7 @@ export const ScreenRecorder = ({ onSaved }) => {
         } catch (e) {
             if (e?.name !== 'NotAllowedError') toast.error(e?.message || 'Could not start recording');
             setCountdown(null);
+            closeRecordingHudOverlay();
             stopAllTracks();
         } finally { setStarting(false); }
     };
