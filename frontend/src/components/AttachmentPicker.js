@@ -1,14 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Paperclip, Video, X, Loader2, Video as VideoIcon, FileText, Image as ImageIcon, Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Play, Trash2, RotateCw } from 'lucide-react';
 import { uploadBlob, fileUrl } from '@/lib/upload';
-import { openRecordingHudOverlay, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
+import { openRecordingHudOverlay, prepareRecordingHudOverlay, attachRecordingHudStream, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import RecordingFloatingHud from '@/components/RecordingFloatingHud';
-import LoomPlayer from '@/components/LoomPlayer';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -28,7 +27,12 @@ const OptionToggle = ({ on, onClick, iconOn, iconOff, label, dataTestId }) => (
     </button>
 );
 
-export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRecording = false }) => {
+export const AttachmentPicker = forwardRef(({
+    attachments,
+    setAttachments,
+    requiresScreenRecording = false,
+    compact = false,
+}, ref) => {
     const fileInputRef = useRef(null);
     const [uploads, setUploads] = useState({});
     const [recording, setRecording] = useState(false);
@@ -92,6 +96,11 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
         })();
         return () => { cancelled = true; };
     }, [showOptions]);
+
+    useImperativeHandle(ref, () => ({
+        startRecording: () => startRecording(),
+        isRecording: () => recording || starting,
+    }));
 
     useEffect(() => {
         if (!previewBlob) {
@@ -195,15 +204,19 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             toast.error('Screen recording is not supported in this browser. Try Chrome.');
             return;
         }
+        if (starting || recording) return;
         setStarting(true);
+        // Open PiP while the click gesture is still valid — after getDisplayMedia it is gone.
+        const hudPrep = prepareRecordingHudOverlay({ showCamera: opts.camera });
         try {
             const { mic: micStream, camera: cameraStream } = await requestMediaPermissions();
             streamsRef.current.mic = micStream;
             streamsRef.current.camera = cameraStream;
             setCamStream(cameraStream);
+            if (cameraStream) attachRecordingHudStream(cameraStream);
 
             const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                video: { frameRate: 30 }, // Fixed: consistent 30fps for smoother recording
+                video: { frameRate: 30 },
                 audio: opts.systemAudio,
             });
             streamsRef.current.screen = screenStream;
@@ -284,11 +297,13 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
             const needed = recordingOverlayNeeded(settings.displaySurface, matched.screen);
-            const hud = await openRecordingHudOverlay({
+            let hud = await hudPrep.catch(() => ({ mode: 'none', win: null }));
+            hud = await openRecordingHudOverlay({
                 stream: cameraStream,
                 trackSettings: settings,
-                needed,
-                showCamera: !!cameraStream,
+                needed: true,
+                showCamera: !!cameraStream || opts.camera,
+                reuseExisting: hud?.mode === 'pip',
             });
             if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
                 toast.success('Drag the recording controls onto the screen you are capturing.');
@@ -296,6 +311,7 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                 toast.info('Using the in-tab toolbar — Chrome can also show a Stop sharing bar.');
             }
         } catch (e) {
+            closeRecordingHudOverlay();
             try {
                 if (recorderRef.current && recorderRef.current.state !== 'inactive') {
                     recorderRef.current.stop();
@@ -395,12 +411,13 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
 
     return (
         <div className="space-y-3">
-            {requiresScreenRecording && (
+            {requiresScreenRecording && !compact && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
                     <strong>⚠️ Screen recording required</strong> - This task requires a screen recording for completion proof.
                 </div>
             )}
-            
+
+            {!compact && (
             <div className="flex flex-wrap gap-2">
                 <input type="file" ref={fileInputRef} onChange={handleFiles} multiple hidden />
                 <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} className="rounded-full" size="sm">
@@ -408,14 +425,21 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                     Attach Files
                 </Button>
                 {!recording && (
-                    <Button type="button" variant="outline" onClick={() => setShowOptions(!showOptions)} className="rounded-full" disabled={starting} size="sm">
+                    <Button type="button" variant="outline" onClick={() => startRecording()} className="rounded-full" disabled={starting} size="sm" data-testid="record-screen-btn">
                         <Video className="w-4 h-4 mr-2" />
                         {starting ? 'Starting...' : 'Record Screen'}
                     </Button>
                 )}
             </div>
+            )}
 
-            {showOptions && !recording && (
+            {compact && starting && !recording && (
+                <p className="text-xs text-muted-foreground inline-flex items-center gap-2" data-testid="recording-starting">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting screen capture…
+                </p>
+            )}
+
+            {!compact && showOptions && !recording && (
                 <div className="p-3 bg-slate-50 rounded-xl border space-y-3" data-testid="recording-options-panel">
                     {(() => {
                         const micGranted = permissionState.mic === 'granted';
@@ -522,11 +546,13 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
                     </DialogHeader>
                     <div className="space-y-4">
                         {(replaySrc || previewUrl) && (
-                            <LoomPlayer
+                            <video
+                                key={replaySrc || previewUrl}
                                 src={replaySrc || previewUrl}
+                                controls
                                 autoPlay
-                                className="rounded-lg"
-                                videoClassName="max-h-[50vh]"
+                                playsInline
+                                className="w-full rounded-lg bg-black max-h-[50vh]"
                                 data-testid="recording-preview-video"
                             />
                         )}
@@ -625,6 +651,8 @@ export const AttachmentPicker = ({ attachments, setAttachments, requiresScreenRe
             )}
         </div>
     );
-};
+});
+
+AttachmentPicker.displayName = 'AttachmentPicker';
 
 export default AttachmentPicker;

@@ -31,10 +31,23 @@ def test_camera_overlay_is_placed_on_matched_screen():
     assert "other-display" in display
     assert "openRecordingHudOverlay" in overlay or "openRecordingCameraOverlay" in overlay
     assert "openRecordingHudOverlay" in hud
+    assert "prepareRecordingHudOverlay" in hud
+    assert "prepareRecordingHudOverlay" in rec
+    assert "prepareRecordingHudOverlay" in picker
     assert "openRecordingHudOverlay" in rec
     assert "openRecordingHudOverlay" in picker
     assert "placedOnOtherDisplay" in rec
-    assert rec.index("openRecordingHudOverlay") < rec.index("setCountdown(n)")
+    assert rec.index("prepareRecordingHudOverlay") < rec.index("setCountdown(n)")
+
+
+def test_one_click_record_from_plus_menu():
+    quick = _read("components", "AIQuickCreate.js")
+    picker = _read("components", "AttachmentPicker.js")
+    assert "recordPickerRef" in quick
+    assert "startRecording?.()" in quick or "startRecording()" in quick
+    assert "useImperativeHandle" in picker
+    assert "compact" in picker
+    assert 'showCommandChips = false' in quick
 
 
 def test_save_recording_keeps_preview_on_success_and_failure():

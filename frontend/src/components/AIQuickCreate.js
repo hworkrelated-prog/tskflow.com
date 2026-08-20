@@ -180,6 +180,7 @@ const AIQuickCreate = ({
     const [attachments, setAttachments] = useState([]);
     const [uploadingPaste, setUploadingPaste] = useState(false);
     const [showRecordPicker, setShowRecordPicker] = useState(false);
+    const recordPickerRef = useRef(null);
     const [plusOpen, setPlusOpen] = useState(false);
     const [showAttachPrompt, setShowAttachPrompt] = useState(false);
     const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -1497,7 +1498,7 @@ const AIQuickCreate = ({
         }
     };
 
-    const showCommandChips = embedded && !preview && !answerMode && thread.length === 0 && !text.trim() && composerFocused;
+    const showCommandChips = false;
     const showPromptExample = !text.trim() && !preview && !answerMode && thread.length === 0 && !listening;
     const promptExample = PROMPT_EXAMPLES[exampleIndex] || PROMPT_EXAMPLES[0];
 
@@ -2734,7 +2735,9 @@ const AIQuickCreate = ({
                                                 role="menuitem"
                                                 onClick={() => {
                                                     setPlusOpen(false);
-                                                    setShowRecordPicker((v) => !v);
+                                                    setShowRecordPicker(true);
+                                                    // Call from the click gesture so Chrome keeps activation for PiP + picker.
+                                                    recordPickerRef.current?.startRecording?.();
                                                 }}
                                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                                 data-testid="ai-screen-record-btn"
@@ -2830,15 +2833,19 @@ const AIQuickCreate = ({
                             </div>
                         </div>
 
-                        {showRecordPicker && (
-                            <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3" data-testid="ai-inline-recorder">
-                                <AttachmentPicker
-                                    attachments={attachments}
-                                    setAttachments={setAttachments}
-                                    requiresScreenRecording={editScreenRecording}
-                                />
-                            </div>
-                        )}
+                        {/* Keep mounted so Record can start from the plus-menu click gesture. */}
+                        <div
+                            className={showRecordPicker ? 'mt-2 rounded-xl border border-slate-200 bg-white p-3' : ''}
+                            data-testid="ai-inline-recorder"
+                        >
+                            <AttachmentPicker
+                                ref={recordPickerRef}
+                                compact
+                                attachments={attachments}
+                                setAttachments={setAttachments}
+                                requiresScreenRecording={editScreenRecording}
+                            />
+                        </div>
 
                         <Dialog open={showAttachPrompt} onOpenChange={setShowAttachPrompt}>
                             <DialogContent className="max-w-md rounded-2xl" data-testid="ai-attach-prompt">
