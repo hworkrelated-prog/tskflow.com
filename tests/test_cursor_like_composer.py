@@ -13,6 +13,7 @@ def test_composer_uses_plus_menu_and_arrow_send():
     src = _read("components", "AIQuickCreate.js")
     toolbar = src[src.index("relative z-[1] flex items-center justify-between") : src.index("ai-inline-recorder")]
     assert 'data-testid="ai-plus-btn"' in toolbar
+    assert 'data-testid="ai-record-btn"' in toolbar
     assert 'data-testid="ai-plus-menu"' in toolbar
     assert 'data-testid="ai-screen-record-btn"' in toolbar
     assert 'data-testid="ai-attach-file-btn"' in toolbar
@@ -23,8 +24,10 @@ def test_composer_uses_plus_menu_and_arrow_send():
     assert 'aria-label="Send"' in toolbar
     assert ">Go<" not in toolbar
     assert "Wand2" not in src
-    # Extra actions live in the plus menu, not as a row of always-on icons.
-    assert toolbar.index("ai-plus-btn") < toolbar.index("ai-screen-record-btn")
+    # Record is one tap away next to +; other extras stay in the plus menu.
+    assert toolbar.index("ai-plus-btn") < toolbar.index("ai-record-btn")
+    assert toolbar.index("ai-record-btn") < toolbar.index("ai-screen-record-btn")
+    assert ">Record</span>" in toolbar
 
 
 def test_format_toolbar_is_overlay_only_when_open():

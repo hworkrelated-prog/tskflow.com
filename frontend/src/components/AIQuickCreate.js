@@ -2724,6 +2724,21 @@ const AIQuickCreate = ({
                                     >
                                         <Plus className="w-4 h-4" strokeWidth={1.75} />
                                     </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPlusOpen(false);
+                                            setShowRecordPicker((v) => !v);
+                                        }}
+                                        className={`ai-composer-icon-btn h-8 rounded-lg inline-flex items-center justify-center gap-1 px-2 transition-colors ${showRecordPicker ? 'is-open' : ''}`}
+                                        title="Record screen"
+                                        aria-label="Record screen"
+                                        aria-pressed={showRecordPicker}
+                                        data-testid="ai-record-btn"
+                                    >
+                                        <Video className="w-4 h-4" strokeWidth={1.75} />
+                                        <span className="text-xs font-medium leading-none">Record</span>
+                                    </button>
                                     {plusOpen && (
                                         <div
                                             className="ai-plus-menu absolute bottom-full left-0 mb-1.5 w-52 rounded-xl border py-1 shadow-lg shadow-slate-900/10 z-30"
