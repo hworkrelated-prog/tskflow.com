@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Pencil, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -26,13 +26,87 @@ import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layou
  *   1) User types plain English + Enter
  *   2) POST /api/ai/quick-create-preview
  *   3a) If something critical is missing → keep chatting until it is filled in
- *   3b) If ready → natural-language summary + one-tap Confirm
- *   4) "Edit details" reveals the full field editor as a fallback
+ *   3b) If ready → natural-language summary + Send (keep chatting to tweak anything)
+ *   4) Fallback field editor only when something is still missing
  */
 
 const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quota|deals?|opportunit(?:y|ies)|demos?|discovery|pitch(?:es)?|proposals?|quotes?|crm|hubspot|salesforce|sdrs?|bdrs?|cold[-\s]?calls?|outbound|renewals?|\barr\b|\bmrr\b|poc|leads?|rfps?|(?:customer|client|prospect|buyer)s?\s+(?:call|meeting|demo|follow[-\s]?up)|(?:follow[-\s]?up|call|meet(?:ing)?)\s+(?:with\s+)?(?:a\s+)?(?:customer|client|prospect)s?)\b/i;
 
 const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
+
+const CONFIRM_SEND_RE = /^(send|yes|yep|yeah|y|ok|okay|looks good|lgtm|ship it|go ahead|confirm|do it|please send)[.!]?$/i;
+const CONFIRM_READY_HINT = 'Ready when you are — hit Send, or just tell me what to change.';
+
+/** Local chat edits while a task is ready to send — no More/Less form. */
+const parseConfirmChatEdit = (raw) => {
+    const t = String(raw || '').trim();
+    if (!t) return { kind: 'empty' };
+    if (CONFIRM_SEND_RE.test(t)) return { kind: 'send' };
+
+    const notes = [];
+    const patch = {};
+
+    if (/\b(urgent|asap|immediately|critical|fire\s*drill)\b/i.test(t)) {
+        patch.priority = 'Urgent';
+        notes.push('marked Urgent');
+    } else if (/\b(high priority|make it high|priority high)\b/i.test(t)) {
+        patch.priority = 'High';
+        notes.push('marked High');
+    } else if (/\b(low priority|make it low|priority low|no rush)\b/i.test(t)) {
+        patch.priority = 'Low';
+        notes.push('marked Low');
+    } else if (/\b(medium priority|priority medium|make it medium)\b/i.test(t)) {
+        patch.priority = 'Medium';
+        notes.push('marked Medium');
+    }
+
+    if (/\b(don'?t|do not|no|remove|without)\b.{0,24}\bscreen\s*recording\b/i.test(t)
+        || /\bscreen\s*recording\b.{0,16}\b(off|not required|unnecessary)\b/i.test(t)) {
+        patch.requires_screen_recording = false;
+        notes.push('screen recording not required');
+    } else if (/\b(require|need|ask for|with|add)\b.{0,20}\bscreen\s*recording\b/i.test(t)
+        || /\brecord (their|your|a|the)\s+screen\b/i.test(t)
+        || /\bscreen\s*recording\s+required\b/i.test(t)) {
+        patch.requires_screen_recording = true;
+        notes.push('screen recording required');
+    }
+
+    if (/\b(not sales|unmark sales|remove sales|not a sales)\b/i.test(t)) {
+        patch.is_sales_task = false;
+        notes.push('not a sales task');
+    } else if (/\b(mark (it |this |as )?sales|sales task|this is sales|make it sales)\b/i.test(t)) {
+        patch.is_sales_task = true;
+        notes.push('marked as Sales');
+    }
+
+    const titleM = t.match(/^(?:change|set|update|rename)\s+(?:the\s+)?(?:title|task|name)\s+to\s+(.+)$/i)
+        || t.match(/^title:\s*(.+)$/i);
+    if (titleM) {
+        patch.title = titleM[1].trim().replace(/^["']|["']$/g, '');
+        notes.push('updated the title');
+    }
+
+    const descM = t.match(/^(?:change|set|update|rewrite)\s+(?:the\s+)?(?:message|description|ask|note|body)\s+to\s+(.+)$/i)
+        || t.match(/^(?:message|description|ask):\s*(.+)$/i);
+    if (descM) {
+        patch.description = descM[1].trim().replace(/^["']|["']$/g, '');
+        notes.push('updated the message');
+    }
+
+    const dueM = t.match(/^(?:change|set|update|make)\s+(?:the\s+)?(?:due(?:\s*date)?|deadline)\s+(?:to|for)\s+(.+)$/i)
+        || t.match(/^(?:due|deadline):\s*(.+)$/i)
+        || t.match(/^(?:due|make it due|push (?:it )?to|move (?:it )?to)\s+(.+)$/i);
+    if (dueM) {
+        patch.due_phrase = dueM[1].trim();
+        notes.push(`due ${dueM[1].trim()}`);
+    } else if (/\b(due|deadline|by)\b/i.test(t) && /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|asap|eod|next week|in\s+\d+)\b/i.test(t)) {
+        patch.due_phrase = t;
+        notes.push('updating the due date');
+    }
+
+    if (notes.length) return { kind: 'patch', patch, notes };
+    return { kind: 'reparse', text: t };
+};
 
 const COMMAND_ROUTES = [
     { keys: ['analytics', 'metrics', 'reports', 'report'], re: /\b(analytics|metrics|reports?)\b/i, path: '/analytics', label: 'Analytics' },
@@ -142,7 +216,6 @@ const AIQuickCreate = ({
     const [preview, setPreview] = useState(null);
     const [answers, setAnswers] = useState({});
     const [sending, setSending] = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
     const [answerMode, setAnswerMode] = useState(null);
     const [answerLoading, setAnswerLoading] = useState(false);
     const [thread, setThread] = useState([]);
@@ -196,6 +269,7 @@ const AIQuickCreate = ({
     const voiceFinalRef = useRef('');
     const voiceSeedRef = useRef('');
     const runPreviewRef = useRef(null);
+    const sendRef = useRef(null);
     const threadEndRef = useRef(null);
     const threadRef = useRef([]);
     const activePromptRef = useRef('');
@@ -700,7 +774,6 @@ const AIQuickCreate = ({
         setEditSales(!!sales);
         setEditScreenRecording(!!p.requires_screen_recording);
         setEditingField(null);
-        setShowDetails(false);
         setClarifyAnswer('');
         setPeopleSearch('');
         setMention(null);
@@ -776,6 +849,21 @@ const AIQuickCreate = ({
             }
         } else {
             setShowPeopleDrop(false);
+            // Confirm is ready — invite more chat instead of opening a form.
+            const last = threadRef.current[threadRef.current.length - 1];
+            if (!(last?.role === 'assistant' && last.text === CONFIRM_READY_HINT)) {
+                const entry = {
+                    id: `${Date.now()}-assistant-ready`,
+                    role: 'assistant',
+                    text: CONFIRM_READY_HINT,
+                };
+                setThread((prev) => {
+                    const next = [...prev, entry];
+                    threadRef.current = next;
+                    return next;
+                });
+            }
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
         }
     };
 
@@ -791,6 +879,117 @@ const AIQuickCreate = ({
             return next;
         });
         return entry;
+    };
+
+    const applyConfirmChatEdit = async (raw) => {
+        const parsed = parseConfirmChatEdit(raw);
+        if (parsed.kind === 'empty') return;
+        if (parsed.kind === 'send') {
+            await sendRef.current?.();
+            return;
+        }
+
+        if (parsed.kind === 'patch') {
+            const { patch, notes } = parsed;
+            if (patch.priority) setEditPriority(patch.priority);
+            if (typeof patch.requires_screen_recording === 'boolean') {
+                setEditScreenRecording(patch.requires_screen_recording);
+            }
+            if (typeof patch.is_sales_task === 'boolean') {
+                setEditSales(patch.is_sales_task);
+            }
+            if (patch.title) setEditTitle(displayTaskTitle(patch.title) || patch.title);
+            if (patch.description) setEditDesc(layoutTaskDescription(patch.description) || patch.description);
+
+            if (patch.due_phrase) {
+                setLoading(true);
+                try {
+                    const base = activePromptRef.current || editTitle || 'task';
+                    const res = await axios.post(`${API}/ai/quick-create-preview`, {
+                        text: `${base}. This is due ${patch.due_phrase}`,
+                        answers: { ...(answers || {}), 'When should this be done by?': patch.due_phrase },
+                        history: threadRef.current.slice(-12).map((m) => ({ role: m.role, text: m.text })),
+                        context_hint: 'User is refining a ready-to-send task in chat. Update due date from their message; keep assignees unless they clearly change who.',
+                    }, { timeout: 35000 });
+                    const p = res.data;
+                    if (p?.due_date) setEditDue(p.due_date);
+                    if (p?.priority && !patch.priority) setEditPriority(p.priority);
+                    if (p?.title && !patch.title) setEditTitle(displayTaskTitle(p.title) || p.title);
+                    if (p?.description && !patch.description) {
+                        setEditDesc(layoutTaskDescription(p.description) || p.description);
+                    }
+                    setPreview((prev) => (prev ? {
+                        ...prev,
+                        ...p,
+                        clarifying_questions: [],
+                        due_date: p.due_date || prev.due_date,
+                    } : p));
+                } catch {
+                    appendThread({
+                        role: 'assistant',
+                        text: 'I couldn’t update the due date — try “due Friday 5pm” or pick the date on the summary.',
+                    });
+                    setLoading(false);
+                    return;
+                } finally {
+                    setLoading(false);
+                }
+            }
+
+            appendThread({
+                role: 'assistant',
+                text: `Got it — ${notes.join(', ')}. Still ready to send whenever you are.`,
+            });
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
+            return;
+        }
+
+        // Open-ended tweak — reparse with conversation history, keep chips when possible.
+        setLoading(true);
+        try {
+            const base = activePromptRef.current || editTitle || 'task';
+            const res = await axios.post(`${API}/ai/quick-create-preview`, {
+                text: `${base}. Change request: ${parsed.text}`,
+                answers: {
+                    ...(answers || {}),
+                    ...(editDue ? { 'When should this be done by?': editDue } : {}),
+                },
+                history: threadRef.current.slice(-12).map((m) => ({ role: m.role, text: m.text })),
+                context_hint: 'User is refining an already-ready task in continuous chat. Apply only their change. Keep existing assignees unless they rename them. Do not ask clarifying questions unless something critical became missing.',
+            }, { timeout: 35000 });
+            const p = res.data;
+            if (p?.intent === 'question') {
+                await runQA(parsed.text, { alreadyLogged: true });
+                return;
+            }
+            applyPreview({
+                ...p,
+                clarifying_questions: [],
+                assignee_resolution: {
+                    ...(p.assignee_resolution || {}),
+                    // Prefer keeping current chips if the reparse didn't resolve anyone new
+                    resolved: (p.assignee_resolution?.resolved?.length
+                        ? p.assignee_resolution.resolved
+                        : null),
+                },
+            });
+            // Restore chips if reparse dropped them
+            if (editAssigneesRef.current.length === 0 && (p.assignee_resolution?.resolved || []).length === 0) {
+                /* applyPreview may have cleared — leave as-is */
+            }
+            appendThread({
+                role: 'assistant',
+                text: 'Updated — still ready to send whenever you are.',
+            });
+        } catch (err) {
+            appendThread({
+                role: 'assistant',
+                text: err?.response?.data?.detail || 'I couldn’t apply that — try rephrasing, or hit Send as-is.',
+            });
+        } finally {
+            setLoading(false);
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
+        }
     };
 
     const startRecurringCompose = () => {
@@ -892,6 +1091,20 @@ const AIQuickCreate = ({
             const pendingQs = preview?.clarifying_questions || [];
             if (preview && pendingQs.length > 0) {
                 answerClarify(pendingQs[0], t, { alreadyLogged: true });
+                return;
+            }
+            // Already ready to send — keep chatting to refine instead of wiping the card.
+            const ambiguousNow = preview?.assignee_resolution?.ambiguous || [];
+            const readyNow = Boolean(
+                preview
+                && pendingQs.length === 0
+                && (editDue || preview?.due_date)
+                && (editAssigneesRef.current.length > 0 || (preview?.assignee_resolution?.resolved || []).length > 0)
+                && ambiguousNow.length === 0
+                && !teamScopePrompt
+            );
+            if (readyNow) {
+                await applyConfirmChatEdit(t);
                 return;
             }
             setPreview(null);
@@ -1091,7 +1304,6 @@ const AIQuickCreate = ({
         setFormatOpen(false);
         setTeamScopePrompt(null);
         setEditingField(null);
-        setShowDetails(false);
         setClarifyAnswer('');
         setPeopleSearch('');
         setShowPeopleDrop(false);
@@ -1320,17 +1532,20 @@ const AIQuickCreate = ({
 
         if (!editTitle || !editTitle.trim()) {
             toast.error('Please give the task a title');
-            setShowDetails(true);
+            appendThread({ role: 'assistant', text: 'What should I call this task?' });
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
         if (!editDue) {
             toast.error('Please pick a due date');
-            setShowDetails(true);
+            appendThread({ role: 'assistant', text: 'When should this be done by?' });
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
         if (unique.length === 0) {
             toast.error('Please pick at least one assignee');
-            setShowDetails(true);
+            appendThread({ role: 'assistant', text: 'Who should this be assigned to?' });
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
 
@@ -1414,6 +1629,7 @@ const AIQuickCreate = ({
             setSending(false);
         }
     };
+    sendRef.current = send;
 
     const swapAlternate = (idx, alt) => {
         setEditAssignees((prev) => prev.map((a, i) => (i === idx ? { ...alt, kind: alt.kind || 'team' } : a)));
@@ -2060,60 +2276,25 @@ const AIQuickCreate = ({
                                                     </div>
                                                 )}
 
-                                                {showDetails && (
-                                                    <div className="space-y-2 text-sm">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setEditingField(editingField === 'desc' ? null : 'desc')}
-                                                            className="text-left text-muted-foreground w-full rounded-md px-1.5 py-0.5 hover:bg-muted"
-                                                            data-testid="ai-chip-desc"
-                                                        >
-                                                            {editDesc || <span className="text-slate-400 italic">Add a note for them (optional)</span>}
-                                                        </button>
-                                                        {editingField === 'desc' && (
-                                                            <Textarea
-                                                                autoFocus
-                                                                value={editDesc}
-                                                                onChange={(e) => setEditDesc(e.target.value)}
-                                                                onBlur={() => setEditingField(null)}
-                                                                className="rounded-lg text-sm min-h-[56px]"
-                                                                rows={3}
-                                                                data-testid="ai-inline-desc"
-                                                            />
+                                                {(editSales || editScreenRecording || preview.recurring?.is_recurring) && (
+                                                    <div className="flex flex-wrap gap-1.5" data-testid="ai-confirm-flags">
+                                                        {preview.recurring?.is_recurring && (
+                                                            <Badge className="bg-slate-200 text-slate-800">
+                                                                Recurring · {preview.recurring.frequency}
+                                                            </Badge>
                                                         )}
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {preview.recurring?.is_recurring && (
-                                                                <Badge className="bg-slate-200 text-slate-800">
-                                                                    Recurring · {preview.recurring.frequency}
-                                                                </Badge>
-                                                            )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setEditSales((v) => !v)}
-                                                                className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-wide font-semibold border ${
-                                                                    editSales
-                                                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                                        : 'bg-white text-slate-500 border-slate-200'
-                                                                }`}
-                                                                data-testid="ai-chip-sales"
-                                                            >
-                                                                {editSales ? 'Sales' : 'Mark as sales'}
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setEditScreenRecording((v) => !v)}
-                                                                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold border ${
-                                                                    editScreenRecording
-                                                                        ? 'bg-violet-100 text-violet-800 border-violet-200'
-                                                                        : 'bg-white text-slate-500 border-slate-200'
-                                                                }`}
-                                                                data-testid="ai-chip-screen-recording"
-                                                            >
-                                                                {editScreenRecording ? 'Screen recording required' : 'Require screen recording'}
-                                                            </button>
-                                                        </div>
+                                                        {editSales && (
+                                                            <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200">Sales</Badge>
+                                                        )}
+                                                        {editScreenRecording && (
+                                                            <Badge className="bg-violet-50 text-violet-800 border border-violet-200">Screen recording required</Badge>
+                                                        )}
                                                     </div>
                                                 )}
+
+                                                <p className="text-xs text-muted-foreground" data-testid="ai-confirm-chat-hint">
+                                                    Want to change priority, due date, the message, or require a screen recording? Just type it below.
+                                                </p>
 
                                                 <div className="flex flex-wrap items-center gap-2 pt-1">
                                                     <Button
@@ -2125,16 +2306,6 @@ const AIQuickCreate = ({
                                                     >
                                                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                                         {sending ? 'Sending…' : 'Send'}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={() => setShowDetails((v) => !v)}
-                                                        className="rounded-full gap-1.5"
-                                                        data-testid="ai-edit-details"
-                                                    >
-                                                        <Pencil className="w-3.5 h-3.5" />
-                                                        {showDetails ? 'Less' : 'More'}
                                                     </Button>
                                                     <button
                                                         type="button"
@@ -2526,7 +2697,9 @@ const AIQuickCreate = ({
                                             ? (/often|repeat/i.test(clarifying[0] || '')
                                                 ? 'e.g. every weekday at 5pm'
                                                 : 'e.g. Friday 5pm or ASAP')
-                                            : '')
+                                            : (readyToConfirm
+                                                ? 'e.g. make it urgent, due tomorrow, require screen recording…'
+                                                : ''))
                                 }
                                 aria-label="Create, search, or go to"
                                 rows={1}
