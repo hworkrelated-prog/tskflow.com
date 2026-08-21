@@ -75,6 +75,18 @@ if (!/^Today, please review/i.test(illogical)) {
   process.exit(1);
 }
 
+const screenAsk = layoutTaskDescription(
+  "Please review and respond with a screen recording with their understanding of the work that's been assigned. Additional info: When should this be done by?: ASAP. Assign to ASAP."
+);
+if (/with their/i.test(screenAsk) || /Additional info/i.test(screenAsk) || /Assign to ASAP/i.test(screenAsk)) {
+  console.error('screen recording ask not cleaned', JSON.stringify(screenAsk));
+  process.exit(1);
+}
+if (!/your understanding/i.test(screenAsk)) {
+  console.error('expected your understanding', JSON.stringify(screenAsk));
+  process.exit(1);
+}
+
 const html = layoutTaskDescription('<p>This is a reminder for myself to make sure I for all deals I steps: 1. Complete the 2. Reply with a brief update when you are done.</p>');
 if (!html.includes('Steps:') || !html.includes('\n1. ') || !html.includes('\n2. ')) {
   console.error('html layout failed', JSON.stringify(html));

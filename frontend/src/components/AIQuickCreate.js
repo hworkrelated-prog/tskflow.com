@@ -328,9 +328,10 @@ const AIQuickCreate = ({
     const showAddGroup = Boolean(mention) && mentionQuery.length > 0 && !mentionHasExactGroup;
 
     const mentionOptions = (() => {
+        // Groups first so they are visible without scrolling past people.
         const opts = [
-            ...mentionPeople.map((u) => ({ type: 'user', data: u })),
             ...mentionGroups.map((g) => ({ type: 'group', data: g })),
+            ...mentionPeople.map((u) => ({ type: 'user', data: u })),
         ];
         if (showAddPerson) opts.push({ type: 'add_person', data: { query: mention?.query || '' } });
         if (showAddGroup) opts.push({ type: 'add_group', data: { query: mention?.query || '' } });
@@ -367,8 +368,9 @@ const AIQuickCreate = ({
         }
         const spaceAbove = r.top - viewTop - pad;
         const spaceBelow = (viewTop + viewHeight) - r.bottom - pad;
-        const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
-        const maxHeight = Math.max(140, Math.min(260, openUp ? spaceAbove - 4 : spaceBelow - 4));
+        // Prefer opening upward near the bottom dock so groups aren't off-screen.
+        const openUp = spaceBelow < 280 || spaceAbove > spaceBelow;
+        const maxHeight = Math.max(180, Math.min(320, openUp ? spaceAbove - 4 : spaceBelow - 4));
         setMentionPos({
             left: Math.max(12, r.left),
             width: Math.min(r.width, viewWidth - 24),
@@ -755,7 +757,15 @@ const AIQuickCreate = ({
             }
             const isWho = /who|own|assign/i.test(q || '') && !hasAssignees;
             setShowPeopleDrop(isWho);
-            setTimeout(() => clarifyRef.current?.focus(), 50);
+            // When / cadence questions: stay in the main composer — no second reply box.
+            // Who questions: focus the people search in the picker.
+            setTimeout(() => {
+                if (isWho) {
+                    clarifyRef.current?.focus();
+                } else {
+                    inputRef.current?.focus({ preventScroll: true });
+                }
+            }, 50);
             if (!nudgeSentRef.current) {
                 nudgeSentRef.current = true;
                 setTimeout(() => {
@@ -1059,6 +1069,8 @@ const AIQuickCreate = ({
         // Stay on the confirm message — do not re-ask who or reopen the picker.
         if (!hasDue) {
             setShowPeopleDrop(false);
+            // Due is still missing — keep focus in the main composer for a seamless answer.
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 60);
         }
     };
 
@@ -1459,11 +1471,12 @@ const AIQuickCreate = ({
         const pad = 8;
         const spaceBelow = window.innerHeight - r.bottom - pad;
         const spaceAbove = r.top - pad;
-        const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
-        const maxHeight = Math.max(120, Math.min(240, openUp ? spaceAbove - 4 : spaceBelow - 4));
+        // Composer sits near the bottom — open upward so groups stay on-screen.
+        const openUp = spaceBelow < 260 || spaceAbove > spaceBelow;
+        const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove - 4 : spaceBelow - 4));
         setPeopleDropPos({
             left: Math.max(12, r.left),
-            width: Math.min(r.width, window.innerWidth - 24),
+            width: Math.min(Math.max(r.width, 280), window.innerWidth - 24),
             maxHeight,
             openUp,
             top: openUp ? undefined : r.bottom + 6,
@@ -1589,29 +1602,35 @@ const AIQuickCreate = ({
                                         </div>
                                     )}
 
-                                    {clarifying.length > 0 && (
+                                    {clarifying.length > 0 && !isWhenClarify && (
                                         <div className="flex justify-start" data-testid="ai-clarifying">
                                             <div className="w-full max-w-[95%] rounded-2xl rounded-bl-md bg-muted/70 border border-border px-3.5 py-3 space-y-2">
-                                                <div className="flex items-start gap-2">
-                                                    <MessageCircleQuestion className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                                                    <p className="text-sm font-medium text-foreground" data-testid="ai-clarify-question">{clarifying[0]}</p>
-                                                </div>
-
                                                 {/scope|direct reports|everyone under/i.test(clarifying[0] || '') && teamScopePrompt ? (
-                                                    <div className="flex flex-wrap gap-2 ml-6">
-                                                        {(teamScopePrompt.options || []).map((opt) => (
-                                                            <button
-                                                                key={`q-${opt.id || opt.label}`}
-                                                                type="button"
-                                                                onClick={() => pickTeamScope(opt)}
-                                                                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                                                            >
-                                                                <Users className="w-3.5 h-3.5" />
-                                                                {opt.label || opt.name}
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                    <>
+                                                        <div className="flex items-start gap-2">
+                                                            <MessageCircleQuestion className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                                                            <p className="text-sm font-medium text-foreground" data-testid="ai-clarify-question">{clarifying[0]}</p>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 ml-6">
+                                                            {(teamScopePrompt.options || []).map((opt) => (
+                                                                <button
+                                                                    key={`q-${opt.id || opt.label}`}
+                                                                    type="button"
+                                                                    onClick={() => pickTeamScope(opt)}
+                                                                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                                                                >
+                                                                    <Users className="w-3.5 h-3.5" />
+                                                                    {opt.label || opt.name}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </>
                                                 ) : isWhoClarify ? (
+                                                    <>
+                                                        <div className="flex items-start gap-2">
+                                                            <MessageCircleQuestion className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                                                            <p className="text-sm font-medium text-foreground" data-testid="ai-clarify-question">{clarifying[0]}</p>
+                                                        </div>
                                                     <div className="relative ml-6" ref={peopleAnchorRef}>
                                                         <Input
                                                             ref={clarifyRef}
@@ -1628,7 +1647,7 @@ const AIQuickCreate = ({
                                                                     setShowPeopleDrop(false);
                                                                 }
                                                             }}
-                                                            placeholder="Search people or type @name"
+                                                            placeholder="Search people or groups"
                                                             className="h-9 text-sm rounded-lg border-border bg-background text-foreground"
                                                             data-testid="clarify-people-search"
                                                             disabled={loading || sending}
@@ -1651,111 +1670,133 @@ const AIQuickCreate = ({
                                                                 onPointerDown={(e) => e.stopPropagation()}
                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                             >
-                                                                {filteredPeople.length === 0 && groups.filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)).length === 0 && (
-                                                                    <p className="px-2.5 py-3 text-xs text-muted-foreground">No matches — try an email or group</p>
-                                                                )}
-                                                                {groups
-                                                                    .filter((g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery))
-                                                                    .slice(0, 4)
-                                                                    .map((g) => (
-                                                                        <button
-                                                                            key={`cg-${g.id}`}
-                                                                            type="button"
-                                                                            onMouseDown={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                addAssigneeChip({
-                                                                                    kind: 'group',
-                                                                                    id: g.id,
-                                                                                    name: g.name,
-                                                                                    emails: g.emails || [],
-                                                                                    members: g.emails || [],
-                                                                                    member_count: (g.emails || []).length,
-                                                                                });
-                                                                                setShowPeopleDrop(false);
-                                                                                setPeopleSearch('');
-                                                                                const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
-                                                                                    || 'Who should own this task?';
-                                                                                const nextAnswers = { ...answers, [whoQ]: g.name };
-                                                                                setAnswers(nextAnswers);
-                                                                                setPreview((p) => {
-                                                                                    if (!p) return p;
-                                                                                    const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
-                                                                                    return { ...p, clarifying_questions: qs };
-                                                                                });
-                                                                                if (editDue || preview?.due_date) runPreview(text, nextAnswers);
-                                                                            }}
-                                                                            className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted flex items-center gap-2.5"
-                                                                            role="option"
-                                                                            data-testid={`clarify-pick-group-${g.id}`}
-                                                                        >
-                                                                            <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
-                                                                                <Users className="w-3.5 h-3.5" />
-                                                                            </span>
-                                                                            <span className="min-w-0 flex-1">
-                                                                                <span className="text-sm font-medium text-foreground block truncate">{g.name}</span>
-                                                                                <span className="text-[11px] text-muted-foreground">Group · {(g.emails || []).length}</span>
-                                                                            </span>
-                                                                        </button>
-                                                                    ))}
-                                                                {filteredPeople.map((u) => (
-                                                                    <button
-                                                                        key={u.id || u.email}
-                                                                        type="button"
-                                                                        onMouseDown={(e) => {
-                                                                            e.preventDefault();
-                                                                            e.stopPropagation();
-                                                                            pickPerson(u);
-                                                                        }}
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault();
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted flex items-center gap-2.5"
-                                                                        role="option"
-                                                                        data-testid={`clarify-pick-${u.id || u.email}`}
-                                                                    >
-                                                                        <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                                                                            u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-muted text-muted-foreground'
-                                                                        }`}>
-                                                                            {u.id === 'self' ? 'Me' : <UserIcon className="w-3.5 h-3.5" />}
-                                                                        </span>
-                                                                        <span className="min-w-0 flex-1">
-                                                                            <span className="text-sm font-medium text-foreground block truncate">{u.name}</span>
-                                                                            {u.email ? <span className="text-[11px] text-muted-foreground truncate block">{u.email}</span> : null}
-                                                                        </span>
-                                                                    </button>
-                                                                ))}
-                                                                {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onMouseDown={(e) => {
-                                                                            e.preventDefault();
-                                                                            const email = peopleSearch.replace(/^@/, '').trim();
-                                                                            pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
-                                                                        }}
-                                                                        className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted text-sm text-foreground mt-0.5 flex items-center gap-2.5"
-                                                                    >
-                                                                        <span className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
-                                                                            <Plus className="w-3.5 h-3.5" />
-                                                                        </span>
-                                                                        <span className="min-w-0">
-                                                                            <span className="font-medium block truncate">Assign {peopleSearch.replace(/^@/, '').trim()}</span>
-                                                                            <span className="text-[11px] text-slate-500">Invite by email</span>
-                                                                        </span>
-                                                                    </button>
-                                                                )}
+                                                                {(() => {
+                                                                    const clarifyGroups = groups.filter(
+                                                                        (g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)
+                                                                    );
+                                                                    return (
+                                                                        <>
+                                                                            {filteredPeople.length === 0 && clarifyGroups.length === 0 && (
+                                                                                <p className="px-2.5 py-3 text-xs text-muted-foreground">No matches — try an email or group</p>
+                                                                            )}
+                                                                            {clarifyGroups.length > 0 && (
+                                                                                <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" data-testid="clarify-groups-header">
+                                                                                    Groups
+                                                                                </div>
+                                                                            )}
+                                                                            {clarifyGroups.map((g) => (
+                                                                                <button
+                                                                                    key={`cg-${g.id}`}
+                                                                                    type="button"
+                                                                                    onMouseDown={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        addAssigneeChip({
+                                                                                            kind: 'group',
+                                                                                            id: g.id,
+                                                                                            name: g.name,
+                                                                                            emails: g.emails || [],
+                                                                                            members: g.emails || [],
+                                                                                            member_count: (g.emails || []).length,
+                                                                                        });
+                                                                                        setShowPeopleDrop(false);
+                                                                                        setPeopleSearch('');
+                                                                                        const whoQ = (preview?.clarifying_questions || []).find((q) => /who|own|assign/i.test(q || ''))
+                                                                                            || 'Who should own this task?';
+                                                                                        const nextAnswers = { ...answers, [whoQ]: g.name };
+                                                                                        setAnswers(nextAnswers);
+                                                                                        setPreview((p) => {
+                                                                                            if (!p) return p;
+                                                                                            const qs = (p.clarifying_questions || []).filter((q) => !/who|own|assign/i.test(q || ''));
+                                                                                            if (!(editDue || preview?.due_date) && !qs.some((q) => /when|due|deadline/i.test(q || ''))) {
+                                                                                                qs.push('When should this be done by?');
+                                                                                            }
+                                                                                            return { ...p, clarifying_questions: qs };
+                                                                                        });
+                                                                                        if (!(editDue || preview?.due_date)) {
+                                                                                            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 60);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted flex items-center gap-2.5"
+                                                                                    role="option"
+                                                                                    data-testid={`clarify-pick-group-${g.id}`}
+                                                                                >
+                                                                                    <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
+                                                                                        <Users className="w-3.5 h-3.5" />
+                                                                                    </span>
+                                                                                    <span className="min-w-0 flex-1">
+                                                                                        <span className="text-sm font-medium text-foreground block truncate">{g.name}</span>
+                                                                                        <span className="text-[11px] text-muted-foreground">Group · {(g.emails || []).length}</span>
+                                                                                    </span>
+                                                                                </button>
+                                                                            ))}
+                                                                            {filteredPeople.length > 0 && clarifyGroups.length > 0 && (
+                                                                                <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                                    People
+                                                                                </div>
+                                                                            )}
+                                                                            {filteredPeople.map((u) => (
+                                                                                <button
+                                                                                    key={u.id || u.email}
+                                                                                    type="button"
+                                                                                    onMouseDown={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        pickPerson(u);
+                                                                                    }}
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                    }}
+                                                                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted flex items-center gap-2.5"
+                                                                                    role="option"
+                                                                                    data-testid={`clarify-pick-${u.id || u.email}`}
+                                                                                >
+                                                                                    <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                                                                        u.id === 'self' ? 'bg-teal-700 text-white text-xs font-semibold' : 'bg-muted text-muted-foreground'
+                                                                                    }`}>
+                                                                                        {u.id === 'self' ? 'Me' : <UserIcon className="w-3.5 h-3.5" />}
+                                                                                    </span>
+                                                                                    <span className="min-w-0 flex-1">
+                                                                                        <span className="text-sm font-medium text-foreground block truncate">{u.name}</span>
+                                                                                        {u.email ? <span className="text-[11px] text-muted-foreground truncate block">{u.email}</span> : null}
+                                                                                    </span>
+                                                                                </button>
+                                                                            ))}
+                                                                            {peopleSearch.includes('@') && peopleSearch.includes('.') && !filteredPeople.some((u) => (u.email || '').toLowerCase() === peopleSearch.replace(/^@/, '').trim().toLowerCase()) && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onMouseDown={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        const email = peopleSearch.replace(/^@/, '').trim();
+                                                                                        pickPerson({ id: `email_${email}`, name: email.split('@')[0], email, is_invited: true });
+                                                                                    }}
+                                                                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-muted text-sm text-foreground mt-0.5 flex items-center gap-2.5"
+                                                                                >
+                                                                                    <span className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                                                                                        <Plus className="w-3.5 h-3.5" />
+                                                                                    </span>
+                                                                                    <span className="min-w-0">
+                                                                                        <span className="font-medium block truncate">Assign {peopleSearch.replace(/^@/, '').trim()}</span>
+                                                                                        <span className="text-[11px] text-slate-500">Invite by email</span>
+                                                                                    </span>
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    );
+                                                                })()}
                                                             </div>,
                                                             document.body
                                                         )}
                                                     </div>
+                                                    </>
                                                 ) : (
-                                                    <div className="flex gap-2 ml-6">
+                                                    <div className="flex gap-2">
                                                         <Input
                                                             ref={clarifyRef}
                                                             value={clarifyAnswer}
                                                             onChange={(e) => setClarifyAnswer(e.target.value)}
-                                                            placeholder={isWhenClarify ? (/often|repeat/i.test(clarifying[0] || '') ? 'e.g. every weekday at 5pm' : 'e.g. Friday 5pm') : 'Your answer…'}
+                                                            placeholder="Your answer…"
                                                             onKeyDown={(e) => {
                                                                 if (e.key === 'Enter' && clarifyAnswer.trim()) {
                                                                     e.preventDefault();
@@ -2476,7 +2517,15 @@ const AIQuickCreate = ({
                                         runPreview();
                                     }
                                 }}
-                                placeholder={listening ? 'Listening…' : ''}
+                                placeholder={
+                                    listening
+                                        ? 'Listening…'
+                                        : (isWhenClarify
+                                            ? (/often|repeat/i.test(clarifying[0] || '')
+                                                ? 'e.g. every weekday at 5pm'
+                                                : 'e.g. Friday 5pm or ASAP')
+                                            : '')
+                                }
                                 aria-label="Create, search, or go to"
                                 rows={1}
                                 className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400"
@@ -2510,6 +2559,11 @@ const AIQuickCreate = ({
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                                             Assign to{mention.query ? ` · ${mention.query}` : ''}
                                         </p>
+                                        {mentionGroups.length > 0 && (
+                                            <p className="text-[10px] text-teal-700/80 mt-0.5" data-testid="mention-groups-hint">
+                                                Groups appear first
+                                            </p>
+                                        )}
                                     </div>
                                     <div
                                         className="overflow-y-auto overscroll-contain px-1.5 pb-1.5 clean-scroll"
