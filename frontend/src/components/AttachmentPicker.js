@@ -50,6 +50,7 @@ export const AttachmentPicker = forwardRef(({
     const [savingPreview, setSavingPreview] = useState(false);
     const [camStream, setCamStream] = useState(null);
     const [replaySrc, setReplaySrc] = useState('');
+    const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
 
     const recorderRef = useRef(null);
     const streamsRef = useRef({ screen: null, mic: null, camera: null, composed: null });
@@ -262,6 +263,7 @@ export const AttachmentPicker = forwardRef(({
                 setPaused(false);
                 setSeconds(0);
                 closeRecordingHudOverlay();
+                setHudOverlayOpen(false);
                 const wasDiscard = discardOnStopRef.current;
                 discardOnStopRef.current = false;
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' });
@@ -305,6 +307,7 @@ export const AttachmentPicker = forwardRef(({
                 showCamera: !!cameraStream || opts.camera,
                 reuseExisting: hud?.mode === 'pip',
             });
+            setHudOverlayOpen(hud.mode === 'pip');
             if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
                 toast.success('Drag the recording controls onto the screen you are capturing.');
             } else if (hud.mode === 'none' && needed) {
@@ -334,6 +337,7 @@ export const AttachmentPicker = forwardRef(({
         discardOnStopRef.current = false;
         if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
         closeRecordingHudOverlay();
+        setHudOverlayOpen(false);
     };
 
     const pauseResume = () => {
@@ -374,7 +378,11 @@ export const AttachmentPicker = forwardRef(({
             const ref = await doUpload(previewBlob, filename, 'video/webm');
             if (!ref) return;
             setSavedAttachment(ref);
-            toast.success('Recording saved — play it again below, or close when you’re done.');
+            // Saved → close immediately; attachment chip is the replay surface.
+            setShowPreview(false);
+            setPreviewBlob(null);
+            setReplaySrc('');
+            toast.success('Recording saved to this task.');
         } finally {
             setSavingPreview(false);
         }
@@ -521,7 +529,8 @@ export const AttachmentPicker = forwardRef(({
                 </div>
             )}
 
-            {recording && (
+            {/* One control surface only: PiP HUD when available, else in-tab bar. */}
+            {recording && !hudOverlayOpen && (
                 <RecordingFloatingHud
                     seconds={seconds}
                     paused={paused}
@@ -538,40 +547,39 @@ export const AttachmentPicker = forwardRef(({
                 />
             )}
 
-            {/* Preview Dialog */}
+            {/* Preview Dialog — closes automatically after Save */}
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle>{savedAttachment ? 'Recording saved' : 'Preview your recording'}</DialogTitle>
+                <DialogContent className="max-w-2xl sm:max-w-3xl p-0 overflow-hidden gap-0">
+                    <DialogHeader className="px-5 pt-5 pb-3">
+                        <DialogTitle>Preview your recording</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <div className="space-y-4 px-5 pb-5">
                         {(replaySrc || previewUrl) && (
-                            <video
-                                key={replaySrc || previewUrl}
-                                src={replaySrc || previewUrl}
-                                controls
-                                autoPlay
-                                playsInline
-                                className="w-full rounded-lg bg-black max-h-[50vh]"
-                                data-testid="recording-preview-video"
-                            />
+                            <div
+                                className="relative w-full overflow-hidden rounded-xl bg-black ring-1 ring-black/10"
+                                style={{ aspectRatio: '16 / 9' }}
+                                data-testid="recording-preview-frame"
+                            >
+                                <video
+                                    key={replaySrc || previewUrl}
+                                    src={replaySrc || previewUrl}
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                    className="absolute inset-0 h-full w-full object-contain"
+                                    data-testid="recording-preview-video"
+                                />
+                            </div>
                         )}
-                        {savedAttachment && (
-                            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                                Saved to this task. You can play it again here or from the attachment list.
-                            </p>
-                        )}
-                        <div className="flex gap-3 justify-end">
-                            {!savedAttachment && (
-                                <Button
-                                    variant="outline"
-                                    onClick={handleDiscardRecording}
-                                    className="rounded-full"
-                                >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Discard
-                                </Button>
-                            )}
+                        <div className="flex gap-3 justify-end flex-wrap">
+                            <Button
+                                variant="outline"
+                                onClick={handleDiscardRecording}
+                                className="rounded-full"
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Discard
+                            </Button>
                             <Button
                                 variant="outline"
                                 onClick={handleRecordAgain}
@@ -580,25 +588,15 @@ export const AttachmentPicker = forwardRef(({
                                 <RotateCw className="w-4 h-4 mr-2" />
                                 Record Again
                             </Button>
-                            {savedAttachment ? (
-                                <Button
-                                    onClick={() => setShowPreview(false)}
-                                    className="rounded-full bg-teal-700 hover:bg-teal-800"
-                                    data-testid="recording-preview-done"
-                                >
-                                    Done
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={handleSaveRecording}
-                                    disabled={savingPreview || !previewBlob}
-                                    className="rounded-full bg-green-600 hover:bg-green-700"
-                                    data-testid="save-recording-btn"
-                                >
-                                    {savingPreview ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
-                                    {savingPreview ? 'Saving…' : 'Save Recording'}
-                                </Button>
-                            )}
+                            <Button
+                                onClick={handleSaveRecording}
+                                disabled={savingPreview || !previewBlob}
+                                className="rounded-full bg-green-600 hover:bg-green-700"
+                                data-testid="save-recording-btn"
+                            >
+                                {savingPreview ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                                {savingPreview ? 'Saving…' : 'Save Recording'}
+                            </Button>
                         </div>
                     </div>
                 </DialogContent>

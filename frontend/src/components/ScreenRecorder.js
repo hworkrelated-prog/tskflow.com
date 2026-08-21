@@ -355,9 +355,8 @@ export const ScreenRecorder = ({ onSaved }) => {
                 </div>
             )}
 
-            {/* Always keep a Loom-style draggable HUD on the recording tab.
-                A Document PiP HUD can also open for other screens — same camera + controls. */}
-            {recording && (
+            {/* One control surface only: PiP HUD when available, else in-tab bar. */}
+            {recording && !hudOverlayOpen && (
                 <RecordingFloatingHud
                     seconds={seconds}
                     paused={paused}
@@ -380,6 +379,13 @@ export const ScreenRecorder = ({ onSaved }) => {
                     className="max-w-xs bg-white border border-amber-300 shadow-xl rounded-2xl p-3 text-xs text-amber-800 flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>You&apos;re recording a separate window. Use the toolbar on this tab, or Chrome&apos;s Stop sharing bar, if the overlay isn&apos;t visible.</span>
+                </div>
+            )}
+            {recording && hudOverlayOpen && (
+                <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483645 }}
+                    className="max-w-sm bg-slate-900/90 text-white shadow-xl rounded-2xl px-3.5 py-2 text-xs flex items-start gap-2 pointer-events-none"
+                    data-testid="recording-pip-hint">
+                    <span>Recording controls are in the floating window — drag it onto the screen you are capturing.</span>
                 </div>
             )}
         </>

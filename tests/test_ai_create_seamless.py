@@ -114,6 +114,13 @@ def test_classify_team_hint_and_name_extract():
     assert not ns["_name_hints_from_text"]("He should close lost opportunities")
     hints = ns["_hints_from_answers"]({"Who should own this task?": "Harold John"})
     assert "Harold John" in hints
+    # Due answers must never become assignee hints (was "Assign to ASAP")
+    assert ns["_hints_from_answers"]({"When should this be done by?": "ASAP"}) == []
+    assert ns["_hints_from_answers"]({"Who should own this task?": "ASAP"}) == []
+    ctx = ns["_answers_as_natural_context"]({"When should this be done by?": "ASAP"})
+    assert "Additional info" not in ctx
+    assert "due" in ctx.lower()
+    assert "ASAP" in ctx
 
 
 def test_carnegie_adds_next_steps():

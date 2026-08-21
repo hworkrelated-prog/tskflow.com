@@ -36,6 +36,17 @@ export function layoutTaskDescription(raw) {
         /^([A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})\s+(?:needs to|has to|should|must|will)\s+/i,
         '',
     );
+    // Strip clarifying-chat debris that used to leak into assignee copy
+    s = s.replace(/\s*\.?\s*Additional info:\s*[\s\S]*?(?=(?:\n\n(?:Next\s+)?steps?:)|$)/i, '');
+    s = s.replace(/\s*\.?\s*Assign to\s+(?:ASAP|EOD|EOM|today|tomorrow|urgent|now)\.?/gi, '');
+    s = s.replace(/\s*When should this be done by\?\s*:\s*[^\n.]+/gi, '');
+    // Speak TO the assignee — never "with their understanding"
+    s = s.replace(
+        /\b(?:respond|reply)\s+with\s+a\s+screen\s+recording\s+with\s+their\s+understanding\s+of\s+the\s+work\s+that(?:'s| has)\s+been\s+assigned\b/gi,
+        'reply with a screen recording that shows your understanding of the assigned work',
+    );
+    s = s.replace(/\bwith their understanding\b/gi, 'that shows your understanding');
+    s = s.replace(/\btheir understanding\b/gi, 'your understanding');
     s = s.replace(/\s*((?:Next\s+)?steps?):\s*/i, (_, label) => {
         const pretty = /^next/i.test(label) ? 'Next steps:' : 'Steps:';
         return `\n\n${pretty}\n`;

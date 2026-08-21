@@ -9184,6 +9184,10 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - NEVER paste the user's raw prompt (or a near-copy) into title or description.
   Manager-voice wrappers to strip: "Tell my team that…", "Tell my team to…", "Ask my team to…",
   "I want them to…", "we need to…", "have X do…". Those are routing, not the task.
+- NEVER include clarifying-chat debris: "Additional info:", "When should this be done by?: …",
+  "Assign to ASAP", or any Q&A labels. Due dates belong in due_date — not the description body.
+- Screen-recording response asks: write "Please review the assigned work and reply with a screen recording
+  that shows your understanding." NEVER "with their understanding" (you are speaking TO them).
 - Example: "Tell my team that on Monday we need to finish outreach training"
     title: "Finish outreach training"
     description: "On Monday, please finish the outreach training."
@@ -9442,7 +9446,20 @@ def _classify_team_hint(low: str) -> Optional[str]:
     return None
 
 
+_TIMEISH_ANSWER_RE = re.compile(
+    r"(?i)^(asap|eod|eom|now|immediately|urgent|today|tomorrow|tonight|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"next week|this week|end of (?:the )?day|end of (?:the )?month|"
+    r"\d{1,2}(?::\d{2})?\s*(?:am|pm|pst|est|cst|mst)?|"
+    r"(?:by\s+)?(?:fri|mon|tue|wed|thu|sat|sun)\w*"
+    r"(?:\s+\w+){0,4}|"
+    r"in\s+\d+\s*(?:min|mins|minutes|hours?|days?|weeks?))$"
+)
+_PRIORITYISH_ANSWER = {"high", "low", "medium", "urgent", "asap"}
+
+
 def _hints_from_answers(answers: Optional[dict]) -> List[str]:
+    """Only pull assignee names from who/assign answers — never due dates like ASAP."""
     if not answers:
         return []
     out = []
@@ -9451,11 +9468,36 @@ def _hints_from_answers(answers: Optional[dict]) -> List[str]:
         if not val:
             continue
         key = str(k or "")
-        if re.search(r"who|own|assign", key, re.I):
-            out.append(val)
-        elif re.match(r"^[A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,2}$", val):
-            out.append(val)
+        # Due / cadence answers are never people (was leaking "Assign to ASAP").
+        if re.search(r"when|due|deadline|often|repeat|cadence", key, re.I):
+            continue
+        if not re.search(r"who|own|assign", key, re.I):
+            continue
+        if _TIMEISH_ANSWER_RE.match(val) or val.lower().strip() in _PRIORITYISH_ANSWER:
+            continue
+        out.append(val)
     return out
+
+
+def _answers_as_natural_context(answers: Optional[dict]) -> str:
+    """Fold clarifying answers into plain English — never 'Additional info: Q?: A'."""
+    if not answers:
+        return ""
+    bits = []
+    for k, v in answers.items():
+        val = str(v or "").strip()
+        if not val:
+            continue
+        key = str(k or "")
+        if re.search(r"when|due|deadline", key, re.I):
+            bits.append(f"This is due {val}")
+        elif re.search(r"who|own|assign", key, re.I):
+            bits.append(f"Assign this to {val}")
+        elif re.search(r"often|repeat|cadence", key, re.I):
+            bits.append(f"This repeats {val}")
+        else:
+            bits.append(val)
+    return ". ".join(bits)
 
 
 def _clean_name_hint(name: str) -> str:
@@ -10115,11 +10157,44 @@ def _self_facing_note(when: str, work: str) -> str:
     return body
 
 
-def _normalize_description_layout(text: str) -> str:
-    """Keep numbered instructions on their own lines so the UI can render them."""
-    s = (text or "").strip()
+def _strip_clarify_leakage(text: str) -> str:
+    """Remove clarifying Q&A that got pasted into prompts or task copy."""
+    s = str(text or "")
     if not s:
         return s
+    s = re.sub(
+        r"(?i)\s*\.?\s*Additional info:\s*.*?(?=(?:\n\nNext steps:)|\Z)",
+        "",
+        s,
+        flags=re.S,
+    )
+    s = re.sub(
+        r"(?i)\s*\.?\s*Assign to\s+(?:ASAP|EOD|EOM|today|tomorrow|tonight|urgent|now)\b\.?",
+        "",
+        s,
+    )
+    s = re.sub(
+        r"(?i)\s*When should this be done by\?\s*:\s*[^.|\n]+",
+        "",
+        s,
+    )
+    return re.sub(r"[ \t]{2,}", " ", s).strip(" .")
+
+
+def _normalize_description_layout(text: str) -> str:
+    """Keep numbered instructions on their own lines so the UI can render them."""
+    s = _strip_clarify_leakage((text or "").strip())
+    if not s:
+        return s
+    # Keep second-person screen-recording asks logical even if the LLM echoed manager voice
+    s = re.sub(
+        r"(?i)\b(?:respond|reply)\s+with\s+a\s+screen\s+recording\s+with\s+their\s+understanding"
+        r"\s+of\s+the\s+work\s+that(?:'s| has)\s+been\s+assigned\b",
+        "reply with a screen recording that shows your understanding of the assigned work",
+        s,
+    )
+    s = re.sub(r"(?i)\bwith their understanding\b", "that shows your understanding", s)
+    s = re.sub(r"(?i)\btheir understanding\b", "your understanding", s)
     s = re.sub(r"(?i)\s*next steps?:\s*", "\n\nNext steps:\n", s, count=1)
     s = re.sub(r"(?<!\n)\s+(\d{1,2})[.)]\s+", r"\n\1. ", s)
     s = re.sub(r"[ \t]+\n", "\n", s)
@@ -10201,10 +10276,32 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         count=1,
     )
 
+    s = _strip_clarify_leakage(s)
+    # Speak TO the assignee: "with their understanding" → "that shows your understanding"
+    s = re.sub(
+        r"(?i)\b(?:respond|reply)\s+with\s+a\s+screen\s+recording\s+with\s+their\s+understanding"
+        r"\s+of\s+the\s+work\s+that(?:'s| has)\s+been\s+assigned\b",
+        "reply with a screen recording that shows your understanding of the assigned work",
+        s,
+    )
+    s = re.sub(
+        r"(?i)\bwith their understanding of the work that(?:'s| has) been assigned\b",
+        "that shows your understanding of the assigned work",
+        s,
+    )
+    s = re.sub(r"(?i)\bwith their understanding\b", "that shows your understanding", s)
+    s = re.sub(r"(?i)\btheir understanding\b", "your understanding", s)
+    s = re.sub(
+        r"(?i)\breview and respond with a screen recording\b",
+        "review the assigned work and reply with a screen recording",
+        s,
+    )
+
     replacements = [
         (r"(?i)^(?:please\s+)?ask\s+to\s+", "Please "),
         (r"(?i)^tell\s+(?:my|the|our)\s+team\s+that\s+", ""),
         (r"(?i)^tell\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
+        (r"(?i)^ask\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
         (r"(?i)^please\s+tell\s+that\s+", "Please "),
         (r"(?i)^tell\s+that\s+", ""),
         (r"(?i)^i\s+want\s+(?:my|the|our)\s+team\s+to\s+", "Please "),
@@ -10353,6 +10450,13 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
     if re.search(r"(?i)\bplease\s+[A-Za-z][\w'.-]*\s+needs?\s+to\b|\bplease\s+needs?\s+to\b", description or ""):
         return True
     if re.search(r"(?m)^\s*\d+[.)]\s*(complete the|the)\s*$", description or ""):
+        return True
+    # Clarifying answers or third-person "their" leaked into assignee-facing copy
+    if re.search(
+        r"(?i)additional info:|assign to asap|with their understanding|"
+        r"when should this be done by\?",
+        description or "",
+    ):
         return True
     return False
 
@@ -10561,7 +10665,7 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
                 hints.append(h)
         parsed["assignee_hints"] = hints
 
-    source_text = repaired or raw_text or ""
+    source_text = _strip_clarify_leakage(repaired or raw_text or "")
     parsed["assignee_hints"] = _drop_destination_assignee_hints(parsed.get("assignee_hints") or [], source_text)
     self_assign = _parse_is_self_assign(parsed, source_text, current_user)
     people = _assignee_name_list(parsed)
@@ -10711,6 +10815,8 @@ async def _llm_logical_copy(
         "Never write 'I need my …' or glue Please onto leftover manager voice. "
         "Example: 'I need my @HM Org to submit one BAMFAM call to their managers' → "
         "'Please submit one BAMFAM call to your managers.' "
+        "Screen-recording asks: 'reply with a screen recording that shows your understanding' — "
+        "never 'with their understanding', never 'Additional info:', never 'Assign to ASAP'. "
         "Keep every named account/client in the title (e.g. Beck bus). "
         "If they listed several actions (run through AI, give context, share a template), "
         "those belong in Next steps — never write 'Do the work.'\n"
@@ -11011,16 +11117,13 @@ class QuickCreatePreviewRequest(BaseModel):
 @api_router.post("/ai/quick-create-preview")
 async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dict = Depends(get_current_user)):
     """Parse + resolve → ready-to-confirm preview, chatting through anything still missing."""
-    # If answers were provided, append them to the text so the LLM has more context
-    text = req.text or ""
+    # Fold clarifying answers into natural language — never "Additional info: Q?: A"
+    # (that used to leak into description as "Assign to ASAP").
+    text = _strip_clarify_leakage(req.text or "")
     extra_hints = _hints_from_answers(req.answers)
-    if req.answers:
-        add = " ".join([f"{k}: {v}" for k, v in req.answers.items() if v])
-        if add:
-            text = f"{text}. Additional info: {add}"
-        for h in extra_hints:
-            if h and f"assign to {h.lower()}" not in text.lower():
-                text = f"{text}. Assign to {h}."
+    context = _answers_as_natural_context(req.answers)
+    if context:
+        text = f"{text}. {context}".strip()
 
     parse_req = SmartParseRequest(
         text=text,
@@ -11046,6 +11149,11 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
             ]
     # Ready when due + assignee are known and no clarifying question remains
     ar = parsed.get("assignee_resolution", {"resolved": [], "ambiguous": [], "unresolved": []})
+    # Never leave clarifying leakage in the copy shown to the assignee
+    if parsed.get("description"):
+        parsed["description"] = _normalize_description_layout(parsed["description"])
+    if parsed.get("title"):
+        parsed["title"] = _strip_clarify_leakage(str(parsed["title"]))
     parsed["ready_to_confirm"] = (
         bool(parsed.get("due_date"))
         and len(ar.get("resolved", [])) > 0

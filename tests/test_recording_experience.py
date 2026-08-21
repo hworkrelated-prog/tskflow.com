@@ -66,17 +66,31 @@ def test_composer_record_button_starts_capture():
     assert "startComposerRecording" in menu_btn
 
 
-def test_save_recording_keeps_preview_on_success_and_failure():
+def test_save_recording_auto_closes_preview():
     picker = _read("components", "AttachmentPicker.js")
     assert "return ref;" in picker
     assert "return null;" in picker
-    assert "setPreviewBlob(null)" in picker
     save_fn = picker.split("const handleSaveRecording")[1].split("const handleDiscardRecording")[0]
-    assert "setShowPreview(false)" not in save_fn
-    assert "setPreviewBlob(null)" not in save_fn
+    # After a successful save the preview closes — no Record Again / Done detour.
+    assert "setShowPreview(false)" in save_fn
+    assert "setPreviewBlob(null)" in save_fn
     assert "if (!ref) return;" in save_fn
+    assert "Recording saved to this task" in save_fn
+    assert "recording-preview-done" not in picker
+    assert "recording-preview-frame" in picker
+    assert "object-contain" in picker
     assert "replayAttachment" in picker
     assert "recording-preview-video" in picker
+
+
+def test_single_recording_control_surface():
+    rec = _read("components", "ScreenRecorder.js")
+    picker = _read("components", "AttachmentPicker.js")
+    assert "hudOverlayOpen" in rec
+    assert "recording && !hudOverlayOpen" in rec
+    assert "recording && !hudOverlayOpen" in picker
+    assert "recording-pip-hint" in rec
+    assert "Drag the recording controls onto the screen" in picker or "Drag the recording controls" in rec
 
 
 def test_controls_are_a_toolbar_not_a_chrome_popup():
