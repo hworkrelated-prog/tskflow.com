@@ -25,6 +25,31 @@ def test_confirm_is_a_message_not_a_form():
     assert ">Task<" not in confirm
     assert ">To<" not in confirm
     assert ">Done well<" not in confirm
+    # Continuous chat — no More/Less form toggles
+    assert 'data-testid="ai-edit-details"' not in src
+    assert "showDetails" not in src
+    assert 'data-testid="ai-confirm-chat-hint"' in src
+    assert "parseConfirmChatEdit" in src
+    assert "applyConfirmChatEdit" in src
+    assert "CONFIRM_READY_HINT" in src
+
+
+def test_confirm_chat_edits_priority_and_recording():
+    src = _read(FE, "components", "AIQuickCreate.js")
+    start = src.index("const parseConfirmChatEdit")
+    end = src.index("const COMMAND_ROUTES")
+    chunk = src[start:end]
+    # Smoke the pure parser via Node-less string checks + exec isn't needed —
+    # assert the intents we care about are handled.
+    assert "kind: 'send'" in chunk or 'kind: "send"' in chunk or "return { kind: 'send' }" in chunk
+    assert "requires_screen_recording" in chunk
+    assert "is_sales_task" in chunk
+    assert "due_phrase" in chunk
+    assert "Urgent" in chunk
+    # Ready confirm keeps chatting instead of wiping the card
+    run = src[src.index("const runPreview") : src.index("runPreviewRef.current = runPreview")]
+    assert "applyConfirmChatEdit" in run
+    assert "readyNow" in run
 
 
 def test_who_picker_does_not_rerun_preview_after_pick():
