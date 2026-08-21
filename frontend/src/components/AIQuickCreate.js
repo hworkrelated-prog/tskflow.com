@@ -1434,10 +1434,11 @@ const AIQuickCreate = ({
         !needsAmbiguousPick &&
         !teamScopePrompt;
 
-    // Keep parent in sync so dismissing the dialog can save a draft.
+    // Keep parent in sync so drafts can save as soon as a conversation starts.
     useEffect(() => {
         onSnapshot?.({
             text,
+            activePrompt,
             editTitle,
             editDesc,
             editDue,
@@ -1448,10 +1449,11 @@ const AIQuickCreate = ({
             preview: !!preview,
             answerMode: !!answerMode || thread.length > 0,
             thread: thread.length,
+            threadTexts: thread.map((m) => m.text).filter(Boolean).slice(0, 12),
             attachments,
             focused: composerFocused || listening,
         });
-    }, [text, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, thread, attachments, composerFocused, listening, onSnapshot]);
+    }, [text, activePrompt, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, thread, attachments, composerFocused, listening, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
