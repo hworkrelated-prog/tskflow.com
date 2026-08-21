@@ -48,9 +48,14 @@ def test_composer_has_formatting_toolbar():
 def test_exited_prompts_save_as_header_drafts():
     dock = _read(FE, "components", "GlobalAIDock.js")
     hub = _read(FE, "pages", "TaskHub.js")
-    assert "persistDraftFromSnap" in dock
+    assert "upsertDraftFromSnap" in dock
+    assert "scheduleDraftSave" in dock
+    assert "draftPayloadFromSnap" in dock
+    assert "conversationStarted" in dock
+    assert "activePrompt" in dock
     assert "/tasks/drafts" in dock
     assert "tskflow:drafts-changed" in dock
+    assert "discardDraft" in dock
     assert 'data-testid="drafts-compact"' in hub
     assert 'data-testid="drafts-popover"' in hub
     assert "drafts-compact" in hub
@@ -59,6 +64,24 @@ def test_exited_prompts_save_as_header_drafts():
     assert 'data-testid="drafts-compact"' in welcome
     assert 'data-testid="drafts-popover"' in welcome
     assert 't.status !== \'Draft\'' in hub or 't.status !== "Draft"' in hub
+
+
+def test_conversation_start_saves_draft_immediately():
+    dock = _read(FE, "components", "GlobalAIDock.js")
+    quick = _read(FE, "components", "AIQuickCreate.js")
+    # Snapshot exposes the sent prompt + thread so drafts work after text is cleared.
+    assert "activePrompt" in quick
+    assert "threadTexts" in quick
+    assert "scheduleDraftSave(snap)" in dock or "scheduleDraftSave(snap," in dock
+    assert "immediate" in dock
+    assert "axios.post(`${API}/tasks/drafts`" in dock or 'axios.post(`${API}/tasks/drafts`' in dock
+    # Sent tasks remove the draft; exit keeps/updates it.
+    assert "discardDraft" in dock
+    created = dock.split("onCreated={() => {")[1].split("onOpenAdvanced")[0]
+    assert "discardDraft()" in created
+    clear = dock.split("const clearFlow")[1].split("useEffect(() => {")[0]
+    assert "upsertDraftFromSnap(snap, { force: true })" in clear
+    assert "draftIdRef.current = null" in clear
 
 
 def test_sheets_connector_hidden():

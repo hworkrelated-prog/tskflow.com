@@ -8,6 +8,33 @@ import AIQuickCreate from '@/components/AIQuickCreate';
 const HIDDEN = ['/login', '/register', '/verify-email', '/forgot-password'];
 const LANDINGish = ['/', '/privacy', '/terms', '/contact'];
 
+const draftPayloadFromSnap = (snap) => {
+    if (!snap || snap.sending) return null;
+    const prompt = String(snap.activePrompt || '').trim();
+    const typed = String(snap.text || '').trim();
+    const threadBlob = Array.isArray(snap.threadTexts)
+        ? snap.threadTexts.map((t) => String(t || '').trim()).filter(Boolean).join('\n')
+        : '';
+    const body = String(snap.editDesc || prompt || typed || threadBlob || '').trim();
+    const started = Boolean(
+        snap.preview
+        || (snap.thread || 0) > 0
+        || prompt
+        || (snap.attachments || []).length
+    );
+    // Save as soon as a conversation has started (first send), or while typing a prompt.
+    if (!started && !typed) return null;
+    if (!body && !typed) return null;
+    const seed = String(snap.editTitle || prompt || typed || body).split('\n')[0].replace(/^#+\s*/, '').trim();
+    return {
+        title: (seed || 'Untitled draft').slice(0, 80),
+        description: body || typed,
+        due_date: snap.editDue || '',
+        priority: snap.editPriority || 'Medium',
+        assigned_to: snap.editAssignees?.[0]?.id || snap.editAssignees?.[0]?.email || '',
+    };
+};
+
 /**
  * Minimal app-wide command bar — create, search, navigate, ask.
  */
@@ -22,6 +49,9 @@ const GlobalAIDock = () => {
     const snapRef = useRef(null);
     const attachHandlerRef = useRef(null);
     const dockRef = useRef(null);
+    const draftIdRef = useRef(null);
+    const draftTimerRef = useRef(null);
+    const lastDraftSigRef = useRef('');
 
     const visible =
         !!user
@@ -34,6 +64,56 @@ const GlobalAIDock = () => {
         document.body.classList.add('has-ai-dock');
         return () => document.body.classList.remove('has-ai-dock');
     }, [visible]);
+
+    const upsertDraftFromSnap = useCallback(async (snap, { force = false } = {}) => {
+        const payload = draftPayloadFromSnap(snap);
+        if (!payload) return null;
+        const sig = JSON.stringify(payload);
+        if (!force && draftIdRef.current && sig === lastDraftSigRef.current) {
+            return draftIdRef.current;
+        }
+        try {
+            if (draftIdRef.current) {
+                await axios.put(`${API}/tasks/drafts/${draftIdRef.current}`, payload);
+            } else {
+                const res = await axios.post(`${API}/tasks/drafts`, payload);
+                draftIdRef.current = res?.data?.id || null;
+            }
+            lastDraftSigRef.current = sig;
+            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
+            return draftIdRef.current;
+        } catch {
+            /* draft save is best-effort */
+            return draftIdRef.current;
+        }
+    }, []);
+
+    const scheduleDraftSave = useCallback((snap, { immediate = false } = {}) => {
+        if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+        if (immediate || !draftIdRef.current) {
+            draftTimerRef.current = null;
+            upsertDraftFromSnap(snap);
+            return;
+        }
+        draftTimerRef.current = setTimeout(() => {
+            upsertDraftFromSnap(snap);
+        }, 350);
+    }, [upsertDraftFromSnap]);
+
+    const discardDraft = useCallback(async () => {
+        if (draftTimerRef.current) {
+            clearTimeout(draftTimerRef.current);
+            draftTimerRef.current = null;
+        }
+        const id = draftIdRef.current;
+        draftIdRef.current = null;
+        lastDraftSigRef.current = '';
+        if (!id) return;
+        try {
+            await axios.delete(`${API}/tasks/drafts/${id}`);
+            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
+        } catch { /* noop */ }
+    }, []);
 
     useEffect(() => {
         const markActive = () => setActive(true);
@@ -66,48 +146,48 @@ const GlobalAIDock = () => {
             setRecordingPending(true);
             focusPrompt();
         };
+        const onResumeDraft = (e) => {
+            const id = e?.detail?.id;
+            if (id) {
+                draftIdRef.current = id;
+                lastDraftSigRef.current = '';
+            }
+            focusPrompt();
+        };
         window.addEventListener('tskflow:open-ai-create', focusPrompt);
         window.addEventListener('tskflow:focus-ai-prompt', markActive);
         window.addEventListener('tskflow:attach-to-ai-create', onAttach);
         window.addEventListener('tskflow:start-task-from-recording', onRecordingTask);
-        window.addEventListener('tskflow:resume-ai-draft', focusPrompt);
+        window.addEventListener('tskflow:resume-ai-draft', onResumeDraft);
         return () => {
             window.removeEventListener('tskflow:open-ai-create', focusPrompt);
             window.removeEventListener('tskflow:focus-ai-prompt', markActive);
             window.removeEventListener('tskflow:attach-to-ai-create', onAttach);
             window.removeEventListener('tskflow:start-task-from-recording', onRecordingTask);
-            window.removeEventListener('tskflow:resume-ai-draft', focusPrompt);
+            window.removeEventListener('tskflow:resume-ai-draft', onResumeDraft);
+            if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
         };
-    }, []);
-
-    const persistDraftFromSnap = useCallback(async (snap) => {
-        const raw = (snap?.text || '').trim();
-        if (!raw || snap?.sending) return;
-        try {
-            const first = raw.split('\n')[0].replace(/^#+\s*/, '').trim();
-            await axios.post(`${API}/tasks/drafts`, {
-                title: (snap.editTitle || first || 'Untitled draft').slice(0, 80),
-                description: snap.editDesc || raw,
-                due_date: snap.editDue || '',
-                priority: snap.editPriority || 'Medium',
-                assigned_to: snap.editAssignees?.[0]?.id || snap.editAssignees?.[0]?.email || '',
-            });
-            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
-        } catch {
-            /* draft save is best-effort */
-        }
     }, []);
 
     const clearFlow = useCallback(() => {
         const snap = snapRef.current;
-        persistDraftFromSnap(snap);
+        if (draftTimerRef.current) {
+            clearTimeout(draftTimerRef.current);
+            draftTimerRef.current = null;
+        }
+        // Keep the unfinished draft in the header list; wait for the write so we
+        // don't clear draftId mid-flight and orphan a second create.
+        Promise.resolve(upsertDraftFromSnap(snap, { force: true })).finally(() => {
+            draftIdRef.current = null;
+            lastDraftSigRef.current = '';
+        });
         setActive(false);
         setFocused(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
         window.dispatchEvent(new CustomEvent('tskflow:ai-dock-reset'));
-    }, [persistDraftFromSnap]);
+    }, [upsertDraftFromSnap]);
 
     useEffect(() => {
         const onKey = (e) => {
@@ -175,15 +255,34 @@ const GlobalAIDock = () => {
                     onSnapshot={(snap) => {
                         snapRef.current = snap;
                         setFocused(!!snap?.focused);
-                        if (snap?.preview || snap?.text?.trim() || snap?.answerMode || snap?.thread || (snap?.attachments || []).length) {
+                        const hasConversation = Boolean(
+                            snap?.preview
+                            || snap?.thread > 0
+                            || snap?.answerMode
+                            || (snap?.activePrompt || '').trim()
+                            || snap?.text?.trim()
+                            || (snap?.attachments || []).length
+                        );
+                        if (hasConversation) {
                             setActive(true);
                         } else if (!recordingPending) {
                             setActive(false);
+                        }
+                        // The moment a conversation starts (first send → thread/activePrompt),
+                        // persist a draft so it shows in Unfinished Drafts immediately.
+                        const conversationStarted = Boolean(
+                            snap?.preview
+                            || snap?.thread > 0
+                            || (snap?.activePrompt || '').trim()
+                        );
+                        if (conversationStarted && !snap?.sending) {
+                            scheduleDraftSave(snap, { immediate: !draftIdRef.current });
                         }
                     }}
                     onCreated={() => {
                         setPendingAttachments([]);
                         setRecordingPending(false);
+                        discardDraft();
                         window.dispatchEvent(new CustomEvent('tskflow:task-created'));
                     }}
                     onOpenAdvanced={(prefill) => openManual(prefill)}
