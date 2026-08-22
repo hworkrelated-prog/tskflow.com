@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import AIQuickCreate from '@/components/AIQuickCreate';
 
@@ -44,6 +44,7 @@ const GlobalAIDock = () => {
     const navigate = useNavigate();
     const [active, setActive] = useState(false);
     const [focused, setFocused] = useState(false);
+    const [hovered, setHovered] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState([]);
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
@@ -183,6 +184,7 @@ const GlobalAIDock = () => {
         });
         setActive(false);
         setFocused(false);
+        setHovered(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
@@ -219,15 +221,46 @@ const GlobalAIDock = () => {
 
     if (!visible) return null;
 
-    const open = active || focused || recordingPending;
+    const lockedOpen = active || focused || recordingPending;
+    const open = lockedOpen || hovered;
+
+    const expandFromFab = () => {
+        setHovered(true);
+        setFocused(true);
+        setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
+            const dock = document.querySelector('[data-testid="ai-command-dock"]');
+            dock?.classList?.add('ai-dock-pulse');
+            setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
+        }, 40);
+    };
 
     return (
         <div
             ref={dockRef}
-            className={`ai-command-dock${open ? ' is-open' : ''}${focused ? ' is-focused' : ''}`}
+            className={`ai-command-dock${open ? ' is-open' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}`}
             data-testid="ai-command-dock"
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => { if (!lockedOpen) setHovered(false); }}
         >
-            <div className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}>
+            <button
+                type="button"
+                className="ai-dock-fab"
+                data-testid="ai-dock-fab"
+                title="Create with AI"
+                aria-label="Create a task"
+                aria-expanded={open}
+                tabIndex={open ? -1 : 0}
+                aria-hidden={open}
+                onClick={expandFromFab}
+            >
+                <Plus className="ai-dock-fab-plus" strokeWidth={2.25} />
+            </button>
+            <div
+                className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}
+                inert={!open ? true : undefined}
+                aria-hidden={!open}
+            >
                 <button
                     type="button"
                     onClick={clearFlow}
