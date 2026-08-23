@@ -13,7 +13,7 @@ def test_dock_renders_center_fab_and_keeps_quick_create():
     assert "<Plus" in DOCK
     assert "<AIQuickCreate" in DOCK
     assert "embedded" in DOCK
-    assert "onMouseEnter" in DOCK
+    assert "handleDockPointerEnter" in DOCK
     assert "onClick={expandFromFab}" in DOCK
     assert "tskflow:focus-ai-prompt" in DOCK
 
@@ -41,3 +41,15 @@ def test_quick_create_logic_untouched():
     assert "runPreviewRef" in CREATE
     assert "/ai/quick-create-preview" in CREATE or "quick-create-preview" in CREATE
     assert 'data-testid="ai-quick-create"' in CREATE
+
+
+def test_hover_morph_keeps_stable_hit_target():
+    """Hover must not flicker: delayed leave + no panel scale + FAB stays hittable until locked."""
+    assert "hoverLeaveTimerRef" in DOCK
+    assert "handleDockPointerLeave" in DOCK
+    assert "180" in DOCK
+    assert ".ai-command-dock.is-open:not(.is-locked) .ai-dock-fab" in CSS
+    assert "pointer-events: auto" in CSS.split(".ai-command-dock.is-open:not(.is-locked) .ai-dock-fab")[1].split("}")[0]
+    panel = CSS.split(".ai-dock-panel {")[1].split("}")[0]
+    assert "transform: none" in panel
+    assert "scale(0.92)" not in panel
