@@ -8,6 +8,8 @@ import { useAuth, API } from '@/App';
 import { JarvisIcon } from '@/components/JarvisIcon';
 import { captureVisibleScreenContext } from '@/lib/screenContext';
 
+import { createSilenceWatch, VOICE_SILENCE_MS } from '@/lib/promptVoice';
+
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return null;
@@ -15,7 +17,7 @@ const getRecognition = () => {
     rec.lang = 'en-US';
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    rec.continuous = true;
     return rec;
 };
 
@@ -103,6 +105,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     const [wiggle, setWiggle] = useState(false);
     const [voiceReady, setVoiceReady] = useState(false);
     const recRef = useRef(null);
+    const voiceWantRef = useRef(false);
+    const voiceSilenceRef = useRef(null);
     const listRef = useRef(null);
     const inputRef = useRef(null);
     const nudgeTimer = useRef(null);
@@ -255,10 +259,24 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             setSupported(false);
             return;
         }
+        try { recRef.current?.abort(); } catch { /* noop */ }
+        voiceSilenceRef.current?.clear();
         recRef.current = rec;
+        voiceWantRef.current = true;
         setPhase('listening');
         setOpen(true);
         let finalText = '';
+
+        const silence = createSilenceWatch({
+            ms: VOICE_SILENCE_MS,
+            onSilence: () => {
+                voiceWantRef.current = false;
+                try { recRef.current?.stop(); } catch { /* noop */ }
+            },
+        });
+        voiceSilenceRef.current = silence;
+        silence.bump();
+
         rec.onresult = (e) => {
             let interim = '';
             for (let i = e.resultIndex; i < e.results.length; ++i) {
@@ -266,8 +284,18 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 else interim += e.results[i][0].transcript;
             }
             setTextInput(finalText || interim);
+            silence.bump();
         };
         rec.onend = () => {
+            if (voiceWantRef.current) {
+                try {
+                    rec.start();
+                    return;
+                } catch { /* fall through */ }
+            }
+            recRef.current = null;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             if (finalText && finalText.trim()) {
                 const t = finalText.trim();
                 setTextInput('');
@@ -277,6 +305,10 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             }
         };
         rec.onerror = (ev) => {
+            if (ev.error === 'no-speech' || ev.error === 'aborted') return;
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             setPhase('idle');
             if (ev.error === 'not-allowed') toast.error('Microphone permission denied');
         };
@@ -284,6 +316,9 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     }, [sendCommand, supported]);
 
     const stopListening = useCallback(() => {
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
         if (recRef.current) {
             try { recRef.current.stop(); } catch (_) { /* noop */ }
         }
