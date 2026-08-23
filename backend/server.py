@@ -39,7 +39,7 @@ from eod_report import (
     render_eod_slack,
 )
 from response_review import generate_group_response_review
-from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv
+from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv, serialize_app_ts, app_now_iso
 from slack_followup import (
     group_accountability,
     is_live_slack_thread,
@@ -2128,10 +2128,10 @@ async def get_task_activity(
         row["meta"] = meta
         # Keep top-level channel aligned with first delivered channel
         row["channel"] = norm[0]
-        # Normalize timestamps so the UI matches when the email/notif went out
-        ca = row.get("created_at")
-        if hasattr(ca, "isoformat"):
-            row["created_at"] = ca.isoformat()
+        # Normalize timestamps to Pacific with offset so the UI matches send time
+        ca = serialize_app_ts(row.get("created_at"))
+        if ca:
+            row["created_at"] = ca
         if row.get("event_type") in ("reminder", "nudge"):
             row["body"] = _humanize_reminder_body(row.get("body") or "", meta.get("fired_kind"))
 
@@ -7424,7 +7424,7 @@ async def create_notification(
         "body": _notify_text(body),
         "task_id": task_id,
         "actor_name": actor_name,
-        "created_at": get_pst_now().isoformat(),
+        "created_at": app_now_iso(),
         "delivered": False,   # for live OS toast poll (recent non-reminders only)
         "read": False,        # for in-app bell
     }
@@ -7437,6 +7437,14 @@ async def create_notification(
     # Push over WebSocket if user is online
     try:
         await ws_manager.send(user_id, {"event": "notification", "notification": {k: v for k, v in doc.items() if k != "_id"}})
+    except Exception:
+        pass
+    # Background OS/browser push — works with the tab closed if they still have a session
+    try:
+        push_url = f"/task/{task_id}" if task_id else "/dashboard"
+        if task_id and n_type in ("reminder", "nudge"):
+            push_url = f"/task/{task_id}?tab=reminders"
+        await send_web_push(user_id, doc["title"], doc["body"], push_url)
     except Exception:
         pass
     # Slack bridge — Teams admin webhook (org-wide), mentions & key events only
@@ -7504,6 +7512,9 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
 async def get_notifications(current_user: dict = Depends(get_current_user), limit: int = 50):
     docs = await db.notifications.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     for d in docs:
+        stamped = serialize_app_ts(d.get("created_at"))
+        if stamped:
+            d["created_at"] = stamped
         nt = clean_display_text(d.get("title"))
         nb = clean_display_text(d.get("body"))
         if nt != (d.get("title") or "") or nb != (d.get("body") or ""):
@@ -11627,14 +11638,17 @@ async def _check_smart_reminders():
                     "type": "reminder",
                     "read": {"$ne": True},
                 }, {"_id": 0, "id": 1})
+                reminder_title = _notify_text(wording["title"])
+                reminder_body = _notify_text(f"{t.get('title')} - priority {t.get('priority')}")
+                sent_at = serialize_app_ts(now) or app_now_iso()
                 if existing_unread:
                     await db.notifications.update_one(
                         {"id": existing_unread["id"]},
                         {"$set": {
-                            "title": _notify_text(wording["title"]),
-                            "body": _notify_text(f"{t.get('title')} - priority {t.get('priority')}"),
-                            "created_at": now.isoformat(),
-                            "delivered": True,  # catch-up UI, not OS toast
+                            "title": reminder_title,
+                            "body": reminder_body,
+                            "created_at": sent_at,
+                            "delivered": True,  # catch-up UI; OS delivery is web-push below
                         }},
                     )
                 else:
@@ -11643,13 +11657,22 @@ async def _check_smart_reminders():
                         "id": nid,
                         "user_id": aid,
                         "type": "reminder",
-                        "title": _notify_text(wording["title"]),
-                        "body": _notify_text(f"{t.get('title')} - priority {t.get('priority')}"),
+                        "title": reminder_title,
+                        "body": reminder_body,
                         "task_id": t["id"],
                         "read": False,
-                        "delivered": True,  # bell/catch-up only; never OS-spam on login
-                        "created_at": now.isoformat(),
+                        "delivered": True,  # bell/catch-up; OS delivery is web-push below
+                        "created_at": sent_at,
                     })
+                try:
+                    await send_web_push(
+                        aid,
+                        reminder_title,
+                        reminder_body,
+                        f"/task/{t['id']}?tab=reminders",
+                    )
+                except Exception as push_err:
+                    logging.warning(f"[smart_reminders] web push failed: {push_err}")
                 channels_sent.append("in_app")
 
             if "email" in channels:
@@ -11730,13 +11753,13 @@ async def _check_smart_reminders():
                             "bucket": bucket,
                             "channels": channels_sent,
                         },
-                        created_at=now.isoformat(),
+                        created_at=serialize_app_ts(now) or app_now_iso(),
                     )
                 except Exception as log_err:
                     logging.warning(f"[smart_reminders] activity log failed: {log_err}")
 
             update_doc = {
-                "last_smart_reminder_sent": now.isoformat(),
+                "last_smart_reminder_sent": serialize_app_ts(now) or app_now_iso(),
                 "last_reminder_wording_idx": (t.get("last_reminder_wording_idx", -1) + 1) % 100,
             }
             if bucket and bucket != "overdue":

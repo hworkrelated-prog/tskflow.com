@@ -45,6 +45,7 @@ import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
+import { registerPush, unregisterPush } from '@/lib/push';
 import TeamSetupModal from '@/components/TeamSetupModal';
 import WhatsNewPrompt from '@/components/WhatsNewPrompt';
 
@@ -94,6 +95,13 @@ const AuthProvider = ({ children }) => {
             return () => clearTimeout(t);
         }
     }, [user]);
+
+    // Keep a web-push subscription for the whole session — including when the tab is closed.
+    useEffect(() => {
+        if (!user || !token) return undefined;
+        registerPush();
+        return undefined;
+    }, [user, token]);
 
     // Smart catch-up on login (replaces spammy per-task Chrome popups for backlog).
     // In-app sheet only — never fire an OS toast when the user just opened the app.
@@ -305,6 +313,7 @@ const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
+        unregisterPush().catch(() => {});
         localStorage.removeItem('token');
         localStorage.removeItem('pendingTaskRedirect');
         setToken(null);

@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Pencil, Save, Trash2, Image, X, AlertCircle, RotateCcw, MessageSquare, Share2, Mail, Copy, Users, ChevronRight, Plus, Trophy, Video, Ban, Bell, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { formatAppDateTime } from '@/lib/datetime';
 import { getErrorMessage } from '@/lib/utils';
 import { displayTaskTitle } from '@/lib/taskDescription';
 import AttachmentViewer from '@/components/AttachmentViewer';
@@ -1543,7 +1544,7 @@ const TaskDetail = () => {
                                             <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="font-semibold text-sm">{c.user_name}</span>
-                                                    <span className="text-xs text-gray-500">{c.created_at && format(new Date(c.created_at), 'MMM d, h:mm a')}</span>
+                                                    <span className="text-xs text-gray-500">{c.created_at && formatAppDateTime(c.created_at)}</span>
                                                 </div>
                                                 <p className="text-sm whitespace-pre-wrap">{c.content}</p>
                                             </div>
@@ -1601,7 +1602,7 @@ const TaskDetail = () => {
                                                     {a.title || (a.event_type === 'nudge' ? 'Nudge' : 'Reminder')}
                                                 </span>
                                                 <span className="reminder-tone-meta text-xs shrink-0">
-                                                    {a.created_at && format(new Date(a.created_at), 'MMM d, h:mm a')}
+                                                    {a.created_at && formatAppDateTime(a.created_at)}
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-1.5 mb-1">

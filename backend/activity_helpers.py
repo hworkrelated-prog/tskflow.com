@@ -5,6 +5,38 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import pytz
+
+PST = pytz.timezone("America/Los_Angeles")
+
+
+def serialize_app_ts(value: Any) -> Optional[str]:
+    """ISO-8601 in America/Los_Angeles with offset, seconds precision (JS-safe)."""
+    if value is None or value == "":
+        return None
+    dt = None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            return raw
+        if parsed.tzinfo is None:
+            dt = PST.localize(parsed)
+        else:
+            dt = parsed
+    return dt.astimezone(PST).isoformat(timespec="seconds")
+
+
+def app_now_iso() -> str:
+    return datetime.now(PST).isoformat(timespec="seconds")
+
 
 async def log_task_activity(
     db,
@@ -24,7 +56,7 @@ async def log_task_activity(
     created_at: Optional[str] = None,
 ) -> dict:
     """Persist one activity row for a task (reminders, nudges, chatter, etc.)."""
-    now = created_at or datetime.utcnow().isoformat() + "Z"
+    now = serialize_app_ts(created_at) or app_now_iso()
     doc = {
         "id": str(uuid.uuid4()),
         "task_id": task_id,
