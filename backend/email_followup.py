@@ -323,11 +323,11 @@ async def maybe_llm_interpret_email(text: str, task: Optional[dict], parsed: dic
     """LLM only when regex is unsure. Must stay below auto-threshold if unclear."""
     if (parsed.get("confidence") or 0) >= CONFIDENCE_AUTO and parsed.get("intent") != "unclear":
         return parsed
-    key = (os.getenv("EMERGENT_LLM_KEY") or "").strip()
+    key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not key or not (text or "").strip():
         return parsed
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from llm import chat_complete
 
         title = (task or {}).get("title") or "this task"
         prompt = (
@@ -339,12 +339,13 @@ async def maybe_llm_interpret_email(text: str, task: Optional[dict], parsed: dic
             "unclear = you are not sure — do NOT guess. confidence must be < 0.6 if unclear.\n"
             f"Task: {title}\nReply: {text[:1500]}"
         )
-        chat = LlmChat(
+        raw = await chat_complete(
+            model="gpt-4o",
+            system="You classify assignee email replies. Never invent a status.",
+            user=prompt,
+            json_mode=True,
             api_key=key,
-            session_id=f"email_{((task or {}).get('id') or 'x')[:24]}",
-            system_message="You classify assignee email replies. Never invent a status.",
-        ).with_model("openai", "gpt-4o")
-        raw = await chat.send_message(UserMessage(text=prompt))
+        )
         blob = (raw if isinstance(raw, str) else str(raw)).strip()
         if blob.startswith("```"):
             blob = re.sub(r"^```(?:json)?\s*|\s*```$", "", blob).strip()

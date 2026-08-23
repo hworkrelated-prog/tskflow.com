@@ -185,7 +185,7 @@ def _merge_llm(fallback: dict, llm: dict) -> dict:
 async def generate_group_response_review(parent: dict, children: List[dict]) -> Dict[str, Any]:
     rows = collect_assignee_responses(children)
     fallback = fallback_group_review(parent, rows)
-    key = os.getenv("EMERGENT_LLM_KEY")
+    key = os.getenv("OPENAI_API_KEY")
     if not key or not rows:
         return fallback
 
@@ -211,13 +211,14 @@ async def generate_group_response_review(parent: dict, children: List[dict]) -> 
         f"DATA:\n{json.dumps(payload, ensure_ascii=True)}"
     )
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
+        from llm import chat_complete
+        raw = await chat_complete(
+            model="gpt-4o-mini",
+            system="You brief managers on team task replies. JSON only. No pass/fail grades.",
+            user=prompt,
+            json_mode=True,
             api_key=key,
-            session_id=f"group_review_{parent.get('id')}",
-            system_message="You brief managers on team task replies. JSON only. No pass/fail grades.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await chat.send_message(UserMessage(text=prompt))
+        )
         parsed = _parse_llm_json(raw if isinstance(raw, str) else str(raw))
         if parsed:
             return _merge_llm(fallback, parsed)

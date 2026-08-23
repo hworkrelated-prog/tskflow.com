@@ -20,7 +20,6 @@ from jose import JWTError, jwt
 import resend
 import pytz
 import random
-from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionResponse, CheckoutStatusResponse, CheckoutSessionRequest
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -2948,12 +2947,12 @@ async def get_task_ai_summary(task_id: str, current_user: dict = Depends(get_cur
     if not allowed:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         return {"summary": _plain_task_blurb(task)}
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from llm import chat_complete
 
         subject = (task.get("title") or "").strip()
         description = (task.get("description") or "").strip()
@@ -2970,12 +2969,13 @@ Priority: {task.get('priority', 'Medium')}
 Due: {task.get('due_date')}
 Status: {task.get('status')}"""
 
-        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        response = await asyncio.wait_for(
-            chat.aask([UserMessage(content=prompt)]),
+        summary_text = await chat_complete(
+            model="gpt-4o-mini",
+            user=prompt,
             timeout=10.0,
+            api_key=openai_key,
         )
-        summary = clean_display_text((getattr(response, "content", None) or str(response) or "").strip())
+        summary = clean_display_text((summary_text or "").strip())
         return {"summary": summary or _plain_task_blurb(task)}
     except asyncio.TimeoutError:
         return {"summary": _plain_task_blurb(task, note="(Summary timed out.)")}
@@ -3019,8 +3019,8 @@ async def get_dashboard_ai_summary(
     if not tasks:
         return {"summary": "No tasks found for the selected filter."}
     
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         # Provide a quick heuristic summary if AI is unavailable
         total = len(tasks)
         overdue = 0
@@ -3037,7 +3037,7 @@ async def get_dashboard_ai_summary(
         return {"summary": f"You have {total} {view_mode} tasks. {overdue} are overdue. Priorities — High: {priorities.get('High',0)}, Medium: {priorities.get('Medium',0)}, Low: {priorities.get('Low',0)}."}
     
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from llm import chat_complete
         
         # Build compact task list summary (fewer tasks, shorter fields for speed)
         task_list = []
@@ -3051,14 +3051,14 @@ async def get_dashboard_ai_summary(
             + "\n".join(task_list)
         )
 
-        chat = LlmChat(api_key=emergent_key).with_model("openai", "gpt-4o-mini")
-        # Add a timeout so slow LLM does not block the UI
-        response = await asyncio.wait_for(
-            chat.aask([UserMessage(content=prompt)]),
-            timeout=12.0
+        summary_text = await chat_complete(
+            model="gpt-4o-mini",
+            user=prompt,
+            timeout=12.0,
+            api_key=openai_key,
         )
         
-        return {"summary": response.content.strip()}
+        return {"summary": summary_text.strip()}
     except asyncio.TimeoutError:
         return {"summary": f"You have {len(tasks)} {view_mode} tasks. (AI summary timed out — showing quick stats.)"}
     except Exception as e:
@@ -4203,16 +4203,26 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
     if transaction["payment_status"] == "paid":
         return {"status": "complete", "payment_status": "paid"}
     
-    # Check with Stripe
+    # Check with Stripe (official SDK)
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
-    host_url = str(http_request.base_url)
-    webhook_url = f"{host_url}api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
-    checkout_status: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Payment system not configured")
+
+    import stripe
+    stripe.api_key = stripe_key
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.InvalidRequestError:
+        raise HTTPException(status_code=404, detail="Checkout session not found")
+    except stripe.error.StripeError as e:
+        logging.error(f"Stripe status error: {e}")
+        raise HTTPException(status_code=502, detail="Could not verify payment status")
+
+    payment_status = session.payment_status or ""
+    status = session.status or ""
     
     # Update transaction if payment succeeded and not already processed
-    if checkout_status.payment_status == "paid" and transaction["payment_status"] != "paid":
+    if payment_status == "paid" and transaction["payment_status"] != "paid":
         # Update user subscription
         package = transaction["package"]
         update_data = {"subscription_tier": package}
@@ -4231,7 +4241,7 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
             {"session_id": session_id},
             {"$set": {
                 "payment_status": "paid",
-                "status": checkout_status.status,
+                "status": status,
                 "completed_at": get_pst_now().isoformat()
             }}
         )
@@ -4239,8 +4249,8 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
         logging.info(f"Subscription upgraded: {transaction['user_email']} -> {package}")
     
     return {
-        "status": checkout_status.status,
-        "payment_status": checkout_status.payment_status
+        "status": status,
+        "payment_status": payment_status
     }
 
 @api_router.post("/create-portal-session")
@@ -4270,35 +4280,57 @@ async def create_portal_session(current_user: dict = Depends(get_current_user)):
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(http_request: HTTPRequest):
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
-    host_url = str(http_request.base_url)
-    webhook_url = f"{host_url}api/webhook/stripe"
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Payment system not configured")
+    if not webhook_secret:
+        raise HTTPException(status_code=500, detail="Stripe webhook secret not configured")
+
+    import stripe
+    stripe.api_key = stripe_key
+
     body_bytes = await http_request.body()
     signature = http_request.headers.get("Stripe-Signature")
-    
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
+
     try:
-        webhook_response = await stripe_checkout.handle_webhook(body_bytes, signature)
-        
-        # Process webhook events
-        if webhook_response.payment_status == "paid":
-            session_id = webhook_response.session_id
-            metadata = webhook_response.metadata
-            
-            # Update user subscription
-            if "user_id" in metadata and "package" in metadata:
-                update_data = {"subscription_tier": metadata["package"]}
-                if metadata["package"] == "teams":
-                    update_data["is_team_owner"] = True
-                    
-                await db.users.update_one(
-                    {"id": metadata["user_id"]},
-                    {"$set": update_data}
-                )
-                
-                logging.info(f"Webhook processed: {metadata['user_email']} -> {metadata['package']}")
-        
+        event = stripe.Webhook.construct_event(body_bytes, signature, webhook_secret)
+    except ValueError as e:
+        logging.error(f"Webhook payload error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        logging.error(f"Webhook signature error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    try:
+        # Checkout completion carries session metadata used for tier upgrades.
+        if event["type"] in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+            session = event["data"]["object"]
+            payment_status = session.get("payment_status") if isinstance(session, dict) else getattr(session, "payment_status", None)
+            if payment_status == "paid":
+                session_id = session.get("id") if isinstance(session, dict) else getattr(session, "id", None)
+                metadata = session.get("metadata") if isinstance(session, dict) else getattr(session, "metadata", None)
+                metadata = dict(metadata or {})
+
+                # Update user subscription
+                if "user_id" in metadata and "package" in metadata:
+                    update_data = {"subscription_tier": metadata["package"]}
+                    if metadata["package"] == "teams":
+                        update_data["is_team_owner"] = True
+
+                    await db.users.update_one(
+                        {"id": metadata["user_id"]},
+                        {"$set": update_data}
+                    )
+
+                    logging.info(
+                        f"Webhook processed: {metadata.get('user_email', session_id)} -> {metadata['package']}"
+                    )
+
         return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Webhook error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -6780,17 +6812,12 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
             if role in ("user", "assistant") and htext:
                 history_lines.append(f"{role.upper()}: {htext[:500]}")
 
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
     raw = None
-    if emergent_key:
+    if openai_key:
         try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            from llm import chat_complete
             # gpt-4o-mini matches other working AI routes; shorter timeout for Cloudflare
-            chat = LlmChat(
-                api_key=emergent_key,
-                session_id=f"voice_{current_user['id']}",
-                system_message=VOICE_ASSISTANT_SYSTEM
-            ).with_model("openai", _task_llm_model())
             hist_block = ("\nRecent conversation:\n" + "\n".join(history_lines) + "\n") if history_lines else ""
             screen_hint = ""
             if context.get("screen"):
@@ -6799,10 +6826,14 @@ async def voice_command(req: VoiceCommandRequest, background_tasks: BackgroundTa
                     "Context JSON.screen is a snapshot of their UI. Diagnose what they are stuck on "
                     "(clarify question, missing field, error, preview state) and give one concrete next step.\n"
                 )
-            user_msg = UserMessage(
-                text=f"{hist_block}{screen_hint}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
+            user_text = f"{hist_block}{screen_hint}Latest message: {transcript}\n\nContext JSON: {_json.dumps(context)}"
+            raw = await chat_complete(
+                model=_task_llm_model(),
+                system=VOICE_ASSISTANT_SYSTEM,
+                user=user_text,
+                timeout=_task_llm_timeout(),
+                api_key=openai_key,
             )
-            raw = await asyncio.wait_for(chat.send_message(user_msg), timeout=_task_llm_timeout())
         except asyncio.TimeoutError:
             logging.error("Voice LLM timed out")
             raw = None
@@ -7842,7 +7873,7 @@ async def dashboard_ai_summary_v2(
         "total": len(tasks),
     }
 
-    key = os.getenv("EMERGENT_LLM_KEY")
+    key = os.getenv("OPENAI_API_KEY")
     if not key or stats["total"] == 0:
         # Heuristic recommendation
         recs = []
@@ -7859,7 +7890,7 @@ async def dashboard_ai_summary_v2(
         return {"stats": stats, "summary": " ".join(recs)}
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from llm import chat_complete
         top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
         lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
         prompt = (
@@ -7868,9 +7899,13 @@ async def dashboard_ai_summary_v2(
             f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
             f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
         )
-        chat = LlmChat(api_key=key).with_model("openai", "gpt-4o-mini")
-        resp = await asyncio.wait_for(chat.aask([UserMessage(content=prompt)]), timeout=8.0)
-        return {"stats": stats, "summary": resp.content.strip()}
+        summary_text = await chat_complete(
+            model="gpt-4o-mini",
+            user=prompt,
+            timeout=8.0,
+            api_key=key,
+        )
+        return {"stats": stats, "summary": summary_text.strip()}
     except Exception:
         return {"stats": stats, "summary": f"{stats['overdue_count']} overdue, {stats['urgent_high_count']} high-priority urgent, {stats['due_in_hours_count']} due in <6h. Tackle overdue first."}
 
@@ -8219,19 +8254,21 @@ async def create_drafts_from_transcript(
     if not roster:
         roster = [{"id": current_user.get("id"), "name": current_user.get("name"), "email": email}]
 
-    key = os.getenv("EMERGENT_LLM_KEY")
+    key = os.getenv("OPENAI_API_KEY")
     drafts_data: List[dict] = []
     if key:
         try:
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            from llm import chat_complete
             import json as _json
             prompt = build_transcript_extract_prompt(text, roster, current_user, now)
-            chat = LlmChat(
+            raw = await chat_complete(
+                model="gpt-4o-mini",
+                system="Extract only clearly identified action items as JSON. Always guess owner and deadline.",
+                user=prompt,
+                timeout=28.0,
+                json_mode=True,
                 api_key=key,
-                session_id=f"transcript_{current_user['id']}",
-                system_message="Extract only clearly identified action items as JSON. Always guess owner and deadline.",
-            ).with_model("openai", "gpt-4o-mini")
-            raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=28.0)
+            )
             if not isinstance(raw, str):
                 raw = str(raw)
             raw = raw.strip()
@@ -10855,8 +10892,8 @@ def _task_llm_timeout() -> float:
 
 async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], current_user: dict) -> Optional[str]:
     """Tiny/fast second pass only when the title still looks wrong. Uses mini + 3s timeout."""
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         return None
     people_s = ", ".join(people[:8]) if people else "(none)"
     prompt = (
@@ -10868,13 +10905,14 @@ async def _llm_vet_title(raw_text: str, current_title: str, people: List[str], c
         "Title:"
     )
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"title_{current_user['id']}_{int(get_pst_now().timestamp())}",
-            system_message="You write short imperative task titles. Reply with the title only.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=3.0)
+        from llm import chat_complete
+        raw = await chat_complete(
+            model="gpt-4o-mini",
+            system="You write short imperative task titles. Reply with the title only.",
+            user=prompt,
+            timeout=3.0,
+            api_key=openai_key,
+        )
         out = (raw if isinstance(raw, str) else str(raw)).strip().strip('"').strip("'")
         out = re.sub(r"\s+", " ", out).strip()
         if (
@@ -10897,8 +10935,8 @@ async def _llm_logical_copy(
     current_user: dict,
 ) -> Optional[dict]:
     """Second pass: turn messy parse output into complete, voice-correct copy."""
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         return None
     voice = (
         "SELF-ASSIGNED personal reminder. First person (I/my). No Please. "
@@ -10930,13 +10968,15 @@ async def _llm_logical_copy(
         f"Draft description: {description[:1200]}\n"
     )
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"logic_{current_user['id']}_{int(get_pst_now().timestamp())}",
-            system_message="You rewrite task copy so it is clear and complete. Reply with JSON only.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=prompt)), timeout=8.0)
+        from llm import chat_complete
+        raw = await chat_complete(
+            model="gpt-4o-mini",
+            system="You rewrite task copy so it is clear and complete. Reply with JSON only.",
+            user=prompt,
+            timeout=8.0,
+            json_mode=True,
+            api_key=openai_key,
+        )
         text_out = (raw if isinstance(raw, str) else str(raw)).strip()
         start = text_out.index("{")
         end = text_out.rindex("}") + 1
@@ -10962,8 +11002,8 @@ async def _llm_parse(
     context_hint: Optional[str] = None,
     history: Optional[List[dict]] = None,
 ) -> Optional[dict]:
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         return None
     repaired, speech_hints = _repair_speech_prompt(text)
     parse_text = repaired or text
@@ -10985,13 +11025,15 @@ async def _llm_parse(
         if turns:
             context += "\nRecent conversation (use this to understand follow-ups, pronouns, and implied owners/dates):\n" + "\n".join(turns)
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"parse_{current_user['id']}_{int(now.timestamp())}",
-            system_message=SMART_PARSE_SYSTEM + "\n\n" + context
-        ).with_model("openai", _task_llm_model())
-        raw = await asyncio.wait_for(chat.send_message(UserMessage(text=parse_text)), timeout=_task_llm_timeout())
+        from llm import chat_complete
+        raw = await chat_complete(
+            model=_task_llm_model(),
+            system=SMART_PARSE_SYSTEM + "\n\n" + context,
+            user=parse_text,
+            timeout=_task_llm_timeout(),
+            json_mode=True,
+            api_key=openai_key,
+        )
     except Exception as e:
         logging.warning(f"smart_parse LLM error: {e}")
         return None

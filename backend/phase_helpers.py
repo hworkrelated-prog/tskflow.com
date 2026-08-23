@@ -17,8 +17,8 @@ def priority_followup_config(priority: str) -> dict:
 
 
 async def generate_ai_work_review(task: dict, completion_note: Optional[str], has_images: bool) -> Optional[str]:
-    emergent_key = os.getenv("EMERGENT_LLM_KEY")
-    if not emergent_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
         return None
     criteria = (task.get("success_criteria") or "").strip()
     note = (completion_note or task.get("completion_note") or "").strip()
@@ -34,13 +34,13 @@ async def generate_ai_work_review(task: dict, completion_note: Optional[str], ha
         "Keep under 120 words. Use bullets starting with - "
     )
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=emergent_key,
-            session_id=f"review_{task.get('id')}",
-            system_message="You write concise advisory work-review checklists for managers. No pass/fail grades.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await chat.send_message(UserMessage(text=prompt))
+        from llm import chat_complete
+        raw = await chat_complete(
+            model="gpt-4o-mini",
+            system="You write concise advisory work-review checklists for managers. No pass/fail grades.",
+            user=prompt,
+            api_key=openai_key,
+        )
         out = (raw if isinstance(raw, str) else str(raw)).strip()
         return out[:2000] if out else None
     except Exception as e:
