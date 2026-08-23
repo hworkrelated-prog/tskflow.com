@@ -23,7 +23,7 @@ const RecurrenceEditor = ({ value, onChange }) => {
                     onChange={(e) => set({ enabled: e.target.checked })}
                     className="rounded"
                 />
-                <Repeat className="w-4 h-4 text-indigo-600" />
+                <Repeat className="w-4 h-4 text-violet-600" />
                 <span>Repeat this task <span className="text-xs text-muted-foreground">(turn it into a recurring series)</span></span>
             </label>
 

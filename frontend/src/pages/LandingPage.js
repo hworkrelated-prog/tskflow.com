@@ -10,6 +10,8 @@ import {
     DEMO_PROMPT,
     DEMO_ROLLUP,
     DEMO_SLACK,
+    PROMPT_SEGMENT_CLASS,
+    colorizeAssignPrompt,
     isLargeTeamPrompt,
 } from '@/lib/landingAssignDemo';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
@@ -21,6 +23,16 @@ const initials = (name) =>
         .slice(0, 2)
         .join('')
         .toUpperCase();
+
+const ColorCodedPrompt = ({ text, className = '', testId }) => (
+    <p className={className} data-testid={testId}>
+        {colorizeAssignPrompt(text).map((part, i) => (
+            <span key={`${part.kind}-${i}`} className={PROMPT_SEGMENT_CLASS[part.kind] || PROMPT_SEGMENT_CLASS.plain}>
+                {part.text}
+            </span>
+        ))}
+    </p>
+);
 
 const TryIt = ({ onTry }) => {
     const navigate = useNavigate();
@@ -35,27 +47,37 @@ const TryIt = ({ onTry }) => {
         onTry?.();
     };
 
+    const displayText = value || DEMO_PROMPT;
+    const showSamplePlaceholder = !value;
+
     return (
         <div className="w-full" data-testid="landing-tryit">
             <label className="block text-xs uppercase tracking-[0.18em] text-teal-200/80 mb-3">
                 Try it — no account
             </label>
             <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/15 p-3 sm:p-4 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)]">
-                <textarea
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            run();
-                        }
-                    }}
-                    rows={3}
-                    className="w-full resize-none bg-transparent text-white text-base leading-relaxed outline-none placeholder:text-white/35"
-                    placeholder={DEMO_PROMPT}
-                    data-testid="landing-tryit-input"
-                    aria-label="Try assigning work in plain English"
-                />
+                <div className="relative">
+                    <ColorCodedPrompt
+                        text={displayText}
+                        className={`pointer-events-none absolute inset-0 text-base leading-relaxed whitespace-pre-wrap break-words ${showSamplePlaceholder ? 'opacity-90' : ''}`}
+                        testId="landing-tryit-colorized"
+                    />
+                    <textarea
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                run();
+                            }
+                        }}
+                        rows={3}
+                        className="relative w-full resize-none bg-transparent text-base leading-relaxed outline-none caret-teal-300 text-transparent selection:bg-teal-400/30"
+                        placeholder=""
+                        data-testid="landing-tryit-input"
+                        aria-label="Try assigning work in plain English"
+                    />
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
                     <button
                         type="button"
@@ -182,7 +204,11 @@ const Simulation = () => {
                                     </p>
                                     <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-4">
                                         <p className="text-[11px] text-white/45 mb-2">You type</p>
-                                        <p className="text-sm text-white/90 leading-relaxed">“{DEMO_PROMPT.replace(/\.$/, '')}”</p>
+                                        <ColorCodedPrompt
+                                            text={DEMO_PROMPT.replace(/\.$/, '')}
+                                            className="text-sm leading-relaxed"
+                                            testId="landing-sim-colorized"
+                                        />
                                     </div>
                                 </>
                             )}

@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2 } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1436,10 +1436,10 @@ const TaskHub = () => {
                                             </label>
 
                                             {/* Advanced options — collapsed by default so the form stays short */}
-                                            <details className="rounded-xl border bg-gray-50/50 group" data-testid="advanced-options">
-                                                <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
+                                            <details className="rounded-xl border bg-muted/40 group" data-testid="advanced-options">
+                                                <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-muted/60 rounded-xl">
                                                     <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-teal-600" /> Advanced options</span>
-                                                    <ChevronDown className="w-4 h-4 text-gray-500 group-open:rotate-180 transition-transform" />
+                                                    <ChevronDown className="w-4 h-4 text-muted-foreground group-open:rotate-180 transition-transform" />
                                                 </summary>
                                                 <div className="px-4 pb-4 pt-2 space-y-3">
                                                     <label className="flex items-start gap-2 text-sm cursor-pointer">
@@ -1450,6 +1450,7 @@ const TaskHub = () => {
                                                             data-testid="requires-recording-checkbox"
                                                             className="rounded mt-0.5"
                                                         />
+                                                        <Video className="w-4 h-4 text-violet-600 mt-0.5 shrink-0" />
                                                         <span>
                                                             <span className="font-medium">Require a screen recording from the assignee</span>
                                                             <span className="block text-xs text-muted-foreground mt-0.5">A prominent banner will appear on their task view asking them to attach a Loom-style recording before they can mark it done.</span>
