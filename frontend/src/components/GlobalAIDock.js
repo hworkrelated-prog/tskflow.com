@@ -193,12 +193,13 @@ const GlobalAIDock = () => {
 
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape' && (active || focused)) {
+            if (e.key === 'Escape' && (active || focused || hovered)) {
                 e.preventDefault();
                 if (active) {
                     clearFlow();
                 } else {
                     setFocused(false);
+                    setHovered(false);
                     if (document.activeElement instanceof HTMLElement) {
                         document.activeElement.blur();
                     }
@@ -241,7 +242,9 @@ const GlobalAIDock = () => {
             className={`ai-command-dock${open ? ' is-open' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}`}
             data-testid="ai-command-dock"
             onMouseEnter={() => setHovered(true)}
+            onPointerEnter={() => setHovered(true)}
             onMouseLeave={() => { if (!lockedOpen) setHovered(false); }}
+            onPointerLeave={() => { if (!lockedOpen) setHovered(false); }}
         >
             <button
                 type="button"
