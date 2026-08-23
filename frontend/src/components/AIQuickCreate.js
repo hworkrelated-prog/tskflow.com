@@ -1257,16 +1257,9 @@ const AIQuickCreate = ({
     }, [finishVoiceSession]);
 
     const toggleVoice = useCallback(() => {
-        if (listening) {
-            // Manual tap: end now; onend auto-sends whatever we captured.
-            voiceWantRef.current = false;
-            voiceSilenceRef.current?.clear();
-            voiceSilenceRef.current = null;
-            try { recRef.current?.stop(); } catch { /* noop */ }
-        } else {
-            startVoice();
-        }
-    }, [listening, startVoice]);
+        if (listening) stopVoice();
+        else startVoice();
+    }, [listening, startVoice, stopVoice]);
 
     useEffect(() => {
         const onStartVoice = () => startVoice();
