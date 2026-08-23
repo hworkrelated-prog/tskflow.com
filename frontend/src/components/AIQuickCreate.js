@@ -15,7 +15,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
+import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
@@ -171,7 +171,9 @@ const getSpeechRecognition = () => {
     rec.lang = 'en-US';
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    // Continuous + our own silence watch: browsers end non-continuous sessions
+    // after a couple seconds of quiet, which kills contemplative pauses.
+    rec.continuous = true;
     return rec;
 };
 
@@ -268,6 +270,8 @@ const AIQuickCreate = ({
     const recRef = useRef(null);
     const voiceFinalRef = useRef('');
     const voiceSeedRef = useRef('');
+    const voiceWantRef = useRef(false);
+    const voiceSilenceRef = useRef(null);
     const runPreviewRef = useRef(null);
     const sendRef = useRef(null);
     const threadEndRef = useRef(null);
@@ -1150,7 +1154,22 @@ const AIQuickCreate = ({
 
     runPreviewRef.current = runPreview;
 
+    const finishVoiceSession = useCallback((opts = {}) => {
+        const { send = true } = opts;
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
+        setListening(false);
+        const spoken = voiceFinalRef.current.trim();
+        if (send && shouldAutoSendVoice(spoken)) {
+            runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+        }
+    }, []);
+
     const stopVoice = useCallback(() => {
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
         try { recRef.current?.stop(); } catch { /* already stopped */ }
     }, []);
 
@@ -1161,8 +1180,22 @@ const AIQuickCreate = ({
             return;
         }
         try { recRef.current?.abort(); } catch { /* noop */ }
+        voiceSilenceRef.current?.clear();
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
         voiceFinalRef.current = '';
+        voiceWantRef.current = true;
+
+        const silence = createSilenceWatch({
+            ms: VOICE_SILENCE_MS,
+            onSilence: () => {
+                // Long quiet stretch — user is done contemplating; stop + send.
+                voiceWantRef.current = false;
+                try { recRef.current?.stop(); } catch { /* noop */ }
+            },
+        });
+        voiceSilenceRef.current = silence;
+        silence.bump();
+
         rec.onresult = (event) => {
             let interim = '';
             let finalText = '';
@@ -1175,22 +1208,38 @@ const AIQuickCreate = ({
             const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
             const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
             if (shown) setText(shown);
+            // Any speech (interim or final) resets the contemplative pause window.
+            silence.bump();
         };
         rec.onerror = (event) => {
+            if (event.error === 'no-speech') {
+                // Expected during long pauses; silence watch owns hang-up.
+                return;
+            }
+            if (event.error === 'aborted') return;
             if (event.error === 'not-allowed') {
                 toast.error('Microphone permission is needed for voice.');
-            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+            } else {
                 toast.error('Couldn’t hear that — try again.');
             }
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             setListening(false);
         };
         rec.onend = () => {
-            recRef.current = null;
-            setListening(false);
-            const spoken = voiceFinalRef.current.trim();
-            if (shouldAutoSendVoice(spoken)) {
-                runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+            // Chrome often ends continuous sessions early; keep the mic up
+            // until the silence watch (or the user) says we're done.
+            if (voiceWantRef.current) {
+                try {
+                    rec.start();
+                    return;
+                } catch {
+                    /* fall through and finish */
+                }
             }
+            recRef.current = null;
+            finishVoiceSession({ send: true });
         };
         recRef.current = rec;
         setComposerFocused(true);
@@ -1198,16 +1247,26 @@ const AIQuickCreate = ({
         try {
             rec.start();
         } catch {
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             setListening(false);
             recRef.current = null;
             toast.error('Couldn’t start the microphone.');
         }
-    }, []);
+    }, [finishVoiceSession]);
 
     const toggleVoice = useCallback(() => {
-        if (listening) stopVoice();
-        else startVoice();
-    }, [listening, startVoice, stopVoice]);
+        if (listening) {
+            // Manual tap: end now; onend auto-sends whatever we captured.
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
+            try { recRef.current?.stop(); } catch { /* noop */ }
+        } else {
+            startVoice();
+        }
+    }, [listening, startVoice]);
 
     useEffect(() => {
         const onStartVoice = () => startVoice();
@@ -1216,6 +1275,9 @@ const AIQuickCreate = ({
     }, [startVoice]);
 
     useEffect(() => () => {
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
         try { recRef.current?.abort(); } catch { /* noop */ }
         recRef.current = null;
     }, []);
@@ -3048,7 +3110,7 @@ const AIQuickCreate = ({
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
                                         aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak — sends when you finish'}
+                                        title={listening ? 'Tap to send now' : 'Speak — stays on through pauses; sends after ~20s of silence'}
                                     >
                                         {listening
                                             ? <MicOff className="w-4 h-4" />
