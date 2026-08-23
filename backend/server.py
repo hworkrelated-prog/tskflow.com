@@ -52,6 +52,16 @@ from slack_followup import (
     slack_signing_secret,
     verify_slack_signature,
 )
+from email_followup import (
+    followup_copy,
+    new_reply_token,
+    process_inbound_email,
+    record_email_followup,
+    render_followup_email,
+    reply_address,
+    sweep_email_followups,
+    verify_resend_webhook,
+)
 from transcript_helpers import (
     apply_owner_and_due_guesses,
     build_transcript_extract_prompt,
@@ -374,7 +384,7 @@ def to_pst(dt_str: str):
     dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
     return dt.astimezone(PST)
 
-async def send_email_notification(to_email: str, subject: str, content: str) -> bool:
+async def send_email_notification(to_email: str, subject: str, content: str, reply_to: Optional[str] = None) -> bool:
     resend_key = os.getenv('RESEND_API_KEY')
     
     if not resend_key:
@@ -387,6 +397,8 @@ async def send_email_notification(to_email: str, subject: str, content: str) -> 
         "subject": subject,
         "html": content
     }
+    if reply_to:
+        params["reply_to"] = reply_to
     # Fast + resilient: 3 attempts with quick backoff (0.4s, 0.8s). Runs off the request
     # thread via to_thread so FastAPI stays non-blocking. Total worst-case ~1.2s of retry.
     last_err = None
@@ -8565,6 +8577,64 @@ async def _consume_slack_event(payload: dict) -> None:
         logging.warning(f"slack event failed: {e}")
 
 
+@api_router.post("/webhooks/resend/inbound")
+async def resend_inbound_webhook(request: HTTPRequest, background_tasks: BackgroundTasks):
+    """Resend email.received — map a reply back to a task via the unique Reply-To token."""
+    body = await request.body()
+    secret = (os.getenv("RESEND_WEBHOOK_SECRET") or "").strip()
+    headers = {
+        "svix-id": request.headers.get("svix-id") or request.headers.get("Svix-Id") or "",
+        "svix-timestamp": request.headers.get("svix-timestamp") or request.headers.get("Svix-Timestamp") or "",
+        "svix-signature": request.headers.get("svix-signature") or request.headers.get("Svix-Signature") or "",
+    }
+    if secret:
+        if not verify_resend_webhook(body, headers, secret):
+            raise HTTPException(status_code=401, detail="invalid signature")
+    else:
+        logging.warning("Resend inbound ignored signature check — RESEND_WEBHOOK_SECRET is not set")
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid json")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid payload")
+    if payload.get("type") and payload.get("type") != "email.received":
+        return {"ok": True, "ignored": payload.get("type")}
+    background_tasks.add_task(_consume_resend_inbound, payload)
+    return {"ok": True}
+
+
+async def _consume_resend_inbound(payload: dict) -> None:
+    try:
+        result = await process_inbound_email(db, payload, get_pst_now())
+        if not result or not result.get("task_id"):
+            return
+        task = await db.tasks.find_one({"id": result["task_id"]}, {"_id": 0}) or {}
+        try:
+            await log_task_activity(
+                db,
+                task_id=result["task_id"],
+                event_type="status_change" if result.get("auto") else "nudge",
+                channel="email",
+                actor_name="Email reply",
+                company_domain=task.get("company_domain"),
+                title="Email reply applied" if result.get("auto") else "Email reply needs review",
+                body=((result.get("parsed") or {}).get("note") or "")[:500],
+                meta={
+                    "via": "email_reply",
+                    "auto": bool(result.get("auto")),
+                    "intent": (result.get("parsed") or {}).get("intent"),
+                    "confidence": (result.get("parsed") or {}).get("confidence"),
+                    "new_status": (result.get("applied") or {}).get("status"),
+                },
+                created_at=get_pst_now().isoformat(),
+            )
+        except Exception as log_err:
+            logging.warning(f"email reply activity log failed: {log_err}")
+    except Exception as e:
+        logging.warning(f"resend inbound failed: {e}")
+
+
 @api_router.get("/tasks/{task_id}/slack-followup")
 async def get_slack_followup(task_id: str, current_user: dict = Depends(get_current_user)):
     """Conversation Jarvis had with the assignee after ignored pings.
@@ -9201,10 +9271,12 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Never leave description empty when the input is longer than ~1 sentence or contains multiple requirements.
 - For recurring asks (e.g. "every day at 2:15"), state the cadence clearly in the description for the assignee.
 
-SUCCESS CRITERIA (expectations):
-- Extract when the manager states what "done well" / "done right" / "success" looks like, or phrases like "I expect…", "make sure…", "quality bar…", "acceptance criteria…".
-- Keep it as a short plain sentence the assignee can aim for. Empty string if not stated.
-- Do NOT invent success criteria.
+SUCCESS CRITERIA (expectations) — always fill this, including self-assigned tasks:
+- If the manager stated what "done well" / "done right" / "success" looks like (or "I expect…", "make sure…", "quality bar…", "acceptance criteria…"), use that wording.
+- If they did not, distill a one-sentence completion bar from the work itself (what "done" means). Do not add extra requirements they did not ask for.
+- Self-assigned: first person ("I've finished the EOD report." / "My 1:1 notes are ready.").
+- Delegated: assignee-facing ("Outreach training is finished." / "The BAMFAM call is submitted to your managers.").
+- Keep it one short sentence. Never leave success_criteria empty.
 
 is_sales_task=true when the text mentions sales work — e.g. sales, prospect, lead, pipeline, deal, opportunity,
 demo, discovery, pitch, proposal, quote, CRM, HubSpot, Salesforce, SDR/BDR/AE, cold call, outbound, renewal,
@@ -10737,6 +10809,25 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
         parsed["action_items"] = [
             _rewrite_description_for_assignee(_strip_manager_voice(a), manager_name) for a in actions
         ]
+    _ensure_success_criteria(parsed, source_text, self_assign=self_assign)
+
+
+def _ensure_success_criteria(parsed: dict, raw_text: str, self_assign: bool = False) -> None:
+    """Every parsed task gets a short completion bar — stated or distilled, never invented extras."""
+    existing = str(parsed.get("success_criteria") or "").strip()
+    if existing and not _too_close_to_prompt(existing, raw_text or ""):
+        if not re.search(r"(?i)\b(tell my team|ask my team|we need to|tell that)\b", existing):
+            parsed["success_criteria"] = existing[:400]
+            return
+    title = str(parsed.get("title") or "").strip().rstrip(".")
+    lead = str(parsed.get("description") or "").split("Next steps:")[0].strip()
+    lead = (lead.split("\n")[0] if lead else "").strip().rstrip(".")
+    work = title or lead or "this"
+    if self_assign:
+        parsed["success_criteria"] = f"I've finished {work}."
+    else:
+        parsed["success_criteria"] = f"{work} is finished."
+    parsed["success_criteria"] = parsed["success_criteria"][:400]
 
 
 def _task_llm_model() -> str:
@@ -10806,7 +10897,7 @@ async def _llm_logical_copy(
     )
     prompt = (
         "Rewrite this TskFlow task so it is logical and complete. JSON only, no markdown:\n"
-        '{"title":"...","description":"..."}\n'
+        '{"title":"...","description":"...","success_criteria":"..."}\n'
         f"Voice: {voice}\n"
         "Title: 3-8 words naming the WORK. Imperative. Never 'Complete This is…', "
         "never 'This is a reminder for myself', no names/@/dates.\n"
@@ -10820,6 +10911,8 @@ async def _llm_logical_copy(
         "Keep every named account/client in the title (e.g. Beck bus). "
         "If they listed several actions (run through AI, give context, share a template), "
         "those belong in Next steps — never write 'Do the work.'\n"
+        "success_criteria: one sentence for what done looks like. Always include it, "
+        "including self-assigned. Distill from the ask — do not invent extra requirements.\n"
         "Do not invent a different task.\n"
         f"Original request: {raw_text[:800]}\n"
         f"Draft title: {title[:200]}\n"
@@ -10845,7 +10938,8 @@ async def _llm_logical_copy(
             return None
         if _copy_drops_prompt_facts(raw_text, out_title, out_desc):
             return None
-        return {"title": out_title, "description": out_desc}
+        out_crit = str(data.get("success_criteria") or "").strip()
+        return {"title": out_title, "description": out_desc, "success_criteria": out_crit}
     except Exception as e:
         logging.warning(f"logical copy LLM error: {e}")
     return None
@@ -11056,11 +11150,14 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
                 parsed["title"] = logical["title"]
             if logical.get("description"):
                 parsed["description"] = _normalize_description_layout(logical["description"])
+            if logical.get("success_criteria"):
+                parsed["success_criteria"] = str(logical["success_criteria"]).strip()[:400]
     if self_assign:
         parsed["title"], parsed["description"] = _apply_self_assign_copy(
             str(parsed.get("title") or ""),
             str(parsed.get("description") or ""),
         )
+    _ensure_success_criteria(parsed, text, self_assign=self_assign)
 
     # Rebuild clarifying questions: one at a time, preferring who / team-scope / cadence / when
     needs_who = False
@@ -11567,10 +11664,26 @@ async def _check_smart_reminders():
                 if sent == 0:
                     sent = rule_count
                 if max_emails > 0 and sent < max_emails:
+                    email_html = render_reminder_email(user["name"], t, wording, APP_BASE_URL)
+                    reply_to_addr = None
+                    if fired_kind in ("no_response", "no_progress"):
+                        token = new_reply_token()
+                        reply_to_addr = reply_address(token)
+                        follow = followup_copy(fired_kind, t, user.get("name") or "", "")
+                        email_html = render_followup_email(
+                            user.get("name") or "",
+                            "",
+                            t,
+                            follow,
+                            APP_BASE_URL,
+                            reply_to_addr,
+                        )
+                        await record_email_followup(db, t, token, fired_kind, now)
                     await send_email_notification(
                         user["email"],
-                        f"[TskFlow] {wording['title']}: {t['title']}",
-                        render_reminder_email(user["name"], t, wording, APP_BASE_URL)
+                        follow["subject"] if reply_to_addr else f"[TskFlow] {wording['title']}: {t['title']}",
+                        email_html,
+                        reply_to=reply_to_addr,
                     )
                     sent += 1
                     emails_sent_today[aid] = sent
@@ -12069,6 +12182,7 @@ async def _scheduler_loop():
         try:
             await _background_generate_all_recurring()
             await _check_smart_reminders()
+            await sweep_email_followups(db, get_pst_now(), send_email_notification, APP_BASE_URL)
             await _sweep_ignored_slack_followups()
             await _sync_all_sheet_configs()
             await send_due_eod_reports()
@@ -12099,6 +12213,9 @@ async def _ensure_indexes():
         await db.slack_threads.create_index("assignee_id")
         await db.slack_threads.create_index("slack_channel_id")
         await db.engagement_digests.create_index("id", unique=True)
+        await db.email_followup_tokens.create_index("id", unique=True)
+        await db.email_followup_tokens.create_index("task_id")
+        await db.tasks.create_index("email_reply_token")
     except Exception:
         pass
 
