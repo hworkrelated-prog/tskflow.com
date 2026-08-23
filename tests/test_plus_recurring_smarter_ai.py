@@ -48,9 +48,10 @@ def test_parse_uses_high_intelligence_model():
     assert 'return (os.getenv("TSKFLOW_PARSE_MODEL") or "gpt-4o")' in server
     parse = server.split("async def _llm_parse")[1].split("async def smart_parse_task")[0]
     assert "_task_llm_model()" in parse
+    assert "chat_complete(" in parse
+    assert "model=_task_llm_model()" in parse
     assert 'gpt-4o-mini' not in parse
-    voice = server.split("VOICE_ASSISTANT_SYSTEM")[1].split("TSKFLOW_KB")[0] if False else ""
-    assert ").with_model(\"openai\", _task_llm_model())" in server
+    assert "model=_task_llm_model()" in server
     assert "history: Optional[List[dict]]" in server.split("class QuickCreatePreviewRequest")[1].split("async def quick_create_preview")[0]
     assert "How often should this repeat" in server
     assert "Who should this be assigned to?" in server

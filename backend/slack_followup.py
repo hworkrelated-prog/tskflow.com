@@ -146,11 +146,11 @@ async def maybe_llm_interpret(text: str, task: Optional[dict], assigner_name: st
     classified = any((a or {}).get("type") in ("accept", "complete", "decline", "block") for a in actions)
     if classified:
         return parsed
-    key = (os.getenv("EMERGENT_LLM_KEY") or "").strip()
+    key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not key:
         return parsed
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from llm import chat_complete
 
         title = (task or {}).get("title") or "this task"
         prompt = (
@@ -161,12 +161,13 @@ async def maybe_llm_interpret(text: str, task: Optional[dict], assigner_name: st
             "accept = they will do it. complete = they already did. decline = they cannot. "
             "block = stuck. comment = note it and ask a short clarifying question."
         )
-        chat = LlmChat(
+        raw = await chat_complete(
+            model="gpt-4o-mini",
+            system="You are Jarvis, a concise human teammate on Slack. Never mention being an AI.",
+            user=prompt,
+            json_mode=True,
             api_key=key,
-            session_id=f"slack_{((task or {}).get('id') or 'x')[:24]}",
-            system_message="You are Jarvis, a concise human teammate on Slack. Never mention being an AI.",
-        ).with_model("openai", "gpt-4o-mini")
-        raw = await chat.send_message(UserMessage(text=prompt))
+        )
         blob = (raw if isinstance(raw, str) else str(raw)).strip()
         if blob.startswith("```"):
             blob = re.sub(r"^```(?:json)?\s*|\s*```$", "", blob).strip()
