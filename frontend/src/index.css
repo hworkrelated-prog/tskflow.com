@@ -286,9 +286,15 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ai-command-dock.is-open .ai-dock-fab {
     opacity: 0;
-    pointer-events: none;
     transform: scale(0.72);
     animation: none;
+    /* Stay hittable while hover-previewing so the morph cannot drop a frame
+       through the stage (pointer-events: none) and flicker. Locked open hides
+       the FAB for real so the composer receives clicks. */
+    pointer-events: none;
+}
+.ai-command-dock.is-open:not(.is-locked) .ai-dock-fab {
+    pointer-events: auto;
 }
 [data-theme="dark"] .ai-dock-fab {
     background: #f4f4f5;
@@ -304,7 +310,9 @@ h1, h2, h3, h4, h5, h6 {
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
-    transform: scale(0.92);
+    /* Avoid scale transforms here — they shrink the hit box during the morph
+       and combined with the FAB pointer-events swap caused hover flicker. */
+    transform: none;
     transform-origin: bottom center;
     transition:
         width 320ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -313,15 +321,13 @@ h1, h2, h3, h4, h5, h6 {
         border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1),
         background-color 280ms ease,
         box-shadow 280ms ease,
-        opacity 220ms ease,
-        transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+        opacity 220ms ease;
 }
 .ai-command-dock.is-open .ai-dock-panel {
     width: 100%;
     min-height: 0;
     opacity: 1;
     pointer-events: auto;
-    transform: scale(1);
     overflow: visible;
     border-radius: 1.25rem;
 }
