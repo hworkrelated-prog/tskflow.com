@@ -11,9 +11,16 @@ def test_landing_hits_pain_points_not_board_slogan():
     assert "not another board" not in src.lower()
     assert "Not just a board" not in src
     assert "Stop chasing work in chat" in src
+    assert "Still hunting for the work you already assigned" in src
     assert "You assign it. They accept it." in src
     assert "Work you assign does not disappear" in src
     assert "Follow-up is automatic" in src
+    assert "Just circling back" in src
+    assert "Thread archaeology" in src
+    assert "team-wide ghost" in src
+    assert "ownership evaporates" in src
+    assert 'data-testid="landing-pain"' in src
+    assert 'data-testid="landing-brand"' in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
 
