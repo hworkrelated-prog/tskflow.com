@@ -44,7 +44,6 @@ const GlobalAIDock = () => {
     const navigate = useNavigate();
     const [active, setActive] = useState(false);
     const [focused, setFocused] = useState(false);
-    const [hovered, setHovered] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState([]);
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
@@ -184,7 +183,6 @@ const GlobalAIDock = () => {
         });
         setActive(false);
         setFocused(false);
-        setHovered(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
@@ -193,13 +191,12 @@ const GlobalAIDock = () => {
 
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape' && (active || focused || hovered)) {
+            if (e.key === 'Escape' && (active || focused)) {
                 e.preventDefault();
                 if (active) {
                     clearFlow();
                 } else {
                     setFocused(false);
-                    setHovered(false);
                     if (document.activeElement instanceof HTMLElement) {
                         document.activeElement.blur();
                     }
@@ -223,10 +220,9 @@ const GlobalAIDock = () => {
     if (!visible) return null;
 
     const lockedOpen = active || focused || recordingPending;
-    const open = lockedOpen || hovered;
+    const open = lockedOpen;
 
     const expandFromFab = () => {
-        setHovered(true);
         setFocused(true);
         setTimeout(() => {
             window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
@@ -241,10 +237,6 @@ const GlobalAIDock = () => {
             ref={dockRef}
             className={`ai-command-dock${open ? ' is-open' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}`}
             data-testid="ai-command-dock"
-            onMouseEnter={() => setHovered(true)}
-            onPointerEnter={() => setHovered(true)}
-            onMouseLeave={() => { if (!lockedOpen) setHovered(false); }}
-            onPointerLeave={() => { if (!lockedOpen) setHovered(false); }}
         >
             <button
                 type="button"

@@ -13,18 +13,22 @@ def test_dock_renders_center_fab_and_keeps_quick_create():
     assert "<Plus" in DOCK
     assert "<AIQuickCreate" in DOCK
     assert "embedded" in DOCK
-    assert "onMouseEnter" in DOCK
     assert "onClick={expandFromFab}" in DOCK
     assert "tskflow:focus-ai-prompt" in DOCK
+    assert "lockedOpen || hovered" not in DOCK
 
 
-def test_dock_morphs_from_circle_using_existing_panel_transition():
+def test_dock_morphs_from_rounded_fab_using_existing_panel_transition():
     assert ".ai-command-dock.is-collapsed" in DOCK or "is-collapsed" in DOCK
     assert "is-open" in DOCK
     assert "ai-dock-panel" in DOCK
     assert "320ms" in CSS
     assert ".ai-dock-fab" in CSS
-    assert "border-radius: 9999px" in CSS
+    fab = CSS.split("\n.ai-dock-fab {")[1].split("}")[0]
+    assert "width: 4.75rem" in fab
+    assert "height: 3rem" in fab
+    assert "border-radius: 0.95rem" in fab
+    assert "9999px" not in fab
     assert "animation: ai-dock-pulse-kf 2.6s ease-in-out infinite" in CSS
     assert "@keyframes ai-dock-pulse-kf" in CSS
     assert "0 0 0 0 rgba(13, 148, 136, 0.4)" in CSS.split("@keyframes ai-dock-pulse-kf")[1]

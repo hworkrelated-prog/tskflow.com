@@ -237,11 +237,11 @@ h1, h2, h3, h4, h5, h6 {
     animation: ai-dock-pulse-kf 0.85s ease-out;
 }
 
-/* Circle FAB morphs into the existing prompt panel. */
+/* Rounded-rect FAB morphs into the existing prompt panel. */
 .ai-command-dock {
     position: relative;
-    width: 3.5rem;
-    min-height: 3.5rem;
+    width: 4.75rem;
+    min-height: 3rem;
     overflow: visible;
     box-sizing: border-box;
     display: flex;
@@ -260,12 +260,12 @@ h1, h2, h3, h4, h5, h6 {
     right: 0;
     bottom: 0;
     z-index: 2;
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 4.75rem;
+    height: 3rem;
     margin: 0 auto;
     padding: 0;
     border: 0;
-    border-radius: 9999px;
+    border-radius: 0.95rem;
     background: #0f172a;
     color: #fff;
     display: inline-flex;
@@ -278,7 +278,11 @@ h1, h2, h3, h4, h5, h6 {
     animation: ai-dock-pulse-kf 2.6s ease-in-out infinite;
     transition:
         opacity 220ms ease,
-        transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ai-command-dock.is-collapsed .ai-dock-fab:hover,
+.ai-command-dock.is-collapsed .ai-dock-fab:focus-visible {
+    transform: translateY(-1px) scale(1.03);
 }
 .ai-dock-fab-plus {
     width: 1.35rem;
@@ -295,10 +299,10 @@ h1, h2, h3, h4, h5, h6 {
     color: #111111;
 }
 .ai-dock-panel {
-    width: 3.5rem;
-    min-height: 3.5rem;
+    width: 4.75rem;
+    min-height: 3rem;
     padding: 0;
-    border-radius: 9999px;
+    border-radius: 0.95rem;
     background: transparent;
     box-shadow: none;
     overflow: hidden;
@@ -602,7 +606,7 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 }
 .ai-bottom-stage .ai-command-dock {
     align-self: center;
-    width: 3.5rem;
+    width: 4.75rem;
 }
 .ai-bottom-stage .ai-command-dock.is-open {
     align-self: stretch;
