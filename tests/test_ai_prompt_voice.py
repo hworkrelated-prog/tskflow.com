@@ -18,10 +18,30 @@ def test_composer_has_voice_mic_that_auto_sends():
     assert "runPreviewRef.current" in src
     assert "shouldAutoSendVoice" in src
     assert "composeVoiceSubmit" in src
-    assert "Speak — sends when you finish" in src
+    assert "createSilenceWatch" in src
+    assert "VOICE_SILENCE_MS" in src
+    assert "continuous = true" in src
+    assert "Speak — stays on through pauses" in src
     assert "is-listening" in src
     # Toolbar is a real row, not an overlay sitting on the field.
     assert "absolute bottom-2 left-2 right-2" not in src
+
+
+def test_voice_keeps_listening_through_contemplative_pauses():
+    """Mic must not hang up on short pauses — only after ~15–30s of silence."""
+    helper = _read("lib", "promptVoice.js")
+    create = _read("components", "AIQuickCreate.js")
+    voice = _read("components", "VoiceMode.js")
+    assert "VOICE_SILENCE_MS = 20_000" in helper or "VOICE_SILENCE_MS = 20000" in helper
+    assert "createSilenceWatch" in helper
+    assert "silence.bump()" in create
+    assert "voiceWantRef" in create
+    assert "continuous = true" in create
+    assert "continuous = true" in voice
+    assert "createSilenceWatch" in voice
+    # Must not use the old short-session mode.
+    assert "rec.continuous = false" not in create
+    assert "rec.continuous = false" not in voice
 
 
 def test_voice_fab_does_not_overlap_prompt():
@@ -47,7 +67,11 @@ def test_analytics_metrics_stack_on_mobile():
 
 def test_voice_submit_helper_auto_sends_spoken_text():
     script = r"""
-import { composeVoiceSubmit, shouldAutoSendVoice } from './frontend/src/lib/promptVoice.js';
+import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS } from './frontend/src/lib/promptVoice.js';
+if (VOICE_SILENCE_MS < 15000 || VOICE_SILENCE_MS > 30000) {
+  console.error('silence window out of 15–30s range', VOICE_SILENCE_MS);
+  process.exit(2);
+}
 const cases = [
   [composeVoiceSubmit('', 'assign this to Harold'), 'assign this to Harold'],
   [composeVoiceSubmit('follow up', 'with Harold tomorrow'), 'follow up with Harold tomorrow'],
@@ -62,6 +86,16 @@ for (const [got, want] of cases) {
     process.exit(1);
   }
 }
+let fired = 0;
+const watch = createSilenceWatch({ ms: 30, onSilence: () => { fired += 1; } });
+watch.bump();
+await new Promise((r) => setTimeout(r, 10));
+watch.bump(); // reset before fire
+await new Promise((r) => setTimeout(r, 10));
+if (fired !== 0) { console.error('fired too early', fired); process.exit(3); }
+await new Promise((r) => setTimeout(r, 40));
+if (fired !== 1) { console.error('expected one silence fire', fired); process.exit(4); }
+watch.clear();
 console.log('ok');
 """
     result = subprocess.run(

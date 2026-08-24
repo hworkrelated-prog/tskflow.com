@@ -35,6 +35,9 @@ const RegistrationPage = () => {
             }
             
             navigate('/verify-email', { state: { email: formData.email } });
+            try {
+                localStorage.setItem('tskflow_pending_verify_email', formData.email.trim().toLowerCase());
+            } catch { /* noop */ }
         } catch (error) {
             toast.error(getErrorMessage(error, 'Registration failed'));
         } finally {

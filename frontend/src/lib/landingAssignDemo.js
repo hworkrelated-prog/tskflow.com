@@ -54,3 +54,44 @@ export const DEMO_BEATS = [
 
 export const isLargeTeamPrompt = (text) =>
     /\b(east coast|everyone|my team|sales team|\b3[0-9]\b|\b40\b)\b/i.test(String(text || ''));
+
+/**
+ * Split an assign-style sentence into color-coded parts for the landing try-it UI.
+ * kind: who (assignee/group) | work (the ask) | when (deadline) | plain
+ */
+export const colorizeAssignPrompt = (raw) => {
+    const text = String(raw || '');
+    if (!text) return [];
+
+    const assign = text.match(/^(assign\s+)(.+?)(\s+to\s+)(.+?)(\s+by\s+)(.+?)([.!?]*)$/i);
+    if (assign) {
+        return [
+            { kind: 'plain', text: assign[1] },
+            { kind: 'who', text: assign[2] },
+            { kind: 'plain', text: assign[3] },
+            { kind: 'work', text: assign[4] },
+            { kind: 'plain', text: assign[5] },
+            { kind: 'when', text: assign[6] },
+            ...(assign[7] ? [{ kind: 'plain', text: assign[7] }] : []),
+        ];
+    }
+
+    const byWhen = text.match(/^(.*?)(\s+by\s+)(eod|eod\.|end of day|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday)([.!?]*)$/i);
+    if (byWhen) {
+        return [
+            { kind: 'work', text: byWhen[1] },
+            { kind: 'plain', text: byWhen[2] },
+            { kind: 'when', text: byWhen[3] },
+            ...(byWhen[4] ? [{ kind: 'plain', text: byWhen[4] }] : []),
+        ];
+    }
+
+    return [{ kind: 'plain', text }];
+};
+
+export const PROMPT_SEGMENT_CLASS = {
+    plain: 'text-white/55',
+    who: 'text-teal-300 font-medium',
+    work: 'text-sky-200',
+    when: 'text-amber-300 font-medium',
+};

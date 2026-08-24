@@ -10,6 +10,8 @@ import {
     DEMO_PROMPT,
     DEMO_ROLLUP,
     DEMO_SLACK,
+    PROMPT_SEGMENT_CLASS,
+    colorizeAssignPrompt,
     isLargeTeamPrompt,
 } from '@/lib/landingAssignDemo';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
@@ -21,6 +23,16 @@ const initials = (name) =>
         .slice(0, 2)
         .join('')
         .toUpperCase();
+
+const ColorCodedPrompt = ({ text, className = '', testId }) => (
+    <p className={className} data-testid={testId}>
+        {colorizeAssignPrompt(text).map((part, i) => (
+            <span key={`${part.kind}-${i}`} className={PROMPT_SEGMENT_CLASS[part.kind] || PROMPT_SEGMENT_CLASS.plain}>
+                {part.text}
+            </span>
+        ))}
+    </p>
+);
 
 const TryIt = ({ onTry }) => {
     const navigate = useNavigate();
@@ -35,27 +47,37 @@ const TryIt = ({ onTry }) => {
         onTry?.();
     };
 
+    const displayText = value || DEMO_PROMPT;
+    const showSamplePlaceholder = !value;
+
     return (
         <div className="w-full" data-testid="landing-tryit">
             <label className="block text-xs uppercase tracking-[0.18em] text-teal-200/80 mb-3">
                 Try it — no account
             </label>
             <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/15 p-3 sm:p-4 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)]">
-                <textarea
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            run();
-                        }
-                    }}
-                    rows={3}
-                    className="w-full resize-none bg-transparent text-white text-base leading-relaxed outline-none placeholder:text-white/35"
-                    placeholder={DEMO_PROMPT}
-                    data-testid="landing-tryit-input"
-                    aria-label="Try assigning work in plain English"
-                />
+                <div className="relative">
+                    <ColorCodedPrompt
+                        text={displayText}
+                        className={`pointer-events-none absolute inset-0 text-base leading-relaxed whitespace-pre-wrap break-words ${showSamplePlaceholder ? 'opacity-90' : ''}`}
+                        testId="landing-tryit-colorized"
+                    />
+                    <textarea
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                run();
+                            }
+                        }}
+                        rows={3}
+                        className="relative w-full resize-none bg-transparent text-base leading-relaxed outline-none caret-teal-300 text-transparent selection:bg-teal-400/30"
+                        placeholder=""
+                        data-testid="landing-tryit-input"
+                        aria-label="Try assigning work in plain English"
+                    />
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
                     <button
                         type="button"
@@ -176,13 +198,17 @@ const Simulation = () => {
                         >
                             {cur.id === 'sentence' && (
                                 <>
-                                    <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">One sentence</p>
+                                    <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">Instead of another Slack blast</p>
                                     <p className="text-white text-xl sm:text-2xl font-semibold leading-snug mb-6" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Assign a task to 36 people in one line.
+                                        Assign a task to 36 people in one line — and keep the ownership.
                                     </p>
                                     <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-4">
                                         <p className="text-[11px] text-white/45 mb-2">You type</p>
-                                        <p className="text-sm text-white/90 leading-relaxed">“{DEMO_PROMPT.replace(/\.$/, '')}”</p>
+                                        <ColorCodedPrompt
+                                            text={DEMO_PROMPT.replace(/\.$/, '')}
+                                            className="text-sm leading-relaxed"
+                                            testId="landing-sim-colorized"
+                                        />
                                     </div>
                                 </>
                             )}
@@ -312,16 +338,22 @@ const LandingPage = () => {
             <section className="relative pt-28 pb-10 md:pt-36 md:pb-16">
                 <div className="max-w-6xl mx-auto px-5 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
                     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
-                        <p className="text-teal-300/90 text-xs uppercase tracking-[0.22em] mb-4">Stop chasing work in chat</p>
-                        <h1 className="text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold leading-[1.08] mb-5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            You assign it. They accept it. You see who actually did it.
+                        <p
+                            className="text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-white mb-6"
+                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                            data-testid="landing-brand"
+                        >
+                            TskFlow
+                        </p>
+                        <h1 className="text-2xl sm:text-3xl lg:text-[2.15rem] font-semibold leading-[1.15] mb-5 text-white/95" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            Still hunting for the work you already assigned?
                         </h1>
                         <p className="text-white/65 text-lg leading-relaxed max-w-md mb-8">
-                            One sentence to 30–40 people. You see who received it, who accepted, who was pinged twice — and if they still ignore it, Jarvis opens a Slack thread and talks to them.
+                            Stop chasing work in chat. Every “quick ask” dies the same way — buried, half-owned, and somehow your problem again by Friday.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Button size="lg" className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7" onClick={jumpToTry} data-testid="landing-hero-try">
-                                Test it now
+                                Feel the difference
                             </Button>
                             <Button size="lg" variant="outline" className="rounded-full h-12 px-7 border-white/20 bg-transparent text-white hover:bg-white/10" onClick={() => navigate('/register')}>
                                 Start free
@@ -335,6 +367,57 @@ const LandingPage = () => {
                 </div>
             </section>
 
+            <section className="relative py-16 md:py-20 border-t border-white/10" data-testid="landing-pain">
+                <div className="max-w-3xl mx-auto px-5">
+                    <motion.p
+                        initial={{ opacity: 0 }}
+                        whileInView={{ opacity: 1 }}
+                        viewport={{ once: true, margin: '-80px' }}
+                        className="text-teal-300/90 text-xs uppercase tracking-[0.22em] mb-4"
+                    >
+                        You&apos;ve lived this
+                    </motion.p>
+                    <motion.h2
+                        initial={{ opacity: 0, y: 10 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: '-80px' }}
+                        transition={{ duration: 0.45 }}
+                        className="text-3xl sm:text-4xl font-semibold leading-tight mb-10"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                        The problem isn&apos;t that people forget. It&apos;s that ownership evaporates the second you hit send.
+                    </motion.h2>
+                    <div className="space-y-10">
+                        {[
+                            {
+                                sting: '“Just circling back…”',
+                                body: 'The follow-up you hate writing — because it means the first ask already failed, and now you\'re the awkward reminder.',
+                            },
+                            {
+                                sting: 'Thread archaeology',
+                                body: 'Scrolling a 40-message Slack trail to reconstruct who owns what, who said “on it,” and who went quiet.',
+                            },
+                            {
+                                sting: 'The team-wide ghost',
+                                body: 'You asked thirty people. A few replied. Everyone else is a question mark you have to chase yourself — after hours, again.',
+                            },
+                        ].map((item, i) => (
+                            <motion.div
+                                key={item.sting}
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: '-60px' }}
+                                transition={{ duration: 0.4, delay: i * 0.08 }}
+                                className="border-l border-teal-400/35 pl-5"
+                            >
+                                <h3 className="text-xl font-semibold mb-2 text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>{item.sting}</h3>
+                                <p className="text-white/55 leading-relaxed">{item.body}</p>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             <section id="try" className="relative py-16 md:py-24">
                 <div className="max-w-3xl mx-auto px-5">
                     <h2 className="text-3xl font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Type an assignment. Watch it become an ask.</h2>
@@ -343,18 +426,26 @@ const LandingPage = () => {
                 </div>
             </section>
 
-            <section className="relative py-16 border-t border-white/10">
-                <div className="max-w-5xl mx-auto px-5 grid md:grid-cols-3 gap-8">
-                    {[
-                        { t: 'Work you assign does not disappear', d: 'Every ask gets an owner and a time. If they do not accept, you see it — you do not hunt through chat.' },
-                        { t: 'They get a direct instruction', d: 'You can talk like a manager. They receive a clear “please do this by Monday,” not a pasted command.' },
-                        { t: 'Follow-up is automatic', d: 'Two ignored pings, and Jarvis opens a Slack thread. They reply like a person. The task updates from whatever they say.' },
-                    ].map((item) => (
-                        <div key={item.t}>
-                            <h3 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>{item.t}</h3>
-                            <p className="text-sm text-white/55 leading-relaxed">{item.d}</p>
-                        </div>
-                    ))}
+            <section className="relative py-16 border-t border-white/10" data-testid="landing-relief">
+                <div className="max-w-5xl mx-auto px-5">
+                    <h2 className="text-3xl font-semibold mb-3 max-w-xl" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        What changes when the ask can&apos;t disappear
+                    </h2>
+                    <p className="text-white/55 mb-10 max-w-xl leading-relaxed">
+                        You assign it. They accept it. You see who actually did it — without becoming the human reminder system.
+                    </p>
+                    <div className="grid md:grid-cols-3 gap-10 md:gap-8">
+                        {[
+                            { t: 'Work you assign does not disappear', d: 'Every ask gets an owner and a time. If they do not accept, you see it — you do not hunt through chat.' },
+                            { t: 'They get a direct instruction', d: 'You can talk like a manager. They receive a clear “please do this by Monday,” not a pasted command.' },
+                            { t: 'Follow-up is automatic', d: 'Two ignored pings, and Jarvis opens a Slack thread. They reply like a person. The task updates from whatever they say.' },
+                        ].map((item) => (
+                            <div key={item.t}>
+                                <h3 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>{item.t}</h3>
+                                <p className="text-sm text-white/55 leading-relaxed">{item.d}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </section>
 

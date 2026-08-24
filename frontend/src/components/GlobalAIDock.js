@@ -52,6 +52,7 @@ const GlobalAIDock = () => {
     const draftIdRef = useRef(null);
     const draftTimerRef = useRef(null);
     const lastDraftSigRef = useRef('');
+    const hoverLeaveTimerRef = useRef(null);
 
     const visible =
         !!user
@@ -166,8 +167,31 @@ const GlobalAIDock = () => {
             window.removeEventListener('tskflow:start-task-from-recording', onRecordingTask);
             window.removeEventListener('tskflow:resume-ai-draft', onResumeDraft);
             if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+            if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
         };
     }, []);
+
+    const clearHoverLeaveTimer = useCallback(() => {
+        if (hoverLeaveTimerRef.current) {
+            clearTimeout(hoverLeaveTimerRef.current);
+            hoverLeaveTimerRef.current = null;
+        }
+    }, []);
+
+    const handleDockPointerEnter = useCallback(() => {
+        clearHoverLeaveTimer();
+        setHovered(true);
+    }, [clearHoverLeaveTimer]);
+
+    const handleDockPointerLeave = useCallback(() => {
+        // Delay collapse so the FAB→panel morph (opacity / pointer-events swap)
+        // cannot drop a hit-test frame and flicker open/closed under the cursor.
+        clearHoverLeaveTimer();
+        hoverLeaveTimerRef.current = setTimeout(() => {
+            hoverLeaveTimerRef.current = null;
+            setHovered(false);
+        }, 180);
+    }, [clearHoverLeaveTimer]);
 
     const clearFlow = useCallback(() => {
         const snap = snapRef.current;
@@ -175,6 +199,7 @@ const GlobalAIDock = () => {
             clearTimeout(draftTimerRef.current);
             draftTimerRef.current = null;
         }
+        clearHoverLeaveTimer();
         // Keep the unfinished draft in the header list; wait for the write so we
         // don't clear draftId mid-flight and orphan a second create.
         Promise.resolve(upsertDraftFromSnap(snap, { force: true })).finally(() => {
@@ -187,12 +212,13 @@ const GlobalAIDock = () => {
         setRecordingPending(false);
         snapRef.current = null;
         window.dispatchEvent(new CustomEvent('tskflow:ai-dock-reset'));
-    }, [upsertDraftFromSnap]);
+    }, [upsertDraftFromSnap, clearHoverLeaveTimer]);
 
     useEffect(() => {
         const onKey = (e) => {
             if (e.key === 'Escape' && (active || focused)) {
                 e.preventDefault();
+                clearHoverLeaveTimer();
                 if (active) {
                     clearFlow();
                 } else {
@@ -205,7 +231,7 @@ const GlobalAIDock = () => {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [active, focused, clearFlow]);
+    }, [active, focused, hovered, clearFlow, clearHoverLeaveTimer]);
 
     const openManual = (prefill) => {
         try {
@@ -223,6 +249,8 @@ const GlobalAIDock = () => {
     const open = lockedOpen;
 
     const expandFromFab = () => {
+        clearHoverLeaveTimer();
+        setHovered(false);
         setFocused(true);
         setTimeout(() => {
             window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));

@@ -15,7 +15,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { composeVoiceSubmit, shouldAutoSendVoice } from '@/lib/promptVoice';
+import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
@@ -171,7 +171,9 @@ const getSpeechRecognition = () => {
     rec.lang = 'en-US';
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    // Continuous + our own silence watch: browsers end non-continuous sessions
+    // after a couple seconds of quiet, which kills contemplative pauses.
+    rec.continuous = true;
     return rec;
 };
 
@@ -268,6 +270,8 @@ const AIQuickCreate = ({
     const recRef = useRef(null);
     const voiceFinalRef = useRef('');
     const voiceSeedRef = useRef('');
+    const voiceWantRef = useRef(false);
+    const voiceSilenceRef = useRef(null);
     const runPreviewRef = useRef(null);
     const sendRef = useRef(null);
     const threadEndRef = useRef(null);
@@ -1150,7 +1154,22 @@ const AIQuickCreate = ({
 
     runPreviewRef.current = runPreview;
 
+    const finishVoiceSession = useCallback((opts = {}) => {
+        const { send = true } = opts;
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
+        setListening(false);
+        const spoken = voiceFinalRef.current.trim();
+        if (send && shouldAutoSendVoice(spoken)) {
+            runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+        }
+    }, []);
+
     const stopVoice = useCallback(() => {
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
         try { recRef.current?.stop(); } catch { /* already stopped */ }
     }, []);
 
@@ -1161,8 +1180,22 @@ const AIQuickCreate = ({
             return;
         }
         try { recRef.current?.abort(); } catch { /* noop */ }
+        voiceSilenceRef.current?.clear();
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
         voiceFinalRef.current = '';
+        voiceWantRef.current = true;
+
+        const silence = createSilenceWatch({
+            ms: VOICE_SILENCE_MS,
+            onSilence: () => {
+                // Long quiet stretch — user is done contemplating; stop + send.
+                voiceWantRef.current = false;
+                try { recRef.current?.stop(); } catch { /* noop */ }
+            },
+        });
+        voiceSilenceRef.current = silence;
+        silence.bump();
+
         rec.onresult = (event) => {
             let interim = '';
             let finalText = '';
@@ -1175,22 +1208,38 @@ const AIQuickCreate = ({
             const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
             const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
             if (shown) setText(shown);
+            // Any speech (interim or final) resets the contemplative pause window.
+            silence.bump();
         };
         rec.onerror = (event) => {
+            if (event.error === 'no-speech') {
+                // Expected during long pauses; silence watch owns hang-up.
+                return;
+            }
+            if (event.error === 'aborted') return;
             if (event.error === 'not-allowed') {
                 toast.error('Microphone permission is needed for voice.');
-            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
+            } else {
                 toast.error('Couldn’t hear that — try again.');
             }
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             setListening(false);
         };
         rec.onend = () => {
-            recRef.current = null;
-            setListening(false);
-            const spoken = voiceFinalRef.current.trim();
-            if (shouldAutoSendVoice(spoken)) {
-                runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+            // Chrome often ends continuous sessions early; keep the mic up
+            // until the silence watch (or the user) says we're done.
+            if (voiceWantRef.current) {
+                try {
+                    rec.start();
+                    return;
+                } catch {
+                    /* fall through and finish */
+                }
             }
+            recRef.current = null;
+            finishVoiceSession({ send: true });
         };
         recRef.current = rec;
         setComposerFocused(true);
@@ -1198,16 +1247,26 @@ const AIQuickCreate = ({
         try {
             rec.start();
         } catch {
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
             setListening(false);
             recRef.current = null;
             toast.error('Couldn’t start the microphone.');
         }
-    }, []);
+    }, [finishVoiceSession]);
 
     const toggleVoice = useCallback(() => {
-        if (listening) stopVoice();
-        else startVoice();
-    }, [listening, startVoice, stopVoice]);
+        if (listening) {
+            // Manual tap: end now; onend auto-sends whatever we captured.
+            voiceWantRef.current = false;
+            voiceSilenceRef.current?.clear();
+            voiceSilenceRef.current = null;
+            try { recRef.current?.stop(); } catch { /* noop */ }
+        } else {
+            startVoice();
+        }
+    }, [listening, startVoice]);
 
     useEffect(() => {
         const onStartVoice = () => startVoice();
@@ -1216,6 +1275,9 @@ const AIQuickCreate = ({
     }, [startVoice]);
 
     useEffect(() => () => {
+        voiceWantRef.current = false;
+        voiceSilenceRef.current?.clear();
+        voiceSilenceRef.current = null;
         try { recRef.current?.abort(); } catch { /* noop */ }
         recRef.current = null;
     }, []);
@@ -2238,39 +2300,95 @@ const AIQuickCreate = ({
                                                             autoFocus
                                                             value={peopleSearch}
                                                             onChange={(e) => setPeopleSearch(e.target.value)}
-                                                            placeholder="Search people or type an email…"
+                                                            placeholder="Search people or groups…"
                                                             className="h-8 text-sm rounded-lg"
                                                             data-testid="ai-inline-assignee-search"
                                                         />
                                                         <div className="max-h-36 overflow-y-auto space-y-0.5">
-                                                            {filteredPeople.map((u) => {
-                                                                const selected = editAssignees.some((a) => a.id === u.id || (u.email && a.email === u.email));
-                                                                return (
-                                                                    <button
-                                                                        key={u.id || u.email}
-                                                                        type="button"
-                                                                        disabled={selected}
-                                                                        onClick={() => pickPerson(u)}
-                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
-                                                                    >
-                                                                        <span className="font-medium">{u.name}</span>
-                                                                        {u.email ? <span className="text-slate-500 ml-1">{u.email}</span> : null}
-                                                                    </button>
+                                                            {(() => {
+                                                                const inlineGroups = groups.filter(
+                                                                    (g) => !peopleQuery || (g.name || '').toLowerCase().includes(peopleQuery)
                                                                 );
-                                                            })}
-                                                            {isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()) && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const email = peopleSearch.trim();
-                                                                        setEditAssignees((prev) => [...prev, { kind: 'email', email, name: email }]);
-                                                                        setPeopleSearch('');
-                                                                    }}
-                                                                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-50"
-                                                                >
-                                                                    Add email <span className="font-medium">{peopleSearch.trim()}</span>
-                                                                </button>
-                                                            )}
+                                                                const empty = filteredPeople.length === 0 && inlineGroups.length === 0
+                                                                    && !(isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()));
+                                                                return (
+                                                                    <>
+                                                                        {empty && (
+                                                                            <p className="px-2.5 py-2 text-xs text-slate-500" data-testid="ai-inline-assignee-empty">
+                                                                                No matches — try a name, email, or group
+                                                                            </p>
+                                                                        )}
+                                                                        {inlineGroups.length > 0 && (
+                                                                            <div className="px-2.5 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400" data-testid="ai-inline-groups-header">
+                                                                                Groups
+                                                                            </div>
+                                                                        )}
+                                                                        {inlineGroups.map((g) => {
+                                                                            const selected = editAssignees.some((a) => a.kind === 'group' && a.id === g.id);
+                                                                            return (
+                                                                                <button
+                                                                                    key={`ig-${g.id}`}
+                                                                                    type="button"
+                                                                                    disabled={selected}
+                                                                                    onClick={() => {
+                                                                                        addAssigneeChip({
+                                                                                            kind: 'group',
+                                                                                            id: g.id,
+                                                                                            name: g.name,
+                                                                                            emails: g.emails || [],
+                                                                                            members: g.emails || [],
+                                                                                            member_count: (g.emails || []).length,
+                                                                                        });
+                                                                                        setPeopleSearch('');
+                                                                                    }}
+                                                                                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
+                                                                                    data-testid={`ai-inline-pick-group-${g.id}`}
+                                                                                >
+                                                                                    <Users className="w-3 h-3 text-teal-700 shrink-0" />
+                                                                                    <span className="min-w-0 flex-1">
+                                                                                        <span className="font-medium">{g.name}</span>
+                                                                                        <span className="text-slate-500 ml-1">· {(g.emails || []).length}</span>
+                                                                                    </span>
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                        {filteredPeople.length > 0 && inlineGroups.length > 0 && (
+                                                                            <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                                                                People
+                                                                            </div>
+                                                                        )}
+                                                                        {filteredPeople.map((u) => {
+                                                                            const selected = editAssignees.some((a) => a.id === u.id || (u.email && a.email === u.email));
+                                                                            return (
+                                                                                <button
+                                                                                    key={u.id || u.email}
+                                                                                    type="button"
+                                                                                    disabled={selected}
+                                                                                    onClick={() => pickPerson(u)}
+                                                                                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs ${selected ? 'opacity-40' : 'hover:bg-slate-50'}`}
+                                                                                    data-testid={`ai-inline-pick-person-${u.id || u.email}`}
+                                                                                >
+                                                                                    <span className="font-medium">{u.name}</span>
+                                                                                    {u.email ? <span className="text-slate-500 ml-1">{u.email}</span> : null}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                        {isEmailLike(peopleSearch) && !editAssignees.some((a) => a.email === peopleSearch.trim()) && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    const email = peopleSearch.trim();
+                                                                                    setEditAssignees((prev) => [...prev, { kind: 'email', email, name: email }]);
+                                                                                    setPeopleSearch('');
+                                                                                }}
+                                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-50"
+                                                                            >
+                                                                                Add email <span className="font-medium">{peopleSearch.trim()}</span>
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </div>
                                                         <button type="button" onClick={() => setEditingField(null)} className="text-[11px] text-slate-500 underline">Done</button>
                                                     </div>
@@ -3048,7 +3166,7 @@ const AIQuickCreate = ({
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
                                         aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak — sends when you finish'}
+                                        title={listening ? 'Tap to send now' : 'Speak — stays on through pauses; sends after ~20s of silence'}
                                     >
                                         {listening
                                             ? <MicOff className="w-4 h-4" />

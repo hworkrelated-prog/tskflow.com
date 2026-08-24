@@ -11,9 +11,16 @@ def test_landing_hits_pain_points_not_board_slogan():
     assert "not another board" not in src.lower()
     assert "Not just a board" not in src
     assert "Stop chasing work in chat" in src
+    assert "Still hunting for the work you already assigned" in src
     assert "You assign it. They accept it." in src
     assert "Work you assign does not disappear" in src
     assert "Follow-up is automatic" in src
+    assert "Just circling back" in src
+    assert "Thread archaeology" in src
+    assert "team-wide ghost" in src
+    assert "ownership evaporates" in src
+    assert 'data-testid="landing-pain"' in src
+    assert 'data-testid="landing-brand"' in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
 
@@ -84,6 +91,51 @@ console.log('ok');
     )
     assert result.returncode == 0, result.stderr or result.stdout
     assert "ok" in result.stdout
+
+
+def test_landing_tryit_color_codes_assign_prompt():
+    """Try-it sample prompt highlights who / work / when, not flat gray."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
+    assert "colorizeAssignPrompt" in demo
+    assert "PROMPT_SEGMENT_CLASS" in demo
+    assert "text-teal-300" in demo
+    assert "text-amber-300" in demo
+    assert "landing-tryit-colorized" in landing
+    assert "ColorCodedPrompt" in landing
+    script = r"""
+import { colorizeAssignPrompt } from './frontend/src/lib/landingAssignDemo.js';
+const parts = colorizeAssignPrompt('Assign East Coast sales to send the Q3 outreach email by EOD.');
+const kinds = parts.map((p) => p.kind).join(',');
+if (!kinds.includes('who') || !kinds.includes('work') || !kinds.includes('when')) process.exit(1);
+const who = parts.find((p) => p.kind === 'who');
+if (!/east coast sales/i.test(who.text)) process.exit(2);
+console.log('ok');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "ok" in result.stdout
+
+
+def test_create_task_advanced_options_color_coded_icons():
+    hub = (FRONT / "pages" / "TaskHub.js").read_text(encoding="utf-8")
+    rec = (FRONT / "components" / "RecurrenceEditor.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert 'data-testid="advanced-options"' in hub
+    assert 'bg-muted/40' in hub
+    assert "text-violet-600" in hub
+    assert "Video" in hub
+    assert "text-emerald-600" in hub  # sales dollar
+    assert "text-violet-600" in rec
+    assert "[data-theme=\"dark\"] .text-violet-600" in css
+    assert "[data-theme=\"dark\"] .text-emerald-600" in css
+    assert "bg-gray-50/50" not in hub.split('data-testid="advanced-options"')[0][-80:]
 
 
 def test_landing_ignores_app_theme_preference():

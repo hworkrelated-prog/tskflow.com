@@ -139,6 +139,7 @@ class _DB:
 def test_handle_on_it_marks_accepted_and_replies():
     import os
     os.environ.pop("EMERGENT_LLM_KEY", None)
+    os.environ.pop("OPENAI_API_KEY", None)
     db = _DB()
     task = {"id": "t1", "title": "Q3 outreach", "status": "Pending", "comments": []}
     thread = {"id": "th1", "task_id": "t1", "messages": [], "slack_channel_id": None}

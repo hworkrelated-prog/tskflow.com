@@ -15,6 +15,7 @@ def test_dock_renders_center_fab_and_keeps_quick_create():
     assert "embedded" in DOCK
     assert "onClick={expandFromFab}" in DOCK
     assert "tskflow:focus-ai-prompt" in DOCK
+    # Hover must not expand the dock — click opens; hover only lifts the FAB.
     assert "lockedOpen || hovered" not in DOCK
 
 
@@ -45,3 +46,19 @@ def test_quick_create_logic_untouched():
     assert "runPreviewRef" in CREATE
     assert "/ai/quick-create-preview" in CREATE or "quick-create-preview" in CREATE
     assert 'data-testid="ai-quick-create"' in CREATE
+
+
+def test_collapsed_fab_hover_only_lifts_not_expands():
+    """Rounded FAB may lift on hover; opening the panel is click-only."""
+    assert "onClick={expandFromFab}" in DOCK
+    assert "onMouseEnter={handleDockPointerEnter}" not in DOCK
+    assert "const open = lockedOpen;" in DOCK or "const open = lockedOpen\n" in DOCK or re_open_locked_only()
+    lift = CSS.split(".ai-command-dock.is-collapsed .ai-dock-fab:hover")[1].split("}")[0]
+    assert "translateY" in lift
+    panel = CSS.split(".ai-dock-panel {")[1].split("}")[0]
+    assert "scale(0.92)" not in panel
+
+
+def re_open_locked_only():
+    import re
+    return bool(re.search(r"const open = lockedOpen\s*;", DOCK))

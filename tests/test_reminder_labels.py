@@ -46,3 +46,4 @@ def test_task_detail_humanizes_legacy_reminder_body():
     assert "humanizeReminderBody(a.body)" in src
     assert "reminderActivityTone" in src
     assert "from {a.actor_name}" in src
+    assert "formatAppDateTime" in src

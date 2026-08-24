@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { API } from '@/App';
+
+const API = `${process.env.REACT_APP_BACKEND_URL || ''}/api`;
 
 const urlBase64ToUint8Array = (base64String) => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -51,6 +52,30 @@ export const registerPush = async () => {
         return { ok: true };
     } catch (e) {
         console.warn('Push registration failed:', e);
+        return { ok: false, reason: 'error' };
+    }
+};
+
+/** Drop the browser push subscription on logout so we don't notify signed-out users. */
+export const unregisterPush = async () => {
+    try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            return { ok: false, reason: 'unsupported' };
+        }
+        const registration = await navigator.serviceWorker.getRegistration();
+        const subscription = await registration?.pushManager?.getSubscription();
+        if (!subscription) return { ok: true, reason: 'none' };
+        const keys = subscription.toJSON()?.keys || { p256dh: '', auth: '' };
+        try {
+            await axios.post(`${API}/push/unsubscribe`, {
+                endpoint: subscription.endpoint,
+                keys,
+            });
+        } catch (_) { /* session may already be gone */ }
+        await subscription.unsubscribe();
+        return { ok: true };
+    } catch (e) {
+        console.warn('Push unregister failed:', e);
         return { ok: false, reason: 'error' };
     }
 };
