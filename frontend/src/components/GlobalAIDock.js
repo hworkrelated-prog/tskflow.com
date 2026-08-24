@@ -44,7 +44,6 @@ const GlobalAIDock = () => {
     const navigate = useNavigate();
     const [active, setActive] = useState(false);
     const [focused, setFocused] = useState(false);
-    const [hovered, setHovered] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState([]);
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
@@ -209,7 +208,6 @@ const GlobalAIDock = () => {
         });
         setActive(false);
         setFocused(false);
-        setHovered(false);
         setPendingAttachments([]);
         setRecordingPending(false);
         snapRef.current = null;
@@ -218,14 +216,13 @@ const GlobalAIDock = () => {
 
     useEffect(() => {
         const onKey = (e) => {
-            if (e.key === 'Escape' && (active || focused || hovered)) {
+            if (e.key === 'Escape' && (active || focused)) {
                 e.preventDefault();
                 clearHoverLeaveTimer();
                 if (active) {
                     clearFlow();
                 } else {
                     setFocused(false);
-                    setHovered(false);
                     if (document.activeElement instanceof HTMLElement) {
                         document.activeElement.blur();
                     }
@@ -249,11 +246,11 @@ const GlobalAIDock = () => {
     if (!visible) return null;
 
     const lockedOpen = active || focused || recordingPending;
-    const open = lockedOpen || hovered;
+    const open = lockedOpen;
 
     const expandFromFab = () => {
         clearHoverLeaveTimer();
-        setHovered(true);
+        setHovered(false);
         setFocused(true);
         setTimeout(() => {
             window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
@@ -268,10 +265,6 @@ const GlobalAIDock = () => {
             ref={dockRef}
             className={`ai-command-dock${open ? ' is-open' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}`}
             data-testid="ai-command-dock"
-            onMouseEnter={handleDockPointerEnter}
-            onPointerEnter={handleDockPointerEnter}
-            onMouseLeave={() => { if (!lockedOpen) handleDockPointerLeave(); }}
-            onPointerLeave={() => { if (!lockedOpen) handleDockPointerLeave(); }}
         >
             <button
                 type="button"
