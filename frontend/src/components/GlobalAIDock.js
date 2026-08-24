@@ -44,6 +44,7 @@ const GlobalAIDock = () => {
     const navigate = useNavigate();
     const [active, setActive] = useState(false);
     const [focused, setFocused] = useState(false);
+    const [hovered, setHovered] = useState(false);
     const [pendingAttachments, setPendingAttachments] = useState([]);
     const [recordingPending, setRecordingPending] = useState(false);
     const snapRef = useRef(null);
