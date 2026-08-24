@@ -178,21 +178,6 @@ const GlobalAIDock = () => {
         }
     }, []);
 
-    const handleDockPointerEnter = useCallback(() => {
-        clearHoverLeaveTimer();
-        setHovered(true);
-    }, [clearHoverLeaveTimer]);
-
-    const handleDockPointerLeave = useCallback(() => {
-        // Delay collapse so the FAB→panel morph (opacity / pointer-events swap)
-        // cannot drop a hit-test frame and flicker open/closed under the cursor.
-        clearHoverLeaveTimer();
-        hoverLeaveTimerRef.current = setTimeout(() => {
-            hoverLeaveTimerRef.current = null;
-            setHovered(false);
-        }, 180);
-    }, [clearHoverLeaveTimer]);
-
     const clearFlow = useCallback(() => {
         const snap = snapRef.current;
         if (draftTimerRef.current) {
@@ -231,7 +216,7 @@ const GlobalAIDock = () => {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [active, focused, hovered, clearFlow, clearHoverLeaveTimer]);
+    }, [active, focused, clearFlow, clearHoverLeaveTimer]);
 
     const openManual = (prefill) => {
         try {
@@ -250,7 +235,6 @@ const GlobalAIDock = () => {
 
     const expandFromFab = () => {
         clearHoverLeaveTimer();
-        setHovered(false);
         setFocused(true);
         setTimeout(() => {
             window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
