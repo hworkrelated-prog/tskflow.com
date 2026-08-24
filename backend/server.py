@@ -11,6 +11,7 @@ import asyncio
 import re
 import httpx
 from pathlib import Path
+from urllib.parse import quote
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from typing import List, Optional, Dict, Any
 import uuid
@@ -488,16 +489,37 @@ def resolve_assignee_name(task: dict, user_map: dict) -> str:
     return task.get("assigned_to_email") or "Unknown"
 
 
+async def find_user_by_email(email: str):
+    """Case-insensitive user lookup by email (EmailStr may preserve local-part case)."""
+    raw = (email or "").strip()
+    if not raw:
+        return None
+    user = await db.users.find_one({"email": raw}, {"_id": 0})
+    if user:
+        return user
+    # Fall back for mixed-case local parts stored at registration time
+    return await db.users.find_one(
+        {"email": {"$regex": f"^{re.escape(raw)}$", "$options": "i"}},
+        {"_id": 0},
+    )
+
+
+def normalize_verification_code(code: Optional[str]) -> str:
+    return re.sub(r"\D", "", str(code or "")).strip()
+
+
 # Auth Routes
 @api_router.post("/auth/register", response_model=dict)
 async def register(user: UserCreate, background_tasks: BackgroundTasks):
+    # Normalize email so verify/login lookups are consistent
+    email_norm = str(user.email).strip().lower()
     # Check if email already exists
-    existing = await db.users.find_one({"email": user.email}, {"_id": 0})
+    existing = await find_user_by_email(email_norm)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Extract company domain
-    company_domain = user.email.split('@')[1]
+    company_domain = email_norm.split('@')[1]
     
     # Check if there's a team owner with this domain
     team_owner = await db.users.find_one({
@@ -507,7 +529,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     }, {"_id": 0})
 
     # Check admin access grants (silent free Pro/Teams for specific emails or whole domains)
-    grant = await db.access_grants.find_one({"type": "email", "value": user.email.lower()}, {"_id": 0})
+    grant = await db.access_grants.find_one({"type": "email", "value": email_norm}, {"_id": 0})
     if not grant:
         grant = await db.access_grants.find_one({"type": "domain", "value": "@" + company_domain}, {"_id": 0})
 
@@ -535,7 +557,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     user_doc = {
         "id": user_id,
         "name": user.name,
-        "email": user.email,
+        "email": email_norm,
         "password_hash": get_password_hash(user.password),
         "subscription_tier": subscription_tier,
         "company_domain": company_domain,
@@ -552,19 +574,20 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     
     # Link any tasks that were assigned to this email before they registered
     # Use case-insensitive matching for email placeholder
-    placeholder_id = f"email_{user.email}"
-    placeholder_id_lower = f"email_{user.email.lower()}"
+    placeholder_id = f"email_{email_norm}"
+    placeholder_id_lower = f"email_{email_norm.lower()}"
     await db.tasks.update_many(
         {"$or": [
             {"assigned_to": placeholder_id},
             {"assigned_to": placeholder_id_lower},
-            {"assigned_to": {"$regex": f"^email_{user.email}$", "$options": "i"}}
+            {"assigned_to": {"$regex": f"^email_{re.escape(email_norm)}$", "$options": "i"}}
         ]},
         {"$set": {"assigned_to": user_id, "assigned_to_name": user.name}}
     )
     
     # Always send verification email via Resend
     app_url = APP_BASE_URL
+    verify_link = f"{app_url}/verify-email?email={quote(email_norm)}"
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -585,7 +608,7 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
                     This code will expire in 24 hours. If you didn't create an account with Tskflow, please disregard this email.
                 </p>
                 <div style="margin-top: 30px; text-align: center;">
-                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                    <a href="{verify_link}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                         Verify Your Account
                     </a>
                 </div>
@@ -598,22 +621,56 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, user.email, "Verify your Tskflow account", email_content)
+    background_tasks.add_task(send_email_notification, email_norm, "Verify your Tskflow account", email_content)
     
     return {"message": "Registration successful. Verification code sent to your email.", "verification_code": None, "user_id": user_id}
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)
 async def verify_email(request: EmailVerifyRequest):
-    user = await db.users.find_one({"email": request.email}, {"_id": 0})
+    email_norm = str(request.email).strip().lower()
+    code = normalize_verification_code(request.verification_code)
+    if len(code) != 6:
+        raise HTTPException(status_code=400, detail="Enter the 6-digit code from your email")
+
+    user = await find_user_by_email(email_norm)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    if user["verification_code"] != request.verification_code:
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    if user.get("email_verified"):
+        # Already verified — log them in rather than dead-ending
+        access_token = create_access_token(data={"sub": user["id"]})
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=UserResponse(
+                id=user["id"],
+                name=user["name"],
+                email=user["email"],
+                subscription_tier=user["subscription_tier"],
+                email_verified=True,
+                is_team_owner=user.get("is_team_owner", False),
+                team_owner_email=user.get("team_owner_email"),
+                google_calendar_connected=user.get("google_calendar_connected", False),
+                google_sheets_connected=user.get("google_sheets_connected", False),
+                preferences=user.get("preferences") or {},
+                reports_to=user.get("reports_to"),
+                company_domain=user.get("company_domain"),
+                org_role=user.get("org_role") or "ic",
+            )
+        )
+
+    stored = normalize_verification_code(user.get("verification_code"))
+    if not stored:
+        raise HTTPException(
+            status_code=400,
+            detail="No verification code on file. Tap Resend to get a new code.",
+        )
+    if stored != code:
+        raise HTTPException(status_code=400, detail="Invalid verification code. Check the latest email or tap Resend.")
     
     # Mark email as verified
     await db.users.update_one(
-        {"email": request.email},
+        {"id": user["id"]},
         {"$set": {"email_verified": True}, "$unset": {"verification_code": ""}}
     )
     
@@ -642,7 +699,8 @@ async def verify_email(request: EmailVerifyRequest):
 
 @api_router.post("/auth/resend-verification")
 async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks):
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    email_norm = str(email).strip().lower()
+    user = await find_user_by_email(email_norm)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -651,10 +709,11 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
     
     # Generate new code
     verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    await db.users.update_one({"email": email}, {"$set": {"verification_code": verification_code}})
+    await db.users.update_one({"id": user["id"]}, {"$set": {"verification_code": verification_code}})
     
     # Send email via Resend
     app_url = APP_BASE_URL
+    verify_link = f"{app_url}/verify-email?email={quote(email_norm)}"
     email_content = f"""
     <html>
         <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
@@ -671,7 +730,7 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
                     <p style="font-size: 36px; font-weight: 700; color: #0d9488; margin: 0; letter-spacing: 4px;">{verification_code}</p>
                 </div>
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="{app_url}/verify-email" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                    <a href="{verify_link}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
                         Verify Your Account
                     </a>
                 </div>
@@ -682,12 +741,12 @@ async def resend_verification(email: EmailStr, background_tasks: BackgroundTasks
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, email, "Your Tskflow Verification Code", email_content)
+    background_tasks.add_task(send_email_notification, email_norm, "Your Tskflow Verification Code", email_content)
     return {"message": "Verification code sent to your email"}
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(user: UserLogin):
-    db_user = await db.users.find_one({"email": user.email}, {"_id": 0})
+    db_user = await find_user_by_email(str(user.email).strip().lower())
     
     # Check if user exists first
     if not db_user:
