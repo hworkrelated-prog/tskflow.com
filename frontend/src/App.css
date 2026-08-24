@@ -404,6 +404,10 @@
 [data-theme="dark"] .text-emerald-700,
 [data-theme="dark"] .text-emerald-800,
 [data-theme="dark"] .text-emerald-900 { color: #6ee7b7 !important; }
+/* Option row icons in Create Task — keep sales / recording / repeat color-coded on dark fills */
+[data-theme="dark"] .text-emerald-600 { color: #34d399 !important; }
+[data-theme="dark"] .text-violet-600 { color: #c4b5fd !important; }
+[data-theme="dark"] .text-indigo-600 { color: #a5b4fc !important; }
 [data-theme="dark"] .text-amber-700, [data-theme="dark"] .text-amber-800, [data-theme="dark"] .text-amber-900,
 [data-theme="dark"] .text-amber-950 { color: #fcd34d !important; }
 [data-theme="dark"] .text-red-700, [data-theme="dark"] .text-red-800, [data-theme="dark"] .text-red-900 { color: #fca5a5 !important; }
