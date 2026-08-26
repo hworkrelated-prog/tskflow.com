@@ -59,6 +59,18 @@ def test_collapsed_fab_hover_only_lifts_not_expands():
     assert "scale(0.92)" not in panel
 
 
+def test_open_does_not_collapse_height_or_pulse_the_fab():
+    """Click morph must not snap min-height to 0 or restart a pulse on the button."""
+    open_panel = CSS.split(".ai-command-dock.is-open .ai-dock-panel {")[1].split("}")[0]
+    assert "min-height: 0" not in open_panel
+    assert "min-height: 3rem" in open_panel
+    assert "ai-dock-fab::after" in CSS
+    assert "classList?.add('ai-dock-pulse')" not in DOCK
+    assert "openingRef" in DOCK
+    assert "onSnapshot={handleSnapshot}" in DOCK
+    assert "${open ? ' is-active' : ''}" in DOCK
+
+
 def re_open_locked_only():
     import re
     return bool(re.search(r"const open = lockedOpen\s*;", DOCK))

@@ -225,16 +225,16 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0.5rem 0;
 }
 
-/* Attention pulse + idle FAB glow — one keyframe, two timings. */
+/* Idle FAB ring lives on ::after so killing it on open cannot snap the button shadow. */
 @keyframes ai-dock-pulse-kf {
     0% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.4); }
     35% { box-shadow: 0 0 0 8px rgba(13, 148, 136, 0.12), 0 10px 28px -8px rgba(13, 148, 136, 0.4); }
     70% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
-    100% { box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15); }
+    100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0); }
 }
 .ai-dock-pulse .ai-dock-panel,
 .ai-dock-pulse .ai-dock-fab {
-    animation: ai-dock-pulse-kf 0.85s ease-out;
+    animation: none;
 }
 
 /* Rounded-rect FAB morphs into the existing prompt panel. */
@@ -248,8 +248,7 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
     align-items: flex-end;
     transition:
-        width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        min-height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+        width 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ai-command-dock.is-open {
     width: 100%;
@@ -272,17 +271,26 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transform: scale(1);
+    transform: translateZ(0);
     opacity: 1;
     pointer-events: auto;
-    animation: ai-dock-pulse-kf 2.6s ease-in-out infinite;
+    box-shadow: 0 10px 24px -12px rgba(15, 23, 42, 0.45);
     transition:
-        opacity 220ms ease,
-        transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+        opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 280ms ease;
+}
+.ai-dock-fab::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    animation: ai-dock-pulse-kf 2.6s ease-in-out infinite;
 }
 .ai-command-dock.is-collapsed .ai-dock-fab:hover,
 .ai-command-dock.is-collapsed .ai-dock-fab:focus-visible {
-    transform: translateY(-1px) scale(1.03);
+    transform: translateY(-1px) translateZ(0);
 }
 .ai-dock-fab-plus {
     width: 1.35rem;
@@ -290,15 +298,16 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ai-command-dock.is-open .ai-dock-fab {
     opacity: 0;
-    transform: scale(0.72);
-    animation: none;
-    /* Stay hittable while hover-previewing so the morph cannot drop a frame
-       through the stage (pointer-events: none) and flicker. Locked open hides
-       the FAB for real so the composer receives clicks. */
+    transform: scale(0.98) translateZ(0);
     pointer-events: none;
+    box-shadow: none;
+}
+.ai-command-dock.is-open .ai-dock-fab::after {
+    animation: none;
+    opacity: 0;
 }
 .ai-command-dock.is-open:not(.is-locked) .ai-dock-fab {
-    pointer-events: auto;
+    pointer-events: none;
 }
 [data-theme="dark"] .ai-dock-fab {
     background: #f4f4f5;
@@ -314,22 +323,19 @@ h1, h2, h3, h4, h5, h6 {
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
-    /* Avoid scale transforms here — they shrink the hit box during the morph
-       and combined with the FAB pointer-events swap caused hover flicker. */
     transform: none;
     transform-origin: bottom center;
     transition:
-        width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        min-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        padding 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        background-color 280ms ease,
-        box-shadow 280ms ease,
-        opacity 220ms ease;
+        width 400ms cubic-bezier(0.22, 1, 0.36, 1),
+        padding 400ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-radius 400ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 320ms ease,
+        box-shadow 320ms ease,
+        opacity 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ai-command-dock.is-open .ai-dock-panel {
     width: 100%;
-    min-height: 0;
+    min-height: 3rem;
     opacity: 1;
     pointer-events: auto;
     overflow: visible;
@@ -395,6 +401,7 @@ h1, h2, h3, h4, h5, h6 {
     .ai-dock-panel,
     .ai-dock-exit,
     .ai-dock-fab,
+    .ai-dock-fab::after,
     .ai-command-dock,
     .ai-command-chips-wrap {
         transition: none;
@@ -613,6 +620,7 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 .ai-bottom-stage .ai-command-dock {
     align-self: center;
     width: 4.75rem;
+    transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ai-bottom-stage .ai-command-dock.is-open {
     align-self: stretch;
