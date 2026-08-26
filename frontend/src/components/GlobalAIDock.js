@@ -53,6 +53,8 @@ const GlobalAIDock = () => {
     const draftTimerRef = useRef(null);
     const lastDraftSigRef = useRef('');
     const hoverLeaveTimerRef = useRef(null);
+    const openingRef = useRef(false);
+    const openingDoneTimerRef = useRef(null);
 
     const visible =
         !!user
@@ -118,14 +120,20 @@ const GlobalAIDock = () => {
 
     useEffect(() => {
         const markActive = () => setActive(true);
+        const beginOpen = () => {
+            openingRef.current = true;
+            if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
+            openingDoneTimerRef.current = setTimeout(() => {
+                openingRef.current = false;
+            }, 480);
+        };
         const focusPrompt = () => {
+            beginOpen();
+            setFocused(true);
             setActive(true);
-            setTimeout(() => {
+            requestAnimationFrame(() => {
                 window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
-                const dock = document.querySelector('[data-testid="ai-command-dock"]');
-                dock?.classList?.add('ai-dock-pulse');
-                setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
-            }, 40);
+            });
         };
         const onAttach = (e) => {
             const refs = e?.detail?.attachments;
@@ -168,6 +176,7 @@ const GlobalAIDock = () => {
             window.removeEventListener('tskflow:resume-ai-draft', onResumeDraft);
             if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
             if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
+            if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
         };
     }, []);
 
@@ -185,6 +194,11 @@ const GlobalAIDock = () => {
             draftTimerRef.current = null;
         }
         clearHoverLeaveTimer();
+        openingRef.current = false;
+        if (openingDoneTimerRef.current) {
+            clearTimeout(openingDoneTimerRef.current);
+            openingDoneTimerRef.current = null;
+        }
         // Keep the unfinished draft in the header list; wait for the write so we
         // don't clear draftId mid-flight and orphan a second create.
         Promise.resolve(upsertDraftFromSnap(snap, { force: true })).finally(() => {
@@ -218,6 +232,36 @@ const GlobalAIDock = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [active, focused, clearFlow, clearHoverLeaveTimer]);
 
+    const handleSnapshot = useCallback((snap) => {
+        snapRef.current = snap;
+        if (snap?.focused) {
+            setFocused(true);
+        } else if (!openingRef.current) {
+            setFocused(false);
+        }
+        const hasConversation = Boolean(
+            snap?.preview
+            || snap?.thread > 0
+            || snap?.answerMode
+            || (snap?.activePrompt || '').trim()
+            || snap?.text?.trim()
+            || (snap?.attachments || []).length
+        );
+        if (hasConversation) {
+            setActive(true);
+        } else if (!recordingPending && !openingRef.current && !snap?.focused) {
+            setActive(false);
+        }
+        const conversationStarted = Boolean(
+            snap?.preview
+            || snap?.thread > 0
+            || (snap?.activePrompt || '').trim()
+        );
+        if (conversationStarted && !snap?.sending) {
+            scheduleDraftSave(snap, { immediate: !draftIdRef.current });
+        }
+    }, [recordingPending, scheduleDraftSave]);
+
     const openManual = (prefill) => {
         try {
             if (prefill) sessionStorage.setItem('tsk_manual_prefill', JSON.stringify(prefill));
@@ -235,13 +279,16 @@ const GlobalAIDock = () => {
 
     const expandFromFab = () => {
         clearHoverLeaveTimer();
+        openingRef.current = true;
+        if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
+        openingDoneTimerRef.current = setTimeout(() => {
+            openingRef.current = false;
+        }, 480);
         setFocused(true);
-        setTimeout(() => {
+        setActive(true);
+        requestAnimationFrame(() => {
             window.dispatchEvent(new CustomEvent('tskflow:focus-ai-prompt'));
-            const dock = document.querySelector('[data-testid="ai-command-dock"]');
-            dock?.classList?.add('ai-dock-pulse');
-            setTimeout(() => dock?.classList?.remove('ai-dock-pulse'), 900);
-        }, 40);
+        });
     };
 
     return (
@@ -264,19 +311,19 @@ const GlobalAIDock = () => {
                 <Plus className="ai-dock-fab-plus" strokeWidth={2.25} />
             </button>
             <div
-                className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${active ? ' is-active' : ''}`}
+                className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${open ? ' is-active' : ''}`}
                 inert={!open ? true : undefined}
                 aria-hidden={!open}
             >
                 <button
                     type="button"
                     onClick={clearFlow}
-                    className={`ai-dock-exit absolute top-2 right-2 z-10 h-7 w-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center${active ? ' is-visible' : ''}`}
+                    className={`ai-dock-exit absolute top-2 right-2 z-10 h-7 w-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center${open ? ' is-visible' : ''}`}
                     data-testid="ai-dock-exit"
                     title="Clear (Esc)"
                     aria-label="Clear"
-                    tabIndex={active ? 0 : -1}
-                    aria-hidden={!active}
+                    tabIndex={open ? 0 : -1}
+                    aria-hidden={!open}
                 >
                     <X className="w-3.5 h-3.5" />
                 </button>
@@ -292,33 +339,7 @@ const GlobalAIDock = () => {
                     externalAttachments={pendingAttachments}
                     onExternalAttachmentsConsumed={() => setPendingAttachments([])}
                     registerAttachHandler={(fn) => { attachHandlerRef.current = fn; }}
-                    onSnapshot={(snap) => {
-                        snapRef.current = snap;
-                        setFocused(!!snap?.focused);
-                        const hasConversation = Boolean(
-                            snap?.preview
-                            || snap?.thread > 0
-                            || snap?.answerMode
-                            || (snap?.activePrompt || '').trim()
-                            || snap?.text?.trim()
-                            || (snap?.attachments || []).length
-                        );
-                        if (hasConversation) {
-                            setActive(true);
-                        } else if (!recordingPending) {
-                            setActive(false);
-                        }
-                        // The moment a conversation starts (first send → thread/activePrompt),
-                        // persist a draft so it shows in Unfinished Drafts immediately.
-                        const conversationStarted = Boolean(
-                            snap?.preview
-                            || snap?.thread > 0
-                            || (snap?.activePrompt || '').trim()
-                        );
-                        if (conversationStarted && !snap?.sending) {
-                            scheduleDraftSave(snap, { immediate: !draftIdRef.current });
-                        }
-                    }}
+                    onSnapshot={handleSnapshot}}
                     onCreated={() => {
                         setPendingAttachments([]);
                         setRecordingPending(false);
