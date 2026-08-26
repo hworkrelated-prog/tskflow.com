@@ -2240,7 +2240,7 @@ const AIQuickCreate = ({
                                                             data-testid="ai-chip-title"
                                                             title="Edit task"
                                                         >
-                                                            {editTitle || 'Untitled'}
+                                                            {displayTaskTitle(editTitle) || 'Untitled'}
                                                         </button>
                                                     )}
                                                     {editDue ? ' by ' : ''}

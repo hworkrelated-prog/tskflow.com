@@ -47,6 +47,7 @@ export function layoutTaskDescription(raw) {
     );
     s = s.replace(/\bwith their understanding\b/gi, 'that shows your understanding');
     s = s.replace(/\btheir understanding\b/gi, 'your understanding');
+    s = s.replace(/\btheir (1:1s?|one[- ]on[- ]ones?|DKOs|DDBs)\b/gi, 'your $1');
     s = s.replace(/\s*((?:Next\s+)?steps?):\s*/i, (_, label) => {
         const pretty = /^next/i.test(label) ? 'Next steps:' : 'Steps:';
         return `\n\n${pretty}\n`;
@@ -57,6 +58,7 @@ export function layoutTaskDescription(raw) {
     // Capitalize the ask after a when-clause: "Today, please review…"
     s = s.replace(/^((?:Today|Tomorrow|Tonight|On\s+\w+)\s*,\s*)([a-z])/i, (_, when, ch) => `${when}${ch.toLowerCase()}`);
     s = s.replace(/^(please\s+)([a-z])/i, (_, p, ch) => `Please ${ch}`);
+    s = s.replace(/^(Please [^\n]+)\?\s*(?=\n|$)/i, '$1.');
     return s.trim();
 }
 
@@ -105,11 +107,30 @@ export function parseDescriptionBlocks(raw) {
     return blocks;
 }
 
+const TITLE_DANGLING = new Set([
+    'the', 'a', 'an', 'to', 'for', 'and', 'or', 'of', 'with',
+    'let', 'know', 'tell', 'give', 'by', 'once', 'please',
+]);
+
 /** Titles like "Complete This is a reminder…" — drop the glued command. */
 export function displayTaskTitle(raw) {
     let s = cleanDisplayText(raw).replace(/\s+/g, ' ').trim();
     s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
     s = s.replace(/^this is a reminder for myself\s+to\s+/i, '');
+    s = s.replace(
+        /^(please\s+)?(update|complete|finish|review|send|share|prepare|submit)\s+(their|his|her)\s+/i,
+        (_, please, verb) => `${please || ''}${verb} `,
+    );
+    s = s.replace(/\s+and\s+let(\s+\S+){0,8}\s*$/i, '').trim();
+    s = s.replace(/[.?!,:;]+\s*$/, '').trim();
+    const words = s.split(/\s+/).filter(Boolean);
+    while (
+        words.length
+        && TITLE_DANGLING.has(words[words.length - 1].toLowerCase().replace(/[.,!?:;]+$/, ''))
+    ) {
+        words.pop();
+    }
+    s = words.join(' ').trim();
     if (!s) return '';
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
