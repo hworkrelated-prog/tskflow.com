@@ -38,8 +38,13 @@ def test_reminder_tone_classes_are_high_contrast():
     ):
         assert f".{cls}" in CSS
         assert f'[data-theme="dark"] .{cls}' in CSS
-    # No dusty pink / gold-on-black leftovers as primary styles
     assert "reminder-tone-overdue" in FE
+    assert "border-left-width: 3px" in CSS
+    # Full-card pops (rose/amber/navy fills) must not come back
+    assert "background: #fff1f2 !important" not in CSS
+    assert "background: #fffbeb !important" not in CSS
+    assert "background: #4c0519 !important" not in CSS
+    assert "background: #451a03 !important" not in CSS
     assert "bg-rose-50" not in FE or "reminder-tone" in FE
 
 

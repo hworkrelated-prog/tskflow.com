@@ -23,6 +23,7 @@ logger = logging.getLogger("tskflow.email_followup")
 CONFIDENCE_AUTO = 0.75
 APPROACH_FRACTION = 0.75
 MIN_APPROACH_HOURS = 0.25
+PING_THRESHOLD = 2
 TOKEN_RE = re.compile(r"(?:updates|reply|followup)\+([A-Za-z0-9_-]{8,})@", re.I)
 
 _DONE_RE = re.compile(
@@ -51,6 +52,51 @@ def new_reply_token() -> str:
 
 def reply_address(token: str) -> str:
     return f"{reply_local()}+{token}@{reply_domain()}"
+
+
+def rfc_message_id(token: str) -> str:
+    """Stable RFC 5322 Message-ID so follow-ups stay in one mailbox thread."""
+    return f"<tskflow.{token}@{reply_domain()}>"
+
+
+def thread_headers(task: Optional[dict], this_id: str) -> dict:
+    """Message-ID plus In-Reply-To / References when a thread already exists."""
+    headers = {"Message-ID": this_id}
+    root = ((task or {}).get("email_thread_root_message_id") or "").strip()
+    last = ((task or {}).get("email_thread_last_message_id") or root).strip()
+    if last:
+        headers["In-Reply-To"] = last
+        if root and root != last:
+            headers["References"] = f"{root} {last}"
+        else:
+            headers["References"] = last
+    return headers
+
+
+def threaded_subject(existing: Optional[str], fresh: str) -> str:
+    prior = (existing or "").strip()
+    if not prior:
+        return fresh
+    if prior.lower().startswith("re:"):
+        return prior
+    return f"Re: {prior}"
+
+
+def should_open_email_thread(task: dict) -> bool:
+    """True after two ignored pings when we have not started an email thread yet."""
+    if not task or task.get("is_parent"):
+        return False
+    if task.get("email_thread_id") or task.get("email_thread_root_message_id"):
+        return False
+    if (task.get("status") or "Pending") != "Pending":
+        return False
+    if task.get("assigned_to") and task.get("assigned_to") == task.get("created_by"):
+        return False
+    try:
+        pings = int(task.get("nudge_count") or 0)
+    except (TypeError, ValueError):
+        pings = 0
+    return pings >= PING_THRESHOLD
 
 
 def token_from_addresses(addresses: Optional[List[str]]) -> Optional[str]:
@@ -227,6 +273,25 @@ def followup_copy(kind: str, task: dict, assignee_name: str, assigner_name: str)
             "I'll update the task from whatever you write."
         )
     return {"subject": subject, "greeting": greeting, "body": body, "kind": kind}
+
+
+def ignored_guidance_copy(task: dict, assignee_name: str, assigner_name: str) -> dict:
+    """Opening email when someone has ignored two in-app pings."""
+    first = first_name(assignee_name)
+    mgr = first_name(assigner_name, "your manager")
+    title = (task.get("title") or "this").strip()
+    due = (task.get("due_date") or "").replace("T", " at ").split(".")[0][:16]
+    due_bit = f" It's due {due}." if due else ""
+    subject = f"{mgr} asked you to handle {title}"
+    greeting = f"Hi {first} — checking in personally."
+    body = (
+        f"{mgr} asked you to take care of {title}.{due_bit} "
+        "I've pinged you twice in TskFlow with no response, so I'm writing here "
+        "instead of having them chase you. "
+        "Could you take this on, or should I let them know you're blocked? "
+        "Just reply to this email — I'll update the task from whatever you write."
+    )
+    return {"subject": subject, "greeting": greeting, "body": body, "kind": "ignored_guidance"}
 
 
 def render_followup_email(
@@ -482,34 +547,122 @@ async def flag_email_reply_for_review(
     return review
 
 
-async def record_email_followup(db, task: dict, token: str, kind: str, now: datetime) -> dict:
+async def record_email_followup(
+    db,
+    task: dict,
+    token: str,
+    kind: str,
+    now: datetime,
+    message_id: Optional[str] = None,
+    subject: Optional[str] = None,
+) -> dict:
     iso = now.isoformat() if hasattr(now, "isoformat") else str(now)
     try:
         count = int(task.get("email_followup_count") or 0) + 1
     except (TypeError, ValueError):
         count = 1
-    await db.tasks.update_one(
-        {"id": task["id"]},
-        {"$set": {
-            "last_email_followup_at": iso,
-            "email_followup_count": count,
-            "email_reply_token": token,
-            "last_email_followup_kind": kind,
-        }},
-    )
+    mid = message_id or rfc_message_id(token)
+    root = (task.get("email_thread_root_message_id") or mid).strip()
+    thread_id = task.get("email_thread_id") or str(uuid.uuid4())
+    subj = threaded_subject(task.get("email_thread_subject"), subject or "")
+    if not subj:
+        subj = subject or ""
+    fields = {
+        "last_email_followup_at": iso,
+        "email_followup_count": count,
+        "email_reply_token": token,
+        "last_email_followup_kind": kind,
+        "email_thread_id": thread_id,
+        "email_thread_root_message_id": root,
+        "email_thread_last_message_id": mid,
+    }
+    if subj:
+        fields["email_thread_subject"] = subj
+    await db.tasks.update_one({"id": task["id"]}, {"$set": fields})
     await db.email_followup_tokens.insert_one({
         "id": token,
         "task_id": task["id"],
         "assignee_id": task.get("assigned_to"),
         "assignee_email": task.get("assigned_to_email"),
         "kind": kind,
+        "message_id": mid,
         "created_at": iso,
     })
     next_task = dict(task)
-    next_task["last_email_followup_at"] = iso
-    next_task["email_followup_count"] = count
-    next_task["email_reply_token"] = token
+    next_task.update(fields)
     return next_task
+
+
+async def open_ignored_email_thread(
+    db,
+    task: dict,
+    assignee: dict,
+    assigner: Optional[dict],
+    now: datetime,
+    send_email: Callable[..., Any],
+    app_url: str,
+) -> Optional[dict]:
+    """Start a real mailbox thread after two ignored pings."""
+    if not should_open_email_thread(task):
+        return None
+    if not email_channel_allowed(assignee, None):
+        return None
+    email = (assignee or {}).get("email")
+    if not email:
+        return None
+    token = new_reply_token()
+    addr = reply_address(token)
+    this_id = rfc_message_id(token)
+    wording = ignored_guidance_copy(
+        task,
+        (assignee or {}).get("name") or "",
+        (assigner or {}).get("name") or "your manager",
+    )
+    subject = wording["subject"]
+    html_body = render_followup_email(
+        (assignee or {}).get("name") or "",
+        (assigner or {}).get("name") or "your manager",
+        task,
+        wording,
+        app_url,
+        addr,
+    )
+    headers = {"Message-ID": this_id}
+    ok = await send_email(email, subject, html_body, reply_to=addr, headers=headers)
+    if not ok:
+        return None
+    pinged = await record_email_followup(
+        db, task, token, "ignored_guidance", now, message_id=this_id, subject=subject
+    )
+    try:
+        from activity_helpers import log_task_activity, serialize_app_ts
+
+        sent_at = serialize_app_ts(now) or (now.isoformat() if hasattr(now, "isoformat") else str(now))
+        await log_task_activity(
+            db,
+            task_id=task["id"],
+            event_type="reminder",
+            channel="email",
+            actor_name="Email follow-up",
+            recipient_id=assignee.get("id"),
+            recipient_name=assignee.get("name"),
+            recipient_email=email,
+            company_domain=assignee.get("company_domain") or task.get("company_domain"),
+            title=subject,
+            body=f"{task.get('title')} — email thread after ignored guidance",
+            meta={
+                "fired_kind": "ignored_guidance",
+                "via": "email_thread",
+                "reply_token": token,
+                "message_id": this_id,
+                "sent_at": sent_at,
+                "channels": ["email"],
+            },
+            created_at=sent_at,
+        )
+    except Exception as log_err:
+        logger.warning("ignored email thread activity log failed: %s", log_err)
+    return pinged
 
 
 async def sweep_email_followups(
@@ -566,8 +719,10 @@ async def sweep_email_followups(
                 continue
             token = new_reply_token()
             addr = reply_address(token)
+            this_id = rfc_message_id(token)
             assigner = creators.get(t.get("created_by") or "") or {}
             wording = followup_copy(kind, t, user.get("name") or "", assigner.get("name") or "your manager")
+            subject = threaded_subject(t.get("email_thread_subject"), wording["subject"])
             html_body = render_followup_email(
                 user.get("name") or "",
                 assigner.get("name") or "your manager",
@@ -576,10 +731,13 @@ async def sweep_email_followups(
                 app_url,
                 addr,
             )
-            ok = await send_email(user["email"], wording["subject"], html_body, reply_to=addr)
+            headers = thread_headers(t, this_id)
+            ok = await send_email(user["email"], subject, html_body, reply_to=addr, headers=headers)
             if not ok:
                 continue
-            pinged = await record_email_followup(db, t, token, kind, now)
+            pinged = await record_email_followup(
+                db, t, token, kind, now, message_id=this_id, subject=subject
+            )
             try:
                 from activity_helpers import log_task_activity
                 await log_task_activity(
@@ -592,9 +750,9 @@ async def sweep_email_followups(
                     recipient_name=user.get("name"),
                     recipient_email=user.get("email"),
                     company_domain=user.get("company_domain") or t.get("company_domain"),
-                    title=wording["subject"],
+                    title=subject,
                     body=f"{t.get('title')} — email {kind.replace('_', ' ')}",
-                    meta={"fired_kind": kind, "via": "email_followup", "reply_token": token},
+                    meta={"fired_kind": kind, "via": "email_followup", "reply_token": token, "message_id": this_id},
                     created_at=now.isoformat() if hasattr(now, "isoformat") else str(now),
                 )
             except Exception as log_err:

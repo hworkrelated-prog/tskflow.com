@@ -14,10 +14,15 @@ from email_followup import (
     followup_copy,
     followup_kind,
     has_assignee_update,
+    ignored_guidance_copy,
     interpret_email_reply,
     render_followup_email,
     reply_address,
+    rfc_message_id,
+    should_open_email_thread,
     should_send_email_followup,
+    thread_headers,
+    threaded_subject,
     token_from_addresses,
 )
 
@@ -133,3 +138,48 @@ def test_apply_and_review_paths_exist():
     assert "Updated from an email reply" in src
     assert "do NOT guess" in src
     assert "priority_followup_config" in src
+    assert "open_ignored_email_thread" in src
+    assert "rfc_message_id" in src
+    assert "should_open_email_thread" in SERVER
+    assert "open_ignored_email_thread" in SERVER
+    assert "headers=email_headers" in SERVER or "headers=headers" in SERVER
+
+
+def test_email_thread_headers_continue_a_conversation():
+    mid = rfc_message_id("tokAAA111")
+    assert mid.startswith("<tskflow.tokAAA111@")
+    first = thread_headers({}, mid)
+    assert first["Message-ID"] == mid
+    assert "In-Reply-To" not in first
+    follow = thread_headers(
+        {
+            "email_thread_root_message_id": mid,
+            "email_thread_last_message_id": mid,
+        },
+        rfc_message_id("tokBBB222"),
+    )
+    assert follow["In-Reply-To"] == mid
+    assert mid in follow["References"]
+    assert threaded_subject(None, "Have you had a chance") == "Have you had a chance"
+    assert threaded_subject("Have you had a chance", "x") == "Re: Have you had a chance"
+    assert threaded_subject("Re: Have you had a chance", "x") == "Re: Have you had a chance"
+
+
+def test_ignored_guidance_opens_after_two_pings():
+    task = {
+        "status": "Pending",
+        "nudge_count": 2,
+        "assigned_to": "a",
+        "created_by": "b",
+        "title": "Finish outreach training",
+    }
+    assert should_open_email_thread(task) is True
+    assert should_open_email_thread({**task, "nudge_count": 1}) is False
+    assert should_open_email_thread({**task, "email_thread_id": "e1"}) is False
+    assert should_open_email_thread({**task, "assigned_to": "a", "created_by": "a"}) is False
+    copy = ignored_guidance_copy(task, "Ada Lovelace", "Henrik")
+    blob = f"{copy['subject']} {copy['greeting']} {copy['body']}".lower()
+    assert "ada" in blob
+    assert "twice" in blob
+    assert "reply" in blob
+    assert "⚠️" not in blob

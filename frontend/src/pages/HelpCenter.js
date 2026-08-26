@@ -97,7 +97,7 @@ const topics = [
         body: (
             <div className="text-sm space-y-2">
                 <p><strong>Do I need to install anything?</strong> No — TskFlow runs in your browser.</p>
-                <p><strong>What happens if someone ignores a task?</strong> After two pings, Jarvis DMs them on Slack, talks like a teammate, and updates the task from whatever they reply. That needs a Slack bot token and signing secret on the server, with Events API pointed at <code>/api/slack/events</code> (subscribe to <code>message.im</code>).</p>
+                <p><strong>What happens if someone ignores a task?</strong> After two pings, Jarvis starts an email thread with them (and a Slack DM if Slack is connected), talks like a teammate, and updates the task from whatever they reply. Email replies go to the unique reply address on that thread. Slack needs a bot token and signing secret, with Events API pointed at <code>/api/slack/events</code> (subscribe to <code>message.im</code>).</p>
                 <p><strong>Can external people receive tasks?</strong> Yes — use their email; we’ll send them an invite link.</p>
                 <p><strong>Is my data private?</strong> Your task metrics for direct reports only include tasks you assigned to them.</p>
                 <p><strong>Does Voice Mode work in Safari?</strong> Best in Chrome / Edge. Safari support is partial.</p>

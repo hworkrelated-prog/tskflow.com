@@ -34,6 +34,19 @@ def test_reminder_cards_use_pacific_clock():
     assert "formatAppDateTime" in DETAIL
     assert "America/Los_Angeles" in DT
     assert "format(new Date(a.created_at)" not in DETAIL
+    assert "a.sent_at || a.created_at" in DETAIL
+
+
+def test_notifications_use_same_pacific_clock():
+    bell = (ROOT / "frontend/src/components/NotificationBell.js").read_text(encoding="utf-8")
+    catch = (ROOT / "frontend/src/components/CatchUpReview.js").read_text(encoding="utf-8")
+    assert "formatAppDateTime" in bell
+    assert "n.sent_at || n.created_at" in bell
+    assert "formatDistanceToNow" not in bell
+    assert "n.sent_at || n.created_at" in catch
+    assert '"sent_at": sent_at' in SERVER
+    assert "create_notification(" in SERVER
+    assert "created_at: Optional[str] = None" in SERVER
 
 
 def test_serialize_app_ts_keeps_pacific_evening():
