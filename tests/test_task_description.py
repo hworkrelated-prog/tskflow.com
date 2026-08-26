@@ -120,12 +120,12 @@ if (/their 1:1/i.test(teamAsk) || /\?$/.test(teamAsk.split('\n')[0].trim())) {
   console.error('team ask not polished', JSON.stringify(teamAsk));
   process.exit(1);
 }
-if (!/your 1:1/i.test(teamAsk) || /let Henrik Morgan know/i.test(teamAsk) || /once this is completed/i.test(teamAsk)) {
-  console.error('expected softened close-the-loop', JSON.stringify(teamAsk));
+if (!/your 1:1/i.test(teamAsk) || /let Henrik/i.test(teamAsk) || /once this is completed/i.test(teamAsk) || /short update/i.test(teamAsk) || /Morgan/i.test(teamAsk)) {
+  console.error('expected mark-done close without a status ping', JSON.stringify(teamAsk));
   process.exit(1);
 }
-if (!/send Henrik Morgan a short update when you're done/i.test(teamAsk.split('\n')[0])) {
-  console.error('expected short update close', JSON.stringify(teamAsk));
+if (!/mark this done when you're finished/i.test(teamAsk.split('\n')[0])) {
+  console.error('expected mark this done', JSON.stringify(teamAsk));
   process.exit(1);
 }
 if (rewriteSelfAssignCopy('1. Complete the ask above.\n2. Reply with a brief update when you are done.') !== '1. Do the work.\n2. Mark this done when I finish.') {

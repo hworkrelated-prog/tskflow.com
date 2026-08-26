@@ -61,9 +61,18 @@ export function layoutTaskDescription(raw) {
     s = s.replace(/^(Please [^\n]+)\?\s*(?=\n|$)/i, '$1.');
     s = s.replace(
         /(?:,?\s+and\s+)?let\s+((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+know\s+(?:once|when)\s+(?:this\s+is\s+(?:completed|done)|you(?:'re| are)\s+done)\.?/g,
-        (_, who) => `, and send ${who} a short update when you're done.`,
+        ", and mark this done when you're finished.",
     );
-    s = s.replace(/^, and send\b/i, 'Send');
+    s = s.replace(
+        /(?:,?\s+and\s+)?send\s+((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+a short update when you(?:'re| are) done\.?/g,
+        ", and mark this done when you're finished.",
+    );
+    s = s.replace(/Reply with a brief update when you are done\.?/gi, "Mark this done when you're finished.");
+    s = s.replace(
+        /Send a short update to [A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2} with what you found and any blockers\.?/g,
+        "Mark this done when you're finished.",
+    );
+    s = s.replace(/^, and mark\b/i, 'Mark');
     s = s.replace(/[ \t]{2,}/g, ' ').replace(/\s+,/g, ',');
     return s.trim();
 }
@@ -171,6 +180,7 @@ export function rewriteSelfAssignCopy(text) {
     s = s.replace(/\bwe\s+have\s+to\b/gi, 'I have to');
     s = s.replace(/\bwe\s+should\b/gi, 'I should');
     s = s.replace(/Reply with a brief update when you are done\.?/gi, 'Mark this done when I finish.');
+    s = s.replace(/Mark this done when you're finished\.?/gi, 'Mark this done when I finish.');
     s = s.replace(/Complete the ask above\.?/gi, 'Do the work.');
     s = s.replace(/^\s*\d{1,2}[.)]\s*Complete the\s*$/gim, '');
     s = s.replace(/\n{3,}/g, '\n\n');

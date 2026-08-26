@@ -63,9 +63,17 @@ def test_confirm_card_verbiage_is_second_person_and_complete():
     first = ask.split("\n", 1)[0].strip()
     assert first.endswith(".")
     assert not first.endswith("?")
-    assert "let henrik morgan know" not in first.lower()
+    assert "let henrik" not in first.lower()
+    assert "morgan" not in first.lower()
+    assert "short update" not in first.lower()
     assert "once this is completed" not in first.lower()
-    assert "send henrik morgan a short update when you're done" in first.lower()
+    assert "mark this done" in first.lower()
+    shared = ns["_rewrite_description_for_assignee"](
+        "Please share the template with me.",
+        "Henrik Morgan",
+    )
+    assert "henrik" in shared.lower()
+    assert "morgan" not in shared.lower()
 
 
 def test_cards_rewrite_self_assign_voice():

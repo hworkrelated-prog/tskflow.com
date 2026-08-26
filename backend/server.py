@@ -9433,8 +9433,9 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
   Write as the assigner speaking directly to them — never as a note about them.
   Say "your 1:1s" / "your DKOs", never "their 1:1s". Direct Please-asks end with a period, not a question mark.
-  Never write "let {manager} know once this is completed" — it sounds like an order.
-  Prefer "send {manager} a short update when you're done."
+  Never write "let {manager} know once this is completed" or ask them to send you an update when they finish.
+  Closing the task is enough: "mark this done when you're finished."
+  If you mention the person who assigned the work, first name only — never a full name.
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
 - Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
 - NEVER paste the user's raw prompt (or a near-copy) into title or description.
@@ -10477,9 +10478,18 @@ def _too_close_to_prompt(candidate: str, raw: str) -> bool:
     return len(a) > 24 and (a in b or b in a)
 
 
+def _assigner_first_name(name: Optional[str], fallback: str = "your manager") -> str:
+    raw = (name or "").strip()
+    if not raw:
+        return fallback
+    if raw.lower() in {"your manager", "me", "myself"}:
+        return fallback if raw.lower() != "your manager" else "your manager"
+    return raw.split()[0]
+
+
 def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = None) -> str:
     """Assigner talking directly to the people who will do the work."""
-    mgr = (manager_name or "your manager").strip() or "your manager"
+    mgr = _assigner_first_name(manager_name)
     body = (work or "").strip()
     # Drop leftover owner phrasing so we never emit "please benjamin needs to…"
     body = re.sub(
@@ -10519,7 +10529,7 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     if not desc:
         return desc
     s = str(desc).strip()
-    mgr = (manager_name or "your manager").strip() or "your manager"
+    mgr = _assigner_first_name(manager_name)
 
     # "{Name} needs to review…" / "please benjamin needs to…" → imperative ask
     s = re.sub(
@@ -10620,11 +10630,12 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         s = lead + (("\n" + rest) if rest else "")
 
     s = _soften_close_the_loop(s)
+    s = _prefer_assigner_first_name(s, manager_name)
     return s.strip()
 
 
 def _soften_close_the_loop(text: str) -> str:
-    """'Let {name} know once this is completed' reads like an order — ask for a short update instead."""
+    """Status pings ('let me know when done') are unnecessary — marking the task done is enough."""
     if not text:
         return text
     s = str(text)
@@ -10632,13 +10643,33 @@ def _soften_close_the_loop(text: str) -> str:
         r"(?i)(?:,?\s+and\s+)?let\s+"
         r"((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+"
         r"know\s+(?:once|when)\s+(?:this\s+is\s+(?:completed|done)|you(?:'re| are)\s+done)\.?",
-        lambda m: f", and send {m.group(1)} a short update when you're done.",
+        ", and mark this done when you're finished.",
         s,
     )
-    s = re.sub(r"(?i)^, and send\b", "Send", s)
+    s = re.sub(
+        r"(?i)(?:,?\s+and\s+)?send\s+"
+        r"((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+"
+        r"a short update when you(?:'re| are) done\.?",
+        ", and mark this done when you're finished.",
+        s,
+    )
+    s = re.sub(
+        r"(?i)reply with a brief update when you are done\.?",
+        "Mark this done when you're finished.",
+        s,
+    )
+    s = re.sub(r"(?i)^, and mark\b", "Mark", s)
     s = re.sub(r"[ \t]{2,}", " ", s)
     s = re.sub(r"\s+,", ",", s)
     return s.strip()
+
+
+def _prefer_assigner_first_name(text: str, manager_name: Optional[str]) -> str:
+    full = (manager_name or "").strip()
+    first = _assigner_first_name(full, "")
+    if not text or not full or not first or first.lower() == full.lower():
+        return text
+    return re.sub(re.escape(full), first, text, flags=re.I)
 
 
 def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> List[str]:
@@ -10684,17 +10715,17 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
             steps.append("Make sure the submission reached them.")
     elif re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob) and not steps:
         steps.append("Review the material and note anything that needs a decision.")
-    if re.search(r"(?i)\b(update|report|eod|summary)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
-        steps.append(f"Send a short update to {('your manager')} with what you found and any blockers.")
+    if re.search(r"(?i)\b(eod|end of day)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
+        steps.append("Send the EOD update.")
     if re.search(r"(?i)\b(meet|talk|meeting)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     elif re.search(r"(?i)\bcall\b", blob) and not re.search(r"(?i)\b(bamfam|submit)\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     if not steps:
         steps.append("Complete the ask above.")
-        steps.append("Reply with a brief update when you are done.")
-    elif not any(re.search(r"(?i)\breply|when you are done|when I finish", st) for st in steps):
-        steps.append("Reply with a brief update when you are done.")
+        steps.append("Mark this done when you're finished.")
+    elif not any(re.search(r"(?i)\breply|when you are done|when I finish|mark this done", st) for st in steps):
+        steps.append("Mark this done when you're finished.")
     return steps[:4]
 
 
@@ -10707,7 +10738,7 @@ def _carnegie_format_description(desc: str, title: str = "", manager_name: Optio
         return _normalize_description_layout(s)
     steps = _infer_next_steps(s, title, self_assign=self_assign)
     if manager_name and not self_assign:
-        steps = [st.replace("your manager", manager_name) for st in steps]
+        steps = [st.replace("your manager", _assigner_first_name(manager_name)) for st in steps]
     numbered = "\n".join(f"{i + 1}. {st}" for i, st in enumerate(steps))
     return _normalize_description_layout(f"{s.rstrip()}\n\nNext steps:\n{numbered}")
 
@@ -10742,6 +10773,8 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
     if re.match(r"(?i)^please\b", first) and first.rstrip().endswith("?"):
         return True
     if re.search(r"(?i)\blet\s+.+\s+know\s+once\s+this\s+is\s+completed", description or ""):
+        return True
+    if re.search(r"(?i)\bsend\s+.+\s+a short update when you(?:'re| are) done", description or ""):
         return True
     if re.search(r"(?i)\bi need my\b|please i\b|need my submit\b", description or ""):
         return True
@@ -11155,8 +11188,8 @@ async def _llm_logical_copy(
         "Complete verb phrase only — never end on let/know/and. No 'their 1:1s' in a title shown as I'll ask them to {title}.\n"
         "Description: full grammatical sentences a colleague would send. Polite, not stiff. "
         "Second person (your 1:1s, not their). Please-asks end with a period, not '?'. "
-        "Never 'let {name} know once this is completed' — that sounds like an order. "
-        "Prefer 'send {name} a short update when you're done'. "
+        "Never 'let {name} know once this is completed' and never ask them to send an update when done — "
+        "marking the task done is enough. If you mention the assigner, first name only. "
         "Lead with the ask, then Next steps if there are several actions. "
         "If the draft is truncated, finish the thought from the original request — "
         "do not leave dangling 'the' / 'I' / 'for'. "
