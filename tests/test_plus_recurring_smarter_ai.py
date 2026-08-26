@@ -56,3 +56,7 @@ def test_parse_uses_high_intelligence_model():
     assert "How often should this repeat" in server
     assert "Who should this be assigned to?" in server
     assert "fully-present colleague" in server
+    copy = server.split("async def _llm_logical_copy")[1].split("async def _llm_parse")[0]
+    assert "model=_task_llm_model()" in copy
+    assert "gpt-4o-mini" not in copy
+    assert "professional, polite" in copy.lower()

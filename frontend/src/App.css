@@ -572,172 +572,128 @@ body.landing-active {
     color: #ffffff !important;
 }
 
-/* --- Reminder activity cards: high-contrast tones (light + dark) --- */
+/* --- Reminder activity cards: calm, readable (light + dark) --- */
 .reminder-card {
     border-radius: 0.75rem;
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-left-width: 3px !important;
+    color: #0f172a !important;
 }
 .reminder-tone-title {
-    color: inherit;
+    color: #0f172a !important;
 }
 .reminder-tone-meta {
-    opacity: 0.72;
+    color: #475569 !important;
+    opacity: 1;
 }
 .reminder-tone-body {
-    color: inherit;
-    opacity: 0.92;
+    color: #334155 !important;
+    opacity: 1;
 }
 .reminder-channel-badge {
     border-width: 1px;
-    font-weight: 600;
+    font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
-/* Overdue — clear rose, never dusty pink-on-pink */
-.reminder-tone-overdue {
-    background: #fff1f2 !important;
-    border-color: #fb7185 !important;
-    color: #9f1239 !important;
-}
-.reminder-tone-overdue .reminder-tone-title { color: #881337 !important; }
-.reminder-tone-overdue .reminder-tone-meta { color: #9f1239 !important; }
-.reminder-tone-overdue .reminder-tone-body { color: #9f1239 !important; }
-
-/* Due soon — amber */
-.reminder-tone-soon {
-    background: #fffbeb !important;
-    border-color: #f59e0b !important;
-    color: #92400e !important;
-}
-.reminder-tone-soon .reminder-tone-title { color: #78350f !important; }
-.reminder-tone-soon .reminder-tone-meta,
-.reminder-tone-soon .reminder-tone-body { color: #92400e !important; }
-
-/* Manager nudge — teal */
-.reminder-tone-nudge {
-    background: #f0fdfa !important;
-    border-color: #2dd4bf !important;
-    color: #115e59 !important;
-}
-.reminder-tone-nudge .reminder-tone-title { color: #0f766e !important; }
-.reminder-tone-nudge .reminder-tone-meta,
-.reminder-tone-nudge .reminder-tone-body { color: #115e59 !important; }
-
-/* Email-forwarded reminder */
-.reminder-tone-email {
-    background: #eff6ff !important;
-    border-color: #60a5fa !important;
-    color: #1e3a8a !important;
-}
-.reminder-tone-email .reminder-tone-title { color: #1e40af !important; }
-.reminder-tone-email .reminder-tone-meta,
-.reminder-tone-email .reminder-tone-body { color: #1e3a8a !important; }
-
-/* Slack (only when connected) */
-.reminder-tone-slack {
-    background: #faf5ff !important;
-    border-color: #c084fc !important;
-    color: #581c87 !important;
-}
-.reminder-tone-slack .reminder-tone-title { color: #6b21a8 !important; }
-.reminder-tone-slack .reminder-tone-meta,
-.reminder-tone-slack .reminder-tone-body { color: #581c87 !important; }
-
-/* Default in-app */
+.reminder-tone-overdue,
+.reminder-tone-soon,
+.reminder-tone-nudge,
+.reminder-tone-email,
+.reminder-tone-slack,
 .reminder-tone-default {
     background: #f8fafc !important;
-    border-color: #cbd5e1 !important;
+    border-color: #e2e8f0 !important;
     color: #0f172a !important;
 }
+.reminder-tone-overdue { border-left-color: #9f1239 !important; }
+.reminder-tone-soon { border-left-color: #a16207 !important; }
+.reminder-tone-nudge { border-left-color: #0f766e !important; }
+.reminder-tone-email { border-left-color: #1d4ed8 !important; }
+.reminder-tone-slack { border-left-color: #6b21a8 !important; }
+.reminder-tone-default { border-left-color: #64748b !important; }
+
+.reminder-tone-overdue .reminder-tone-title,
+.reminder-tone-soon .reminder-tone-title,
+.reminder-tone-nudge .reminder-tone-title,
+.reminder-tone-email .reminder-tone-title,
+.reminder-tone-slack .reminder-tone-title,
 .reminder-tone-default .reminder-tone-title { color: #0f172a !important; }
+.reminder-tone-overdue .reminder-tone-meta,
+.reminder-tone-soon .reminder-tone-meta,
+.reminder-tone-nudge .reminder-tone-meta,
+.reminder-tone-email .reminder-tone-meta,
+.reminder-tone-slack .reminder-tone-meta,
 .reminder-tone-default .reminder-tone-meta { color: #475569 !important; }
-.reminder-tone-default .reminder-tone-body { color: #1e293b !important; }
+.reminder-tone-overdue .reminder-tone-body,
+.reminder-tone-soon .reminder-tone-body,
+.reminder-tone-nudge .reminder-tone-body,
+.reminder-tone-email .reminder-tone-body,
+.reminder-tone-slack .reminder-tone-body,
+.reminder-tone-default .reminder-tone-body { color: #334155 !important; }
 
 .reminder-channel-in_app {
-    background: #e2e8f0 !important;
-    border-color: #94a3b8 !important;
-    color: #0f172a !important;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
 }
 .reminder-channel-email {
-    background: #dbeafe !important;
-    border-color: #60a5fa !important;
-    color: #1e3a8a !important;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
 }
 .reminder-channel-slack {
-    background: #ede9fe !important;
-    border-color: #a78bfa !important;
-    color: #5b21b6 !important;
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
 }
 
-/* Dark theme — solid surfaces + light text (no maroon-on-black / gold-on-charcoal) */
-[data-theme="dark"] .reminder-tone-overdue {
-    background: #4c0519 !important;
-    border-color: #fb7185 !important;
-    color: #fecdd3 !important;
-}
-[data-theme="dark"] .reminder-tone-overdue .reminder-tone-title { color: #fff1f2 !important; }
-[data-theme="dark"] .reminder-tone-overdue .reminder-tone-meta,
-[data-theme="dark"] .reminder-tone-overdue .reminder-tone-body { color: #fecdd3 !important; }
-
-[data-theme="dark"] .reminder-tone-soon {
-    background: #451a03 !important;
-    border-color: #fbbf24 !important;
-    color: #fde68a !important;
-}
-[data-theme="dark"] .reminder-tone-soon .reminder-tone-title { color: #fffbeb !important; }
-[data-theme="dark"] .reminder-tone-soon .reminder-tone-meta,
-[data-theme="dark"] .reminder-tone-soon .reminder-tone-body { color: #fde68a !important; }
-
-[data-theme="dark"] .reminder-tone-nudge {
-    background: #042f2e !important;
-    border-color: #2dd4bf !important;
-    color: #99f6e4 !important;
-}
-[data-theme="dark"] .reminder-tone-nudge .reminder-tone-title { color: #ccfbf1 !important; }
-[data-theme="dark"] .reminder-tone-nudge .reminder-tone-meta,
-[data-theme="dark"] .reminder-tone-nudge .reminder-tone-body { color: #99f6e4 !important; }
-
-[data-theme="dark"] .reminder-tone-email {
-    background: #172554 !important;
-    border-color: #60a5fa !important;
-    color: #bfdbfe !important;
-}
-[data-theme="dark"] .reminder-tone-email .reminder-tone-title { color: #eff6ff !important; }
-[data-theme="dark"] .reminder-tone-email .reminder-tone-meta,
-[data-theme="dark"] .reminder-tone-email .reminder-tone-body { color: #bfdbfe !important; }
-
-[data-theme="dark"] .reminder-tone-slack {
-    background: #3b0764 !important;
-    border-color: #c084fc !important;
-    color: #e9d5ff !important;
-}
-[data-theme="dark"] .reminder-tone-slack .reminder-tone-title { color: #faf5ff !important; }
-[data-theme="dark"] .reminder-tone-slack .reminder-tone-meta,
-[data-theme="dark"] .reminder-tone-slack .reminder-tone-body { color: #e9d5ff !important; }
-
+/* Dark theme — same readable slate cards, quiet left accent only */
+[data-theme="dark"] .reminder-card,
+[data-theme="dark"] .reminder-tone-overdue,
+[data-theme="dark"] .reminder-tone-soon,
+[data-theme="dark"] .reminder-tone-nudge,
+[data-theme="dark"] .reminder-tone-email,
+[data-theme="dark"] .reminder-tone-slack,
 [data-theme="dark"] .reminder-tone-default {
     background: #1e293b !important;
-    border-color: #64748b !important;
+    border-color: #334155 !important;
     color: #e2e8f0 !important;
 }
+[data-theme="dark"] .reminder-tone-overdue { border-left-color: #fb7185 !important; }
+[data-theme="dark"] .reminder-tone-soon { border-left-color: #fbbf24 !important; }
+[data-theme="dark"] .reminder-tone-nudge { border-left-color: #2dd4bf !important; }
+[data-theme="dark"] .reminder-tone-email { border-left-color: #60a5fa !important; }
+[data-theme="dark"] .reminder-tone-slack { border-left-color: #c084fc !important; }
+[data-theme="dark"] .reminder-tone-default { border-left-color: #94a3b8 !important; }
+
+[data-theme="dark"] .reminder-tone-overdue .reminder-tone-title,
+[data-theme="dark"] .reminder-tone-soon .reminder-tone-title,
+[data-theme="dark"] .reminder-tone-nudge .reminder-tone-title,
+[data-theme="dark"] .reminder-tone-email .reminder-tone-title,
+[data-theme="dark"] .reminder-tone-slack .reminder-tone-title,
 [data-theme="dark"] .reminder-tone-default .reminder-tone-title { color: #f8fafc !important; }
+[data-theme="dark"] .reminder-tone-overdue .reminder-tone-meta,
+[data-theme="dark"] .reminder-tone-soon .reminder-tone-meta,
+[data-theme="dark"] .reminder-tone-nudge .reminder-tone-meta,
+[data-theme="dark"] .reminder-tone-email .reminder-tone-meta,
+[data-theme="dark"] .reminder-tone-slack .reminder-tone-meta,
 [data-theme="dark"] .reminder-tone-default .reminder-tone-meta,
+[data-theme="dark"] .reminder-tone-overdue .reminder-tone-body,
+[data-theme="dark"] .reminder-tone-soon .reminder-tone-body,
+[data-theme="dark"] .reminder-tone-nudge .reminder-tone-body,
+[data-theme="dark"] .reminder-tone-email .reminder-tone-body,
+[data-theme="dark"] .reminder-tone-slack .reminder-tone-body,
 [data-theme="dark"] .reminder-tone-default .reminder-tone-body { color: #cbd5e1 !important; }
 
-[data-theme="dark"] .reminder-channel-in_app {
-    background: #334155 !important;
-    border-color: #94a3b8 !important;
-    color: #f1f5f9 !important;
-}
-[data-theme="dark"] .reminder-channel-email {
-    background: #1e3a8a !important;
-    border-color: #93c5fd !important;
-    color: #dbeafe !important;
-}
+[data-theme="dark"] .reminder-channel-in_app,
+[data-theme="dark"] .reminder-channel-email,
 [data-theme="dark"] .reminder-channel-slack {
-    background: #5b21b6 !important;
-    border-color: #d8b4fe !important;
-    color: #f3e8ff !important;
+    background: #334155 !important;
+    border-color: #475569 !important;
+    color: #e2e8f0 !important;
 }
 
 [data-theme="dark"] .gradient-mesh,

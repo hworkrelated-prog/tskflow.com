@@ -1602,7 +1602,7 @@ const TaskDetail = () => {
                                                     {a.title || (a.event_type === 'nudge' ? 'Nudge' : 'Reminder')}
                                                 </span>
                                                 <span className="reminder-tone-meta text-xs shrink-0">
-                                                    {a.created_at && formatAppDateTime(a.created_at)}
+                                                    {formatAppDateTime(a.sent_at || a.created_at)}
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-1.5 mb-1">

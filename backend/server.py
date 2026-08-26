@@ -55,11 +55,16 @@ from slack_followup import (
 from email_followup import (
     followup_copy,
     new_reply_token,
+    open_ignored_email_thread,
     process_inbound_email,
     record_email_followup,
     render_followup_email,
     reply_address,
+    rfc_message_id,
+    should_open_email_thread,
     sweep_email_followups,
+    thread_headers,
+    threaded_subject,
     verify_resend_webhook,
 )
 from transcript_helpers import (
@@ -384,7 +389,13 @@ def to_pst(dt_str: str):
     dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
     return dt.astimezone(PST)
 
-async def send_email_notification(to_email: str, subject: str, content: str, reply_to: Optional[str] = None) -> bool:
+async def send_email_notification(
+    to_email: str,
+    subject: str,
+    content: str,
+    reply_to: Optional[str] = None,
+    headers: Optional[dict] = None,
+) -> bool:
     resend_key = os.getenv('RESEND_API_KEY')
     
     if not resend_key:
@@ -399,6 +410,10 @@ async def send_email_notification(to_email: str, subject: str, content: str, rep
     }
     if reply_to:
         params["reply_to"] = reply_to
+    if headers:
+        clean_headers = {str(k): str(v) for k, v in headers.items() if k and v is not None}
+        if clean_headers:
+            params["headers"] = clean_headers
     # Fast + resilient: 3 attempts with quick backoff (0.4s, 0.8s). Runs off the request
     # thread via to_thread so FastAPI stays non-blocking. Total worst-case ~1.2s of retry.
     last_err = None
@@ -1471,6 +1486,7 @@ async def remind_outstanding_assignees(parent_id: str, background_tasks: Backgro
             if (c.get("status") or "Pending") == "Pending":
                 pinged = await record_ping(db, c, get_pst_now(), "group_remind")
                 await _maybe_open_slack_followup(pinged)
+                await _maybe_open_email_followup(pinged)
         except Exception as e:
             logging.warning(f"Slack follow-up after group remind failed: {e}")
 
@@ -2190,6 +2206,11 @@ async def get_task_activity(
         ca = serialize_app_ts(row.get("created_at"))
         if ca:
             row["created_at"] = ca
+        sent = serialize_app_ts((meta or {}).get("sent_at") or row.get("sent_at") or ca)
+        if sent:
+            row["sent_at"] = sent
+            if not ca:
+                row["created_at"] = sent
         if row.get("event_type") in ("reminder", "nudge"):
             row["body"] = _humanize_reminder_body(row.get("body") or "", meta.get("fired_kind"))
 
@@ -2453,7 +2474,8 @@ async def notifications_catch_up(current_user: dict = Depends(get_current_user))
                 "title": _notify_text(n.get("title")),
                 "body": _notify_text(n.get("body")),
                 "task_id": n.get("task_id"),
-                "created_at": n.get("created_at"),
+                "created_at": serialize_app_ts(n.get("created_at")) or n.get("created_at"),
+                "sent_at": serialize_app_ts(n.get("sent_at") or n.get("created_at")) or n.get("created_at"),
             })
         return out
 
@@ -7432,6 +7454,50 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     return thread
 
 
+async def _maybe_open_email_followup(task: dict) -> Optional[dict]:
+    """After two ignored pings, start a replyable email thread with the assignee."""
+    if not should_open_email_thread(task):
+        return None
+    aid = task.get("assigned_to")
+    if not aid or str(aid).startswith("email_"):
+        return None
+    assignee = await db.users.find_one({"id": aid}, {"_id": 0})
+    if not assignee or not assignee.get("email"):
+        return None
+    assigner = None
+    if task.get("created_by"):
+        assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+    now = get_pst_now()
+    thread = await open_ignored_email_thread(
+        db, task, assignee, assigner, now, send_email_notification, APP_BASE_URL
+    )
+    if not thread:
+        return None
+    title = task.get("title") or "a task"
+    name = assignee.get("name") or "them"
+    sent_at = serialize_app_ts(now) or app_now_iso()
+    if assigner and assigner.get("id"):
+        await create_notification(
+            assigner["id"],
+            "status_change",
+            "Jarvis started an email thread",
+            f"No response after 2 pings — Jarvis emailed {name} about “{title}”.",
+            task_id=task.get("id"),
+            actor_name="Jarvis",
+            created_at=sent_at,
+        )
+    await create_notification(
+        assignee["id"],
+        "nudge",
+        "Jarvis emailed you about a task",
+        f"About “{title}” — reply to the email and I’ll update the task from whatever you write.",
+        task_id=task.get("id"),
+        actor_name="Jarvis",
+        created_at=sent_at,
+    )
+    return thread
+
+
 async def _notify_slack_reply_result(result: dict) -> None:
     """Tell the assigner when Jarvis updates a task from a Slack reply."""
     if not result:
@@ -7480,15 +7546,15 @@ async def _sweep_ignored_slack_followups() -> None:
         ).to_list(80)
         opened = 0
         for t in tasks:
-            if not should_open_slack_followup(t):
-                continue
             try:
-                if await _maybe_open_slack_followup(t):
+                if should_open_slack_followup(t) and await _maybe_open_slack_followup(t):
+                    opened += 1
+                if await _maybe_open_email_followup(t):
                     opened += 1
             except Exception as e:
                 logging.warning(f"[slack_sweep] {t.get('id')}: {e}")
         if opened:
-            logging.info(f"[slack_sweep] opened {opened} Slack follow-up(s)")
+            logging.info(f"[slack_sweep] opened {opened} ignored-guidance follow-up(s)")
     except Exception as e:
         logging.error(f"[slack_sweep] {e}")
 
@@ -7505,7 +7571,9 @@ async def create_notification(
     email_subject: Optional[str] = None,
     email_html: Optional[str] = None,
     meta: Optional[dict] = None,
+    created_at: Optional[str] = None,
 ):
+    sent_at = serialize_app_ts(created_at) or app_now_iso()
     doc = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -7514,7 +7582,8 @@ async def create_notification(
         "body": _notify_text(body),
         "task_id": task_id,
         "actor_name": actor_name,
-        "created_at": app_now_iso(),
+        "created_at": sent_at,
+        "sent_at": sent_at,
         "delivered": False,   # for live OS toast poll (recent non-reminders only)
         "read": False,        # for in-app bell
     }
@@ -7602,9 +7671,10 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
 async def get_notifications(current_user: dict = Depends(get_current_user), limit: int = 50):
     docs = await db.notifications.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     for d in docs:
-        stamped = serialize_app_ts(d.get("created_at"))
+        stamped = serialize_app_ts(d.get("created_at") or d.get("sent_at"))
         if stamped:
             d["created_at"] = stamped
+            d["sent_at"] = serialize_app_ts(d.get("sent_at")) or stamped
         nt = clean_display_text(d.get("title"))
         nb = clean_display_text(d.get("body"))
         if nt != (d.get("title") or "") or nb != (d.get("body") or ""):
@@ -9352,6 +9422,10 @@ TITLE RULES:
 
 DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - Distill the manager's request into a Dale Carnegie-style ask: clear, simple, respectful, and easy to act on.
+- Sound like a sharp colleague writing a professional email: polite, specific, and never robotic or shouty.
+  Name the work, the owner (you), and what done looks like. No ALL-CAPS, no emoji, no "ACTION REQUIRED".
+- Infer the right people from names, @mentions, "my team", "direct reports", and conversation history.
+  Route the ask TO those people in second person — do not leave "tell my team that…" in the copy.
 - If the speaker is assigning to themselves, write in first person: "my 1:1" not "our 1:1", no "Please", no "I'll ask them".
   Title the WORK ("Review open deals"), never "This is a reminder for myself" and never "Complete This is…".
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
@@ -11001,16 +11075,22 @@ async def _llm_logical_copy(
         "SELF-ASSIGNED personal reminder. First person (I/my). No Please. "
         "No asking someone to reply. Last step: Mark this done when I finish."
         if self_assign
-        else "DELEGATED to someone else. Second person (you). Clear ask. Last step can ask them to reply when done."
+        else (
+            "DELEGATED to someone else. Second person (you). "
+            "Write the way a thoughtful manager would email the person who owns the work: "
+            "professional, polite, specific, and easy to act on. Never scolding or robotic."
+        )
     )
     prompt = (
-        "Rewrite this TskFlow task so it is logical and complete. JSON only, no markdown:\n"
+        "Rewrite this TskFlow task so the right person can do it professionally. JSON only, no markdown:\n"
         '{"title":"...","description":"...","success_criteria":"..."}\n'
         f"Voice: {voice}\n"
         "Title: 3-8 words naming the WORK. Imperative. Never 'Complete This is…', "
         "never 'This is a reminder for myself', no names/@/dates.\n"
-        "Description: full grammatical sentences. If the draft is truncated, finish the thought "
-        "from the original request — do not leave dangling 'the' / 'I' / 'for'. "
+        "Description: full grammatical sentences a colleague would send. Polite, not stiff. "
+        "Lead with the ask, then Next steps if there are several actions. "
+        "If the draft is truncated, finish the thought from the original request — "
+        "do not leave dangling 'the' / 'I' / 'for'. "
         "Never write 'I need my …' or glue Please onto leftover manager voice. "
         "Example: 'I need my @HM Org to submit one BAMFAM call to their managers' → "
         "'Please submit one BAMFAM call to your managers.' "
@@ -11029,10 +11109,13 @@ async def _llm_logical_copy(
     try:
         from llm import chat_complete
         raw = await chat_complete(
-            model="gpt-4o-mini",
-            system="You rewrite task copy so it is clear and complete. Reply with JSON only.",
+            model=_task_llm_model(),
+            system=(
+                "You rewrite task copy so the assignee can do the work. "
+                "Professional, polite, complete. JSON only."
+            ),
             user=prompt,
-            timeout=8.0,
+            timeout=max(10.0, min(_task_llm_timeout(), 16.0)),
             json_mode=True,
             api_key=openai_key,
         )
@@ -11729,6 +11812,7 @@ async def _check_smart_reminders():
             if not user:
                 continue
 
+            sent_at = serialize_app_ts(now) or app_now_iso()
             channels_sent = []
             # Channel delivery — each channel is opt-in
             if "in_app" in channels:
@@ -11741,7 +11825,6 @@ async def _check_smart_reminders():
                 }, {"_id": 0, "id": 1})
                 reminder_title = _notify_text(wording["title"])
                 reminder_body = _notify_text(f"{t.get('title')} - priority {t.get('priority')}")
-                sent_at = serialize_app_ts(now) or app_now_iso()
                 if existing_unread:
                     await db.notifications.update_one(
                         {"id": existing_unread["id"]},
@@ -11749,6 +11832,7 @@ async def _check_smart_reminders():
                             "title": reminder_title,
                             "body": reminder_body,
                             "created_at": sent_at,
+                            "sent_at": sent_at,
                             "delivered": True,  # catch-up UI; OS delivery is web-push below
                         }},
                     )
@@ -11764,6 +11848,7 @@ async def _check_smart_reminders():
                         "read": False,
                         "delivered": True,  # bell/catch-up; OS delivery is web-push below
                         "created_at": sent_at,
+                        "sent_at": sent_at,
                     })
                 try:
                     await send_web_push(
@@ -11790,10 +11875,16 @@ async def _check_smart_reminders():
                 if max_emails > 0 and sent < max_emails:
                     email_html = render_reminder_email(user["name"], t, wording, APP_BASE_URL)
                     reply_to_addr = None
+                    email_headers = None
+                    email_subject = f"[TskFlow] {wording['title']}: {t['title']}"
                     if fired_kind in ("no_response", "no_progress"):
                         token = new_reply_token()
                         reply_to_addr = reply_address(token)
                         follow = followup_copy(fired_kind, t, user.get("name") or "", "")
+                        this_mid = rfc_message_id(token)
+                        email_headers = thread_headers(t, this_mid)
+                        existing_subj = (t.get("email_thread_subject") or "").strip()
+                        email_subject = threaded_subject(existing_subj, follow["subject"])
                         email_html = render_followup_email(
                             user.get("name") or "",
                             "",
@@ -11802,12 +11893,13 @@ async def _check_smart_reminders():
                             APP_BASE_URL,
                             reply_to_addr,
                         )
-                        await record_email_followup(db, t, token, fired_kind, now)
+                        await record_email_followup(db, t, token, fired_kind, now, message_id=this_mid, subject=email_subject)
                     await send_email_notification(
                         user["email"],
-                        follow["subject"] if reply_to_addr else f"[TskFlow] {wording['title']}: {t['title']}",
+                        email_subject,
                         email_html,
                         reply_to=reply_to_addr,
+                        headers=email_headers,
                     )
                     sent += 1
                     emails_sent_today[aid] = sent
@@ -11853,14 +11945,15 @@ async def _check_smart_reminders():
                             "priority": t.get("priority"),
                             "bucket": bucket,
                             "channels": channels_sent,
+                            "sent_at": sent_at,
                         },
-                        created_at=serialize_app_ts(now) or app_now_iso(),
+                        created_at=sent_at,
                     )
                 except Exception as log_err:
                     logging.warning(f"[smart_reminders] activity log failed: {log_err}")
 
             update_doc = {
-                "last_smart_reminder_sent": serialize_app_ts(now) or app_now_iso(),
+                "last_smart_reminder_sent": sent_at,
                 "last_reminder_wording_idx": (t.get("last_reminder_wording_idx", -1) + 1) % 100,
             }
             if bucket and bucket != "overdue":
@@ -11870,6 +11963,7 @@ async def _check_smart_reminders():
                 pinged = await record_ping(db, {**t, **update_doc}, now, fired_kind or "reminder")
                 try:
                     await _maybe_open_slack_followup(pinged)
+                    await _maybe_open_email_followup(pinged)
                 except Exception as slack_follow_err:
                     logging.warning(f"[smart_reminders] slack follow-up failed: {slack_follow_err}")
         if orphans_marked:
@@ -12282,6 +12376,7 @@ async def nudge_task_assignees(task_id: str, req: NudgeRequest, background_tasks
             if (ping_src.get("status") or "Pending") == "Pending":
                 pinged = await record_ping(db, ping_src, now, f"manual_{preset_key}")
                 await _maybe_open_slack_followup(pinged)
+                await _maybe_open_email_followup(pinged)
         except Exception as e:
             logging.warning(f"Slack follow-up after nudge failed: {e}")
 

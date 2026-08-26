@@ -8,6 +8,7 @@ import {
     ChevronRight, Inbox,
 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { formatAppDateTime } from '@/lib/datetime';
 
 const fmtDue = (iso) => {
     if (!iso) return '';
@@ -208,7 +209,7 @@ export const CatchUpReview = () => {
                             <Row
                                 key={n.id}
                                 title={n.title}
-                                meta={n.body}
+                                meta={[formatAppDateTime(n.sent_at || n.created_at), n.body].filter(Boolean).join(' · ')}
                                 onClick={() => goTask(n.task_id, { tab: 'reminders' })}
                                 testId={`catch-up-nudge-${n.id}`}
                             />

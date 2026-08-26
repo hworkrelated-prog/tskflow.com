@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Bell, Check, CheckCheck, Inbox } from 'lucide-react';
 import { API } from '@/App';
-import { formatDistanceToNow } from 'date-fns';
+import { formatAppDateTime } from '@/lib/datetime';
 import { useNavigate } from 'react-router-dom';
 
 export const NotificationBell = () => {
@@ -201,8 +201,8 @@ export const NotificationBell = () => {
                                             </button>
                                         </div>
                                     )}
-                                    <div className="text-[10px] text-muted-foreground mt-1">
-                                        {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : ''}
+                                    <div className="text-[10px] text-muted-foreground mt-1" data-testid="notification-sent-at">
+                                        {formatAppDateTime(n.sent_at || n.created_at)}
                                     </div>
                                 </div>
                                 {!n.read && (
