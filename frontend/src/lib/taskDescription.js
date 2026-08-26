@@ -59,6 +59,12 @@ export function layoutTaskDescription(raw) {
     s = s.replace(/^((?:Today|Tomorrow|Tonight|On\s+\w+)\s*,\s*)([a-z])/i, (_, when, ch) => `${when}${ch.toLowerCase()}`);
     s = s.replace(/^(please\s+)([a-z])/i, (_, p, ch) => `Please ${ch}`);
     s = s.replace(/^(Please [^\n]+)\?\s*(?=\n|$)/i, '$1.');
+    s = s.replace(
+        /(?:,?\s+and\s+)?let\s+((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+know\s+(?:once|when)\s+(?:this\s+is\s+(?:completed|done)|you(?:'re| are)\s+done)\.?/g,
+        (_, who) => `, and send ${who} a short update when you're done.`,
+    );
+    s = s.replace(/^, and send\b/i, 'Send');
+    s = s.replace(/[ \t]{2,}/g, ' ').replace(/\s+,/g, ',');
     return s.trim();
 }
 

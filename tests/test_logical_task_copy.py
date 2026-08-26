@@ -63,6 +63,9 @@ def test_confirm_card_verbiage_is_second_person_and_complete():
     first = ask.split("\n", 1)[0].strip()
     assert first.endswith(".")
     assert not first.endswith("?")
+    assert "let henrik morgan know" not in first.lower()
+    assert "once this is completed" not in first.lower()
+    assert "send henrik morgan a short update when you're done" in first.lower()
 
 
 def test_cards_rewrite_self_assign_voice():

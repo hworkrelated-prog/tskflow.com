@@ -9433,6 +9433,8 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
   Write as the assigner speaking directly to them — never as a note about them.
   Say "your 1:1s" / "your DKOs", never "their 1:1s". Direct Please-asks end with a period, not a question mark.
+  Never write "let {manager} know once this is completed" — it sounds like an order.
+  Prefer "send {manager} a short update when you're done."
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
 - Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
 - NEVER paste the user's raw prompt (or a near-copy) into title or description.
@@ -10617,6 +10619,25 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         lead = lead.rstrip()[:-1].rstrip() + "."
         s = lead + (("\n" + rest) if rest else "")
 
+    s = _soften_close_the_loop(s)
+    return s.strip()
+
+
+def _soften_close_the_loop(text: str) -> str:
+    """'Let {name} know once this is completed' reads like an order — ask for a short update instead."""
+    if not text:
+        return text
+    s = str(text)
+    s = re.sub(
+        r"(?i)(?:,?\s+and\s+)?let\s+"
+        r"((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+"
+        r"know\s+(?:once|when)\s+(?:this\s+is\s+(?:completed|done)|you(?:'re| are)\s+done)\.?",
+        lambda m: f", and send {m.group(1)} a short update when you're done.",
+        s,
+    )
+    s = re.sub(r"(?i)^, and send\b", "Send", s)
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    s = re.sub(r"\s+,", ",", s)
     return s.strip()
 
 
@@ -10719,6 +10740,8 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
     if re.search(r"(?i)\b(update|complete|finish|review)\s+(their|his|her)\b", f"{title or ''} {description or ''}"):
         return True
     if re.match(r"(?i)^please\b", first) and first.rstrip().endswith("?"):
+        return True
+    if re.search(r"(?i)\blet\s+.+\s+know\s+once\s+this\s+is\s+completed", description or ""):
         return True
     if re.search(r"(?i)\bi need my\b|please i\b|need my submit\b", description or ""):
         return True
@@ -11132,6 +11155,8 @@ async def _llm_logical_copy(
         "Complete verb phrase only — never end on let/know/and. No 'their 1:1s' in a title shown as I'll ask them to {title}.\n"
         "Description: full grammatical sentences a colleague would send. Polite, not stiff. "
         "Second person (your 1:1s, not their). Please-asks end with a period, not '?'. "
+        "Never 'let {name} know once this is completed' — that sounds like an order. "
+        "Prefer 'send {name} a short update when you're done'. "
         "Lead with the ask, then Next steps if there are several actions. "
         "If the draft is truncated, finish the thought from the original request — "
         "do not leave dangling 'the' / 'I' / 'for'. "
