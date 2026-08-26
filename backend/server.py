@@ -10631,7 +10631,10 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
 
     s = _soften_close_the_loop(s)
     s = _prefer_assigner_first_name(s, manager_name)
-    return s.strip()
+    s = (s or "").strip()
+    if s and s[-1] not in ".!?":
+        s += "."
+    return s
 
 
 def _soften_close_the_loop(text: str) -> str:
