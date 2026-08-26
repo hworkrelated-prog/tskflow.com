@@ -19,6 +19,7 @@ def test_prompt_has_no_jarvis_button():
     assert "sentTaskFollowupMessage" in src
     assert "rewriteSelfAssignCopy" in src
     assert "layoutTaskDescription" in src
+    assert "displayTaskTitle(editTitle)" in src
     assert "I&apos;ll remind you" in src
     apply = src[src.index("const applyPreview") : src.index("const runQA")]
     assert ".replace(/\\s+/g, ' ')" not in apply
@@ -106,6 +107,25 @@ if (displayTaskTitle('Complete This is a reminder for myself') !== 'This is a re
 }
 if (displayTaskTitle('Complete This is a reminder for myself to review deals') !== 'Review deals') {
   console.error('reminder wrapper title failed', displayTaskTitle('Complete This is a reminder for myself to review deals'));
+  process.exit(1);
+}
+if (displayTaskTitle('Update their 1:1s and DKOs/DDBs and let') !== 'Update 1:1s and DKOs/DDBs') {
+  console.error('truncated their-title failed', displayTaskTitle('Update their 1:1s and DKOs/DDBs and let'));
+  process.exit(1);
+}
+const teamAsk = layoutTaskDescription(
+  'Please update their 1:1s and DKOs/DDBs and let Henrik Morgan know once this is completed?'
+);
+if (/their 1:1/i.test(teamAsk) || /\?$/.test(teamAsk.split('\n')[0].trim())) {
+  console.error('team ask not polished', JSON.stringify(teamAsk));
+  process.exit(1);
+}
+if (!/your 1:1/i.test(teamAsk) || /let Henrik/i.test(teamAsk) || /once this is completed/i.test(teamAsk) || /short update/i.test(teamAsk) || /Morgan/i.test(teamAsk)) {
+  console.error('expected mark-done close without a status ping', JSON.stringify(teamAsk));
+  process.exit(1);
+}
+if (!/mark this done when you're finished/i.test(teamAsk.split('\n')[0])) {
+  console.error('expected mark this done', JSON.stringify(teamAsk));
   process.exit(1);
 }
 if (rewriteSelfAssignCopy('1. Complete the ask above.\n2. Reply with a brief update when you are done.') !== '1. Do the work.\n2. Mark this done when I finish.') {

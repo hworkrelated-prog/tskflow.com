@@ -9413,6 +9413,8 @@ TITLE RULES:
 - NEVER start with "Assign", never include @handles, person names, last names, emails, dates, or priority words.
 - Completely ignore leading @mentions like "@Mark Sibghat @Benjamin White …" — those are assignees, not title words.
 - Keep compound phrases intact (e.g. "action plans", not truncated "action").
+- Never end a title on let, know, tell, and, or similar — the UI appends "by {due date}" after the title.
+- Title the work without third-person possessives: "Update 1:1s and DKOs/DDBs", not "Update their 1:1s … and let".
 - Keep the subject/account in the title when the user named one: "for Beck bus account" must survive. Drop filler ("a good", "with me") before you drop the account.
 - Spoken run-ons list several actions ("run it through the AI agent give it context and share a template"). Title the deliverable (the template/email) AND keep the account; put the other clauses in description / action_items / Next steps — never "Do the work."
 - Do NOT paste the user's raw prompt into the title. Summarize the deliverable.
@@ -9430,6 +9432,10 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
   Title the WORK ("Review open deals"), never "This is a reminder for myself" and never "Complete This is…".
 - ALWAYS write description in second person addressed TO the assignee ("Please…", "Send…", "Complete…") UNLESS it is self-assigned — then first person / personal reminder voice.
   Write as the assigner speaking directly to them — never as a note about them.
+  Say "your 1:1s" / "your DKOs", never "their 1:1s". Direct Please-asks end with a period, not a question mark.
+  Never write "let {manager} know once this is completed" or ask them to send you an update when they finish.
+  Closing the task is enough: "mark this done when you're finished."
+  If you mention the person who assigned the work, first name only — never a full name.
 - Lead with the one thing you want them to do. Then add a short "Next steps:" numbered list (2–4 items) so they know exactly how to finish.
 - Make the person feel capable — no harsh commands, no "have X do this" leftover manager voice.
 - NEVER paste the user's raw prompt (or a near-copy) into title or description.
@@ -10472,9 +10478,18 @@ def _too_close_to_prompt(candidate: str, raw: str) -> bool:
     return len(a) > 24 and (a in b or b in a)
 
 
+def _assigner_first_name(name: Optional[str], fallback: str = "your manager") -> str:
+    raw = (name or "").strip()
+    if not raw:
+        return fallback
+    if raw.lower() in {"your manager", "me", "myself"}:
+        return fallback if raw.lower() != "your manager" else "your manager"
+    return raw.split()[0]
+
+
 def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = None) -> str:
     """Assigner talking directly to the people who will do the work."""
-    mgr = (manager_name or "your manager").strip() or "your manager"
+    mgr = _assigner_first_name(manager_name)
     body = (work or "").strip()
     # Drop leftover owner phrasing so we never emit "please benjamin needs to…"
     body = re.sub(
@@ -10502,6 +10517,8 @@ def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = Non
         ask = f"{when}, {rest}"
     if ask and ask[-1] not in ".!?":
         ask += "."
+    if re.match(r"(?i)^please\b", ask) and ask.endswith("?"):
+        ask = ask[:-1].rstrip() + "."
     ask = re.sub(r"(?i)\b(the AI agent)\s+and\s+(give)\b", r"\1, \2", ask)
     ask = re.sub(r"(?i)\b(context)\s+and\s+(share|send|draft)\b", r"\1, and \2", ask)
     return ask
@@ -10512,7 +10529,7 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     if not desc:
         return desc
     s = str(desc).strip()
-    mgr = (manager_name or "your manager").strip() or "your manager"
+    mgr = _assigner_first_name(manager_name)
 
     # "{Name} needs to review…" / "please benjamin needs to…" → imperative ask
     s = re.sub(
@@ -10544,6 +10561,11 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
     )
     s = re.sub(r"(?i)\bwith their understanding\b", "that shows your understanding", s)
     s = re.sub(r"(?i)\btheir understanding\b", "your understanding", s)
+    s = re.sub(
+        r"(?i)\btheir (1:1s?|one[- ]on[- ]ones?|DKOs|DDBs)\b",
+        r"your \1",
+        s,
+    )
     s = re.sub(
         r"(?i)\breview and respond with a screen recording\b",
         "review the assigned work and reply with a screen recording",
@@ -10602,7 +10624,55 @@ def _rewrite_description_for_assignee(desc: str, manager_name: Optional[str] = N
         if s and not re.match(r"(?i)^please\b", s) and not re.match(r"(?i)^i\b", s):
             s = "Please " + s[0].lower() + s[1:] if len(s) > 1 else "Please " + s
 
+    lead, rest = (s.split("\n", 1) + [""])[:2]
+    if re.match(r"(?i)^please\b", lead.strip()) and lead.rstrip().endswith("?"):
+        lead = lead.rstrip()[:-1].rstrip() + "."
+        s = lead + (("\n" + rest) if rest else "")
+
+    s = _soften_close_the_loop(s)
+    s = _prefer_assigner_first_name(s, manager_name)
+    s = (s or "").strip()
+    if s and s[-1] not in ".!?":
+        s += "."
+    return s
+
+
+def _soften_close_the_loop(text: str) -> str:
+    """Status pings ('let me know when done') are unnecessary — marking the task done is enough."""
+    if not text:
+        return text
+    s = str(text)
+    s = re.sub(
+        r"(?i)(?:,?\s+and\s+)?let\s+"
+        r"((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+"
+        r"know\s+(?:once|when)\s+(?:this\s+is\s+(?:completed|done)|you(?:'re| are)\s+done)\.?",
+        ", and mark this done when you're finished.",
+        s,
+    )
+    s = re.sub(
+        r"(?i)(?:,?\s+and\s+)?send\s+"
+        r"((?:your manager)|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}|me)\s+"
+        r"a short update when you(?:'re| are) done\.?",
+        ", and mark this done when you're finished.",
+        s,
+    )
+    s = re.sub(
+        r"(?i)reply with a brief update when you are done\.?",
+        "Mark this done when you're finished.",
+        s,
+    )
+    s = re.sub(r"(?i)^, and mark\b", "Mark", s)
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    s = re.sub(r"\s+,", ",", s)
     return s.strip()
+
+
+def _prefer_assigner_first_name(text: str, manager_name: Optional[str]) -> str:
+    full = (manager_name or "").strip()
+    first = _assigner_first_name(full, "")
+    if not text or not full or not first or first.lower() == full.lower():
+        return text
+    return re.sub(re.escape(full), first, text, flags=re.I)
 
 
 def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> List[str]:
@@ -10648,17 +10718,17 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
             steps.append("Make sure the submission reached them.")
     elif re.search(r"(?i)\b(go through|review|look at|read|watch)\b", blob) and not steps:
         steps.append("Review the material and note anything that needs a decision.")
-    if re.search(r"(?i)\b(update|report|eod|summary)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
-        steps.append(f"Send a short update to {('your manager')} with what you found and any blockers.")
+    if re.search(r"(?i)\b(eod|end of day)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
+        steps.append("Send the EOD update.")
     if re.search(r"(?i)\b(meet|talk|meeting)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     elif re.search(r"(?i)\bcall\b", blob) and not re.search(r"(?i)\b(bamfam|submit)\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     if not steps:
         steps.append("Complete the ask above.")
-        steps.append("Reply with a brief update when you are done.")
-    elif not any(re.search(r"(?i)\breply|when you are done|when I finish", st) for st in steps):
-        steps.append("Reply with a brief update when you are done.")
+        steps.append("Mark this done when you're finished.")
+    elif not any(re.search(r"(?i)\breply|when you are done|when I finish|mark this done", st) for st in steps):
+        steps.append("Mark this done when you're finished.")
     return steps[:4]
 
 
@@ -10671,7 +10741,7 @@ def _carnegie_format_description(desc: str, title: str = "", manager_name: Optio
         return _normalize_description_layout(s)
     steps = _infer_next_steps(s, title, self_assign=self_assign)
     if manager_name and not self_assign:
-        steps = [st.replace("your manager", manager_name) for st in steps]
+        steps = [st.replace("your manager", _assigner_first_name(manager_name)) for st in steps]
     numbered = "\n".join(f"{i + 1}. {st}" for i, st in enumerate(steps))
     return _normalize_description_layout(f"{s.rstrip()}\n\nNext steps:\n{numbered}")
 
@@ -10681,7 +10751,7 @@ def _looks_truncated(s: str) -> bool:
     if not t:
         return False
     last = re.split(r"\s+", t)[-1].strip(".,;:")
-    if re.match(r"(?i)^(the|a|an|to|for|and|or|i|my|our|of|with)$", last):
+    if re.match(r"(?i)^(the|a|an|to|for|and|or|i|my|our|of|with|let|know|tell|give|by|once|please)$", last):
         return True
     if re.search(r"(?i)\b(make sure i for|complete the)\s*$", t):
         return True
@@ -10695,8 +10765,19 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
         return True
     if re.search(r"(?i)\bthis is a reminder\b", title or ""):
         return True
+    if _looks_truncated(title or ""):
+        return True
     lead = (description or "").split("Next steps:")[0].strip()
-    if _looks_truncated(lead.split("\n")[0] if lead else ""):
+    first = lead.split("\n")[0] if lead else ""
+    if _looks_truncated(first):
+        return True
+    if re.search(r"(?i)\b(update|complete|finish|review)\s+(their|his|her)\b", f"{title or ''} {description or ''}"):
+        return True
+    if re.match(r"(?i)^please\b", first) and first.rstrip().endswith("?"):
+        return True
+    if re.search(r"(?i)\blet\s+.+\s+know\s+once\s+this\s+is\s+completed", description or ""):
+        return True
+    if re.search(r"(?i)\bsend\s+.+\s+a short update when you(?:'re| are) done", description or ""):
         return True
     if re.search(r"(?i)\bi need my\b|please i\b|need my submit\b", description or ""):
         return True
@@ -10858,6 +10939,13 @@ def _title_from_work_text(work: str) -> str:
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
     s = re.sub(r"(?i)\s+to\s+(?:their|your|his|her)\s+managers?\s*$", "", s).strip(" .,:;-")
+    # Confirm UI appends "by {due}" after the title — never leave "and let …" dangling
+    s = re.sub(r"(?i)\s+and\s+let\b.+$", "", s).strip(" .,:;-")
+    s = re.sub(
+        r"(?i)^(update|complete|finish|review|prepare|submit|send|share)\s+(their|his|her)\s+",
+        r"\1 ",
+        s,
+    ).strip()
     s = _compact_title_work(s)
     subj = _subject_for_phrase(raw_work) or _subject_for_phrase(s)
     words = [w for w in s.split() if w]
@@ -10871,6 +10959,18 @@ def _title_from_work_text(work: str) -> str:
         if subj and subj.lower() not in " ".join(words).lower():
             words = [w for w in words if w.lower() not in {"for"}][:5]
             words = words + ["for"] + subj.split()
+    dangling = {
+        "the", "a", "an", "to", "for", "and", "or", "of", "with",
+        "let", "know", "tell", "give", "by", "once", "please",
+    }
+    while words and words[-1].lower().rstrip(".,!?:;") in dangling:
+        words.pop()
+    if (
+        len(words) >= 3
+        and words[0].lower() in {"update", "complete", "finish", "review", "prepare", "submit", "send", "share"}
+        and words[1].lower() in {"their", "his", "her"}
+    ):
+        words = [words[0]] + words[2:]
     title = " ".join(words)
     if title and title[0].islower():
         title = title[0].upper() + title[1:]
@@ -10899,6 +10999,7 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
         or re.search(r"(?i)^please tell\b", title)
         or re.match(r"(?i)^complete\s+(this|that|these|those|it|a reminder)\b", title)
         or re.search(r"(?i)\bthis is a reminder\b", title)
+        or _looks_truncated(title)
         or _too_close_to_prompt(title, raw_text)
         or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
         or (
@@ -11086,8 +11187,12 @@ async def _llm_logical_copy(
         '{"title":"...","description":"...","success_criteria":"..."}\n'
         f"Voice: {voice}\n"
         "Title: 3-8 words naming the WORK. Imperative. Never 'Complete This is…', "
-        "never 'This is a reminder for myself', no names/@/dates.\n"
+        "never 'This is a reminder for myself', no names/@/dates. "
+        "Complete verb phrase only — never end on let/know/and. No 'their 1:1s' in a title shown as I'll ask them to {title}.\n"
         "Description: full grammatical sentences a colleague would send. Polite, not stiff. "
+        "Second person (your 1:1s, not their). Please-asks end with a period, not '?'. "
+        "Never 'let {name} know once this is completed' and never ask them to send an update when done — "
+        "marking the task done is enough. If you mention the assigner, first name only. "
         "Lead with the ask, then Next steps if there are several actions. "
         "If the draft is truncated, finish the thought from the original request — "
         "do not leave dangling 'the' / 'I' / 'for'. "

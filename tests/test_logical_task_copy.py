@@ -36,6 +36,46 @@ def test_title_from_reminder_prompt_is_the_work():
     assert all("reply with a brief update" not in s.lower() for s in steps)
 
 
+def test_confirm_card_verbiage_is_second_person_and_complete():
+    src = SERVER.read_text(encoding="utf-8")
+    start = src.index("_DIRECT_HINTS = ")
+    end = src.index("async def _llm_vet_title")
+    ns = {}
+    exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
+    title = ns["_title_from_work_text"](
+        "update their 1:1s and DKOs/DDBs and let Henrik Morgan know once this is completed"
+    )
+    assert "their" not in title.lower()
+    assert not title.lower().endswith("let")
+    assert "1:1" in title or "1:1s" in title.lower()
+    assert "dko" in title.lower()
+    assert ns["_looks_truncated"]("Update their 1:1s and DKOs/DDBs and let")
+    assert ns["_copy_looks_illogical"](
+        "Update their 1:1s and DKOs/DDBs and let",
+        "Please update their 1:1s and DKOs/DDBs and let Henrik Morgan know once this is completed?",
+    )
+    ask = ns["_rewrite_description_for_assignee"](
+        "Please update their 1:1s and DKOs/DDBs and let Henrik Morgan know once this is completed?",
+        "Henrik Morgan",
+    )
+    assert "your 1:1" in ask.lower()
+    assert "their 1:1" not in ask.lower()
+    first = ask.split("\n", 1)[0].strip()
+    assert first.endswith(".")
+    assert not first.endswith("?")
+    assert "let henrik" not in first.lower()
+    assert "morgan" not in first.lower()
+    assert "short update" not in first.lower()
+    assert "once this is completed" not in first.lower()
+    assert "mark this done" in first.lower()
+    shared = ns["_rewrite_description_for_assignee"](
+        "Please share the template with me.",
+        "Henrik Morgan",
+    )
+    assert "henrik" in shared.lower()
+    assert "morgan" not in shared.lower()
+
+
 def test_cards_rewrite_self_assign_voice():
     card = (FRONT / "components" / "TaskCard.js").read_text(encoding="utf-8")
     detail = (FRONT / "pages" / "TaskDetail.js").read_text(encoding="utf-8")
