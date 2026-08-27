@@ -44,6 +44,27 @@ def test_voice_keeps_listening_through_contemplative_pauses():
     assert "rec.continuous = false" not in voice
 
 
+def test_voice_releases_mic_on_exit_and_background():
+    """Closing the dock or leaving the tab must abort recognition, not restart it."""
+    helper = _read("lib", "promptVoice.js")
+    create = _read("components", "AIQuickCreate.js")
+    voice = _read("components", "VoiceMode.js")
+    assert "tearDownSpeechRecognition" in helper
+    assert "rec.onend = null" in helper
+    assert "rec.abort()" in helper
+    assert "VOICE_RESTART_MS" in helper
+    assert "tearDownSpeechRecognition" in create
+    assert "stopVoice()" in create.split("const reset = useCallback")[1].split("}, [focusInput, stopVoice]")[0]
+    assert "pagehide" in create
+    assert "visibilitychange" in create
+    assert "VOICE_RESTART_MS" in create
+    assert "tearDownSpeechRecognition" in voice
+    assert "VOICE_RESTART_MS" in voice
+    onend = create.split("rec.onend = () => {")[1].split("recRef.current = rec")[0]
+    assert "setTimeout" in onend
+    assert "rec.start();" not in onend.split("setTimeout")[0]
+
+
 def test_voice_fab_does_not_overlap_prompt():
     app = _read("App.js")
     voice = _read("components", "VoiceMode.js")
@@ -67,7 +88,7 @@ def test_analytics_metrics_stack_on_mobile():
 
 def test_voice_submit_helper_auto_sends_spoken_text():
     script = r"""
-import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS } from './frontend/src/lib/promptVoice.js';
+import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, tearDownSpeechRecognition } from './frontend/src/lib/promptVoice.js';
 if (VOICE_SILENCE_MS < 15000 || VOICE_SILENCE_MS > 30000) {
   console.error('silence window out of 15–30s range', VOICE_SILENCE_MS);
   process.exit(2);
@@ -96,6 +117,20 @@ if (fired !== 0) { console.error('fired too early', fired); process.exit(3); }
 await new Promise((r) => setTimeout(r, 40));
 if (fired !== 1) { console.error('expected one silence fire', fired); process.exit(4); }
 watch.clear();
+const rec = {
+  onresult() {},
+  onerror() {},
+  onend() { rec.ended = true; },
+  abort() { rec.aborted = true; this.onend?.(); },
+  stop() { rec.stopped = true; },
+};
+tearDownSpeechRecognition(rec);
+if (rec.onend !== null || rec.onresult !== null || rec.onerror !== null) {
+  console.error('handlers not cleared', rec);
+  process.exit(5);
+}
+if (!rec.aborted) { console.error('abort not called'); process.exit(6); }
+if (rec.ended) { console.error('onend still fired after teardown'); process.exit(7); }
 console.log('ok');
 """
     result = subprocess.run(

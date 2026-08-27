@@ -19,3 +19,14 @@ def test_wake_refresh_is_quiet_and_coalesced():
     vis = app[app.index("Wake from sleep") : app.index("window.addEventListener('online'")]
     assert "dispatchEvent(new CustomEvent('tskflow:app-wake'))" in vis
     assert "if (wakeBurst) return" in vis
+
+
+def test_active_done_toggle_hugs_buttons():
+    hub = HUB.read_text(encoding="utf-8")
+    track = hub.split('data-testid="view-mode-toggle"')[0].split("<div")[-1]
+    assert "w-full sm:w-auto" not in hub
+    assert "w-fit" in track
+    assert "self-start" in track
+    assert "inline-flex" in track
+    assert 'data-testid="view-active-tasks"' in hub
+    assert 'data-testid="view-completed-tasks"' in hub

@@ -19,6 +19,28 @@ export function shouldAutoSendVoice(spoken) {
  */
 export const VOICE_SILENCE_MS = 20_000;
 
+export const VOICE_RESTART_MS = 280;
+
+/**
+ * Drop SpeechRecognition without leaving the tab-level mic indicator on.
+ * Null handlers first so `onend` cannot immediately `start()` again (Safari/iOS).
+ */
+export function tearDownSpeechRecognition(rec) {
+    if (!rec) return;
+    try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.onnomatch = null;
+        rec.onsoundend = null;
+        rec.onspeechend = null;
+    } catch {
+        /* noop */
+    }
+    try { rec.abort(); } catch { /* noop */ }
+    try { rec.stop(); } catch { /* noop */ }
+}
+
 /** Resettable silence timer used while voice mode is armed. */
 export function createSilenceWatch({ ms = VOICE_SILENCE_MS, onSilence } = {}) {
     let timer = null;

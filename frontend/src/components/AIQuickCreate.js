@@ -9,13 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS } from '@/lib/promptVoice';
+import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
@@ -272,6 +272,7 @@ const AIQuickCreate = ({
     const voiceSeedRef = useRef('');
     const voiceWantRef = useRef(false);
     const voiceSilenceRef = useRef(null);
+    const voiceRestartRef = useRef(null);
     const runPreviewRef = useRef(null);
     const sendRef = useRef(null);
     const threadEndRef = useRef(null);
@@ -1157,8 +1158,15 @@ const AIQuickCreate = ({
     const finishVoiceSession = useCallback((opts = {}) => {
         const { send = true } = opts;
         voiceWantRef.current = false;
+        if (voiceRestartRef.current) {
+            clearTimeout(voiceRestartRef.current);
+            voiceRestartRef.current = null;
+        }
         voiceSilenceRef.current?.clear();
         voiceSilenceRef.current = null;
+        const rec = recRef.current;
+        recRef.current = null;
+        tearDownSpeechRecognition(rec);
         setListening(false);
         const spoken = voiceFinalRef.current.trim();
         if (send && shouldAutoSendVoice(spoken)) {
@@ -1167,11 +1175,8 @@ const AIQuickCreate = ({
     }, []);
 
     const stopVoice = useCallback(() => {
-        voiceWantRef.current = false;
-        voiceSilenceRef.current?.clear();
-        voiceSilenceRef.current = null;
-        try { recRef.current?.stop(); } catch { /* already stopped */ }
-    }, []);
+        finishVoiceSession({ send: false });
+    }, [finishVoiceSession]);
 
     const startVoice = useCallback(() => {
         const rec = getSpeechRecognition();
@@ -1179,8 +1184,7 @@ const AIQuickCreate = ({
             toast.error('Voice isn’t available in this browser. Try Chrome or Safari.');
             return;
         }
-        try { recRef.current?.abort(); } catch { /* noop */ }
-        voiceSilenceRef.current?.clear();
+        finishVoiceSession({ send: false });
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
         voiceFinalRef.current = '';
         voiceWantRef.current = true;
@@ -1188,9 +1192,7 @@ const AIQuickCreate = ({
         const silence = createSilenceWatch({
             ms: VOICE_SILENCE_MS,
             onSilence: () => {
-                // Long quiet stretch — user is done contemplating; stop + send.
-                voiceWantRef.current = false;
-                try { recRef.current?.stop(); } catch { /* noop */ }
+                finishVoiceSession({ send: true });
             },
         });
         voiceSilenceRef.current = silence;
@@ -1208,12 +1210,10 @@ const AIQuickCreate = ({
             const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
             const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
             if (shown) setText(shown);
-            // Any speech (interim or final) resets the contemplative pause window.
             silence.bump();
         };
         rec.onerror = (event) => {
             if (event.error === 'no-speech') {
-                // Expected during long pauses; silence watch owns hang-up.
                 return;
             }
             if (event.error === 'aborted') return;
@@ -1222,24 +1222,25 @@ const AIQuickCreate = ({
             } else {
                 toast.error('Couldn’t hear that — try again.');
             }
-            voiceWantRef.current = false;
-            voiceSilenceRef.current?.clear();
-            voiceSilenceRef.current = null;
-            setListening(false);
+            finishVoiceSession({ send: false });
         };
         rec.onend = () => {
-            // Chrome often ends continuous sessions early; keep the mic up
-            // until the silence watch (or the user) says we're done.
-            if (voiceWantRef.current) {
+            if (recRef.current !== rec || !voiceWantRef.current) {
+                if (recRef.current === rec) finishVoiceSession({ send: true });
+                return;
+            }
+            // Safari/iOS ends sessions immediately; wait a beat so we don't
+            // tight-loop start/stop (glitch + stuck orange mic dot).
+            if (voiceRestartRef.current) clearTimeout(voiceRestartRef.current);
+            voiceRestartRef.current = setTimeout(() => {
+                voiceRestartRef.current = null;
+                if (!voiceWantRef.current || recRef.current !== rec) return;
                 try {
                     rec.start();
-                    return;
                 } catch {
-                    /* fall through and finish */
+                    finishVoiceSession({ send: true });
                 }
-            }
-            recRef.current = null;
-            finishVoiceSession({ send: true });
+            }, VOICE_RESTART_MS);
         };
         recRef.current = rec;
         setComposerFocused(true);
@@ -1247,26 +1248,18 @@ const AIQuickCreate = ({
         try {
             rec.start();
         } catch {
-            voiceWantRef.current = false;
-            voiceSilenceRef.current?.clear();
-            voiceSilenceRef.current = null;
-            setListening(false);
-            recRef.current = null;
+            finishVoiceSession({ send: false });
             toast.error('Couldn’t start the microphone.');
         }
     }, [finishVoiceSession]);
 
     const toggleVoice = useCallback(() => {
         if (listening) {
-            // Manual tap: end now; onend auto-sends whatever we captured.
-            voiceWantRef.current = false;
-            voiceSilenceRef.current?.clear();
-            voiceSilenceRef.current = null;
-            try { recRef.current?.stop(); } catch { /* noop */ }
+            finishVoiceSession({ send: true });
         } else {
             startVoice();
         }
-    }, [listening, startVoice]);
+    }, [listening, startVoice, finishVoiceSession]);
 
     useEffect(() => {
         const onStartVoice = () => startVoice();
@@ -1275,12 +1268,21 @@ const AIQuickCreate = ({
     }, [startVoice]);
 
     useEffect(() => () => {
-        voiceWantRef.current = false;
-        voiceSilenceRef.current?.clear();
-        voiceSilenceRef.current = null;
-        try { recRef.current?.abort(); } catch { /* noop */ }
-        recRef.current = null;
-    }, []);
+        stopVoice();
+    }, [stopVoice]);
+
+    useEffect(() => {
+        const killMic = () => {
+            if (document.visibilityState === 'hidden') stopVoice();
+        };
+        const onHide = () => stopVoice();
+        document.addEventListener('visibilitychange', killMic);
+        window.addEventListener('pagehide', onHide);
+        return () => {
+            document.removeEventListener('visibilitychange', killMic);
+            window.removeEventListener('pagehide', onHide);
+        };
+    }, [stopVoice]);
 
     const removeAssignee = (idx) => {
         setEditAssignees((prev) => prev.filter((_, i) => i !== idx));
@@ -1382,8 +1384,9 @@ const AIQuickCreate = ({
         nudgeSentRef.current = false;
         setRecurringHint(false);
         recurringHintRef.current = false;
+        stopVoice();
         focusInput();
-    }, [focusInput]);
+    }, [focusInput, stopVoice]);
 
     useEffect(() => {
         const onReset = () => reset();
@@ -3168,9 +3171,7 @@ const AIQuickCreate = ({
                                         aria-pressed={listening}
                                         title={listening ? 'Tap to send now' : 'Speak — stays on through pauses; sends after ~20s of silence'}
                                     >
-                                        {listening
-                                            ? <MicOff className="w-4 h-4" />
-                                            : <Mic className="w-4 h-4" />}
+                                        <Mic className="w-4 h-4" />
                                     </button>
                                     <button
                                         type="button"
