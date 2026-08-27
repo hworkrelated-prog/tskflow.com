@@ -7146,6 +7146,10 @@ async def upload_direct(
     content_type = x_ct or (req_ct if req_ct and req_ct != "application/octet-stream" else "") or "application/octet-stream"
     if filename.lower().endswith(".webm") and content_type == "application/octet-stream":
         content_type = "video/webm"
+    if filename.lower().endswith(".mp4") and content_type == "application/octet-stream":
+        content_type = "video/mp4"
+    if filename.lower().endswith(".mov") and content_type == "application/octet-stream":
+        content_type = "video/quicktime"
     return await _persist_uploaded_bytes(current_user, data, filename, content_type)
 
 

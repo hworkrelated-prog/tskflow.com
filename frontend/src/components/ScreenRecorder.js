@@ -7,6 +7,8 @@ import { uploadBlob } from '@/lib/upload';
 import { openRecordingHudOverlay, prepareRecordingHudOverlay, attachRecordingHudStream, closeRecordingHudOverlay, setHudCameraVisible, recordingOverlayNeeded } from '@/lib/recordingHudOverlay';
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import RecordingFloatingHud from '@/components/RecordingFloatingHud';
+import IosScreenRecordGuide from '@/components/IosScreenRecordGuide';
+import { canCaptureDisplay, pickRecorderMime } from '@/lib/recordingCapabilities';
 
 /**
  * Loom-style screen recorder:
@@ -26,6 +28,7 @@ export const ScreenRecorder = ({ onSaved }) => {
     const [displaySurface, setDisplaySurface] = useState(null);
     const [camStream, setCamStream] = useState(null);
     const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
+    const [showIosGuide, setShowIosGuide] = useState(false);
 
     const displayStreamRef = useRef(null);
     const micStreamRef = useRef(null);
@@ -271,7 +274,63 @@ export const ScreenRecorder = ({ onSaved }) => {
         } finally { setStarting(false); }
     };
 
-    const start = () => beginRecording();
+    const start = () => {
+        if (!canCaptureDisplay()) {
+            setShowIosGuide(true);
+            return;
+        }
+        beginRecording();
+    };
+
+    const attachIosVideo = async (file) => {
+        if (!file) return;
+        setShowIosGuide(false);
+        await finalizeAndOpenEditor(file);
+    };
+
+    const startCameraWalkthrough = async () => {
+        if (starting || recording) return;
+        setShowIosGuide(false);
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            toast.error('Camera recording isn’t available. Attach a Screen Recording from Photos instead.');
+            setShowIosGuide(true);
+            return;
+        }
+        setStarting(true);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true },
+                video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+            });
+            camStreamRef.current = stream;
+            mixedStreamRef.current = stream;
+            setCamStream(stream);
+            const mimeType = pickRecorderMime();
+            mimeTypeRef.current = mimeType || 'video/mp4';
+            const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            chunksRef.current = [];
+            rec.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
+            rec.onstop = async () => {
+                if (timerRef.current) clearInterval(timerRef.current);
+                setRecording(false);
+                setSeconds(0);
+                const blob = new Blob(chunksRef.current, { type: rec.mimeType || mimeTypeRef.current });
+                stopAllTracks();
+                await finalizeAndOpenEditor(blob);
+            };
+            recorderRef.current = rec;
+            rec.start(1000);
+            setRecording(true);
+            setSeconds(0);
+            timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+        } catch (e) {
+            stopAllTracks();
+            if (e?.name !== 'NotAllowedError') toast.error('Could not start camera recording.');
+            setShowIosGuide(true);
+        } finally {
+            setStarting(false);
+        }
+    };
 
     const stop = () => {
         discardOnStopRef.current = false;
@@ -388,6 +447,12 @@ export const ScreenRecorder = ({ onSaved }) => {
                     <span>Recording controls are in the floating window — drag it onto the screen you are capturing.</span>
                 </div>
             )}
+            <IosScreenRecordGuide
+                open={showIosGuide}
+                onOpenChange={setShowIosGuide}
+                onPickVideo={attachIosVideo}
+                onStartCameraWalkthrough={startCameraWalkthrough}
+            />
         </>
     );
 };
