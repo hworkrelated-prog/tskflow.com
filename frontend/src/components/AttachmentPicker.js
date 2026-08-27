@@ -8,6 +8,8 @@ import { openRecordingHudOverlay, prepareRecordingHudOverlay, attachRecordingHud
 import { listScreens, matchScreenToCapture } from '@/lib/recordingDisplay';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import RecordingFloatingHud from '@/components/RecordingFloatingHud';
+import IosScreenRecordGuide from '@/components/IosScreenRecordGuide';
+import { canCaptureDisplay, pickRecorderMime, recordingFilename } from '@/lib/recordingCapabilities';
 
 const iconFor = (kind) => {
     if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
@@ -51,6 +53,8 @@ export const AttachmentPicker = forwardRef(({
     const [camStream, setCamStream] = useState(null);
     const [replaySrc, setReplaySrc] = useState('');
     const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
+    const [showIosGuide, setShowIosGuide] = useState(false);
+    const [attachingIos, setAttachingIos] = useState(false);
 
     const recorderRef = useRef(null);
     const streamsRef = useRef({ screen: null, mic: null, camera: null, composed: null });
@@ -200,12 +204,84 @@ export const AttachmentPicker = forwardRef(({
         }
     };
 
-    const startRecording = async () => {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            toast.error('Screen recording is not supported in this browser. Try Chrome.');
+    const attachIosVideo = async (file) => {
+        if (!file) return;
+        setAttachingIos(true);
+        try {
+            const name = file.name || recordingFilename(file.type || 'video/mp4');
+            const ref = await doUpload(file, name, file.type || 'video/mp4');
+            if (ref) {
+                setShowIosGuide(false);
+                toast.success('Screen recording attached.');
+            }
+        } finally {
+            setAttachingIos(false);
+        }
+    };
+
+    const startCameraWalkthrough = async () => {
+        if (starting || recording) return;
+        setShowIosGuide(false);
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            toast.error('Camera recording isn’t available here. Attach a Screen Recording from Photos instead.');
+            setShowIosGuide(true);
             return;
         }
+        setStarting(true);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true },
+                video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+            });
+            streamsRef.current.camera = stream;
+            streamsRef.current.composed = stream;
+            setCamStream(stream);
+            const mimeType = pickRecorderMime();
+            const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            recorderRef.current = rec;
+            chunksRef.current = [];
+            rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) chunksRef.current.push(ev.data); };
+            rec.onstop = async () => {
+                if (timerRef.current) clearInterval(timerRef.current);
+                setRecording(false);
+                setPaused(false);
+                setSeconds(0);
+                const blob = new Blob(chunksRef.current, { type: rec.mimeType || mimeType || 'video/mp4' });
+                cleanupStreams();
+                if (blob.size > 0) {
+                    setSavedAttachment(null);
+                    setReplaySrc('');
+                    setPreviewBlob(blob);
+                    setShowPreview(true);
+                    try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
+                } else {
+                    toast.error('Recording was empty — try again');
+                }
+            };
+            rec.start(1000);
+            setRecording(true);
+            setPaused(false);
+            setSeconds(0);
+            timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+        } catch (e) {
+            cleanupStreams();
+            if (e?.name === 'NotAllowedError') {
+                toast.error('Camera permission is needed, or attach a Screen Recording from Photos.');
+            } else {
+                toast.error('Could not start camera recording.');
+            }
+            setShowIosGuide(true);
+        } finally {
+            setStarting(false);
+        }
+    };
+
+    const startRecording = async () => {
         if (starting || recording) return;
+        if (!canCaptureDisplay()) {
+            setShowIosGuide(true);
+            return;
+        }
         setStarting(true);
         // Open PiP while the click gesture is still valid — after getDisplayMedia it is gone.
         const hudPrep = prepareRecordingHudOverlay({ showCamera: opts.camera });
@@ -374,8 +450,8 @@ export const AttachmentPicker = forwardRef(({
         if (!previewBlob || savingPreview) return;
         setSavingPreview(true);
         try {
-            const filename = `screen-recording-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.webm`;
-            const ref = await doUpload(previewBlob, filename, 'video/webm');
+            const filename = recordingFilename(previewBlob.type || 'video/webm');
+            const ref = await doUpload(previewBlob, filename, previewBlob.type || 'video/webm');
             if (!ref) return;
             setSavedAttachment(ref);
             // Saved → close immediately; attachment chip is the replay surface.
@@ -443,9 +519,17 @@ export const AttachmentPicker = forwardRef(({
 
             {compact && starting && !recording && (
                 <p className="text-xs text-muted-foreground inline-flex items-center gap-2" data-testid="recording-starting">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting screen capture…
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting capture…
                 </p>
             )}
+
+            <IosScreenRecordGuide
+                open={showIosGuide}
+                onOpenChange={setShowIosGuide}
+                onPickVideo={attachIosVideo}
+                onStartCameraWalkthrough={startCameraWalkthrough}
+                attaching={attachingIos}
+            />
 
             {!compact && showOptions && !recording && (
                 <div className="p-3 bg-slate-50 rounded-xl border space-y-3" data-testid="recording-options-panel">
