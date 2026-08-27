@@ -1550,7 +1550,7 @@ const TaskHub = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4">
-                        <div className="mobile-h-scroll sm:overflow-visible items-center gap-1 bg-gray-100 rounded-full p-1 w-full sm:w-auto shrink-0">
+                        <div className="inline-flex items-center gap-1 bg-gray-100 rounded-full p-1 w-fit max-w-full self-start shrink-0" data-testid="view-mode-toggle">
                             <button data-testid="view-active-tasks" onClick={() => setViewMode('active')} className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === 'active' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-600 hover:text-gray-900'}`}>Active</button>
                             <button data-testid="view-completed-tasks" onClick={() => setViewMode('completed')} className={`shrink-0 px-3.5 sm:px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${viewMode === 'completed' ? 'bg-white shadow-sm text-green-600' : 'text-gray-600 hover:text-gray-900'}`}><CheckCircle2 className="w-4 h-4" />Done</button>
                             <button
