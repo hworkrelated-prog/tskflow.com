@@ -29,7 +29,7 @@ export const DEMO_SLACK = {
         {
             role: 'assistant',
             name: 'Jarvis',
-            text: "Hey Chris — Maya asked you to send the Q3 outreach email. It's due EOD. I've pinged you twice in TskFlow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
+            text: "Hey Chris — Maya asked you to take this on. It's due EOD. I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
         },
         {
             role: 'user',

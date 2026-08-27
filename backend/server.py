@@ -53,7 +53,9 @@ from slack_followup import (
     verify_slack_signature,
 )
 from email_followup import (
+    first_name,
     followup_copy,
+    format_due_for_humans,
     new_reply_token,
     open_ignored_email_thread,
     process_inbound_email,
@@ -10482,9 +10484,11 @@ def _assigner_first_name(name: Optional[str], fallback: str = "your manager") ->
     raw = (name or "").strip()
     if not raw:
         return fallback
-    if raw.lower() in {"your manager", "me", "myself"}:
-        return fallback if raw.lower() != "your manager" else "your manager"
-    return raw.split()[0]
+    if raw.lower() == "your manager":
+        return "your manager"
+    if raw.lower() in {"me", "myself"}:
+        return fallback
+    return first_name(raw, fallback)
 
 
 def _assignee_facing_ask(when: str, work: str, manager_name: Optional[str] = None) -> str:
@@ -12256,11 +12260,9 @@ def _reminder_wording(kind: str, task: dict) -> dict:
 
 def render_reminder_email(user_name: str, task: dict, wording: dict, app_url: str) -> str:
     """Consistent, professional reminder email."""
-    due_display = ""
-    try:
-        due_display = task["due_date"].replace("T", " at ").split(".")[0]
-    except Exception:
-        pass
+    due_display = format_due_for_humans(task.get("due_date"))
+    hello = first_name(user_name)
+    hi_line = f"Hi {hello}," if hello else "Hi,"
     priority = task.get("priority", "")
     task_id = task.get("id", "")
     title = task.get("title", "")
@@ -12274,7 +12276,7 @@ def render_reminder_email(user_name: str, task: dict, wording: dict, app_url: st
                 <h1 style="margin:6px 0 0 0;color:white;font-size:22px;font-weight:700;">{wording['title']}</h1>
             </div>
             <div style="padding:28px;">
-                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">Hi {user_name},</p>
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">{hi_line}</p>
                 <p style="margin:0 0 16px 0;color:#374151;font-size:15px;line-height:1.6;">{wording['line']}</p>
                 <div style="background:#F9FAFB;border-radius:12px;padding:20px;margin:18px 0;border-left:4px solid {color};">
                     <p style="margin:0 0 6px 0;font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Task</p>
@@ -12338,15 +12340,18 @@ def render_nudge_email(recipient_name: str, sender_name: str, task_title: str, t
     extra = ""
     if custom_message:
         extra = f'<div style="background:#FFFBEB;border-left:4px solid #F59E0B;padding:14px 18px;border-radius:8px;margin:14px 0;color:#78350F;font-size:14px;font-style:italic;">"{custom_message}"</div>'
+    hello = first_name(recipient_name)
+    hi_line = f"Hi {hello}," if hello else "Hi,"
+    from_label = first_name(sender_name) or "a teammate"
     return f"""<html><body style="margin:0;padding:0;background:#F3F4F6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:24px;">
         <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.06);">
             <div style="background:linear-gradient(135deg,{color},{color}dd);padding:24px 28px;">
-                <p style="margin:0;color:rgba(255,255,255,0.85);font-size:12px;letter-spacing:1px;font-weight:600;">A MESSAGE FROM {sender_name.upper()}</p>
+                <p style="margin:0;color:rgba(255,255,255,0.85);font-size:12px;letter-spacing:1px;font-weight:600;">A MESSAGE FROM {from_label.upper()}</p>
                 <h1 style="margin:6px 0 0 0;color:white;font-size:22px;font-weight:700;">{headline}</h1>
             </div>
             <div style="padding:28px;">
-                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">Hi {recipient_name},</p>
+                <p style="margin:0 0 16px 0;color:#374151;font-size:15px;">{hi_line}</p>
                 <p style="margin:0 0 16px 0;color:#374151;font-size:15px;line-height:1.6;">{body_html}</p>
                 {extra}
                 <div style="text-align:center;margin:28px 0 8px 0;">
