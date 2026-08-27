@@ -339,7 +339,7 @@ const GlobalAIDock = () => {
                     externalAttachments={pendingAttachments}
                     onExternalAttachmentsConsumed={() => setPendingAttachments([])}
                     registerAttachHandler={(fn) => { attachHandlerRef.current = fn; }}
-                    onSnapshot={handleSnapshot}}
+                    onSnapshot={handleSnapshot}
                     onCreated={() => {
                         setPendingAttachments([]);
                         setRecordingPending(false);
