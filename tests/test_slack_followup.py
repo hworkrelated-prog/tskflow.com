@@ -87,8 +87,21 @@ def test_verify_slack_signature_and_opening_message():
     assert not verify_slack_signature("", ts, body, sig)
     msg = opening_message({"title": "send the Q3 outreach email", "due_date": "2026-08-16T17:00"}, "Chris Park", "Maya Chen")
     assert "Chris" in msg and "Maya" in msg
+    assert "asked you to take this on" in msg
+    assert "asked you to send the Q3" not in msg
+    assert "Sunday, August 16 at 5:00 PM" in msg
     assert "twice" in msg.lower()
     assert "blocked" in msg.lower()
+    junk = opening_message(
+        {"title": "Preview assigned to Hashim", "due_date": "2026-08-29T17:00:00"},
+        "Email",
+        "Render",
+    )
+    assert "Hey Email" not in junk
+    assert "Render asked" not in junk
+    assert "asked you to handle" not in junk
+    assert "This is still open" in junk
+    assert "Saturday, August 29 at 5:00 PM" in junk
 
 
 def test_bot_events_are_ignored():

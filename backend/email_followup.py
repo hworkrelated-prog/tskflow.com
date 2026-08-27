@@ -241,55 +241,127 @@ def should_send_email_followup(task: dict, user: Optional[dict], rule: Optional[
     return kind
 
 
-def first_name(name: Optional[str], fallback: str = "there") -> str:
+# Display-name leftovers that are not a person's first name.
+_JUNK_FIRST_NAMES = {
+    "email", "user", "admin", "test", "preview", "render", "tskflow",
+    "unknown", "null", "none", "n/a", "na", "nil", "guest", "demo", "sample",
+    "system", "bot", "slack", "jarvis", "assignee", "assigner", "manager",
+    "notifications", "noreply", "no-reply", "support", "team", "account",
+    "member", "placeholder", "someone", "somebody", "name", "first", "last",
+    "me", "myself", "you", "your", "the", "a", "an",
+}
+_NAME_TITLES = {"dr", "mr", "mrs", "ms", "mz", "prof", "sir"}
+_FALLBACK_PHRASES = {"your manager", "a teammate", "there"}
+
+
+def looks_like_human_first_name(token: Optional[str]) -> bool:
+    """True when token is a plausible given name, not a role/product/placeholder."""
+    raw = (token or "").strip()
+    if len(raw) < 2:
+        return False
+    if raw.lower() in _JUNK_FIRST_NAMES or raw.lower() in _NAME_TITLES:
+        return False
+    if raw.lower() in _FALLBACK_PHRASES:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z][A-Za-z'.\-]*", raw))
+
+
+def first_name(name: Optional[str], fallback: str = "") -> str:
+    """First real given name from a display name.
+
+    Skips junk like Email, User, Admin, Test, Preview, Render, Tskflow.
+    If nothing usable remains, return fallback (empty by default so callers
+    can omit the name instead of greeting "Hey Email").
+    """
     raw = (name or "").strip()
     if not raw:
         return fallback
-    return raw.split()[0]
+    if raw.lower() in _FALLBACK_PHRASES:
+        return fallback
+    if "@" in raw and " " not in raw.split("@", 1)[0]:
+        local = raw.split("@", 1)[0]
+        raw = re.sub(r"[._+\-]+", " ", local).strip()
+        if not raw:
+            return fallback
+    tokens = raw.split()
+    i = 0
+    while i < len(tokens) and tokens[i].strip(".,;:!?").lower() in _NAME_TITLES:
+        i += 1
+    if i >= len(tokens):
+        return fallback
+    cleaned = tokens[i].strip(".,;:!?")
+    if looks_like_human_first_name(cleaned):
+        if cleaned.islower():
+            return cleaned[:1].upper() + cleaned[1:]
+        return cleaned
+    return fallback
+
+
+def format_due_for_humans(iso: Optional[str]) -> str:
+    """Format a stored due stamp like a person would say it.
+
+    2026-08-29T17:00:00 → Saturday, August 29 at 5:00 PM
+    Date-only values omit the time. Never emits 24-hour 'at 17'.
+    """
+    raw = (iso or "").strip()
+    if not raw:
+        return ""
+    has_time = bool(re.search(r"T\d{1,2}", raw)) or bool(re.search(r"\s\d{1,2}:\d{2}", raw))
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except Exception:
+        return ""
+    weekday = dt.strftime("%A")
+    month = dt.strftime("%B")
+    day = dt.day
+    if not has_time:
+        return f"{weekday}, {month} {day}"
+    hour12 = dt.hour % 12 or 12
+    ampm = "AM" if dt.hour < 12 else "PM"
+    return f"{weekday}, {month} {day} at {hour12}:{dt.minute:02d} {ampm}"
+
+
+def _due_bit(task: dict) -> str:
+    due = format_due_for_humans(task.get("due_date"))
+    return f" It's due {due}." if due else ""
+
+
+def _greeting(first: str, with_name: str, without_name: str) -> str:
+    return with_name.format(first=first) if first else without_name
 
 
 def followup_copy(kind: str, task: dict, assignee_name: str, assigner_name: str) -> dict:
-    """Warm, concise colleague voice — not a system banner."""
+    """Short, plain colleague voice — not a system banner."""
     first = first_name(assignee_name)
-    mgr = first_name(assigner_name, "your manager")
-    title = (task.get("title") or "this").strip()
-    due = (task.get("due_date") or "").replace("T", " at ").split(".")[0][:16]
-    due_bit = f" It's due {due}." if due else ""
+    mgr = first_name(assigner_name)
+    title = (task.get("title") or "this").strip() or "this"
+    due_bit = _due_bit(task)
+    open_line = f"{mgr} asked you to take this on." if mgr else "This is still open."
+    reply_line = "Reply done, still working, or blocked, and I'll update the task."
     if kind == "no_progress":
-        subject = f"Quick check-in on {title}"
-        greeting = f"Hey {first} — just circling back."
-        body = (
-            f"You accepted {title} and I haven't seen an update yet.{due_bit} "
-            f"If you're moving on it, a one-line reply is plenty. "
-            f"If something's in the way, say so and I'll let {mgr} know."
-        )
+        subject = f"Checking in on {title}"
+        greeting = _greeting(first, "Hey {first} — just checking in.", "Just checking in.")
+        body = f"{open_line}{due_bit}\n\n{reply_line}"
     else:
-        subject = f"Have you had a chance to look at {title}?"
-        greeting = f"Hey {first} — no rush, just a nudge."
-        body = (
-            f"{mgr} asked you to handle {title}.{due_bit} "
-            "I haven't seen a response yet. "
-            "Reply to this email with done, still working, blocked, or if you need more time — "
-            "I'll update the task from whatever you write."
-        )
+        subject = f"Checking in on {title}"
+        greeting = _greeting(first, "Hey {first} — no rush, just a nudge.", "No rush, just a nudge.")
+        body = f"{open_line}{due_bit}\n\n{reply_line}"
     return {"subject": subject, "greeting": greeting, "body": body, "kind": kind}
 
 
 def ignored_guidance_copy(task: dict, assignee_name: str, assigner_name: str) -> dict:
     """Opening email when someone has ignored two in-app pings."""
     first = first_name(assignee_name)
-    mgr = first_name(assigner_name, "your manager")
-    title = (task.get("title") or "this").strip()
-    due = (task.get("due_date") or "").replace("T", " at ").split(".")[0][:16]
-    due_bit = f" It's due {due}." if due else ""
-    subject = f"{mgr} asked you to handle {title}"
-    greeting = f"Hi {first} — checking in personally."
+    mgr = first_name(assigner_name)
+    title = (task.get("title") or "this").strip() or "this"
+    due_bit = _due_bit(task)
+    open_line = f"{mgr} asked you to take this on." if mgr else "This is still open."
+    subject = f"Checking in on {title}"
+    greeting = _greeting(first, "Hi {first} — checking in.", "Checking in.")
     body = (
-        f"{mgr} asked you to take care of {title}.{due_bit} "
-        "I've pinged you twice in TskFlow with no response, so I'm writing here "
-        "instead of having them chase you. "
-        "Could you take this on, or should I let them know you're blocked? "
-        "Just reply to this email — I'll update the task from whatever you write."
+        f"{open_line}{due_bit} "
+        "I've pinged you twice in Tskflow with no response, so I'm writing here instead. "
+        "\n\nReply done, still working, or blocked, and I'll update the task."
     )
     return {"subject": subject, "greeting": greeting, "body": body, "kind": "ignored_guidance"}
 
@@ -303,16 +375,21 @@ def render_followup_email(
     reply_addr: str,
 ) -> str:
     title = html.escape(task.get("title") or "this task")
-    first = html.escape(first_name(assignee_name))
-    greeting = html.escape(wording.get("greeting") or f"Hey {first},")
-    body = html.escape(wording.get("body") or "")
+    first = first_name(assignee_name)
+    raw_greeting = (wording.get("greeting") or (f"Hey {first}," if first else "")).strip()
+    greeting_html = (
+        f'<p style="margin:0 0 14px 0;color:#111827;font-size:16px;line-height:1.5;">{html.escape(raw_greeting)}</p>'
+        if raw_greeting
+        else ""
+    )
+    body = html.escape(wording.get("body") or "").replace("\n", "<br>")
     task_id = quote(str(task.get("id") or ""), safe="")
     base = (app_url or "https://tskflow.com").rstrip("/")
     link = f"{base}/task/{task_id}"
     return f"""<html><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:28px 20px;">
       <div style="background:#fff;border-radius:18px;padding:28px 28px 22px;box-shadow:0 10px 30px -18px rgba(15,23,42,0.28);">
-        <p style="margin:0 0 14px 0;color:#111827;font-size:16px;line-height:1.5;">{greeting}</p>
+        {greeting_html}
         <p style="margin:0 0 18px 0;color:#374151;font-size:15px;line-height:1.65;">{body}</p>
         <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;margin:0 0 22px 0;">
           <p style="margin:0;color:#0f172a;font-size:16px;font-weight:600;">{title}</p>
@@ -325,7 +402,7 @@ def render_followup_email(
         </p>
       </div>
       <p style="margin:14px 8px 0;color:#94a3b8;font-size:11px;text-align:center;">
-        Reply goes to {html.escape(reply_addr)}. You can also update the task in TskFlow.
+        Reply goes to {html.escape(reply_addr)}. You can also update the task in Tskflow.
       </p>
     </div>
     </body></html>"""

@@ -195,14 +195,17 @@ async def maybe_llm_interpret(text: str, task: Optional[dict], assigner_name: st
 
 
 def opening_message(task: dict, assignee_name: str, assigner_name: str) -> str:
-    first = (assignee_name or "there").split()[0]
-    mgr = assigner_name or "your manager"
-    title = task.get("title") or "a task"
-    due = (task.get("due_date") or "").replace("T", " at ")[:16]
+    from email_followup import first_name, format_due_for_humans
+
+    first = first_name(assignee_name)
+    mgr = first_name(assigner_name)
+    due = format_due_for_humans(task.get("due_date"))
     due_bit = f" It's due {due}." if due else ""
+    hey = f"Hey {first} — " if first else ""
+    open_line = f"{mgr} asked you to take this on." if mgr else "This is still open."
     return (
-        f"Hey {first} — {mgr} asked you to {title}.{due_bit} "
-        "I've pinged you twice in TskFlow with no response, so I'm checking in here instead of making them chase you. "
+        f"{hey}{open_line}{due_bit} "
+        "I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making them chase you. "
         "Can you take this, or should I tell them you're blocked? Reply like you would to a teammate."
     )
 
