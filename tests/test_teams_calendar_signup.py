@@ -33,10 +33,9 @@ def test_backend_stores_next_and_login_hint():
     assert "already_connected" in connect
     assert "_safe_oauth_next" in connect
 
-    assert 'calendar=connected' in callback
-    assert "/settings?calendar=connected" not in callback or "next_path" in callback
-    assert "next_path}?calendar=connected" in callback or '{next_path}?calendar=connected' in callback
-    assert "next_path}?error=oauth_failed" in callback or '{next_path}?error=oauth_failed' in callback
+    assert '{next_path}?calendar=connected' in callback
+    assert '{next_path}?error=oauth_failed' in callback
+    assert "/settings?calendar=connected" not in callback
 
     assert '"package": transaction.get("package")' in status
     assert '"package": transaction.get("package"),' in status

@@ -5883,11 +5883,11 @@ def get_google_flow(redirect_uri: str):
 def _safe_oauth_next(raw) -> str:
     """Allow only in-app paths after Google Calendar OAuth. Default dashboard."""
     path = str(raw or "").strip() or "/dashboard"
+    path = path.split("?")[0].split("#")[0]
     if not path.startswith("/") or path.startswith("//") or path.startswith("/\\"):
         return "/dashboard"
     if "://" in path or "\\" in path:
         return "/dashboard"
-    path = path.split("?")[0].split("#")[0]
     allowed = {"/dashboard", "/settings"}
     return path if path in allowed else "/dashboard"
 

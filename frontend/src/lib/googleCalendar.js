@@ -8,13 +8,13 @@ export const CALENDAR_OAUTH_ALLOWED_NEXT = ['/dashboard', '/settings'];
 
 export function safeCalendarOAuthNext(raw) {
     let path = String(raw || '').trim() || '/dashboard';
+    path = path.split('?')[0].split('#')[0];
     if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) {
         return '/dashboard';
     }
     if (path.includes('://') || path.includes('\\')) {
         return '/dashboard';
     }
-    path = path.split('?')[0].split('#')[0];
     return CALENDAR_OAUTH_ALLOWED_NEXT.includes(path) ? path : '/dashboard';
 }
 
