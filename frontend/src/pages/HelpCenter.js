@@ -17,7 +17,7 @@ const topics = [
             <ol className="list-decimal ml-5 space-y-2 text-sm">
                 <li>Type who, what, and when in the bar. Press Enter.</li>
                 <li>Confirm and send. They accept. You see it through.</li>
-                <li>Dashboard columns: <strong>To me</strong>, <strong>Personal</strong>, <strong>Sent</strong>.</li>
+                <li>Dashboard columns: <strong>To me</strong>, <strong>Personal</strong>, <strong>Delegated</strong>.</li>
                 <li>Need extras (attachments, recurrence)? Open <strong>Full form</strong>.</li>
             </ol>
         )

@@ -17,8 +17,10 @@ def test_dashboard_does_not_lecture():
     assert "This is a Sales Task" not in hub
     assert "Auto-accept this task" not in hub
     assert "To me" in hub
-    assert ">Personal<" in hub or "Personal</CardTitle>" in hub
-    assert ">Sent<" in hub or "Sent</CardTitle>" in hub
+    assert 'title="Personal"' in hub
+    assert 'title="Delegated"' in hub
+    assert "Nothing delegated" in hub
+    assert "dashboard-panels" in hub
     assert "New task" in hub
     assert "Manual form" not in hub
 

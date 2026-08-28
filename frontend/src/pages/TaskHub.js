@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
@@ -31,7 +31,22 @@ import RecurrenceEditor from '@/components/RecurrenceEditor';
 import GroupsManager from '@/components/GroupsManager';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
+import { columnWithSoonestDue, DASHBOARD_MOBILE_MQ, DASHBOARD_COLUMNS } from '@/lib/dashboardColumns';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
+
+const DashboardColumnCard = ({ title, dotClass, testId, children }) => (
+    <Card data-testid={testId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl h-full flex flex-col">
+        <CardHeader className="hidden md:flex pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6 shrink-0">
+            <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${dotClass}`} />
+                {title}
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 flex-1 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
+            {children}
+        </CardContent>
+    </Card>
+);
 
 const TaskHub = () => {
     const { user, logout, refreshUser } = useAuth();
@@ -60,6 +75,10 @@ const TaskHub = () => {
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
+    const panelsRef = useRef(null);
+    const lastFilterKeyRef = useRef('');
+    const ignoreScrollRef = useRef(false);
+    const [activeColumnIndex, setActiveColumnIndex] = useState(0);
     const navigate = useNavigate();
 
     // User groups (Pro & Teams)
@@ -1018,11 +1037,77 @@ const TaskHub = () => {
         );
     };
 
+    const toMeTasks = getFilteredTasks(dashboard?.assigned_to_me || []);
+    const personalTasks = getFilteredTasks(dashboard?.self_assigned || []);
+    const delegatedTasks = getFilteredTasks(dashboard?.assigned_by_me || []);
+    const visibleGroups = (parentGroups || [])
+        .filter(matchesGroupSearch)
+        .filter((g) => !salesOnly || isSalesGroup(g));
+    const columnCounts = [toMeTasks.length, personalTasks.length, delegatedTasks.length + visibleGroups.length];
+    const filteredColumns = [
+        { items: toMeTasks },
+        { items: personalTasks },
+        { items: [...delegatedTasks, ...visibleGroups] },
+    ];
+    const anyVisible = columnCounts.some((n) => n > 0);
+    const urgentColumnIndex = columnWithSoonestDue(
+        anyVisible
+            ? filteredColumns
+            : [
+                { items: dashboard?.assigned_to_me || [] },
+                { items: dashboard?.self_assigned || [] },
+                { items: [...(dashboard?.assigned_by_me || []), ...(parentGroups || [])] },
+            ]
+    );
+    const filterKey = `${viewMode}|${dateFilter}|${salesOnly}|${searchQuery}|${customDateRange.from || ''}|${customDateRange.to || ''}`;
+
+    const isMobileDashboard = () => (
+        typeof window !== 'undefined' && window.matchMedia(DASHBOARD_MOBILE_MQ).matches
+    );
+
+    const scrollToColumn = (index, { smooth = true } = {}) => {
+        const el = panelsRef.current;
+        if (!el || !isMobileDashboard()) return;
+        const width = el.clientWidth || 1;
+        const nextLeft = Math.max(0, Math.min(2, index)) * width;
+        ignoreScrollRef.current = true;
+        el.scrollTo({ left: nextLeft, behavior: smooth ? 'smooth' : 'auto' });
+        window.setTimeout(() => { ignoreScrollRef.current = false; }, smooth ? 400 : 50);
+    };
+
+    useLayoutEffect(() => {
+        if (loading || !dashboard) return;
+        const shouldSnap = lastFilterKeyRef.current !== filterKey;
+        if (!shouldSnap) return;
+        lastFilterKeyRef.current = filterKey;
+        setActiveColumnIndex(urgentColumnIndex);
+        scrollToColumn(urgentColumnIndex, { smooth: false });
+    }, [loading, dashboard, filterKey, urgentColumnIndex]);
+
+    useEffect(() => {
+        const onResize = () => {
+            const el = panelsRef.current;
+            if (!el) return;
+            if (!isMobileDashboard()) {
+                el.scrollLeft = 0;
+                return;
+            }
+            scrollToColumn(activeColumnIndex, { smooth: false });
+        };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, [activeColumnIndex, loading]);
+
+    const selectColumn = (index) => {
+        setActiveColumnIndex(index);
+        scrollToColumn(index, { smooth: true });
+    };
+
     const downloadAllTasksCSV = () => {
         const buckets = [
             { name: 'To me', tasks: dashboard?.assigned_to_me || [] },
             { name: 'Personal', tasks: dashboard?.self_assigned || [] },
-            { name: 'Sent', tasks: dashboard?.assigned_by_me || [] }
+            { name: 'Delegated', tasks: dashboard?.assigned_by_me || [] }
         ];
         const rows = [[
             'Bucket', 'Title', 'Description', 'Priority', 'Status', 'Due Date',
@@ -1053,7 +1138,7 @@ const TaskHub = () => {
         (parentGroups || []).forEach(g => {
             (g.assignees || []).forEach(a => {
                 rows.push([
-                    'Sent (Group)',
+                    'Delegated (Group)',
                     g.title,
                     g.description,
                     g.priority,
@@ -1683,81 +1768,129 @@ const TaskHub = () => {
                     </DialogContent>
                 </Dialog>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-start">
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>To me</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
-                                    <p className="text-center text-sm text-muted-foreground py-8">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
-                                ) : (
-                                    getFilteredTasks(dashboard?.assigned_to_me || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
+                <div className="md:hidden mb-3" data-testid="dashboard-column-tabs">
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1" role="tablist" aria-label="Task lists">
+                        {DASHBOARD_COLUMNS.map((tab, index) => {
+                            const selected = activeColumnIndex === index;
+                            const count = columnCounts[index];
+                            return (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={selected}
+                                    data-testid={`dashboard-column-tab-${tab.id}`}
+                                    onClick={() => selectColumn(index)}
+                                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white shadow-sm text-teal-700' : 'text-gray-600'}`}
+                                >
+                                    <span className="truncate">{tab.name}</span>
+                                    {count > 0 && (
+                                        <span className={`ml-1 tabular-nums ${selected ? 'text-teal-600' : 'text-gray-400'}`}>{count}</span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div
+                    ref={panelsRef}
+                    className="dashboard-panels"
+                    data-testid="dashboard-panels"
+                    onScroll={(e) => {
+                        if (ignoreScrollRef.current || !isMobileDashboard()) return;
+                        const el = e.currentTarget;
+                        const width = el.clientWidth || 1;
+                        const idx = Math.round(el.scrollLeft / width);
+                        const next = Math.max(0, Math.min(2, idx));
+                        if (next !== activeColumnIndex) setActiveColumnIndex(next);
+                    }}
+                >
+                    <motion.div
+                        className="dashboard-panel"
+                        data-testid="dashboard-column-to-me"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
+                            {toMeTasks.length === 0 ? (
+                                <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
+                            ) : (
+                                toMeTasks.map((task, index) => (
+                                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                                ))
+                            )}
+                        </DashboardColumnCard>
                     </motion.div>
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Personal</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
-                                        {viewMode === 'active' && !salesOnly && (
-                                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    getFilteredTasks(dashboard?.self_assigned || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
+                    <motion.div
+                        className="dashboard-panel"
+                        data-testid="dashboard-column-personal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
+                            {personalTasks.length === 0 ? (
+                                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
+                                    {viewMode === 'active' && !salesOnly && (
+                                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+                                    )}
+                                </div>
+                            ) : (
+                                personalTasks.map((task, index) => (
+                                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                                ))
+                            )}
+                        </DashboardColumnCard>
                     </motion.div>
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Sent</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {parentGroups
-                                    .filter(matchesGroupSearch)
-                                    .filter((g) => !salesOnly || isSalesGroup(g))
-                                    .map((group) => (
-                                    <ParentTaskGroup
-                                        key={group.id}
-                                        group={group}
-                                        onChanged={fetchParentGroups}
-                                        selectable={selectionMode}
-                                        selected={selectedTasks.has(group.id)}
-                                        onToggleSelect={toggleTaskSelection}
-                                    />
-                                ))}
-                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0
-                                    && parentGroups.filter(matchesGroupSearch).filter((g) => !salesOnly || isSalesGroup(g)).length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing sent'}</p>
-                                        {viewMode === 'active' && !salesOnly && (
-                                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
+                    <motion.div
+                        className="dashboard-panel"
+                        data-testid="dashboard-column-delegated"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
+                            {visibleGroups.map((group) => (
+                                <ParentTaskGroup
+                                    key={group.id}
+                                    group={group}
+                                    onChanged={fetchParentGroups}
+                                    selectable={selectionMode}
+                                    selected={selectedTasks.has(group.id)}
+                                    onToggleSelect={toggleTaskSelection}
+                                />
+                            ))}
+                            {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
+                                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
+                                    {viewMode === 'active' && !salesOnly && (
+                                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                                    )}
+                                </div>
+                            ) : (
+                                delegatedTasks.map((task, index) => (
+                                    <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                                ))
+                            )}
+                        </DashboardColumnCard>
                     </motion.div>
+                </div>
+
+                <div className="md:hidden flex justify-center gap-1.5 mt-3" data-testid="dashboard-column-dots" aria-hidden="true">
+                    {[0, 1, 2].map((index) => (
+                        <button
+                            key={index}
+                            type="button"
+                            onClick={() => selectColumn(index)}
+                            className={`h-1.5 rounded-full transition-all ${activeColumnIndex === index ? 'w-5 bg-teal-600' : 'w-1.5 bg-gray-300'}`}
+                            aria-label={`Show ${DASHBOARD_COLUMNS[index].name}`}
+                        />
+                    ))}
                 </div>
 
                 {/* Recently Deleted has been moved to inside the individual task view.
