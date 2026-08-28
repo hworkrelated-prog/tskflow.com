@@ -49,3 +49,9 @@ def test_help_is_not_an_essay():
     assert "Accountability Management" not in help_src
     assert "and remember, you can just ask Voice Mode too" not in help_src
     assert "5-minute walkthrough" not in help_src
+
+
+def test_whats_new_does_not_stack_on_first_run():
+    src = _read("components", "WhatsNewPrompt.js")
+    assert "Tskflow_onboarding_dashboard" in src
+    assert "Review in Help Center" not in src
