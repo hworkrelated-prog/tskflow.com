@@ -121,7 +121,12 @@ const TeamPeoplePicker = ({
                             data-testid="team-email-chip"
                         >
                             <span className="min-w-0 truncate">{email}</span>
-                            <button type="button" onClick={() => removeEmail(email)} className="shrink-0 p-0.5 rounded-full opacity-70 hover:opacity-100" aria-label={`Remove ${email}`}>
+                            <button
+                                type="button"
+                                onClick={() => removeEmail(email)}
+                                className="shrink-0 p-0.5 rounded-full opacity-70 hover:opacity-100"
+                                aria-label={`Remove ${email}`}
+                            >
                                 <X className="w-3 h-3" />
                             </button>
                         </span>

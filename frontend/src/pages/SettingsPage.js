@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, API } from '@/App';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ function IosSwitch({ checked, onChange, testId }) {
 const SettingsPage = () => {
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [upgrading, setUpgrading] = React.useState(null);
     const [showPasswordDialog, setShowPasswordDialog] = React.useState(false);
     const [passwordForm, setPasswordForm] = React.useState({ current: '', new: '', confirm: '' });
@@ -109,6 +110,23 @@ const SettingsPage = () => {
         loadSheetConfig();
         if (user?.name) setDisplayName(user.name);
     }, [user]);
+
+    React.useEffect(() => {
+        const calendar = searchParams.get('calendar');
+        const sheets = searchParams.get('sheets');
+        const oauthError = searchParams.get('error');
+        if (!calendar && !sheets && !oauthError) return;
+        if (calendar === 'connected') toast.success('Google Calendar connected');
+        if (sheets === 'connected') toast.success('Google Sheets connected');
+        if (oauthError) toast.error('Google connection did not finish. Try again.');
+        refreshUser?.();
+        const next = new URLSearchParams(searchParams);
+        next.delete('calendar');
+        next.delete('sheets');
+        next.delete('error');
+        setSearchParams(next, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const fetchPreferences = async () => {
         try {

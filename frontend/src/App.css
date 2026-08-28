@@ -353,8 +353,13 @@
 [data-theme="dark"] .bg-red-100 { background: #331616 !important; color: #fecaca !important; }
 [data-theme="dark"] .bg-gray-100 { background: #1a1a1a !important; color: #d0d0d0 !important; }
 [data-theme="dark"] .bg-gray-200 { background: #262626 !important; color: #e0e0e0 !important; }
+/* slate-100 was left as a pale fill while .text-slate-700 remaps to near-white
+   (team email chips, AI assignee pills). Darken the fill; leave color to text classes. */
 [data-theme="dark"] .bg-slate-100 {
     background: #262626 !important;
+}
+[data-theme="dark"] .hover\:bg-slate-100:hover {
+    background: #2e2e2e !important;
 }
 
 .team-email-chip {
