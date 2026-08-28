@@ -65,6 +65,7 @@ const RegistrationPage = () => {
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
                             Create your account
                         </CardTitle>
+                        <p className="text-sm text-muted-foreground">No credit card. Assign anyone by email.</p>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">

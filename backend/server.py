@@ -99,6 +99,7 @@ from engagement import (
     should_send_weekly,
     week_id,
 )
+from billing_nudge import show_billing_nudge
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -183,6 +184,7 @@ class UserResponse(BaseModel):
     reports_to: Optional[str] = None
     company_domain: Optional[str] = None
     org_role: Optional[str] = None
+    show_billing_nudge: Optional[bool] = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -336,6 +338,7 @@ class TaskHubDashboard(BaseModel):
     counts: dict
     subscription_tier: str
     task_limit_reached: bool
+    show_billing_nudge: bool = False
 
 class AnalyticsQuery(BaseModel):
     start_date: str
@@ -856,6 +859,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         reports_to=current_user.get("reports_to"),
         company_domain=current_user.get("company_domain"),
         org_role=current_user.get("org_role") or "ic",
+        show_billing_nudge=await show_billing_nudge(db, current_user),
     )
 
 class UpdateProfileRequest(BaseModel):
@@ -1777,7 +1781,8 @@ async def get_dashboard(
         assigned_by_me=assigned_by_me,
         counts=counts,
         subscription_tier=current_user["subscription_tier"],
-        task_limit_reached=task_limit_reached
+        task_limit_reached=task_limit_reached,
+        show_billing_nudge=await show_billing_nudge(db, current_user),
     )
 
 # Deleted tasks endpoints - MUST be before /tasks/{task_id} to avoid route conflict

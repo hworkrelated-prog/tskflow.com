@@ -23,6 +23,8 @@ def test_dashboard_does_not_lecture():
     assert "dashboard-panels" in hub
     assert "New task" in hub
     assert "Manual form" not in hub
+    assert "activeTaskCount >= 10" not in hub
+    assert "show_billing_nudge" in hub
 
 
 def test_onboarding_is_one_screen():

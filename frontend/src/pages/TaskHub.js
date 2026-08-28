@@ -145,19 +145,13 @@ const TaskHub = () => {
     const [deletedTasks, setDeletedTasks] = useState([]);
     const [showDeleted, setShowDeleted] = useState(false);
 
-    // Upgrade nudges
+    // Upgrade nudges — only after send/receive usage over time (server flag).
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeModalShown, setUpgradeModalShown] = useState(() => localStorage.getItem('upgradeModalShown') === 'true');
+    const [nudgeDismissed, setNudgeDismissed] = useState(() => localStorage.getItem('billingNudgeDismissed') === 'true');
 
-    const getActiveTaskCount = () => {
-        if (!dashboard) return 0;
-        return (dashboard.assigned_to_me?.length || 0) + (dashboard.self_assigned?.length || 0) + (dashboard.assigned_by_me?.length || 0);
-    };
-
-    const activeTaskCount = getActiveTaskCount();
     const isFreeUser = user?.subscription_tier === 'free';
-    const showLightBanner = isFreeUser && activeTaskCount >= 10;
-    const showPersistentBanner = isFreeUser && activeTaskCount >= 30;
+    const showBillingNudge = isFreeUser && Boolean(dashboard?.show_billing_nudge) && !nudgeDismissed;
 
     React.useEffect(() => {
         try {
@@ -170,12 +164,12 @@ const TaskHub = () => {
     }, []);
 
     React.useEffect(() => {
-        if (isFreeUser && activeTaskCount >= 20 && !upgradeModalShown) {
+        if (showBillingNudge && !upgradeModalShown) {
             setShowUpgradeModal(true);
             setUpgradeModalShown(true);
             localStorage.setItem('upgradeModalShown', 'true');
         }
-    }, [activeTaskCount, isFreeUser, upgradeModalShown]);
+    }, [showBillingNudge, upgradeModalShown]);
 
     const getDateRange = (filter) => {
         const now = new Date();
@@ -1792,35 +1786,35 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {/* Upgrade Nudges */}
-                {showLightBanner && !showPersistentBanner && (
-                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <p className="text-sm text-teal-800">Unlock reminders, recordings, and follow-up.</p>
-                        <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs shrink-0 self-start sm:self-auto"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
+                {showBillingNudge && (
+                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2" data-testid="billing-nudge-banner">
+                        <p className="text-sm text-teal-800">You and your team are exchanging work. Pro adds reminders and recordings.</p>
+                        <div className="flex gap-2 shrink-0">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="rounded-full text-xs"
+                                onClick={() => {
+                                    setNudgeDismissed(true);
+                                    localStorage.setItem('billingNudgeDismissed', 'true');
+                                }}
+                            >
+                                Not now
+                            </Button>
+                            <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs"><Crown className="w-3 h-3 mr-1" />See plans</Button>
+                        </div>
                     </div>
                 )}
 
-                {showPersistentBanner && (
-                    <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
-                        <CardContent className="py-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div className="flex items-start sm:items-center gap-3"><Crown className="w-5 h-5 text-amber-600 shrink-0" /><p className="text-amber-800 text-sm sm:text-base">Pro adds reminders, recordings, and team follow-up.</p></div>
-                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 shrink-0 self-start sm:self-auto"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Upgrade Modal (shown once at 20 tasks) */}
                 <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
-                    <DialogContent className="rounded-2xl">
+                    <DialogContent className="rounded-2xl" data-testid="billing-nudge-modal">
                         <DialogHeader>
-                            <DialogTitle className="text-foreground">Unlock Pro</DialogTitle>
-                            <DialogDescription>Reminders, recordings, and team follow-up.</DialogDescription>
+                            <DialogTitle className="text-foreground">You are using Tskflow</DialogTitle>
+                            <DialogDescription>Reminders and recordings help when the volume sticks. No rush.</DialogDescription>
                         </DialogHeader>
                         <div className="flex gap-2 justify-end pt-4">
-                            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Maybe Later</Button>
-                            <Button onClick={() => { setShowUpgradeModal(false); navigate('/settings'); }} className="rounded-full"><Crown className="w-4 h-4 mr-2" />View Plans</Button>
+                            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Not now</Button>
+                            <Button onClick={() => { setShowUpgradeModal(false); navigate('/settings'); }} className="rounded-full"><Crown className="w-4 h-4 mr-2" />See plans</Button>
                         </div>
                     </DialogContent>
                 </Dialog>

@@ -503,14 +503,14 @@ const SettingsPage = () => {
                                         </Badge>
                                     )}
                                 </div>
-                                {user?.subscription_tier === 'free' && (
-                                    <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl">
+                                {user?.subscription_tier === 'free' && user?.show_billing_nudge && (
+                                    <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl" data-testid="teams-trial-cta">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Sparkles className="w-5 h-5 text-green-600" />
-                                            <span className="font-semibold text-green-800">Try Teams Free for 30 Days</span>
+                                            <span className="font-semibold text-green-800">Try Teams for 30 days</span>
                                         </div>
                                         <p className="text-sm text-green-700 mb-3">
-                                            Get unlimited team members, performance leaderboards, and admin controls.
+                                            Hierarchy, leaderboards, and Slack — after you have been exchanging work.
                                         </p>
                                         <Button
                                             onClick={async () => {
@@ -524,7 +524,7 @@ const SettingsPage = () => {
                                             }}
                                             className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-full"
                                         >
-                                            Start Free Trial
+                                            Start trial
                                         </Button>
                                     </div>
                                 )}

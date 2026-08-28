@@ -452,10 +452,10 @@ const LandingPage = () => {
             <section id="pricing" className="relative py-20 border-t border-white/10">
                 <div className="max-w-5xl mx-auto px-5">
                     <h2 className="text-3xl font-semibold text-center mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Simple pricing</h2>
-                    <p className="text-center text-white/50 mb-10 text-sm">Start free. Upgrade when you need reminders, recordings, or a company workspace.</p>
+                    <p className="text-center text-white/50 mb-10 text-sm">Start free. No card. We ask you to pay after you and your team are actually exchanging work.</p>
                     <div className="grid md:grid-cols-3 gap-5">
                         {[
-                            { name: 'Free', price: '$0', period: '/mo', blurb: 'Personal accountability', features: ['Unlimited tasks', 'Email assignment', 'Basic analytics'] },
+                            { name: 'Free', price: '$0', period: '/mo', blurb: 'Assign by email. No card.', features: ['Unlimited tasks', 'Email assignment', 'Basic analytics'] },
                             { name: 'Pro', price: '$9', period: '/mo', blurb: 'Close more loops', highlight: true, features: ['Everything in Free', 'Smart reminders', 'EOD summaries', 'Attachments & recordings'] },
                             { name: 'Teams', price: '$12', period: '/user/mo', blurb: 'Company workspace', features: ['Everything in Pro', 'Hierarchy & leaderboards', 'Slack follow-up for ignored tasks', 'Team analytics'] },
                         ].map((plan) => (
