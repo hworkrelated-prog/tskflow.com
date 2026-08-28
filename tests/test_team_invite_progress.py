@@ -71,8 +71,11 @@ def test_frontend_surfaces():
     app = (front / "App.js").read_text()
     assert 'value="joining"' in page
     assert "TeamInviteProgress" in page
-    assert "Watch who joins" in modal
+    assert "Joining" in modal
     assert "Team → Joining" in modal
+    assert "We’ll notify them" not in modal
+    assert "How often should we remind you" not in modal
+    assert "Find this anytime" not in modal
     assert 'path="/join/:token"' in app
     assert "/team/invite-progress" in (front / "components" / "TeamInviteProgress.js").read_text()
     server = (ROOT / "backend" / "server.py").read_text()

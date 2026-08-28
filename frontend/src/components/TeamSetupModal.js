@@ -5,16 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Users, GitBranch, UserCheck, Trophy } from 'lucide-react';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
 import TeamInviteProgress from '@/components/TeamInviteProgress';
 import { useNavigate } from 'react-router-dom';
 
 const FREQUENCIES = [
-    { value: 'weekly', label: 'Weekly', help: 'Teams reshuffle often' },
-    { value: 'monthly', label: 'Monthly', help: 'Typical cadence' },
-    { value: 'quarterly', label: 'Quarterly', help: 'Mostly stable' },
-    { value: 'rarely', label: 'Rarely', help: 'Org chart almost never changes' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'quarterly', label: 'Quarterly' },
+    { value: 'rarely', label: 'Rarely' },
 ];
 
 /**
@@ -72,7 +71,7 @@ const TeamSetupModal = () => {
             emails: teamEmails,
         });
         const n = (res.data?.created || []).length;
-        if (n) toast.success(`Sent ${n} team request${n === 1 ? '' : 's'} — they’ll confirm or dispute`);
+        if (n) toast.success(`Sent ${n} invite${n === 1 ? '' : 's'}`);
         setReportsSent(true);
     };
 
@@ -93,7 +92,7 @@ const TeamSetupModal = () => {
             });
             await refreshUser?.();
             setOpen(false);
-            if (!skip) toast.success('Team setup saved');
+            if (!skip) toast.success('Saved');
             if (goToJoining) navigate('/team?joining=1');
         } catch (err) {
             toast.error(err?.response?.data?.detail || 'Could not save team setup');
@@ -105,42 +104,40 @@ const TeamSetupModal = () => {
     if (!user || user.subscription_tier !== 'teams') return null;
 
     const titles = {
-        1: 'Who do you report to?',
-        2: 'Who’s on your team?',
-        3: 'How often does it change?',
-        4: 'Watch who joins',
-    };
-    const icons = {
-        1: <UserCheck className="w-5 h-5" />,
-        2: <Users className="w-5 h-5" />,
-        3: <GitBranch className="w-5 h-5" />,
-        4: <Trophy className="w-5 h-5" />,
+        1: 'Your manager',
+        2: 'Your team',
+        3: 'How often?',
+        4: 'Joining',
     };
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v) finish({ skip: true }); else setOpen(v); }}>
             <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto" data-testid="team-setup-modal">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
-                        {icons[step]}
+                    <DialogTitle className="text-2xl tracking-tight" style={{ fontFamily: 'Outfit' }}>
                         {titles[step]}
                     </DialogTitle>
                     <DialogDescription className="sr-only">
-                        Set your manager, identify your team, and review cadence
+                        Team setup
                     </DialogDescription>
                 </DialogHeader>
+                <div className="flex items-center gap-1.5 -mt-1 mb-1" aria-hidden="true">
+                    {[1, 2, 3, 4].map((n) => (
+                        <span
+                            key={n}
+                            className={`h-1.5 rounded-full transition-all ${n === step ? 'w-6 bg-foreground' : 'w-1.5 bg-muted'}`}
+                        />
+                    ))}
+                </div>
 
                 {step === 1 && (
                     <div className="space-y-4 pt-1">
-                        <p className="text-sm text-slate-600">
-                            Your manager — the person you report to. This keeps “my team” and assignments accurate.
-                        </p>
                         <Select value={managerId || 'none'} onValueChange={setManagerId}>
-                            <SelectTrigger className="rounded-xl" data-testid="team-setup-manager">
-                                <SelectValue placeholder="Select manager" />
+                            <SelectTrigger className="rounded-xl h-12" data-testid="team-setup-manager">
+                                <SelectValue placeholder="Choose…" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="none">I don’t report to anyone</SelectItem>
+                                <SelectItem value="none">Nobody</SelectItem>
                                 {potential.map((p) => (
                                     <SelectItem key={p.id} value={p.id}>
                                         {p.name}{p.email ? ` · ${p.email}` : ''}
@@ -150,9 +147,9 @@ const TeamSetupModal = () => {
                         </Select>
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="ghost" className="rounded-full" onClick={() => finish({ skip: true })} disabled={saving}>
-                                Skip
+                                Not now
                             </Button>
-                            <Button type="button" className="rounded-full" onClick={() => setStep(2)} data-testid="team-setup-next">
+                            <Button type="button" className="rounded-full min-w-[7.5rem]" onClick={() => setStep(2)} data-testid="team-setup-next">
                                 Continue
                             </Button>
                         </div>
@@ -161,10 +158,8 @@ const TeamSetupModal = () => {
 
                 {step === 2 && (
                     <div className="space-y-4 pt-1">
-                        <p className="text-sm text-slate-600">
-                            People who report to you. We’ll notify them so they can <strong>accept</strong>, <strong>ignore</strong>, or <strong>dispute</strong> if it’s wrong.
-                        </p>
                         <TeamPeoplePicker
+                            quiet
                             people={potential}
                             selectedIds={teamIds}
                             selectedEmails={teamEmails}
@@ -178,11 +173,11 @@ const TeamSetupModal = () => {
                             <Button type="button" variant="ghost" className="rounded-full" onClick={() => setStep(1)}>
                                 Back
                             </Button>
-                            <Button type="button" className="rounded-full" onClick={async () => {
+                            <Button type="button" className="rounded-full min-w-[7.5rem]" onClick={async () => {
                                 try {
                                     await sendTeamRequests();
                                 } catch (err) {
-                                    toast.error(err?.response?.data?.detail || 'Could not send team requests');
+                                    toast.error(err?.response?.data?.detail || 'Could not send invites');
                                     return;
                                 }
                                 setStep(3);
@@ -195,24 +190,20 @@ const TeamSetupModal = () => {
 
                 {step === 3 && (
                     <div className="space-y-4 pt-1">
-                        <p className="text-sm text-slate-600">
-                            How often should we remind you to confirm your reporting line?
-                        </p>
                         <div className="grid grid-cols-2 gap-2">
                             {FREQUENCIES.map((f) => (
                                 <button
                                     key={f.value}
                                     type="button"
                                     onClick={() => setFrequency(f.value)}
-                                    className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                                    className={`rounded-xl border px-3 py-3.5 text-left transition-colors ${
                                         frequency === f.value
-                                            ? 'border-teal-600 bg-teal-50 text-teal-900'
-                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                            ? 'border-foreground bg-foreground text-background'
+                                            : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
                                     }`}
                                     data-testid={`team-freq-${f.value}`}
                                 >
                                     <span className="text-sm font-medium block">{f.label}</span>
-                                    <span className="text-[11px] opacity-70">{f.help}</span>
                                 </button>
                             ))}
                         </div>
@@ -222,7 +213,7 @@ const TeamSetupModal = () => {
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-full"
+                                className="rounded-full min-w-[7.5rem]"
                                 onClick={() => setStep(4)}
                                 data-testid="team-setup-cadence-next"
                             >
@@ -234,11 +225,8 @@ const TeamSetupModal = () => {
 
                 {step === 4 && (
                     <div className="space-y-4 pt-1">
-                        <p className="text-sm text-slate-600">
-                            Track whether people <strong>opened the invite</strong>, <strong>signed up</strong>, and <strong>logged in</strong>. Fastest joiners sit at the top — late or waiting at the bottom.
-                        </p>
-                        <p className="text-sm rounded-xl bg-teal-50 border border-teal-100 px-3 py-2 text-teal-900">
-                            Find this anytime under <strong>Team → Joining</strong>.
+                        <p className="text-xs text-muted-foreground" data-testid="team-setup-joining-hint">
+                            Team → Joining
                         </p>
                         <TeamInviteProgress compact />
                         <div className="flex justify-between gap-2">
@@ -247,12 +235,12 @@ const TeamSetupModal = () => {
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-full"
+                                className="rounded-full min-w-[7.5rem]"
                                 onClick={() => finish({ goToJoining: true })}
                                 disabled={saving}
                                 data-testid="team-setup-finish"
                             >
-                                {saving ? 'Saving…' : 'Open joining board'}
+                                {saving ? 'Saving…' : 'Done'}
                             </Button>
                         </div>
                     </div>

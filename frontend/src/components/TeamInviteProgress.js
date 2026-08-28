@@ -31,7 +31,7 @@ const TeamInviteProgress = ({ compact = false }) => {
     const summary = data.summary || {};
 
     return (
-        <div className="space-y-4" data-testid="team-invite-progress">
+        <div className={compact ? 'space-y-3' : 'space-y-4'} data-testid="team-invite-progress">
             <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl bg-teal-50 dark:bg-teal-950/40 px-3 py-2">
                     <p className="text-[11px] text-muted-foreground">In</p>
@@ -46,13 +46,8 @@ const TeamInviteProgress = ({ compact = false }) => {
                     <p className="text-xl font-semibold" style={{ fontFamily: 'Outfit' }}>{summary.total || 0}</p>
                 </div>
             </div>
-            {!compact && (
-                <p className="text-xs text-muted-foreground">
-                    Opened invite, signed up, verified, logged in, then finished setup. Fastest joiners at the top.
-                </p>
-            )}
             {rows.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">No invitations yet. Invite people and they’ll show up here.</p>
+                <p className="text-sm text-muted-foreground py-6 text-center">Invite someone</p>
             ) : (
                 <div className="space-y-2">
                     {rows.map((row) => (

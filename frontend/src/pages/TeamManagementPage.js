@@ -323,13 +323,9 @@ const TeamManagementPage = () => {
                         <TabsContent value="joining">
                             <Card className="border-2 shadow-soft rounded-2xl">
                                 <CardHeader>
-                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                                        <Trophy className="w-6 h-6" />
-                                        Who’s joining
+                                    <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>
+                                        Joining
                                     </CardTitle>
-                                    <CardDescription>
-                                        Opened invite → signed up → verified → logged in. Fastest at the top; still waiting at the bottom.
-                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <TeamInviteProgress key={progressKey} />
