@@ -263,41 +263,38 @@ const TeamManagementPage = () => {
                     </div>
 
                     <Tabs value={resolvedTab} onValueChange={setTab} className="w-full">
-                        <TabsList className={`grid w-full mb-8 ${
-                            isPro
-                                ? 'grid-cols-2 max-w-md'
-                                : isOwner
-                                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-                                    : 'grid-cols-2 sm:grid-cols-5'
-                        }`}>
+                        <TabsList
+                            data-testid="team-tabs-list"
+                            className="flex h-auto min-h-9 w-full flex-wrap items-center justify-start gap-1.5 mb-8"
+                        >
                             {(isTeams || isPro) && (
-                                <TabsTrigger value="my-hierarchy" className="rounded-full">
+                                <TabsTrigger value="my-hierarchy" className="rounded-full shrink-0">
                                     <UserCheck className="w-4 h-4 mr-2" />
                                     My Hierarchy
                                 </TabsTrigger>
                             )}
                             {isTeams && (
                                 <>
-                                    <TabsTrigger value="direct-reports" className="rounded-full">
+                                    <TabsTrigger value="direct-reports" className="rounded-full shrink-0">
                                         <GitBranch className="w-4 h-4 mr-2" />
                                         Direct Reports
                                     </TabsTrigger>
-                                    <TabsTrigger value="joining" className="rounded-full" data-testid="team-tab-joining">
+                                    <TabsTrigger value="joining" className="rounded-full shrink-0" data-testid="team-tab-joining">
                                         <Trophy className="w-4 h-4 mr-2" />
                                         Joining
                                     </TabsTrigger>
-                                    <TabsTrigger value="performance" className="rounded-full">
+                                    <TabsTrigger value="performance" className="rounded-full shrink-0">
                                         <CheckCircle2 className="w-4 h-4 mr-2" />
                                         Performance
                                     </TabsTrigger>
                                 </>
                             )}
-                            <TabsTrigger value="groups" className="rounded-full">
+                            <TabsTrigger value="groups" className="rounded-full shrink-0">
                                 <UsersIcon className="w-4 h-4 mr-2" />
                                 Groups
                             </TabsTrigger>
                             {isTeams && isOwner && (
-                                <TabsTrigger value="team-admin" className="rounded-full">
+                                <TabsTrigger value="team-admin" className="rounded-full shrink-0">
                                     <UsersIcon className="w-4 h-4 mr-2" />
                                     Team Admin
                                 </TabsTrigger>
