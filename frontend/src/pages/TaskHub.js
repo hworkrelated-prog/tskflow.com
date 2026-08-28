@@ -1173,55 +1173,65 @@ const TaskHub = () => {
 
     const overdueCount = getOverdueCount();
 
-    const columnCards = [
-        <DashboardColumnCard key="to-me" title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
-            {toMeTasks.length === 0 ? (
-                <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
-            ) : (
-                toMeTasks.map((task, index) => (
-                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                ))
-            )}
-        </DashboardColumnCard>,
-        <DashboardColumnCard key="personal" title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
-            {personalTasks.length === 0 ? (
-                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
-                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
-                    {viewMode === 'active' && !salesOnly && (
-                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+    const renderColumnCard = (id) => {
+        if (id === 'to-me') {
+            return (
+                <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
+                    {toMeTasks.length === 0 ? (
+                        <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
+                    ) : (
+                        toMeTasks.map((task, index) => (
+                            <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                        ))
                     )}
-                </div>
-            ) : (
-                personalTasks.map((task, index) => (
-                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                ))
-            )}
-        </DashboardColumnCard>,
-        <DashboardColumnCard key="delegated" title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
-            {visibleGroups.map((group) => (
-                <ParentTaskGroup
-                    key={group.id}
-                    group={group}
-                    onChanged={fetchParentGroups}
-                    selectable={selectionMode}
-                    selected={selectedTasks.has(group.id)}
-                    onToggleSelect={toggleTaskSelection}
-                />
-            ))}
-            {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
-                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
-                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
-                    {viewMode === 'active' && !salesOnly && (
-                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                </DashboardColumnCard>
+            );
+        }
+        if (id === 'personal') {
+            return (
+                <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
+                    {personalTasks.length === 0 ? (
+                        <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                            <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
+                            {viewMode === 'active' && !salesOnly && (
+                                <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+                            )}
+                        </div>
+                    ) : (
+                        personalTasks.map((task, index) => (
+                            <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                        ))
                     )}
-                </div>
-            ) : (
-                delegatedTasks.map((task, index) => (
-                    <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                ))
-            )}
-        </DashboardColumnCard>,
-    ];
+                </DashboardColumnCard>
+            );
+        }
+        return (
+            <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
+                {visibleGroups.map((group) => (
+                    <ParentTaskGroup
+                        key={group.id}
+                        group={group}
+                        onChanged={fetchParentGroups}
+                        selectable={selectionMode}
+                        selected={selectedTasks.has(group.id)}
+                        onToggleSelect={toggleTaskSelection}
+                    />
+                ))}
+                {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
+                    <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
+                        {viewMode === 'active' && !salesOnly && (
+                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                        )}
+                    </div>
+                ) : (
+                    delegatedTasks.map((task, index) => (
+                        <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                    ))
+                )}
+            </DashboardColumnCard>
+        );
+    };
 
     return (
         <div data-testid="task-hub" className="page-shell">
@@ -1837,36 +1847,33 @@ const TaskHub = () => {
 
                 {isMobileDashboard ? (
                     <Carousel
-                        opts={{ align: 'start', loop: false, startIndex: urgentColumnIndex, duration: 18 }}
+                        opts={{ align: 'start', loop: false, containScroll: 'trimSnaps', watchDrag: true, startIndex: urgentColumnIndex }}
                         setApi={setCarouselApi}
                         className="w-full cursor-grab active:cursor-grabbing"
                         data-testid="dashboard-panels"
                     >
                         <CarouselContent className="-ml-0">
-                            {columnCards.map((card, index) => (
+                            {DASHBOARD_COLUMNS.map((col) => (
                                 <CarouselItem
-                                    key={DASHBOARD_COLUMNS[index].id}
-                                    className="pl-0 basis-full"
-                                    data-testid={`dashboard-column-${DASHBOARD_COLUMNS[index].id}`}
+                                    key={col.id}
+                                    className="pl-0 basis-full min-w-0"
+                                    data-testid={`dashboard-column-${col.id}`}
                                 >
-                                    {card}
+                                    {renderColumnCard(col.id)}
                                 </CarouselItem>
                             ))}
                         </CarouselContent>
                     </Carousel>
                 ) : (
                     <div className="grid grid-cols-3 gap-4 sm:gap-6 items-stretch" data-testid="dashboard-panels">
-                        {columnCards.map((card, index) => (
-                            <motion.div
-                                key={DASHBOARD_COLUMNS[index].id}
+                        {DASHBOARD_COLUMNS.map((col) => (
+                            <div
+                                key={col.id}
                                 className="h-full min-w-0"
-                                data-testid={`dashboard-column-${DASHBOARD_COLUMNS[index].id}`}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.2 }}
+                                data-testid={`dashboard-column-${col.id}`}
                             >
-                                {card}
-                            </motion.div>
+                                {renderColumnCard(col.id)}
+                            </div>
                         ))}
                     </div>
                 )}
