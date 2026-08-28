@@ -35,8 +35,8 @@ import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { columnWithSoonestDue, DASHBOARD_MOBILE_MQ, DASHBOARD_COLUMNS } from '@/lib/dashboardColumns';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
-const DashboardColumnCard = ({ title, dotClass, testId, children }) => (
-    <Card data-testid={testId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl flex-1 min-h-[20rem] w-full flex flex-col">
+const DashboardColumnCard = ({ title, dotClass, testId, columnId, children }) => (
+    <Card data-testid={testId} data-column={columnId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl min-h-[20rem] min-w-0 w-full flex flex-col self-stretch">
         <CardHeader className="hidden md:flex pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6 shrink-0">
             <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${dotClass}`} />
@@ -1183,7 +1183,7 @@ const TaskHub = () => {
     const renderColumnCard = (id) => {
         if (id === 'to-me') {
             return (
-                <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
+                <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me" columnId="to-me">
                     {toMeTasks.length === 0 ? (
                         <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
                     ) : (
@@ -1196,7 +1196,7 @@ const TaskHub = () => {
         }
         if (id === 'personal') {
             return (
-                <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
+                <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal" columnId="personal">
                     {personalTasks.length === 0 ? (
                         <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
                             <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
@@ -1213,7 +1213,7 @@ const TaskHub = () => {
             );
         }
         return (
-            <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
+            <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated" columnId="delegated">
                 {visibleGroups.map((group) => (
                     <ParentTaskGroup
                         key={group.id}
@@ -1875,13 +1875,9 @@ const TaskHub = () => {
                 ) : (
                     <div className="grid grid-cols-3 gap-4 sm:gap-6 items-stretch" data-testid="dashboard-panels">
                         {DASHBOARD_COLUMNS.map((col) => (
-                            <div
-                                key={col.id}
-                                className="min-w-0 flex flex-col"
-                                data-testid={`dashboard-column-${col.id}`}
-                            >
+                            <React.Fragment key={col.id}>
                                 {renderColumnCard(col.id)}
-                            </div>
+                            </React.Fragment>
                         ))}
                     </div>
                 )}
