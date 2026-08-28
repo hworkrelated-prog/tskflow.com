@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -75,7 +75,7 @@ const TaskHub = () => {
     const [loadingAiSummary, setLoadingAiSummary] = useState(false);
     const [bulkApproving, setBulkApproving] = useState(false);
     
-    const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
+    const { showOnboarding, closeOnboarding } = useOnboarding('dashboard');
 
     useEffect(() => {
         const calendar = searchParams.get('calendar');
@@ -109,7 +109,7 @@ const TaskHub = () => {
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // Manual form is opened from the command bar (`/form`) or `?create=advanced`.
+    // Full form is opened from the command bar (`/form`) or `?create=advanced`.
 
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
@@ -191,7 +191,7 @@ const TaskHub = () => {
         registerPush();
     }, []);
 
-    // Manual form + refresh hooks for the app-wide AI dock
+    // Full form + refresh hooks for the app-wide AI dock
     useEffect(() => {
         const applyPrefill = (prefill) => {
             if (!prefill) return;
@@ -1020,9 +1020,9 @@ const TaskHub = () => {
 
     const downloadAllTasksCSV = () => {
         const buckets = [
-            { name: 'Assigned to Me', tasks: dashboard?.assigned_to_me || [] },
-            { name: 'Self-Assigned', tasks: dashboard?.self_assigned || [] },
-            { name: 'Delegated', tasks: dashboard?.assigned_by_me || [] }
+            { name: 'To me', tasks: dashboard?.assigned_to_me || [] },
+            { name: 'Personal', tasks: dashboard?.self_assigned || [] },
+            { name: 'Sent', tasks: dashboard?.assigned_by_me || [] }
         ];
         const rows = [[
             'Bucket', 'Title', 'Description', 'Priority', 'Status', 'Due Date',
@@ -1053,7 +1053,7 @@ const TaskHub = () => {
         (parentGroups || []).forEach(g => {
             (g.assignees || []).forEach(a => {
                 rows.push([
-                    'Delegated (Group)',
+                    'Sent (Group)',
                     g.title,
                     g.description,
                     g.priority,
@@ -1086,10 +1086,12 @@ const TaskHub = () => {
         toast.success('Tasks exported to CSV');
     };
 
+    const openCreate = () => window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen gradient-mesh">
-                <div className="text-lg font-medium">Loading your tasks...</div>
+                <div className="text-lg font-medium">Loading…</div>
             </div>
         );
     }
@@ -1185,9 +1187,6 @@ const TaskHub = () => {
                         <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
                             Welcome, {user?.name}
                         </h2>
-                        <p className="text-sm text-muted-foreground/80 mt-1 tracking-wide">
-                            When something needs doing, start below.
-                        </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                         {(drafts.length > 0 || transcriptSessions.length > 0) && (
@@ -1301,8 +1300,8 @@ const TaskHub = () => {
                                         <DialogHeader className="pr-8">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Manual form</DialogTitle>
-                                                    <DialogDescription className="sr-only">Create a task with the full form</DialogDescription>
+                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>New task</DialogTitle>
+                                                    <DialogDescription className="sr-only">Create a task</DialogDescription>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
@@ -1326,15 +1325,15 @@ const TaskHub = () => {
                                                 </button>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="title">Task Title</Label>
-                                                <Input id="title" data-testid="task-title-input" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Enter task title" required className="rounded-xl" />
+                                                <Label htmlFor="title">Title</Label>
+                                                <Input id="title" data-testid="task-title-input" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Title" required className="rounded-xl" />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor="description">Description</Label>
                                                 <RichTextEditor
                                                     value={taskForm.description}
                                                     onChange={(value) => setTaskForm({ ...taskForm, description: value })}
-                                                    placeholder="Describe the task with formatting..."
+                                                    placeholder="What needs to happen"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -1344,7 +1343,7 @@ const TaskHub = () => {
                                                     data-testid="task-success-criteria"
                                                     value={taskForm.success_criteria || ''}
                                                     onChange={(e) => setTaskForm({ ...taskForm, success_criteria: e.target.value })}
-                                                    placeholder="What does a good completion look like?"
+                                                    placeholder="What good looks like"
                                                     className="rounded-xl min-h-[64px]"
                                                     rows={2}
                                                 />
@@ -1371,13 +1370,13 @@ const TaskHub = () => {
                                                     </div>
                                                 )}
                                                 <div className="relative" ref={dropdownRef}>
-                                                    <Input placeholder="Type email or click to select team members..." value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onFocus={() => setShowUserDropdown(true)} onKeyDown={handleEmailKeyDown} className="rounded-xl" />
+                                                    <Input placeholder="Name, email, or group" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onFocus={() => setShowUserDropdown(true)} onKeyDown={handleEmailKeyDown} className="rounded-xl" />
                                                     {showUserDropdown && (
                                                         <div className="absolute z-50 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-64 overflow-y-auto">
                                                             {!selectedAssignees.some(a => a.type === 'self') && (
                                                                 <div onClick={() => addAssignee({ type: 'self' })} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-b">
                                                                     <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-teal-600" /></div>
-                                                                    <div><p className="font-medium">Assign to Self</p><p className="text-xs text-muted-foreground">Auto-accept this task</p></div>
+                                                                    <div><p className="font-medium">Me</p></div>
                                                                 </div>
                                                             )}
                                                             {!isFreeUser && groups.length > 0 && (
@@ -1406,13 +1405,12 @@ const TaskHub = () => {
                                                             {emailInput && emailInput.includes('@') && (
                                                                 <div onClick={() => { const existingUser = users.find(u => u.email.toLowerCase() === emailInput.toLowerCase()); if (existingUser) { addAssignee({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email }); } else { addAssignee({ type: 'email', email: emailInput.trim() }); } }} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-t">
                                                                     <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center"><Plus className="w-4 h-4 text-green-600" /></div>
-                                                                    <div><p className="font-medium">Invite "{emailInput}"</p><p className="text-xs text-muted-foreground">Send task via email</p></div>
+                                                                    <div><p className="font-medium">Invite "{emailInput}"</p></div>
                                                                 </div>
                                                             )}
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-muted-foreground">Select multiple team members or type any email. Press Enter to add email.</p>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="space-y-2">
@@ -1428,7 +1426,7 @@ const TaskHub = () => {
                                                     </Select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="due_date">Due Date & Time</Label>
+                                                    <Label htmlFor="due_date">Due</Label>
                                                     <DateTimePicker
                                                         value={taskForm.due_date}
                                                         onChange={(val) => setTaskForm({ ...taskForm, due_date: val })}
@@ -1437,7 +1435,7 @@ const TaskHub = () => {
                                                 </div>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label>Attachments & Screen Recording</Label>
+                                                <Label>Attachments</Label>
                                                 <AttachmentPicker attachments={attachments} setAttachments={setAttachments} />
                                             </div>
                                             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -1449,7 +1447,7 @@ const TaskHub = () => {
                                                     className="rounded"
                                                 />
                                                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                                                <span>This is a Sales Task <span className="text-xs text-muted-foreground">(involves a customer or prospect)</span></span>
+                                                <span>Sales</span>
                                             </label>
 
                                             {/* Advanced options - collapsed by default so the form stays short */}
@@ -1468,10 +1466,7 @@ const TaskHub = () => {
                                                             className="rounded mt-0.5"
                                                         />
                                                         <Video className="w-4 h-4 text-violet-600 mt-0.5 shrink-0" />
-                                                        <span>
-                                                            <span className="font-medium">Require a screen recording from the assignee</span>
-                                                            <span className="block text-xs text-muted-foreground mt-0.5">A prominent banner will appear on their task view asking them to attach a Loom-style recording before they can mark it done.</span>
-                                                        </span>
+                                                        <span className="font-medium">Require screen recording</span>
                                                     </label>
                                                     <div className="pt-3 border-t">
                                                         <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
@@ -1658,7 +1653,7 @@ const TaskHub = () => {
                 {/* Upgrade Nudges */}
                 {showLightBanner && !showPersistentBanner && (
                     <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <p className="text-sm text-teal-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
+                        <p className="text-sm text-teal-800">Unlock reminders, recordings, and follow-up.</p>
                         <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs shrink-0 self-start sm:self-auto"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
                     </div>
                 )}
@@ -1667,7 +1662,7 @@ const TaskHub = () => {
                     <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
                         <CardContent className="py-4">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div className="flex items-start sm:items-center gap-3"><Crown className="w-5 h-5 text-amber-600 shrink-0" /><p className="text-amber-800 text-sm sm:text-base">You're managing {activeTaskCount} tasks! Upgrade to Pro or Teams for priority support and team features.</p></div>
+                                <div className="flex items-start sm:items-center gap-3"><Crown className="w-5 h-5 text-amber-600 shrink-0" /><p className="text-amber-800 text-sm sm:text-base">Pro adds reminders, recordings, and team follow-up.</p></div>
                                 <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 shrink-0 self-start sm:self-auto"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
                             </div>
                         </CardContent>
@@ -1678,8 +1673,8 @@ const TaskHub = () => {
                 <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
                     <DialogContent className="rounded-2xl">
                         <DialogHeader>
-                            <DialogTitle className="text-foreground">You're Growing Fast!</DialogTitle>
-                            <DialogDescription>You now have {activeTaskCount} active tasks. Consider upgrading to Pro or Teams for team collaboration, analytics, and priority support.</DialogDescription>
+                            <DialogTitle className="text-foreground">Unlock Pro</DialogTitle>
+                            <DialogDescription>Reminders, recordings, and team follow-up.</DialogDescription>
                         </DialogHeader>
                         <div className="flex gap-2 justify-end pt-4">
                             <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Maybe Later</Button>
@@ -1692,12 +1687,11 @@ const TaskHub = () => {
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
-                                <CardDescription>Tasks from others</CardDescription>
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>To me</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No tasks assigned to you'}</p>
+                                    <p className="text-center text-sm text-muted-foreground py-8">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_to_me || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
@@ -1710,12 +1704,16 @@ const TaskHub = () => {
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
-                                <CardDescription>Your personal tasks</CardDescription>
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Personal</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No self-assigned tasks'}</p>
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
+                                        {viewMode === 'active' && !salesOnly && (
+                                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+                                        )}
+                                    </div>
                                 ) : (
                                     getFilteredTasks(dashboard?.self_assigned || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
@@ -1728,8 +1726,7 @@ const TaskHub = () => {
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
                         <Card className="border-2 shadow-soft rounded-2xl">
                             <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
-                                <CardDescription>Tasks you assigned</CardDescription>
+                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Sent</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
                                 {parentGroups
@@ -1747,7 +1744,12 @@ const TaskHub = () => {
                                 ))}
                                 {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0
                                     && parentGroups.filter(matchesGroupSearch).filter((g) => !salesOnly || isSalesGroup(g)).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No delegated tasks'}</p>
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing sent'}</p>
+                                        {viewMode === 'active' && !salesOnly && (
+                                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                                        )}
+                                    </div>
                                 ) : (
                                     getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
                                         <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />

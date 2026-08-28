@@ -138,7 +138,7 @@ const TranscriptImportPage = () => {
                         <div className="flex items-center gap-2">
                             <FileText className="w-6 h-6 text-indigo-600" />
                             <h1 className="text-2xl font-semibold">
-                                {reviewing ? 'Review & execute drafts' : 'Meet Transcript → Tasks'}
+                                {reviewing ? 'Review drafts' : 'From transcript'}
                             </h1>
                         </div>
                         {reviewing && (
@@ -149,8 +149,8 @@ const TranscriptImportPage = () => {
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
                         {reviewing
-                            ? 'Owner and deadline are best guesses from the transcript. Confirm or edit, then publish - nothing goes live until you do.'
-                            : 'Paste, upload, or link a Google Doc. Jarvis pulls only the clearly identified action items and guesses owner + deadline.'}
+                            ? 'Confirm owner and due date, then publish.'
+                            : 'Paste, upload, or link a Google Doc.'}
                     </p>
                 </div>
             </header>
@@ -173,7 +173,7 @@ const TranscriptImportPage = () => {
                                     <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the full meeting transcript here..." className="rounded-xl" />
                                 </div>
                                 <Button disabled={loading} onClick={importTranscript} className="rounded-full">
-                                    {loading ? 'Extracting...' : 'Extract Tasks with Jarvis'}
+                                    {loading ? 'Extracting…' : 'Extract tasks'}
                                 </Button>
                             </CardContent>
                         </Card>

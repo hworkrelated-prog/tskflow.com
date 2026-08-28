@@ -1,5 +1,5 @@
 import React from 'react';
-import { Repeat, Calendar } from 'lucide-react';
+import { Repeat } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +24,7 @@ const RecurrenceEditor = ({ value, onChange }) => {
                     className="rounded"
                 />
                 <Repeat className="w-4 h-4 text-violet-600" />
-                <span>Repeat this task <span className="text-xs text-muted-foreground">(turn it into a recurring series)</span></span>
+                <span>Repeat</span>
             </label>
 
             {rule.enabled && (
@@ -36,7 +36,7 @@ const RecurrenceEditor = ({ value, onChange }) => {
                                 <SelectTrigger data-testid="recurrence-frequency" className="rounded-xl"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="daily">Daily</SelectItem>
-                                    <SelectItem value="weekdays">Weekdays (Mon\u2013Fri)</SelectItem>
+                                    <SelectItem value="weekdays">Weekdays (Mon-Fri)</SelectItem>
                                     <SelectItem value="weekly">Weekly</SelectItem>
                                     <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
                                     <SelectItem value="monthly">Monthly</SelectItem>
@@ -66,9 +66,9 @@ const RecurrenceEditor = ({ value, onChange }) => {
                         <Select value={rule.end_type || 'never'} onValueChange={(v) => set({ end_type: v })}>
                             <SelectTrigger data-testid="recurrence-end-type" className="rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="never">Never (until you stop it)</SelectItem>
-                                <SelectItem value="on_date">On a specific date</SelectItem>
-                                <SelectItem value="after_count">After N occurrences</SelectItem>
+                                <SelectItem value="never">Never</SelectItem>
+                                <SelectItem value="on_date">On a date</SelectItem>
+                                <SelectItem value="after_count">After N times</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -87,7 +87,7 @@ const RecurrenceEditor = ({ value, onChange }) => {
                     )}
                     {rule.end_type === 'after_count' && (
                         <div className="space-y-1">
-                            <Label>Number of occurrences</Label>
+                            <Label>Times</Label>
                             <Input
                                 type="number"
                                 min={1}
@@ -99,10 +99,6 @@ const RecurrenceEditor = ({ value, onChange }) => {
                             />
                         </div>
                     )}
-                    <p className="text-xs text-muted-foreground flex items-start gap-1">
-                        <Calendar className="w-3 h-3 mt-0.5" />
-                        We generate a rolling window of upcoming occurrences automatically. You can skip or edit any of them.
-                    </p>
                 </div>
             )}
         </div>

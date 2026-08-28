@@ -992,13 +992,8 @@ const TaskDetail = () => {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-semibold text-purple-900 flex items-center gap-2">
-                                            {user?.id === task.assigned_to ? 'A screen recording is required for this task' : 'Assignee must attach a screen recording'}
+                                            {user?.id === task.assigned_to ? 'Attach a screen recording' : 'Screen recording required'}
                                         </h4>
-                                        <p className="text-sm text-teal-900 mt-0.5">
-                                            {user?.id === task.assigned_to
-                                                ? 'Please record a short Loom-style walkthrough of your work and attach it before marking this task complete.'
-                                                : 'The assignee is expected to attach a screen recording (Loom-style walkthrough) as proof-of-work when they complete this task.'}
-                                        </p>
                                         {user?.id === task.assigned_to && (
                                             <Button size="sm" onClick={() => navigate('/recordings')} className="rounded-full h-8 px-3 text-xs mt-2 bg-teal-700 hover:bg-teal-800 text-white" data-testid="open-recorder-btn">
                                                 <Video className="w-3.5 h-3.5 mr-1" /> Open recorder
@@ -1538,7 +1533,7 @@ const TaskDetail = () => {
                                 <>
                                     <div className="space-y-3 mb-3 max-h-[50vh] overflow-y-auto">
                                         {comments.length === 0 && (
-                                            <p className="text-sm text-muted-foreground text-center py-6">Tag people with @ to start a conversation.</p>
+                                            <p className="text-sm text-muted-foreground text-center py-6">No comments yet</p>
                                         )}
                                         {comments.map((c) => (
                                             <div key={c.id} className="bg-gray-50 p-3 rounded-lg">
@@ -2092,7 +2087,7 @@ const SlackFollowupCard = ({ thread }) => {
             </div>
             <CardContent className="pt-4 space-y-3">
                 {messages.length === 0 && (
-                    <p className="text-sm text-muted-foreground">Jarvis will talk to them here after two ignored pings.</p>
+                    <p className="text-sm text-muted-foreground">No follow-up yet</p>
                 )}
                 {messages.map((m, i) => (
                     <div key={`${m.ts || i}-${i}`} className={m.role === 'user' ? 'pl-4' : ''}>
@@ -2103,7 +2098,7 @@ const SlackFollowupCard = ({ thread }) => {
                     </div>
                 ))}
                 <p className="text-xs text-muted-foreground">
-                    Replies on Slack update this task - accepted, blocked, declined, or done.
+                    Replies update this task.
                 </p>
             </CardContent>
         </Card>

@@ -9,11 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ArrowLeft, Crown, Check, Users, Lock, Palette, User, Save, HelpCircle, Sparkles, Table2, RefreshCw, Plus, Trash2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
-import OnboardingPopup from '@/components/OnboardingPopup';
 import { startGoogleCalendarConnect } from '@/lib/googleCalendar';
 
 function IosSwitch({ checked, onChange, testId }) {
@@ -50,7 +49,6 @@ const SettingsPage = () => {
     const [testingSlack, setTestingSlack] = React.useState(false);
     const [displayName, setDisplayName] = React.useState('');
     const [savingName, setSavingName] = React.useState(false);
-    const [showHowItWorks, setShowHowItWorks] = React.useState(false);
     // End-of-day report preferences
     const [eodEnabled, setEodEnabled] = React.useState(false);
     const [eodHour, setEodHour] = React.useState(17);
@@ -361,9 +359,6 @@ const SettingsPage = () => {
 
     return (
         <div data-testid="settings-page" className="page-shell">
-            <AnimatePresence>
-                {showHowItWorks && <OnboardingPopup page="howItWorks" onClose={() => setShowHowItWorks(false)} />}
-            </AnimatePresence>
             <header className="glass-header border-b">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
@@ -377,11 +372,11 @@ const SettingsPage = () => {
                     </Button>
                     <Button
                         variant="ghost"
-                        onClick={() => setShowHowItWorks(true)}
+                        onClick={() => navigate('/help')}
                         className="rounded-full"
                     >
                         <HelpCircle className="w-4 h-4 mr-2" />
-                        How Tskflow Works
+                        Help
                     </Button>
                 </div>
             </header>
@@ -1067,8 +1062,7 @@ const SettingsPage = () => {
                             <div className="flex-1">
                                 <h3 className="font-semibold text-base">Slack</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Channel posts use a webhook. After two ignored pings, Jarvis DMs the assignee
-                                    {slackBotEnabled ? '. Follow-up DMs are on.' : ' when SLACK_BOT_TOKEN is set on the server.'}
+                                    {slackBotEnabled ? 'Follow-up DMs are on.' : 'Channel posts use a webhook. Jarvis DMs after two ignored pings.'}
                                 </p>
                             </div>
                             {slackWebhook && (
@@ -1177,9 +1171,9 @@ const SettingsPage = () => {
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {slackTeamConnected
                                         ? (slackBotEnabled
-                                            ? 'Connected. Jarvis DMs people who ignore two pings, then updates their task from the reply.'
-                                            : 'Connected by your admin for channel posts.')
-                                        : 'Only your Teams admin can connect Slack. Once they do, follow-ups can go to Slack too.'}
+                                            ? 'Connected. Jarvis DMs after two ignored pings.'
+                                            : 'Connected for channel posts.')
+                                        : 'Ask your admin to connect Slack.'}
                                 </p>
                             </div>
                             {slackTeamConnected && (
@@ -1502,10 +1496,10 @@ const SmartRemindersCard = ({ slackConnected }) => {
         : `${(rule.priorities || []).join(', ') || 'No priorities'} · ${(rule.channels || []).map((c) => channelLabels[c] || c).join(', ') || 'No channels'}`;
 
     const nudgeWhen = [
-        { key: 'time_before_due', label: 'Coming up soon (before due date)' },
-        { key: 'no_response', label: 'Assignee hasn’t accepted yet' },
-        { key: 'no_progress', label: 'Accepted but no progress' },
-        { key: 'overdue', label: 'Past the due date' },
+        { key: 'time_before_due', label: 'Before due' },
+        { key: 'no_response', label: 'Not accepted' },
+        { key: 'no_progress', label: 'No progress' },
+        { key: 'overdue', label: 'Past due' },
     ];
 
     const channels = [
@@ -1520,7 +1514,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Automatic nudges when tasks need attention, before they’re due, stuck, or overdue.</p>
+                    <p className="text-xs text-muted-foreground">Nudges when work is stuck or due.</p>
                 </div>
                 <IosSwitch
                     checked={rule.enabled}

@@ -1,116 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronRight, ChevronLeft, Plus, CheckCircle, Users, BarChart3, Settings, Mail, FileText, Clock, Eye } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Plus, Users, BarChart3, Settings, Mail, FileText, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const walkthroughs = {
     howItWorks: {
-        title: "How Tskflow Works",
+        title: "How Tskflow works",
         steps: [
             {
-                title: "Assign with clarity",
-                description: "Assign tasks to anyone by email. Even if they're not on Tskflow yet.",
+                title: "Assign anyone",
+                description: "Email is enough. They don't need an account yet.",
                 icon: <Mail className="w-8 h-8" />
             },
             {
-                title: "Proof of completion",
-                description: "Tasks aren't just marked 'done'. Assignees add notes and context.",
+                title: "They prove it's done",
+                description: "Done includes a note, not just a checkbox.",
                 icon: <FileText className="w-8 h-8" />
             },
             {
-                title: "Review before closure",
-                description: "Assigned tasks go into Review Pending so you can accept or send back.",
+                title: "You review",
+                description: "Accept it, send it back, or it closes in 24 hours.",
                 icon: <Eye className="w-8 h-8" />
-            },
-            {
-                title: "No micromanaging",
-                description: "If you don't act, tasks auto-complete after 24 hours.",
-                icon: <Clock className="w-8 h-8" />
-            },
-            {
-                title: "Team accountability",
-                description: "See completion rates, speed, and top performers at a glance.",
-                icon: <BarChart3 className="w-8 h-8" />
             }
         ]
     },
     dashboard: {
-        title: "Welcome to Tskflow",
+        title: "Tskflow",
         steps: [
             {
-                title: "Your Task Dashboard",
-                description: "This is your command center. Tasks are organized into three columns based on their type.",
-                icon: <CheckCircle className="w-8 h-8" />
-            },
-            {
-                title: "Assigned to Me",
-                description: "Tasks that others have assigned to you appear here. Accept, decline, or counter-propose deadlines.",
-                icon: <Users className="w-8 h-8" />
-            },
-            {
-                title: "Self-Assigned",
-                description: "Personal tasks you've created for yourself. These are auto-accepted and ready to work on.",
-                icon: <CheckCircle className="w-8 h-8" />
-            },
-            {
-                title: "Delegated",
-                description: "Tasks you've assigned to others. Track their progress and status from here.",
-                icon: <Users className="w-8 h-8" />
-            },
-            {
-                title: "Create New Tasks",
-                description: "Use the floating bar at the bottom to create tasks, search, or jump around the app. Tell TskFlow what you need in plain English - it figures out who, when, and priority.",
+                title: "Assign in one line",
+                description: "Type who, what, and when in the bar below. They accept. You see it through.",
                 icon: <Plus className="w-8 h-8" />
             }
         ]
     },
     analytics: {
-        title: "Analytics Overview",
+        title: "Analytics",
         steps: [
             {
-                title: "Your Productivity Insights",
-                description: "Track how many tasks you've assigned, completed, and received over time.",
+                title: "How the team is doing",
+                description: "Completion, speed, and who is falling behind.",
                 icon: <BarChart3 className="w-8 h-8" />
-            },
-            {
-                title: "Team Performance",
-                description: "See detailed breakdowns per assignee: tasks assigned, completed, and completion rates.",
-                icon: <Users className="w-8 h-8" />
-            },
-            {
-                title: "Date Range Filter",
-                description: "Adjust the date range to analyze different time periods.",
-                icon: <Settings className="w-8 h-8" />
             }
         ]
     },
     settings: {
-        title: "Account Settings",
+        title: "Settings",
         steps: [
             {
-                title: "Manage Your Account",
-                description: "Update your profile, password, and subscription settings here.",
+                title: "Your account",
+                description: "Profile, plan, reminders, and Slack.",
                 icon: <Settings className="w-8 h-8" />
-            },
-            {
-                title: "Upgrade Plans",
-                description: "Upgrade to Pro for unlimited tasks or Teams for organizational features.",
-                icon: <CheckCircle className="w-8 h-8" />
             }
         ]
     },
     team: {
-        title: "Team Management",
+        title: "Team",
         steps: [
             {
-                title: "Direct Reports",
-                description: "Manage people who report to you. See their task metrics with privacy protection.",
+                title: "Who reports to you",
+                description: "You only see work you assigned them.",
                 icon: <Users className="w-8 h-8" />
-            },
-            {
-                title: "Organization Hierarchy",
-                description: "Set who you report to and build your team structure.",
-                icon: <Settings className="w-8 h-8" />
             }
         ]
     }
@@ -120,9 +70,11 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const walkthrough = walkthroughs[page] || walkthroughs.dashboard;
     const steps = walkthrough.steps;
+    const isLast = currentStep === steps.length - 1;
+    const single = steps.length === 1;
 
     const nextStep = () => {
-        if (currentStep < steps.length - 1) {
+        if (!isLast) {
             setCurrentStep(currentStep + 1);
         } else {
             onClose();
@@ -148,11 +100,11 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                 exit={{ scale: 0.9, opacity: 0 }}
                 className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden"
             >
-                {/* Header */}
                 <div className="bg-gradient-to-r from-teal-800 to-slate-800 p-6 text-white relative">
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-full transition-colors"
+                        aria-label="Close"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -161,13 +113,12 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                             {steps[currentStep].icon}
                         </div>
                         <div>
-                            <p className="text-white/70 text-sm">{walkthrough.title}</p>
+                            {!single && <p className="text-white/70 text-sm">{walkthrough.title}</p>}
                             <h2 className="text-xl font-bold">{steps[currentStep].title}</h2>
                         </div>
                     </div>
                 </div>
 
-                {/* Content */}
                 <div className="p-6">
                     <AnimatePresence mode="wait">
                         <motion.p
@@ -181,57 +132,58 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
                         </motion.p>
                     </AnimatePresence>
 
-                    {/* Progress Dots */}
-                    <div className="flex justify-center gap-2 mt-6">
-                        {steps.map((_, index) => (
-                            <button
-                                key={index}
-                                onClick={() => setCurrentStep(index)}
-                                className={`w-2 h-2 rounded-full transition-all ${
-                                    index === currentStep 
-                                        ? 'bg-teal-600 w-6' 
-                                        : 'bg-gray-300 hover:bg-gray-400'
-                                }`}
-                            />
-                        ))}
-                    </div>
+                    {!single && (
+                        <div className="flex justify-center gap-2 mt-6">
+                            {steps.map((_, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setCurrentStep(index)}
+                                    className={`w-2 h-2 rounded-full transition-all ${
+                                        index === currentStep
+                                            ? 'bg-teal-600 w-6'
+                                            : 'bg-gray-300 hover:bg-gray-400'
+                                    }`}
+                                    aria-label={`Step ${index + 1}`}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {/* Footer */}
-                <div className="px-6 pb-6 flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
+                <div className="px-6 pb-6 flex items-center justify-between">
+                    {single ? (
                         <Button
-                            variant="ghost"
-                            onClick={prevStep}
-                            disabled={currentStep === 0}
-                            className="rounded-full"
+                            onClick={onClose}
+                            className="rounded-full bg-gradient-to-r from-teal-800 to-slate-800 w-full"
                         >
-                            <ChevronLeft className="w-4 h-4 mr-1" />
-                            Back
+                            Got it
                         </Button>
-                        <Button
-                            onClick={nextStep}
-                            className="rounded-full bg-gradient-to-r from-teal-800 to-slate-800"
-                        >
-                            {currentStep === steps.length - 1 ? "Get Started" : "Next"}
-                            {currentStep < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-1" />}
-                        </Button>
-                    </div>
-                    <div className="text-center">
-                        <a 
-                            href="mailto:hashim@unbiassly.com?subject=Tskflow Feedback" 
-                            className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
-                        >
-                            Report a Bug / Send Feedback
-                        </a>
-                    </div>
+                    ) : (
+                        <>
+                            <Button
+                                variant="ghost"
+                                onClick={prevStep}
+                                disabled={currentStep === 0}
+                                className="rounded-full"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-1" />
+                                Back
+                            </Button>
+                            <Button
+                                onClick={nextStep}
+                                className="rounded-full bg-gradient-to-r from-teal-800 to-slate-800"
+                            >
+                                {isLast ? "Got it" : "Next"}
+                                {!isLast && <ChevronRight className="w-4 h-4 ml-1" />}
+                            </Button>
+                        </>
+                    )}
                 </div>
             </motion.div>
         </motion.div>
     );
 };
 
-// Hook to manage onboarding state
 export const useOnboarding = (pageName) => {
     const storageKey = `Tskflow_onboarding_${pageName}`;
     const [showOnboarding, setShowOnboarding] = useState(false);

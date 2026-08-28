@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useAuth, API } from '@/App';
+import { API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -13,7 +13,6 @@ import { getErrorMessage } from '@/lib/utils';
 
 /** Embeddable activity/data log - used as an Analytics tab. */
 export const ActivityLogTab = () => {
-    const { user } = useAuth();
     const navigate = useNavigate();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -77,12 +76,8 @@ export const ActivityLogTab = () => {
                     <div>
                         <CardTitle className="flex items-center gap-2 text-2xl" style={{ fontFamily: 'Outfit' }}>
                             <ScrollText className="w-5 h-5 text-teal-700" />
-                            Activity & data log
+                            Activity
                         </CardTitle>
-                        <CardDescription className="mt-1">
-                            Assigner, assignee, times, reminders, chatter - viewable and exportable
-                            {user?.company_domain ? ` · ${user.company_domain}` : ''}
-                        </CardDescription>
                     </div>
                     <Button onClick={downloadCsv} disabled={exporting} className="rounded-full shrink-0" data-testid="activity-export-csv">
                         <Download className="w-4 h-4 mr-2" />

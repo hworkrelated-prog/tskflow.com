@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -166,20 +166,17 @@ const CreateTask = () => {
             <main className="container mx-auto px-6 py-8 max-w-2xl">
                 <Card className="border-2 shadow-sm rounded-sm">
                     <CardHeader>
-                        <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Task Details</CardTitle>
-                        <CardDescription>
-                            {draftId ? 'Continue editing your draft' : 'Fill in the information below. Your progress will be auto-saved.'}
-                        </CardDescription>
+                        <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>New task</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="title">Task Title</Label>
+                                <Label htmlFor="title">Title</Label>
                                 <Input
                                     id="title"
                                     data-testid="task-title-input"
                                     type="text"
-                                    placeholder="Enter task title"
+                                    placeholder="Title"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                     required
@@ -192,7 +189,7 @@ const CreateTask = () => {
                                 <RichTextEditor
                                     value={formData.description}
                                     onChange={(value) => setFormData({ ...formData, description: value })}
-                                    placeholder="Enter task description with formatting..."
+                                    placeholder="What needs to happen"
                                 />
                             </div>
 
