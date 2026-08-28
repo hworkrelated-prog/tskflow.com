@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Mail, RefreshCw } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
+import { shouldConnectCalendarOnSignup } from '@/lib/googleCalendar';
 
 const EMAIL_KEY = 'tskflow_pending_verify_email';
 
@@ -56,7 +57,10 @@ const VerifyEmailPage = () => {
             try { localStorage.removeItem(EMAIL_KEY); } catch { /* noop */ }
             login(response.data.access_token, response.data.user);
             toast.success('Email verified successfully!');
-            navigate('/dashboard');
+            const dest = shouldConnectCalendarOnSignup(response.data.user)
+                ? '/connect-calendar'
+                : '/dashboard';
+            navigate(dest);
         } catch (error) {
             toast.error(getErrorMessage(error, 'Verification failed'));
         } finally {

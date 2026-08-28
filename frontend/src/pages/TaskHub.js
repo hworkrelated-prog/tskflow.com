@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,8 @@ import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const TaskHub = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, refreshUser } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
     const [drafts, setDrafts] = useState([]);
@@ -75,6 +76,22 @@ const TaskHub = () => {
     const [bulkApproving, setBulkApproving] = useState(false);
     
     const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
+
+    useEffect(() => {
+        const calendar = searchParams.get('calendar');
+        const oauthError = searchParams.get('error');
+        if (!calendar && !oauthError) return;
+        if (calendar === 'connected') toast.success('Google Calendar connected');
+        if (calendar === 'error' || oauthError) {
+            toast.error('Google Calendar did not finish connecting. You can try again in Settings.');
+        }
+        refreshUser?.();
+        const next = new URLSearchParams(searchParams);
+        next.delete('calendar');
+        next.delete('error');
+        setSearchParams(next, { replace: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const [viewMode, setViewMode] = useState('active');
     const [dateFilter, setDateFilter] = useState('today_overdue');

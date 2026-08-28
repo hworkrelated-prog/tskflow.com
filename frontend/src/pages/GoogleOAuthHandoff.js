@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { googleCallbackBackendUrl } from '@/lib/googleOAuthHandoff';
+import { peekCalendarOAuthNext } from '@/lib/googleCalendar';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 /**
  * Shown when Google returns to tskflow.com/api/auth/google/callback.
- * Forwards code+state to the real API host, which then redirects to Settings.
+ * Forwards code+state to the real API host, which then redirects to the
+ * in-app page stored on the OAuth state (dashboard after Teams signup, Settings otherwise).
  */
 const GoogleOAuthHandoff = () => {
     const location = useLocation();
@@ -14,9 +16,10 @@ const GoogleOAuthHandoff = () => {
     const [message, setMessage] = useState('Connecting Google…');
 
     useEffect(() => {
+        const failTo = `${peekCalendarOAuthNext('/settings')}?error=oauth_denied`;
         const params = new URLSearchParams(location.search);
         if (params.get('error')) {
-            navigate('/settings?error=oauth_denied', { replace: true });
+            navigate(failTo, { replace: true });
             return;
         }
         if (!params.get('code')) {
