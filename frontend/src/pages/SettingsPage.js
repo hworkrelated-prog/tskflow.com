@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
 import OnboardingPopup from '@/components/OnboardingPopup';
+import { startGoogleCalendarConnect } from '@/lib/googleCalendar';
 
 function IosSwitch({ checked, onChange, testId }) {
     return (
@@ -521,8 +522,11 @@ const SettingsPage = () => {
                                             <Button
                                                 onClick={async () => {
                                                     try {
-                                                        const res = await axios.get(`${API}/auth/google/connect`);
-                                                        window.location.href = res.data.auth_url;
+                                                        const result = await startGoogleCalendarConnect({ next: '/settings' });
+                                                        if (result?.already_connected) {
+                                                            toast.success('Google Calendar connected');
+                                                            refreshUser();
+                                                        }
                                                     } catch (e) {
                                                         toast.error('Failed to connect');
                                                     }

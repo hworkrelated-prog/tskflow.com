@@ -4318,7 +4318,11 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
     
     # If already completed, return cached status
     if transaction["payment_status"] == "paid":
-        return {"status": "complete", "payment_status": "paid"}
+        return {
+            "status": "complete",
+            "payment_status": "paid",
+            "package": transaction.get("package"),
+        }
     
     # Check with Stripe (official SDK)
     stripe_key = os.getenv("STRIPE_SECRET_KEY")
@@ -4367,7 +4371,8 @@ async def get_payment_status(session_id: str, http_request: HTTPRequest, current
     
     return {
         "status": status,
-        "payment_status": payment_status
+        "payment_status": payment_status,
+        "package": transaction.get("package"),
     }
 
 @api_router.post("/create-portal-session")
@@ -5875,17 +5880,38 @@ def get_google_flow(redirect_uri: str):
         redirect_uri=redirect_uri
     )
 
+def _safe_oauth_next(raw) -> str:
+    """Allow only in-app paths after Google Calendar OAuth. Default dashboard."""
+    path = str(raw or "").strip() or "/dashboard"
+    path = path.split("?")[0].split("#")[0]
+    if not path.startswith("/") or path.startswith("//") or path.startswith("/\\"):
+        return "/dashboard"
+    if "://" in path or "\\" in path:
+        return "/dashboard"
+    allowed = {"/dashboard", "/settings"}
+    return path if path in allowed else "/dashboard"
+
+
 @api_router.get("/auth/google/connect")
 async def google_calendar_connect(http_request: HTTPRequest, current_user: dict = Depends(get_current_user)):
     """Initiate Google Calendar OAuth flow"""
+    if current_user.get("google_calendar_connected") and current_user.get("google_credentials"):
+        return {"already_connected": True, "auth_url": None}
+
     redirect_uri = f"{APP_BASE_URL}/api/auth/google/callback"
     flow = get_google_flow(redirect_uri)
-    auth_url, state = flow.authorization_url(access_type='offline', prompt='consent')
+    next_path = _safe_oauth_next(http_request.query_params.get("next"))
+    auth_kwargs = {"access_type": "offline", "prompt": "consent"}
+    email = str(current_user.get("email") or "").strip()
+    if email:
+        auth_kwargs["login_hint"] = email
+    auth_url, state = flow.authorization_url(**auth_kwargs)
     
     # Store state with user_id for callback
     await db.oauth_states.insert_one({
         "state": state,
         "user_id": current_user["id"],
+        "next": next_path,
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
@@ -5900,6 +5926,7 @@ async def google_calendar_callback(code: str, state: str, http_request: HTTPRequ
         return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
     
     user_id = state_doc["user_id"]
+    next_path = _safe_oauth_next(state_doc.get("next"))
     await db.oauth_states.delete_one({"state": state})
     
     try:
@@ -5924,10 +5951,10 @@ async def google_calendar_callback(code: str, state: str, http_request: HTTPRequ
             }}
         )
         
-        return RedirectResponse(url=f"{APP_BASE_URL}/settings?calendar=connected")
+        return RedirectResponse(url=f"{APP_BASE_URL}{next_path}?calendar=connected")
     except Exception as e:
         logging.error(f"Google OAuth error: {e}")
-        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=oauth_failed")
+        return RedirectResponse(url=f"{APP_BASE_URL}{next_path}?error=oauth_failed")
 
 @api_router.delete("/auth/google/disconnect")
 async def google_calendar_disconnect(current_user: dict = Depends(get_current_user)):

@@ -13,6 +13,7 @@ const PaymentSuccessPage = () => {
     const sessionId = searchParams.get('session_id');
     const [status, setStatus] = useState('checking');
     const [attempts, setAttempts] = useState(0);
+    const [nextPath, setNextPath] = useState('/dashboard');
     const { refreshUser } = useAuth();
     const navigate = useNavigate();
 
@@ -40,9 +41,12 @@ const PaymentSuccessPage = () => {
             
             if (response.data.payment_status === 'paid') {
                 setStatus('success');
+                const paidPackage = String(response.data.package || '').toLowerCase();
+                const dest = paidPackage === 'teams' ? '/connect-calendar' : '/dashboard';
+                setNextPath(dest);
                 await refreshUser();
                 toast.success('Subscription activated successfully!');
-                setTimeout(() => navigate('/dashboard'), 3000);
+                setTimeout(() => navigate(dest), 3000);
                 return;
             } else if (response.data.status === 'expired') {
                 setStatus('expired');
@@ -101,7 +105,11 @@ const PaymentSuccessPage = () => {
                     </CardHeader>
                     <CardContent>
                         {status === 'success' && (
-                            <p className="text-center text-sm text-muted-foreground">Redirecting to dashboard in 3 seconds...</p>
+                            <p className="text-center text-sm text-muted-foreground">
+                                {nextPath === '/connect-calendar'
+                                    ? 'Next, connect Google Calendar so Teams tasks land on your calendar…'
+                                    : 'Redirecting to dashboard in 3 seconds...'}
+                            </p>
                         )}
 
                         {(status === 'timeout' || status === 'error' || status === 'expired') && (

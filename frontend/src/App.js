@@ -42,6 +42,7 @@ import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
+import ConnectCalendarPage from '@/pages/ConnectCalendarPage';
 import MailClaimPage from '@/pages/MailClaimPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
@@ -538,6 +539,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <ActivityLogPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/connect-calendar"
+                        element={
+                            <ProtectedRoute>
+                                <ConnectCalendarPage />
                             </ProtectedRoute>
                         }
                     />
