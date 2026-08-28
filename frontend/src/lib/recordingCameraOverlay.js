@@ -1,7 +1,7 @@
 /**
  * Always-on-top camera bubble placed on the display being recorded.
  * Uses the unified recording HUD (camera + controls together) via Document PiP
- * so dual-display recordings keep a movable custom surface — not a same-display
+ * so dual-display recordings keep a movable custom surface - not a same-display
  * popup that looks like a tiny Chrome tab.
  */
 

@@ -29,7 +29,7 @@ export const DEMO_SLACK = {
         {
             role: 'assistant',
             name: 'Jarvis',
-            text: "Hey Chris — Maya asked you to take this on. It's due EOD. I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
+            text: "Hey Chris - Maya asked you to take this on. It's due EOD. I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
         },
         {
             role: 'user',
@@ -39,7 +39,7 @@ export const DEMO_SLACK = {
         {
             role: 'assistant',
             name: 'Jarvis',
-            text: "Perfect — you're on it. I marked you accepted. I'll stay out of your way unless this slips.",
+            text: "Perfect - you're on it. I marked you accepted. I'll stay out of your way unless this slips.",
         },
     ],
     result: 'Chris accepted. Task updated from Slack.',

@@ -5,9 +5,6 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Users } from 'lucide-react';
 
-/**
- * Inline inbox for pending "you're on my team" claims — accept / ignore / dispute.
- */
 const TeamClaimsInbox = ({ compact = false }) => {
     const { user } = useAuth();
     const [claims, setClaims] = useState([]);
@@ -31,18 +28,10 @@ const TeamClaimsInbox = ({ compact = false }) => {
     }, [load]);
 
     const respond = async (claimId, action) => {
-        let note = null;
-        if (action === 'dispute') {
-            note = window.prompt('Optional note explaining why this is wrong:') || null;
-        }
         setBusyId(claimId);
         try {
-            await axios.post(`${API}/team/claims/${claimId}/respond`, { action, note });
-            toast.success(
-                action === 'accept' ? 'Accepted — you now report to them'
-                    : action === 'dispute' ? 'Disputed — they were notified'
-                        : 'Ignored'
-            );
+            await axios.post(`${API}/team/claims/${claimId}/respond`, { action });
+            toast.success(action === 'accept' ? 'Thanks' : 'Got it');
             setClaims((prev) => prev.filter((c) => c.id !== claimId));
             window.dispatchEvent(new CustomEvent('tskflow:notification'));
         } catch (e) {
@@ -69,7 +58,7 @@ const TeamClaimsInbox = ({ compact = false }) => {
                 <div key={c.id} className="rounded-xl bg-white border border-amber-100 p-3 space-y-2">
                     <p className="text-sm text-slate-800">
                         <span className="font-semibold">{c.claimer_name}</span>
-                        {' '}says you report to them.
+                        {' '}listed you as their manager.
                     </p>
                     <div className="flex flex-wrap gap-2">
                         <Button
@@ -79,7 +68,7 @@ const TeamClaimsInbox = ({ compact = false }) => {
                             onClick={() => respond(c.id, 'accept')}
                             data-testid={`claim-accept-${c.id}`}
                         >
-                            Accept
+                            Yes
                         </Button>
                         <Button
                             size="sm"
@@ -87,18 +76,9 @@ const TeamClaimsInbox = ({ compact = false }) => {
                             className="rounded-full h-8"
                             disabled={busyId === c.id}
                             onClick={() => respond(c.id, 'ignore')}
+                            data-testid={`claim-ignore-${c.id}`}
                         >
-                            Ignore
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            className="rounded-full h-8 text-rose-700 hover:text-rose-800 hover:bg-rose-50"
-                            disabled={busyId === c.id}
-                            onClick={() => respond(c.id, 'dispute')}
-                            data-testid={`claim-dispute-${c.id}`}
-                        >
-                            Dispute
+                            No
                         </Button>
                     </div>
                 </div>

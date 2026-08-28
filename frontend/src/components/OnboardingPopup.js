@@ -59,7 +59,7 @@ const walkthroughs = {
             },
             {
                 title: "Create New Tasks",
-                description: "Use the floating bar at the bottom to create tasks, search, or jump around the app. Tell TskFlow what you need in plain English — it figures out who, when, and priority.",
+                description: "Use the floating bar at the bottom to create tasks, search, or jump around the app. Tell TskFlow what you need in plain English - it figures out who, when, and priority.",
                 icon: <Plus className="w-8 h-8" />
             }
         ]

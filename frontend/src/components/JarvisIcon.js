@@ -2,7 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 
 /**
- * Jarvis mark — circular glass orb with a geometric J.
+ * Jarvis mark - circular glass orb with a geometric J.
  */
 export const JarvisIcon = ({
     size = 40,

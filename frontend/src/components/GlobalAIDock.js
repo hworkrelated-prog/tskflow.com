@@ -36,7 +36,7 @@ const draftPayloadFromSnap = (snap) => {
 };
 
 /**
- * Minimal app-wide command bar — create, search, navigate, ask.
+ * Minimal app-wide command bar - create, search, navigate, ask.
  */
 const GlobalAIDock = () => {
     const { user } = useAuth();
@@ -333,7 +333,7 @@ const GlobalAIDock = () => {
 
                 {recordingPending && (
                     <p className="text-[11px] text-teal-800 bg-teal-50 border border-teal-100 rounded-xl px-2.5 py-1.5 mb-2" data-testid="ai-dock-recording-pending">
-                        Recording in progress — it will attach here when you stop.
+                        Recording in progress. It will attach here when you stop.
                     </p>
                 )}
 

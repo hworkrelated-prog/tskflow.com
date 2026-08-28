@@ -63,7 +63,7 @@ const TranscriptImportPage = () => {
         try {
             const res = await axios.post(`${API}/task-drafts/from-transcript`, { text, url });
             const n = (res.data.drafts || []).length;
-            toast.success(n ? `Extracted ${n} draft${n === 1 ? '' : 's'} — review owner and deadline, then publish` : 'No clearly identified tasks in that transcript');
+            toast.success(n ? `Extracted ${n} draft${n === 1 ? '' : 's'} - review owner and deadline, then publish` : 'No clearly identified tasks in that transcript');
             setText('');
             setUrl('');
             if (res.data.session_id && n > 0) {
@@ -84,7 +84,7 @@ const TranscriptImportPage = () => {
             return sid === sessionFilter;
         });
         // If the chip/URL does not match stored ids, still show the drafts
-        // the dashboard counted — do not render an empty review by mistake.
+        // the dashboard counted - do not render an empty review by mistake.
         return match.length > 0 ? match : drafts;
     }, [drafts, sessionFilter]);
 
@@ -149,7 +149,7 @@ const TranscriptImportPage = () => {
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
                         {reviewing
-                            ? 'Owner and deadline are best guesses from the transcript. Confirm or edit, then publish — nothing goes live until you do.'
+                            ? 'Owner and deadline are best guesses from the transcript. Confirm or edit, then publish - nothing goes live until you do.'
                             : 'Paste, upload, or link a Google Doc. Jarvis pulls only the clearly identified action items and guesses owner + deadline.'}
                     </p>
                 </div>
@@ -181,7 +181,7 @@ const TranscriptImportPage = () => {
                         {sessions.length > 0 && (
                             <div data-testid="transcript-sessions">
                                 <h2 className="text-sm font-semibold text-slate-600 mb-2">Continue reviewing</h2>
-                                <p className="text-xs text-slate-500 mb-2">Open a session to review and execute drafted tasks — separate from this new transcript window.</p>
+                                <p className="text-xs text-slate-500 mb-2">Open a session to review and execute drafted tasks - separate from this new transcript window.</p>
                                 <div className="flex flex-wrap gap-2">
                                     {sessions.map((s) => (
                                         <button

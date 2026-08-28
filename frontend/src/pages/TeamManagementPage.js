@@ -165,7 +165,7 @@ const TeamManagementPage = () => {
             });
             const n = (res.data?.created || []).length;
             toast.success(n
-                ? `Sent ${n} request${n === 1 ? '' : 's'} — they’ll accept, ignore, or dispute`
+                ? `Sent ${n} request${n === 1 ? '' : 's'}`
                 : (res.data?.message || 'No new requests sent'));
             setShowAddReportDialog(false);
             setSelectedReportIds([]);
@@ -559,7 +559,7 @@ const TeamManagementPage = () => {
                                                                             {report.avg_completion_days}d
                                                                         </Badge>
                                                                     ) : (
-                                                                        <span className="text-xs text-muted-foreground">—</span>
+                                                                        <span className="text-xs text-muted-foreground" />
                                                                     )}
                                                                 </div>
                                                                 

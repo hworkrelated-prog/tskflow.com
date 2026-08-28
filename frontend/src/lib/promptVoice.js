@@ -14,8 +14,8 @@ export function shouldAutoSendVoice(spoken) {
 
 /**
  * Contemplative pauses should not kill the mic. Browsers end a non-continuous
- * recognition session after ~1–3s of quiet; we keep listening and only stop
- * after this much silence (middle of the 15–30s product range).
+ * recognition session after ~1-3s of quiet; we keep listening and only stop
+ * after this much silence (middle of the 15-30s product range).
  */
 export const VOICE_SILENCE_MS = 20_000;
 

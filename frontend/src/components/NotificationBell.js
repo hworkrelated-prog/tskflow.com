@@ -183,21 +183,14 @@ export const NotificationBell = () => {
                                                 className="text-[11px] font-semibold px-2 py-1 rounded-full bg-teal-700 text-white"
                                                 onClick={(e) => respondClaim(e, n, 'accept')}
                                             >
-                                                Accept
+                                                Yes
                                             </button>
                                             <button
                                                 type="button"
                                                 className="text-[11px] font-semibold px-2 py-1 rounded-full border border-border bg-background text-foreground"
                                                 onClick={(e) => respondClaim(e, n, 'ignore')}
                                             >
-                                                Ignore
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="text-[11px] font-semibold px-2 py-1 rounded-full text-rose-700 hover:bg-muted"
-                                                onClick={(e) => respondClaim(e, n, 'dispute')}
-                                            >
-                                                Dispute
+                                                No
                                             </button>
                                         </div>
                                     )}

@@ -236,7 +236,7 @@ const LeadsPage = () => {
                 reveal: true
             };
             const res = await axios.post(`${API}/leads/apollo-save`, body, cfg());
-            toast.success(res.data.phone_pending ? `${person.name} saved — phone unlocking (arrives shortly)` : `${person.name} saved to your leads`);
+            toast.success(res.data.phone_pending ? `${person.name} saved - phone unlocking (arrives shortly)` : `${person.name} saved to your leads`);
             fetchLeads();
         } catch (error) {
             handleAuthError(error);
@@ -256,7 +256,7 @@ const LeadsPage = () => {
                             <Lock className="w-7 h-7 text-white" />
                         </div>
                         <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Prospecting Access</CardTitle>
-                        <CardDescription>Private sales tool — enter the admin password to continue.</CardDescription>
+                        <CardDescription>Private sales tool - enter the admin password to continue.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -343,7 +343,7 @@ const LeadsPage = () => {
 
                                     {apolloResults.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-sm text-muted-foreground">{apolloResults.length} results — click &quot;Save &amp; unlock&quot; to add to your leads.</p>
+                                            <p className="text-sm text-muted-foreground">{apolloResults.length} results - click &quot;Save &amp; unlock&quot; to add to your leads.</p>
                                             {apolloResults.map((p, i) => (
                                                 <div key={p.apollo_person_id || i} data-testid={`apollo-result-${i}`} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-white">
                                                     <div className="min-w-0">
@@ -384,7 +384,7 @@ const LeadsPage = () => {
                                             <p className="text-sm font-semibold mb-2 text-teal-700">Best-fit personas</p>
                                             <ul className="space-y-2">
                                                 {icp.personas.map((p) => (
-                                                    <li key={p.title} className="text-sm"><span className="font-medium">{p.title}</span><span className="text-muted-foreground"> — {p.why}</span></li>
+                                                    <li key={p.title} className="text-sm"><span className="font-medium">{p.title}</span><span className="text-muted-foreground"> - {p.why}</span></li>
                                                 ))}
                                             </ul>
                                         </div>

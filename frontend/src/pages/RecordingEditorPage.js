@@ -133,7 +133,7 @@ const RecordingEditorPage = () => {
                 mime_type: blob?.type,
             });
             setShareLink(res.data.shareable_link);
-            toast.success('Recording saved — preview stays here so you can watch it again.');
+            toast.success('Recording saved - preview stays here so you can watch it again.');
             if (!videoUrl && ref?.storage_path) {
                 setVideoUrl(fileUrl(ref.storage_path));
             }

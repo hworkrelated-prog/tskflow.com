@@ -74,7 +74,7 @@ const VerifyEmailPage = () => {
         try {
             await axios.post(`${API}/auth/resend-verification?email=${encodeURIComponent(dest)}`);
             try { localStorage.setItem(EMAIL_KEY, dest); } catch { /* noop */ }
-            toast.success('New code sent — check your inbox and spam folder');
+            toast.success('New code sent - check your inbox and spam folder');
             setCode('');
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to resend code'));
@@ -138,7 +138,7 @@ const VerifyEmailPage = () => {
                                     className="rounded-xl h-12 text-center text-2xl tracking-widest font-mono"
                                 />
                                 <p className="text-xs text-muted-foreground text-center">
-                                    Use the code from your email — not the placeholder.
+                                    Use the code from your email - not the placeholder.
                                 </p>
                             </div>
                             <Button

@@ -221,7 +221,7 @@ const GroupsManager = ({ onChanged, compact = false }) => {
                     </Label>
                     <div className="border rounded-xl bg-white max-h-40 overflow-y-auto divide-y" data-testid="group-user-picker">
                         {(users || []).filter((u) => u.id !== user?.id).length === 0 ? (
-                            <div className="p-3 text-xs text-slate-500">No teammates yet — paste emails below.</div>
+                            <div className="p-3 text-xs text-slate-500">No teammates yet - paste emails below.</div>
                         ) : (
                             (users || []).filter((u) => u.id !== user?.id).map((u) => {
                                 const already = groupForm.emails.includes(u.email);

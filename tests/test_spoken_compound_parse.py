@@ -27,7 +27,13 @@ def _copy_helpers():
     start = src.index("_DIRECT_HINTS = ")
     end = src.index("async def _llm_vet_title")
     ns = {}
-    exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
+    exec(
+        "import re\nfrom typing import Optional, List\n"
+        "def first_name(name, fallback=''):\n"
+        "    p = (name or '').strip().split()\n"
+        "    return p[0] if p else fallback\n" + src[start:end],
+        ns,
+    )
     return ns
 
 

@@ -5,7 +5,7 @@
 //  * Accepts inputs in hours (default), minutes, or seconds via `unit`.
 
 export function formatDuration(value, unit = 'hours') {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return ' - ';
   let minutes;
   if (unit === 'hours') minutes = Math.round(Number(value) * 60);
   else if (unit === 'minutes') minutes = Math.round(Number(value));
@@ -20,9 +20,9 @@ export function formatDuration(value, unit = 'hours') {
   return `${hours} hour${hours === 1 ? '' : 's'} ${rem} minute${rem === 1 ? '' : 's'}`;
 }
 
-// Time until (in a friendly relative form) — negative means overdue
+// Time until (in a friendly relative form) - negative means overdue
 export function formatRelativeHours(hours) {
-  if (hours == null || isNaN(hours)) return '—';
+  if (hours == null || isNaN(hours)) return ' - ';
   const abs = Math.abs(hours);
   const sign = hours < 0 ? 'ago' : 'left';
   return `${formatDuration(abs, 'hours')} ${sign}`;

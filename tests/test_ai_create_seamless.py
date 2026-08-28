@@ -147,7 +147,13 @@ def test_classify_team_hint_and_name_extract():
     end = src.index("async def _resolve_assignee_hints")
     chunk = src[start:end]
     ns = {}
-    exec("import re\nfrom typing import Optional, List\n" + chunk, ns)
+    exec(
+        "import re\nfrom typing import Optional, List\n"
+        "def first_name(name, fallback=''):\n"
+        "    p = (name or '').strip().split()\n"
+        "    return p[0] if p else fallback\n" + chunk,
+        ns,
+    )
     assert ns["_classify_team_hint"]("my team") == "team"
     assert ns["_classify_team_hint"]("my direct reports") == "direct"
     assert ns["_classify_team_hint"]("everyone under me") == "team"
@@ -176,7 +182,13 @@ def test_carnegie_adds_next_steps():
     start = src.index("_SUBJECT_FOR_RE = ")
     end = src.index("def _assignee_name_list")
     ns = {}
-    exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
+    exec(
+        "import re\nfrom typing import Optional, List\n"
+        "def first_name(name, fallback=''):\n"
+        "    p = (name or '').strip().split()\n"
+        "    return p[0] if p else fallback\n" + src[start:end],
+        ns,
+    )
     out = ns["_carnegie_format_description"](
         "Please go through this and send an update.",
         title="Send an update",

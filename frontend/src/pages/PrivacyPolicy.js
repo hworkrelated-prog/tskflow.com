@@ -34,7 +34,7 @@ const PrivacyPolicy = () => {
                             <li><strong>Task data:</strong> tasks you create, assign, accept, or complete, including titles, descriptions, due dates, and status.</li>
                             <li><strong>Usage data:</strong> basic activity needed to operate the Service (e.g., last active time).</li>
                             <li><strong>Contact form data:</strong> if you submit our Contact Us form, we collect your name, email, phone number, and message, along with your consent to receive SMS messages if you opt in.</li>
-                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar) — see Section 5.</li>
+                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar) - see Section 5.</li>
                         </ul>
                     </section>
 

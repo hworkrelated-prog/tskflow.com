@@ -21,7 +21,7 @@ import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPr
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
- * AIQuickCreate — text an assistant, not fill a form.
+ * AIQuickCreate - text an assistant, not fill a form.
  * Flow:
  *   1) User types plain English + Enter
  *   2) POST /api/ai/quick-create-preview
@@ -35,9 +35,9 @@ const SALES_WORD_RE = /\b(sales?|selling|upsell|prospect(?:s|ing)?|pipeline|quot
 const looksLikeSales = (...parts) => SALES_WORD_RE.test(parts.filter(Boolean).join(' '));
 
 const CONFIRM_SEND_RE = /^(send|yes|yep|yeah|y|ok|okay|looks good|lgtm|ship it|go ahead|confirm|do it|please send)[.!]?$/i;
-const CONFIRM_READY_HINT = 'Ready when you are — hit Send, or just tell me what to change.';
+const CONFIRM_READY_HINT = 'Ready when you are. Hit Send, or tell me what to change.';
 
-/** Local chat edits while a task is ready to send — no More/Less form. */
+/** Local chat edits while a task is ready to send - no More/Less form. */
 const parseConfirmChatEdit = (raw) => {
     const t = String(raw || '').trim();
     if (!t) return { kind: 'empty' };
@@ -574,11 +574,11 @@ const AIQuickCreate = ({
                     members: [],
                     member_count: 0,
                 });
-                toast.success(`Group “${g.name}” created — add members in Manual form or Team → Groups`);
+                toast.success(`Group “${g.name}” created - add members in Manual form or Team → Groups`);
             } catch (err) {
                 // Free tier / errors: still put the @mention in the prompt for the parser
                 replaceMention(`@${name} `);
-                toast.message(`Mentioned “${name}” — create the group in Manual form if needed`);
+                toast.message(`Mentioned “${name}” - create the group in Manual form if needed`);
             }
         }
     }, [mention, replaceMention, addAssigneeChip]);
@@ -656,7 +656,7 @@ const AIQuickCreate = ({
             ...fromPeople.map((a) => a.name).filter(Boolean),
             ...((p.assignee_hints || []).map((h) => String(h).replace(/^@/, ''))),
         ];
-        // Prefer the LLM title when it already looks clean — avoid over-scrubbing into "get do it"
+        // Prefer the LLM title when it already looks clean - avoid over-scrubbing into "get do it"
         const llmTitle = String(p.title || '').trim();
         const llmTitleClean = !llmTitle
             || /@/.test(llmTitle)
@@ -720,7 +720,7 @@ const AIQuickCreate = ({
             }
             if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
         }
-        // Description: prefer clean LLM / action steps — never leave mangled "get do it"
+        // Description: prefer clean LLM / action steps - never leave mangled "get do it"
         if (!desc && actions.length) {
             desc = actions.map((a, i) => `${i + 1}. ${a}`).join('\n');
         }
@@ -752,7 +752,7 @@ const AIQuickCreate = ({
         setEditDue(p.due_date || '');
         setEditPriority(p.priority || 'Medium');
         // Keep @mentions the user already picked; merge in any newly resolved assignees.
-        // "Remind me" / "I need to" always lands on Me — never reopen the people picker.
+        // "Remind me" / "I need to" always lands on Me - never reopen the people picker.
         let merged;
         if (promptMeansSelfAssign(sourceText)) {
             merged = [SELF_CHIP];
@@ -800,7 +800,7 @@ const AIQuickCreate = ({
         }
 
         const qs = p.clarifying_questions || [];
-        // Skip "who" if we already have a person — a first name / "me" is enough
+        // Skip "who" if we already have a person - a first name / "me" is enough
         const hasAssignees = mergedCount > 0
             || promptMeansSelfAssign(sourceText)
             || (p.assignee_resolution?.resolved || []).length > 0
@@ -835,7 +835,7 @@ const AIQuickCreate = ({
             }
             const isWho = /who|own|assign/i.test(q || '') && !hasAssignees;
             setShowPeopleDrop(isWho);
-            // When / cadence questions: stay in the main composer — no second reply box.
+            // When / cadence questions: stay in the main composer - no second reply box.
             // Who questions: focus the people search in the picker.
             setTimeout(() => {
                 if (isWho) {
@@ -854,7 +854,7 @@ const AIQuickCreate = ({
             }
         } else {
             setShowPeopleDrop(false);
-            // Confirm is ready — invite more chat instead of opening a form.
+            // Confirm is ready - invite more chat instead of opening a form.
             const last = threadRef.current[threadRef.current.length - 1];
             if (!(last?.role === 'assistant' && last.text === CONFIRM_READY_HINT)) {
                 const entry = {
@@ -932,7 +932,7 @@ const AIQuickCreate = ({
                 } catch {
                     appendThread({
                         role: 'assistant',
-                        text: 'I couldn’t update the due date — try “due Friday 5pm” or pick the date on the summary.',
+                        text: 'I couldn’t update the due date - try “due Friday 5pm” or pick the date on the summary.',
                     });
                     setLoading(false);
                     return;
@@ -943,13 +943,13 @@ const AIQuickCreate = ({
 
             appendThread({
                 role: 'assistant',
-                text: `Got it — ${notes.join(', ')}. Still ready to send whenever you are.`,
+                text: `Got it - ${notes.join(', ')}. Still ready to send whenever you are.`,
             });
             setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
 
-        // Open-ended tweak — reparse with conversation history, keep chips when possible.
+        // Open-ended tweak - reparse with conversation history, keep chips when possible.
         setLoading(true);
         try {
             const base = activePromptRef.current || editTitle || 'task';
@@ -980,16 +980,16 @@ const AIQuickCreate = ({
             });
             // Restore chips if reparse dropped them
             if (editAssigneesRef.current.length === 0 && (p.assignee_resolution?.resolved || []).length === 0) {
-                /* applyPreview may have cleared — leave as-is */
+                /* applyPreview may have cleared - leave as-is */
             }
             appendThread({
                 role: 'assistant',
-                text: 'Updated — still ready to send whenever you are.',
+                text: 'Updated - still ready to send whenever you are.',
             });
         } catch (err) {
             appendThread({
                 role: 'assistant',
-                text: err?.response?.data?.detail || 'I couldn’t apply that — try rephrasing, or hit Send as-is.',
+                text: err?.response?.data?.detail || 'I couldn’t apply that - try rephrasing, or hit Send as-is.',
             });
         } finally {
             setLoading(false);
@@ -1004,12 +1004,12 @@ const AIQuickCreate = ({
         setComposerFocused(true);
         appendThread({
             role: 'assistant',
-            text: 'What should happen on a repeat? Tell me the work, who it’s for, and how often — I’ll fill in anything that’s missing.',
+            text: 'What should happen on a repeat? Tell me the work, who it’s for, and how often - I’ll fill in anything that’s missing.',
         });
         focusInput();
     };
 
-    // One-click capture from either Record control — must stay in the click
+    // One-click capture from either Record control - must stay in the click
     // gesture so Chrome keeps user-activation for getDisplayMedia + Document PiP.
     const startComposerRecording = () => {
         setPlusOpen(false);
@@ -1098,7 +1098,7 @@ const AIQuickCreate = ({
                 answerClarify(pendingQs[0], t, { alreadyLogged: true });
                 return;
             }
-            // Already ready to send — keep chatting to refine instead of wiping the card.
+            // Already ready to send - keep chatting to refine instead of wiping the card.
             const ambiguousNow = preview?.assignee_resolution?.ambiguous || [];
             const readyNow = Boolean(
                 preview
@@ -1147,7 +1147,7 @@ const AIQuickCreate = ({
             }
             applyPreview(p);
         } catch (err) {
-            toast.error(err?.response?.data?.detail || 'Could not parse — try rephrasing');
+            toast.error(err?.response?.data?.detail || 'Could not parse - try rephrasing');
         } finally {
             setLoading(false);
         }
@@ -1220,7 +1220,7 @@ const AIQuickCreate = ({
             if (event.error === 'not-allowed') {
                 toast.error('Microphone permission is needed for voice.');
             } else {
-                toast.error('Couldn’t hear that — try again.');
+                toast.error('Couldn’t hear that - try again.');
             }
             finishVoiceSession({ send: false });
         };
@@ -1343,10 +1343,10 @@ const AIQuickCreate = ({
             return { ...p, clarifying_questions: qs };
         });
 
-        // Stay on the confirm message — do not re-ask who or reopen the picker.
+        // Stay on the confirm message - do not re-ask who or reopen the picker.
         if (!hasDue) {
             setShowPeopleDrop(false);
-            // Due is still missing — keep focus in the main composer for a seamless answer.
+            // Due is still missing - keep focus in the main composer for a seamless answer.
             setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 60);
         }
     };
@@ -1406,7 +1406,7 @@ const AIQuickCreate = ({
             return merged;
         });
         onExternalAttachmentsConsumed?.();
-        toast.success('Recording attached — describe the task and send');
+        toast.success('Recording attached - describe the task and send');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [externalAttachments]);
 
@@ -1754,7 +1754,7 @@ const AIQuickCreate = ({
         const pad = 8;
         const spaceBelow = window.innerHeight - r.bottom - pad;
         const spaceAbove = r.top - pad;
-        // Composer sits near the bottom — open upward so groups stay on-screen.
+        // Composer sits near the bottom - open upward so groups stay on-screen.
         const openUp = spaceBelow < 260 || spaceAbove > spaceBelow;
         const maxHeight = Math.max(160, Math.min(320, openUp ? spaceAbove - 4 : spaceBelow - 4));
         setPeopleDropPos({
@@ -1960,7 +1960,7 @@ const AIQuickCreate = ({
                                                                     return (
                                                                         <>
                                                                             {filteredPeople.length === 0 && clarifyGroups.length === 0 && (
-                                                                                <p className="px-2.5 py-3 text-xs text-muted-foreground">No matches — try an email or group</p>
+                                                                                <p className="px-2.5 py-3 text-xs text-muted-foreground">No matches - try an email or group</p>
                                                                             )}
                                                                             {clarifyGroups.length > 0 && (
                                                                                 <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" data-testid="clarify-groups-header">
@@ -2318,7 +2318,7 @@ const AIQuickCreate = ({
                                                                     <>
                                                                         {empty && (
                                                                             <p className="px-2.5 py-2 text-xs text-slate-500" data-testid="ai-inline-assignee-empty">
-                                                                                No matches — try a name, email, or group
+                                                                                No matches - try a name, email, or group
                                                                             </p>
                                                                         )}
                                                                         {inlineGroups.length > 0 && (
@@ -2442,7 +2442,7 @@ const AIQuickCreate = ({
                                     )}
                                 </div>
 
-                                {/* Details editor — fallback, not the default path */}
+                                {/* Details editor - fallback, not the default path */}
                                 {(!readyToConfirm && clarifying.length === 0) && (
                                     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4" data-testid="ai-details-editor">
                                         <div className="flex items-center justify-between">
@@ -3169,7 +3169,7 @@ const AIQuickCreate = ({
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
                                         aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak — stays on through pauses; sends after ~20s of silence'}
+                                        title={listening ? 'Tap to send now' : 'Speak - stays on through pauses; sends after ~20s of silence'}
                                     >
                                         <Mic className="w-4 h-4" />
                                     </button>
@@ -3193,7 +3193,7 @@ const AIQuickCreate = ({
                         </div>
 
                         {/* Keep mounted so Record can start from the click gesture.
-                            No bordered panel — capture UI is the system picker + floating HUD. */}
+                            No bordered panel - capture UI is the system picker + floating HUD. */}
                         <div data-testid="ai-inline-recorder">
                             <AttachmentPicker
                                 ref={recordPickerRef}

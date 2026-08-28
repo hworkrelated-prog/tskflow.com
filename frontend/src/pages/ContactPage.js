@@ -81,7 +81,7 @@ const ContactPage = () => {
                                 Send a message
                             </CardTitle>
                             <CardDescription className="text-base">
-                                We typically respond within 1–2 business days.
+                                We typically respond within 1-2 business days.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>

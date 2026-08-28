@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
+import { senseHumanInput } from '@/lib/senseHumanInput';
 
 /**
  * Groups-style multi-select: checkbox people on the platform + paste emails.
@@ -20,6 +21,7 @@ const TeamPeoplePicker = ({
 }) => {
     const [emailInput, setEmailInput] = useState('');
     const [query, setQuery] = useState('');
+    const [busy, setBusy] = useState(false);
 
     const excluded = useMemo(() => new Set(excludeIds.filter(Boolean)), [excludeIds]);
     const filtered = useMemo(() => {
@@ -38,22 +40,29 @@ const TeamPeoplePicker = ({
         onChange?.({ userIds: nextIds, emails: selectedEmails });
     };
 
-    const addEmails = () => {
+    const addEmails = async () => {
         const input = emailInput.trim();
         if (!input) {
             toast.error('Enter an email address');
             return;
         }
-        const lines = input.split(/[\n,;]+/).map((l) => l.trim().toLowerCase()).filter(Boolean);
-        const valid = lines.filter((e) => e.includes('@'));
-        const fresh = valid.filter((e) => !selectedEmails.includes(e));
-        if (!fresh.length) {
-            toast.error(valid.length ? 'All emails already added' : 'Enter a valid email');
-            return;
+        setBusy(true);
+        try {
+            const sensed = await senseHumanInput(input, 'emails');
+            const fromAi = (sensed.emails || []).map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes('@'));
+            const lines = input.split(/[\n,;]+/).map((l) => l.trim().toLowerCase()).filter(Boolean);
+            const valid = fromAi.length ? fromAi : lines.filter((e) => e.includes('@'));
+            const fresh = valid.filter((e) => !selectedEmails.includes(e));
+            if (!fresh.length) {
+                toast.error(valid.length ? 'All emails already added' : 'Enter a valid email');
+                return;
+            }
+            onChange?.({ userIds: selectedIds, emails: [...selectedEmails, ...fresh] });
+            setEmailInput('');
+            if (fresh.length > 1) toast.success(`Added ${fresh.length} emails`);
+        } finally {
+            setBusy(false);
         }
-        onChange?.({ userIds: selectedIds, emails: [...selectedEmails, ...fresh] });
-        setEmailInput('');
-        if (fresh.length > 1) toast.success(`Added ${fresh.length} emails`);
     };
 
     const removeEmail = (email) => {
@@ -107,8 +116,8 @@ const TeamPeoplePicker = ({
                     className="rounded-xl text-sm"
                     data-testid="team-email-list"
                 />
-                <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={addEmails}>
-                    Add
+                <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy} onClick={addEmails}>
+                    {busy ? 'Reading' : 'Add'}
                 </Button>
             </div>
 
