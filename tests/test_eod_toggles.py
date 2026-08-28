@@ -44,10 +44,15 @@ def test_ios_switch_is_green_when_on():
     assert "#34c759" in dark_on
 
 
-def test_reminder_preset_selected_is_readable():
+def test_reminder_presets_are_a_compact_bar():
+    card = SETTINGS.split("reminders-settings-card")[1].split("export default")[0]
+    assert "grid grid-cols-3" not in card
+    assert "flex rounded-xl border" in card
+    assert "Nudges when work is stuck or due" not in SETTINGS
+    assert "Connect Slack first" not in SETTINGS
     block = SETTINGS.split("reminder-preset-${key}")[1].split("aria-pressed")[0]
     assert "bg-rose-50" not in block
     assert "text-slate-800" not in SETTINGS.split("Reminder intensity")[1].split("Customize")[0]
     assert "bg-rose-600" in SETTINGS
-    assert "text-white" in SETTINGS.split("reminder-preset-${key}")[1].split("Customize")[0]
+    assert "bg-rose-600 text-white" in SETTINGS
     assert "[data-theme=\"dark\"] .bg-rose-50" in CSS or r'[data-theme="dark"] .bg-rose-50' in CSS
