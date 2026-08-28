@@ -8,7 +8,7 @@ import { useAuth, API } from '@/App';
 import { JarvisIcon } from '@/components/JarvisIcon';
 import { captureVisibleScreenContext } from '@/lib/screenContext';
 
-import { createSilenceWatch, VOICE_SILENCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
+import { collectRecognitionSpeech, createSilenceWatch, shouldAutoSendVoice, VOICE_SILENCE_MS, VOICE_UTTERANCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
 
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -106,7 +106,9 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     const [voiceReady, setVoiceReady] = useState(false);
     const recRef = useRef(null);
     const voiceWantRef = useRef(false);
+    const voiceHeardRef = useRef('');
     const voiceSilenceRef = useRef(null);
+    const voiceUtteranceRef = useRef(null);
     const voiceRestartRef = useRef(null);
     const listRef = useRef(null);
     const inputRef = useRef(null);
@@ -256,6 +258,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         }
         voiceSilenceRef.current?.clear();
         voiceSilenceRef.current = null;
+        voiceUtteranceRef.current?.clear();
+        voiceUtteranceRef.current = null;
         const rec = recRef.current;
         recRef.current = null;
         tearDownSpeechRecognition(rec);
@@ -277,32 +281,44 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         stopListening();
         recRef.current = rec;
         voiceWantRef.current = true;
+        voiceHeardRef.current = '';
         setPhase('listening');
         setOpen(true);
-        let finalText = '';
+
+        const commitHeard = () => {
+            const t = voiceHeardRef.current.trim();
+            stopListening();
+            if (shouldAutoSendVoice(t)) {
+                setTextInput('');
+                sendCommand(t);
+            }
+        };
 
         const silence = createSilenceWatch({
             ms: VOICE_SILENCE_MS,
+            onSilence: commitHeard,
+        });
+        const utterance = createSilenceWatch({
+            ms: VOICE_UTTERANCE_MS,
             onSilence: () => {
-                stopListening();
-                if (finalText && finalText.trim()) {
-                    const t = finalText.trim();
-                    setTextInput('');
-                    sendCommand(t);
-                }
+                if (shouldAutoSendVoice(voiceHeardRef.current)) commitHeard();
             },
         });
         voiceSilenceRef.current = silence;
+        voiceUtteranceRef.current = utterance;
         silence.bump();
 
         rec.onresult = (e) => {
-            let interim = '';
-            for (let i = e.resultIndex; i < e.results.length; ++i) {
-                if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
-                else interim += e.results[i][0].transcript;
+            const { spoken } = collectRecognitionSpeech(e.results);
+            if (spoken) setTextInput(spoken);
+            if (spoken && spoken !== voiceHeardRef.current) {
+                voiceHeardRef.current = spoken;
+                silence.clear();
+                utterance.bump();
             }
-            setTextInput(finalText || interim);
-            silence.bump();
+        };
+        rec.onspeechend = () => {
+            if (shouldAutoSendVoice(voiceHeardRef.current)) utterance.bump();
         };
         rec.onend = () => {
             if (recRef.current !== rec || !voiceWantRef.current) return;
@@ -313,7 +329,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 try {
                     rec.start();
                 } catch {
-                    stopListening();
+                    commitHeard();
                 }
             }, VOICE_RESTART_MS);
         };

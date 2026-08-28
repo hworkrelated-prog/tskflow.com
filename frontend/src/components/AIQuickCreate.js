@@ -15,7 +15,7 @@ import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
+import { composeVoiceSubmit, shouldAutoSendVoice, collectRecognitionSpeech, resolveVoiceSubmit, createSilenceWatch, VOICE_SILENCE_MS, VOICE_UTTERANCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase, looksLikeTimeOnly, looksLikeFollowupFragment, classifyClarifyAnswer, repairMessyPrompt } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
@@ -271,10 +271,11 @@ const AIQuickCreate = ({
     const plusRef = useRef(null);
     const pasteZoneRef = useRef(null);
     const recRef = useRef(null);
-    const voiceFinalRef = useRef('');
+    const voiceHeardRef = useRef('');
     const voiceSeedRef = useRef('');
     const voiceWantRef = useRef(false);
     const voiceSilenceRef = useRef(null);
+    const voiceUtteranceRef = useRef(null);
     const voiceRestartRef = useRef(null);
     const runPreviewRef = useRef(null);
     const sendRef = useRef(null);
@@ -1184,13 +1185,19 @@ const AIQuickCreate = ({
         }
         voiceSilenceRef.current?.clear();
         voiceSilenceRef.current = null;
+        voiceUtteranceRef.current?.clear();
+        voiceUtteranceRef.current = null;
         const rec = recRef.current;
         recRef.current = null;
         tearDownSpeechRecognition(rec);
         setListening(false);
-        const spoken = voiceFinalRef.current.trim();
-        if (send && shouldAutoSendVoice(spoken)) {
-            runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+        const payload = resolveVoiceSubmit({
+            seed: voiceSeedRef.current,
+            spoken: voiceHeardRef.current,
+            displayed: inputRef.current?.value || '',
+        });
+        if (send && payload) {
+            runPreviewRef.current?.(payload);
         }
     }, []);
 
@@ -1206,7 +1213,7 @@ const AIQuickCreate = ({
         }
         finishVoiceSession({ send: false });
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
-        voiceFinalRef.current = '';
+        voiceHeardRef.current = '';
         voiceWantRef.current = true;
 
         const silence = createSilenceWatch({
@@ -1215,22 +1222,30 @@ const AIQuickCreate = ({
                 finishVoiceSession({ send: true });
             },
         });
+        const utterance = createSilenceWatch({
+            ms: VOICE_UTTERANCE_MS,
+            onSilence: () => {
+                if (shouldAutoSendVoice(voiceHeardRef.current)) {
+                    finishVoiceSession({ send: true });
+                }
+            },
+        });
         voiceSilenceRef.current = silence;
+        voiceUtteranceRef.current = utterance;
         silence.bump();
 
         rec.onresult = (event) => {
-            let interim = '';
-            let finalText = '';
-            for (let i = 0; i < event.results.length; i += 1) {
-                const piece = event.results[i][0]?.transcript || '';
-                if (event.results[i].isFinal) finalText += piece;
-                else interim += piece;
-            }
-            voiceFinalRef.current = finalText.trim();
-            const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
+            const { spoken } = collectRecognitionSpeech(event.results);
             const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
             if (shown) setText(shown);
-            silence.bump();
+            if (spoken && spoken !== voiceHeardRef.current) {
+                voiceHeardRef.current = spoken;
+                silence.clear();
+                utterance.bump();
+            }
+        };
+        rec.onspeechend = () => {
+            if (shouldAutoSendVoice(voiceHeardRef.current)) utterance.bump();
         };
         rec.onerror = (event) => {
             if (event.error === 'no-speech') {
@@ -3207,14 +3222,20 @@ const AIQuickCreate = ({
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
                                         aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak - stays on through pauses; sends after ~20s of silence'}
+                                        title={listening ? 'Tap to send now' : 'Speak to send'}
                                     >
                                         <Mic className="w-4 h-4" />
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => runPreview()}
-                                        disabled={loading || sending || answerLoading || listening || !text.trim()}
+                                        onClick={() => {
+                                            if (listening) {
+                                                finishVoiceSession({ send: true });
+                                                return;
+                                            }
+                                            runPreview();
+                                        }}
+                                        disabled={loading || sending || answerLoading || !text.trim()}
                                         className={`ai-composer-send h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
                                             loading || answerLoading || text.trim() ? 'is-ready' : ''
                                         }`}

@@ -18,28 +18,34 @@ def test_composer_has_voice_mic_that_auto_sends():
     assert "runPreviewRef.current" in src
     assert "shouldAutoSendVoice" in src
     assert "composeVoiceSubmit" in src
+    assert "collectRecognitionSpeech" in src
+    assert "resolveVoiceSubmit" in src
+    assert "VOICE_UTTERANCE_MS" in src
     assert "createSilenceWatch" in src
     assert "VOICE_SILENCE_MS" in src
     assert "continuous = true" in src
-    assert "Speak - stays on through pauses" in src
+    assert "Speak to send" in src
     assert "is-listening" in src
+    # Send stays tappable while the mic is up (iOS users otherwise get stuck).
+    send = src.split('data-testid="ai-quick-preview-btn"')[0].rsplit("<button", 1)[-1]
+    assert "listening || !text.trim()" not in send
+    assert "finishVoiceSession({ send: true })" in send
     # Toolbar is a real row, not an overlay sitting on the field.
     assert "absolute bottom-2 left-2 right-2" not in src
 
 
-def test_voice_keeps_listening_through_contemplative_pauses():
-    """Mic must not hang up on short pauses — only after ~15–30s of silence."""
+def test_voice_sends_when_transcript_stops_changing():
+    """After speech, send on a short settle — do not hold the mic for 20s."""
     helper = _read("lib", "promptVoice.js")
     create = _read("components", "AIQuickCreate.js")
     voice = _read("components", "VoiceMode.js")
+    assert "VOICE_UTTERANCE_MS = 1600" in helper or "VOICE_UTTERANCE_MS = 1_600" in helper
     assert "VOICE_SILENCE_MS = 20_000" in helper or "VOICE_SILENCE_MS = 20000" in helper
-    assert "createSilenceWatch" in helper
-    assert "silence.bump()" in create
-    assert "voiceWantRef" in create
-    assert "continuous = true" in create
-    assert "continuous = true" in voice
-    assert "createSilenceWatch" in voice
-    # Must not use the old short-session mode.
+    assert "collectRecognitionSpeech" in helper
+    assert "spoken !== voiceHeardRef.current" in create
+    assert "spoken !== voiceHeardRef.current" in voice
+    assert "utterance.bump()" in create
+    assert "utterance.bump()" in voice
     assert "rec.continuous = false" not in create
     assert "rec.continuous = false" not in voice
 
@@ -88,11 +94,31 @@ def test_analytics_metrics_stack_on_mobile():
 
 def test_voice_submit_helper_auto_sends_spoken_text():
     script = r"""
-import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, tearDownSpeechRecognition } from './frontend/src/lib/promptVoice.js';
+import {
+  composeVoiceSubmit,
+  shouldAutoSendVoice,
+  collectRecognitionSpeech,
+  resolveVoiceSubmit,
+  createSilenceWatch,
+  VOICE_SILENCE_MS,
+  VOICE_UTTERANCE_MS,
+  tearDownSpeechRecognition,
+} from './frontend/src/lib/promptVoice.js';
 if (VOICE_SILENCE_MS < 15000 || VOICE_SILENCE_MS > 30000) {
   console.error('silence window out of 15–30s range', VOICE_SILENCE_MS);
   process.exit(2);
 }
+if (VOICE_UTTERANCE_MS < 800 || VOICE_UTTERANCE_MS > 2500) {
+  console.error('utterance settle out of range', VOICE_UTTERANCE_MS);
+  process.exit(8);
+}
+const iosInterim = collectRecognitionSpeech([
+  { 0: { transcript: 'I have to meet up with Sophia today to discuss David' }, isFinal: false },
+]);
+const mixed = collectRecognitionSpeech([
+  { 0: { transcript: 'assign this to Harold' }, isFinal: true },
+  { 0: { transcript: ' tomorrow morning' }, isFinal: false },
+]);
 const cases = [
   [composeVoiceSubmit('', 'assign this to Harold'), 'assign this to Harold'],
   [composeVoiceSubmit('follow up', 'with Harold tomorrow'), 'follow up with Harold tomorrow'],
@@ -100,6 +126,13 @@ const cases = [
   [shouldAutoSendVoice('go to analytics'), true],
   [shouldAutoSendVoice('a'), false],
   [shouldAutoSendVoice(''), false],
+  [iosInterim.spoken, 'I have to meet up with Sophia today to discuss David'],
+  [iosInterim.finalText, ''],
+  [mixed.spoken, 'assign this to Harold tomorrow morning'],
+  [resolveVoiceSubmit({ seed: '', spoken: iosInterim.spoken, displayed: iosInterim.spoken }), iosInterim.spoken],
+  [resolveVoiceSubmit({ seed: '', spoken: '', displayed: iosInterim.spoken }), iosInterim.spoken],
+  [resolveVoiceSubmit({ seed: 'typed first', spoken: '', displayed: 'typed first' }), ''],
+  [resolveVoiceSubmit({ seed: 'follow up', spoken: 'with Harold' }), 'follow up with Harold'],
 ];
 for (const [got, want] of cases) {
   if (got !== want) {
