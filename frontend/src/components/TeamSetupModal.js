@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Users, GitBranch, UserCheck } from 'lucide-react';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
+import { useLocation } from 'react-router-dom';
 
 const FREQUENCIES = [
     { value: 'weekly', label: 'Weekly', help: 'Teams reshuffle often' },
@@ -20,6 +21,7 @@ const FREQUENCIES = [
  */
 const TeamSetupModal = () => {
     const { user, refreshUser } = useAuth();
+    const location = useLocation();
     const [open, setOpen] = useState(false);
     const [potential, setPotential] = useState([]);
     const [managerId, setManagerId] = useState('');
@@ -92,6 +94,7 @@ const TeamSetupModal = () => {
         }
     };
 
+    if (location.pathname.startsWith('/api/auth/google') || location.pathname.startsWith('/oauth/google')) return null;
     if (!user || user.subscription_tier !== 'teams') return null;
 
     const titles = {
