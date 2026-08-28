@@ -61,6 +61,7 @@ const GlobalAIDock = () => {
         && !HIDDEN.includes(location.pathname)
         && !LANDINGish.includes(location.pathname)
         && !location.pathname.startsWith('/recording/controls')
+        && !location.pathname.startsWith('/join/')
         && !location.pathname.startsWith('/api/auth/google')
         && !location.pathname.startsWith('/oauth/google');
 

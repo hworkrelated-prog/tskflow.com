@@ -16,6 +16,7 @@ const TeamPeoplePicker = ({
     onChange,
     excludeIds = [],
     label = 'People on your team',
+    quiet = false,
 }) => {
     const [emailInput, setEmailInput] = useState('');
     const [query, setQuery] = useState('');
@@ -61,60 +62,53 @@ const TeamPeoplePicker = ({
 
     return (
         <div className="space-y-3" data-testid="team-people-picker">
-            <div>
+            {!quiet && (
                 <Label className="text-sm font-medium">{label}</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    Select people already on Tskflow, or paste a list of emails (comma or new line).
-                </p>
-            </div>
+            )}
 
             <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search teammates…"
-                className="rounded-xl"
+                placeholder="Search"
+                className="rounded-xl h-11"
                 data-testid="team-people-search"
             />
 
             <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 divide-y bg-white">
                 {filtered.length === 0 ? (
-                    <p className="text-xs text-slate-500 px-3 py-4">No matching teammates</p>
+                    <p className="text-xs text-slate-500 px-3 py-4">{query.trim() ? 'No matches' : 'Paste emails below'}</p>
                 ) : (
                     filtered.map((p) => (
                         <label
                             key={p.id}
-                            className="flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50"
+                            className="flex items-center gap-2.5 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50"
                         >
                             <input
                                 type="checkbox"
                                 checked={selectedIds.includes(p.id)}
                                 onChange={() => toggleId(p.id)}
-                                className="accent-teal-700"
+                                className="accent-teal-700 w-4 h-4"
                             />
                             <span className="min-w-0">
                                 <span className="font-medium text-slate-800 block truncate">{p.name}</span>
                                 <span className="text-xs text-slate-500 truncate block">{p.email}</span>
                             </span>
-                            {p.reports_to_you && (
-                                <span className="ml-auto text-[10px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded-full shrink-0">On your team</span>
-                            )}
                         </label>
                     ))
                 )}
             </div>
 
             <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Add by email (not on the list yet)</Label>
                 <Textarea
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder={"alex@company.com\njamie@company.com"}
+                    placeholder="name@company.com"
                     rows={2}
                     className="rounded-xl text-sm"
                     data-testid="team-email-list"
                 />
                 <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={addEmails}>
-                    Add emails
+                    Add
                 </Button>
             </div>
 

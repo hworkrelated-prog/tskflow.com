@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -9,14 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Target } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
 
 const RegistrationPage = () => {
+    const [searchParams] = useSearchParams();
+    const prefillEmail = (searchParams.get('email') || '').trim();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
-        email: '',
+        email: prefillEmail,
         password: ''
     });
     const navigate = useNavigate();

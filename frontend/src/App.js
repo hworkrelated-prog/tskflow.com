@@ -14,6 +14,7 @@ axios.interceptors.response.use((res) => {
 
 import LandingPage from '@/pages/LandingPage';
 import RegistrationPage from '@/pages/RegistrationPage';
+import JoinInvitePage from '@/pages/JoinInvitePage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
 import LoginPage from '@/pages/LoginPage';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -474,6 +475,7 @@ function App() {
                         </PublicRoute>
                     } />
                     <Route path="/register" element={<RegistrationPage />} />
+                    <Route path="/join/:token" element={<JoinInvitePage />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
