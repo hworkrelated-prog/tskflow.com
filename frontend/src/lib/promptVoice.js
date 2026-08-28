@@ -66,6 +66,146 @@ export const VOICE_UTTERANCE_MS = 1600;
 
 export const VOICE_RESTART_MS = 280;
 
+export function createSpeechRecognition() {
+    const SR = typeof window !== 'undefined'
+        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+        : null;
+    if (!SR) return null;
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.continuous = true;
+    return rec;
+}
+
+/**
+ * One dictation session used by the prompt mic and Jarvis voice, so both
+ * listen / settle / commit the same way.
+ */
+export function createDictationSession({
+    createRecognition = createSpeechRecognition,
+    getDisplayed,
+    getSeed,
+    onTranscript,
+    utteranceMs = VOICE_UTTERANCE_MS,
+    silenceMs = VOICE_SILENCE_MS,
+} = {}) {
+    let rec = null;
+    let want = false;
+    let heard = '';
+    let seed = '';
+    let restartTimer = null;
+    let silence = null;
+    let utterance = null;
+    let onCommit = null;
+    let onError = null;
+
+    const payload = () => resolveVoiceSubmit({
+        seed,
+        spoken: heard,
+        displayed: getDisplayed?.() || '',
+    });
+
+    const stop = ({ commit = false } = {}) => {
+        want = false;
+        if (restartTimer) {
+            clearTimeout(restartTimer);
+            restartTimer = null;
+        }
+        silence?.clear();
+        silence = null;
+        utterance?.clear();
+        utterance = null;
+        const current = rec;
+        rec = null;
+        tearDownSpeechRecognition(current);
+        const text = payload();
+        const shouldCommit = commit && text;
+        heard = '';
+        if (shouldCommit) onCommit?.(text);
+        return text;
+    };
+
+    const start = (opts = {}) => {
+        onCommit = opts.onCommit || null;
+        onError = opts.onError || null;
+        const next = createRecognition?.();
+        if (!next) return { started: false, reason: 'unsupported' };
+        stop({ commit: false });
+        rec = next;
+        seed = String(getSeed?.() || '').trim();
+        heard = '';
+        want = true;
+
+        silence = createSilenceWatch({
+            ms: silenceMs,
+            onSilence: () => stop({ commit: true }),
+        });
+        utterance = createSilenceWatch({
+            ms: utteranceMs,
+            onSilence: () => {
+                if (shouldAutoSendVoice(heard)) stop({ commit: true });
+            },
+        });
+        silence.bump();
+
+        next.onresult = (event) => {
+            const { spoken } = collectRecognitionSpeech(event.results);
+            onTranscript?.({
+                spoken,
+                seed,
+                shown: composeVoiceSubmit(seed, spoken),
+            });
+            if (spoken && spoken !== heard) {
+                heard = spoken;
+                silence.clear();
+                utterance.bump();
+            }
+        };
+        next.onspeechend = () => {
+            if (shouldAutoSendVoice(heard)) utterance.bump();
+        };
+        next.onerror = (event) => {
+            const err = event?.error;
+            if (err === 'no-speech' || err === 'aborted') return;
+            onError?.(err);
+            stop({ commit: false });
+        };
+        next.onend = () => {
+            if (rec !== next || !want) {
+                if (rec === next) stop({ commit: true });
+                return;
+            }
+            if (restartTimer) clearTimeout(restartTimer);
+            restartTimer = setTimeout(() => {
+                restartTimer = null;
+                if (!want || rec !== next) return;
+                try {
+                    next.start();
+                } catch {
+                    stop({ commit: true });
+                }
+            }, VOICE_RESTART_MS);
+        };
+        try {
+            next.start();
+            return { started: true };
+        } catch {
+            stop({ commit: false });
+            return { started: false, reason: 'start-failed' };
+        }
+    };
+
+    return {
+        start,
+        stop,
+        get active() {
+            return want;
+        },
+    };
+}
+
 /**
  * Drop SpeechRecognition without leaving the tab-level mic indicator on.
  * Null handlers first so `onend` cannot immediately `start()` again (Safari/iOS).

@@ -46,8 +46,10 @@ def test_one_click_record_from_plus_menu():
     assert "recordPickerRef" in quick
     assert "startComposerRecording" in quick
     assert "startRecording?.()" in quick or "startRecording()" in quick
-    # Both Record entry points share the same one-click starter (no empty options bar).
-    assert quick.count("onClick={startComposerRecording}") >= 2
+    # Visible Record button uses the shared starter; plus-menu Record screen
+    # always goes to capture (iOS guide / desktop getDisplayMedia).
+    assert quick.count("onClick={startComposerRecording}") >= 1
+    assert "needsIosScreenRecordFlow" in quick
     assert 'showRecordPicker' not in quick
     assert "rounded-xl border border-slate-200 bg-white p-3" not in quick.split('ai-inline-recorder')[0][-200:] + quick.split('ai-inline-recorder')[1][:400]
     assert "useImperativeHandle" in picker
@@ -62,8 +64,8 @@ def test_composer_record_button_starts_capture():
     record_btn = toolbar[toolbar.rfind("onClick=", 0, toolbar.index('data-testid="ai-record-btn"')) : toolbar.index('data-testid="ai-record-btn"') + 40]
     assert "startComposerRecording" in record_btn
     assert "setShowRecordPicker" not in record_btn
-    menu_btn = toolbar[toolbar.rfind("onClick=", 0, toolbar.index('data-testid="ai-screen-record-btn"')) : toolbar.index('data-testid="ai-screen-record-btn"') + 40]
-    assert "startComposerRecording" in menu_btn
+    menu_btn = toolbar[toolbar.rfind("onClick=", 0, toolbar.index('data-testid="ai-screen-record-btn"')) : toolbar.index('data-testid="ai-screen-record-btn"') + 80]
+    assert "startRecording" in menu_btn
 
 
 def test_save_recording_auto_closes_preview():

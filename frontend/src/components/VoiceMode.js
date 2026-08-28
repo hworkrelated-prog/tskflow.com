@@ -8,18 +8,7 @@ import { useAuth, API } from '@/App';
 import { JarvisIcon } from '@/components/JarvisIcon';
 import { captureVisibleScreenContext } from '@/lib/screenContext';
 
-import { collectRecognitionSpeech, createSilenceWatch, shouldAutoSendVoice, VOICE_SILENCE_MS, VOICE_UTTERANCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
-
-const getRecognition = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return null;
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-    rec.continuous = true;
-    return rec;
-};
+import { createDictationSession } from '@/lib/promptVoice';
 
 const routeFor = (target) => ({
     dashboard: '/dashboard',
@@ -104,12 +93,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     const [nudge, setNudge] = useState(false);
     const [wiggle, setWiggle] = useState(false);
     const [voiceReady, setVoiceReady] = useState(false);
-    const recRef = useRef(null);
-    const voiceWantRef = useRef(false);
-    const voiceHeardRef = useRef('');
-    const voiceSilenceRef = useRef(null);
-    const voiceUtteranceRef = useRef(null);
-    const voiceRestartRef = useRef(null);
+    const dictationRef = useRef(null);
     const listRef = useRef(null);
     const inputRef = useRef(null);
     const nudgeTimer = useRef(null);
@@ -250,21 +234,21 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         }
     }, [navigate, speak]);
 
-    const stopListening = useCallback(() => {
-        voiceWantRef.current = false;
-        if (voiceRestartRef.current) {
-            clearTimeout(voiceRestartRef.current);
-            voiceRestartRef.current = null;
+    const getDictation = useCallback(() => {
+        if (!dictationRef.current) {
+            dictationRef.current = createDictationSession({
+                getDisplayed: () => inputRef.current?.value || '',
+                getSeed: () => '',
+                onTranscript: ({ spoken, shown }) => setTextInput(shown || spoken || ''),
+            });
         }
-        voiceSilenceRef.current?.clear();
-        voiceSilenceRef.current = null;
-        voiceUtteranceRef.current?.clear();
-        voiceUtteranceRef.current = null;
-        const rec = recRef.current;
-        recRef.current = null;
-        tearDownSpeechRecognition(rec);
-        setPhase((p) => (p === 'listening' ? 'idle' : p));
+        return dictationRef.current;
     }, []);
+
+    const stopListening = useCallback(() => {
+        getDictation().stop({ commit: false });
+        setPhase((p) => (p === 'listening' ? 'idle' : p));
+    }, [getDictation]);
 
     const startListening = useCallback(() => {
         if (!supported) {
@@ -273,73 +257,24 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             return;
         }
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-        const rec = getRecognition();
-        if (!rec) {
-            setSupported(false);
-            return;
-        }
-        stopListening();
-        recRef.current = rec;
-        voiceWantRef.current = true;
-        voiceHeardRef.current = '';
-        setPhase('listening');
-        setOpen(true);
-
-        const commitHeard = () => {
-            const t = voiceHeardRef.current.trim();
-            stopListening();
-            if (shouldAutoSendVoice(t)) {
+        const result = getDictation().start({
+            onCommit: (t) => {
+                setPhase('idle');
                 setTextInput('');
                 sendCommand(t);
-            }
-        };
-
-        const silence = createSilenceWatch({
-            ms: VOICE_SILENCE_MS,
-            onSilence: commitHeard,
-        });
-        const utterance = createSilenceWatch({
-            ms: VOICE_UTTERANCE_MS,
-            onSilence: () => {
-                if (shouldAutoSendVoice(voiceHeardRef.current)) commitHeard();
+            },
+            onError: (error) => {
+                setPhase('idle');
+                if (error === 'not-allowed') toast.error('Microphone permission denied');
             },
         });
-        voiceSilenceRef.current = silence;
-        voiceUtteranceRef.current = utterance;
-        silence.bump();
-
-        rec.onresult = (e) => {
-            const { spoken } = collectRecognitionSpeech(e.results);
-            if (spoken) setTextInput(spoken);
-            if (spoken && spoken !== voiceHeardRef.current) {
-                voiceHeardRef.current = spoken;
-                silence.clear();
-                utterance.bump();
-            }
-        };
-        rec.onspeechend = () => {
-            if (shouldAutoSendVoice(voiceHeardRef.current)) utterance.bump();
-        };
-        rec.onend = () => {
-            if (recRef.current !== rec || !voiceWantRef.current) return;
-            if (voiceRestartRef.current) clearTimeout(voiceRestartRef.current);
-            voiceRestartRef.current = setTimeout(() => {
-                voiceRestartRef.current = null;
-                if (!voiceWantRef.current || recRef.current !== rec) return;
-                try {
-                    rec.start();
-                } catch {
-                    commitHeard();
-                }
-            }, VOICE_RESTART_MS);
-        };
-        rec.onerror = (ev) => {
-            if (ev.error === 'no-speech' || ev.error === 'aborted') return;
-            stopListening();
-            if (ev.error === 'not-allowed') toast.error('Microphone permission denied');
-        };
-        try { rec.start(); } catch (_) { stopListening(); }
-    }, [sendCommand, supported, stopListening]);
+        if (!result.started) {
+            if (result.reason === 'unsupported') setSupported(false);
+            return;
+        }
+        setPhase('listening');
+        setOpen(true);
+    }, [getDictation, sendCommand, supported]);
 
     const openPanel = useCallback(() => {
         setOpen(true);
