@@ -29,6 +29,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from phase_helpers import priority_followup_config, generate_ai_work_review
+from team_invite_progress import build_invite_progress_rows
 from text_clean import clean_display_text, clean_tree
 from eod_report import (
     aggregate_leaderboard,
@@ -588,6 +589,10 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     }
     
     await db.users.insert_one(user_doc)
+    await db.team_invitations.update_many(
+        {"email": email_norm},
+        {"$set": {"status": "registered", "registered_at": get_pst_now().isoformat(), "user_id": user_id}},
+    )
     
     # Link any tasks that were assigned to this email before they registered
     # Use case-insensitive matching for email placeholder
@@ -688,7 +693,11 @@ async def verify_email(request: EmailVerifyRequest):
     # Mark email as verified
     await db.users.update_one(
         {"id": user["id"]},
-        {"$set": {"email_verified": True}, "$unset": {"verification_code": ""}}
+        {"$set": {"email_verified": True, "verified_at": get_pst_now().isoformat()}, "$unset": {"verification_code": ""}}
+    )
+    await db.team_invitations.update_many(
+        {"email": email_norm},
+        {"$set": {"status": "verified", "verified_at": get_pst_now().isoformat()}},
     )
     
     # Create token
@@ -780,6 +789,10 @@ async def login(user: UserLogin):
     await db.users.update_one(
         {"id": db_user["id"]},
         {"$set": {"last_login": now, "last_active": now}},
+    )
+    await db.team_invitations.update_many(
+        {"email": str(db_user.get("email") or "").strip().lower()},
+        {"$set": {"status": "joined", "logged_in_at": now}},
     )
     access_token = create_access_token(data={"sub": db_user["id"]})
     
@@ -4187,6 +4200,11 @@ async def update_preferences(prefs: UserPreferences, current_user: dict = Depend
         {"id": current_user["id"]},
         {"$set": {"preferences": merged}}
     )
+    if update.get("team_setup_complete"):
+        await db.team_invitations.update_many(
+            {"email": str(current_user.get("email") or "").strip().lower()},
+            {"$set": {"status": "ready", "ready_at": get_pst_now().isoformat()}},
+        )
     return {"message": "Preferences updated", "preferences": merged}
 
 @api_router.get("/auth/preferences")
@@ -4497,34 +4515,75 @@ async def get_team_members(current_user: dict = Depends(get_current_user)):
     
     return team_members
 
+async def _issue_team_invitation(owner: dict, email: str) -> dict:
+    """Create or reuse a tracked invitation (click token) for this email."""
+    email = str(email or "").strip().lower()
+    now = get_pst_now().isoformat()
+    existing = await db.team_invitations.find_one(
+        {"email": email, "company_domain": owner.get("company_domain")},
+        {"_id": 0},
+    )
+    if existing:
+        token = existing.get("token") or str(uuid.uuid4())
+        if not existing.get("token"):
+            await db.team_invitations.update_one(
+                {"email": email, "company_domain": owner.get("company_domain")},
+                {"$set": {"token": token}},
+            )
+            existing = {**existing, "token": token}
+        return existing
+    token = str(uuid.uuid4())
+    doc = {
+        "id": str(uuid.uuid4()),
+        "token": token,
+        "email": email,
+        "invited_by": owner.get("id"),
+        "invited_by_email": owner.get("email"),
+        "company_domain": owner.get("company_domain"),
+        "status": "pending",
+        "created_at": now,
+    }
+    await db.team_invitations.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+def _team_join_url(token: str, email: str) -> str:
+    return f"{APP_BASE_URL}/join/{token}?email={quote(email)}"
+
+
 @api_router.post("/team/invite")
 async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     if not current_user.get("is_team_owner"):
         raise HTTPException(status_code=403, detail="Only team owners can invite users")
     
     # Check if email domain matches
-    invite_domain = invite.email.split('@')[1]
+    email_norm = str(invite.email).strip().lower()
+    invite_domain = email_norm.split('@')[1]
     if invite_domain != current_user["company_domain"]:
         raise HTTPException(status_code=400, detail=f"Can only invite users from your company domain ({current_user['company_domain']})")
     
     # Check if user already exists
-    existing = await db.users.find_one({"email": invite.email}, {"_id": 0})
+    existing = await db.users.find_one({"email": email_norm}, {"_id": 0})
     if existing:
         if existing["subscription_tier"] == "teams":
             raise HTTPException(status_code=400, detail="User is already on your team")
         else:
-            # Upgrade existing user to teams
             await db.users.update_one(
-                {"email": invite.email},
+                {"email": email_norm},
                 {"$set": {
                     "subscription_tier": "teams",
                     "team_owner_email": current_user["email"]
                 }}
             )
-            return {"message": f"User {invite.email} added to team"}
+            inv = await _issue_team_invitation(current_user, email_norm)
+            await db.team_invitations.update_one(
+                {"token": inv["token"]},
+                {"$set": {"status": "joined", "user_id": existing.get("id"), "logged_in_at": get_pst_now().isoformat()}},
+            )
+            return {"message": f"User {email_norm} added to team"}
     
-    # Send invitation email
-    app_url = APP_BASE_URL
+    inv = await _issue_team_invitation(current_user, email_norm)
+    join_url = _team_join_url(inv["token"], email_norm)
     email_content = f"""
     <html>
         <body>
@@ -4537,23 +4596,60 @@ async def invite_user(invite: InviteUserRequest, background_tasks: BackgroundTas
                 <li>No payment required</li>
             </ul>
             <p>Click the link below to create your account and start working:</p>
-            <p><a href="{app_url}/register">Join Team</a></p>
+            <p><a href="{join_url}">Join Team</a></p>
         </body>
     </html>
     """
-    background_tasks.add_task(send_email_notification, invite.email, f"Join {current_user['company_domain']} on Tskflow", email_content)
+    background_tasks.add_task(send_email_notification, email_norm, f"Join {current_user['company_domain']} on Tskflow", email_content)
     
-    # Store pending invitation
-    await db.team_invitations.insert_one({
-        "email": invite.email,
-        "invited_by": current_user["id"],
-        "invited_by_email": current_user["email"],
-        "company_domain": current_user["company_domain"],
-        "status": "pending",
-        "created_at": get_pst_now().isoformat()
-    })
-    
-    return {"message": f"Invitation sent to {invite.email}"}
+    return {"message": f"Invitation sent to {email_norm}", "join_url": join_url}
+
+
+@api_router.get("/team/join/{token}")
+async def team_join_click(token: str):
+    """Public: mark the invite as opened, then the SPA sends them to register."""
+    inv = await db.team_invitations.find_one({"token": token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if not inv.get("clicked_at"):
+        patch = {"clicked_at": get_pst_now().isoformat()}
+        if inv.get("status") in (None, "pending"):
+            patch["status"] = "opened"
+        await db.team_invitations.update_one({"token": token}, {"$set": patch})
+    return {"ok": True, "email": inv.get("email")}
+
+
+@api_router.get("/team/invite-progress")
+async def team_invite_progress(current_user: dict = Depends(get_current_user)):
+    """Who was invited, who opened the link, who signed up / logged in — ranked by speed."""
+    if current_user.get("subscription_tier") != "teams":
+        raise HTTPException(status_code=403, detail="Teams only")
+    domain = current_user.get("company_domain")
+    viewer = current_user.get("email")
+    if current_user.get("is_team_owner"):
+        invites = await db.team_invitations.find({"company_domain": domain}, {"_id": 0}).to_list(500)
+        members = await db.users.find(
+            {"company_domain": domain, "subscription_tier": "teams"},
+            {"_id": 0, "password_hash": 0, "google_credentials": 0, "google_sheets_credentials": 0},
+        ).to_list(500)
+        claims = await db.team_claims.find(
+            {"company_domain": domain, "claimer_id": current_user["id"]},
+            {"_id": 0, "target_email": 1},
+        ).to_list(500)
+    else:
+        invites = await db.team_invitations.find({"invited_by": current_user["id"]}, {"_id": 0}).to_list(500)
+        emails = [i.get("email") for i in invites if i.get("email")]
+        members = await db.users.find(
+            {"email": {"$in": emails}} if emails else {"email": "__none__"},
+            {"_id": 0, "password_hash": 0, "google_credentials": 0, "google_sheets_credentials": 0},
+        ).to_list(500) if emails else []
+        claims = await db.team_claims.find(
+            {"claimer_id": current_user["id"]},
+            {"_id": 0, "target_email": 1},
+        ).to_list(500)
+    extra = [c.get("target_email") for c in claims if c.get("target_email")]
+    payload = build_invite_progress_rows(invites, members, extra_emails=extra, viewer_email=viewer)
+    return payload
 
 @api_router.delete("/team/members/{user_id}")
 async def remove_team_member(user_id: str, current_user: dict = Depends(get_current_user)):
@@ -4824,12 +4920,14 @@ async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict]
         )
     elif email:
         try:
+            inv = await _issue_team_invitation(claimer, email)
+            join_url = _team_join_url(inv["token"], email)
             await send_email_notification(
                 email,
                 title,
                 _jarvis_email_shell(
                     f"<p>{body}</p><p>If you don’t have Tskflow yet, create an account with this email to respond.</p>",
-                    cta_url=f"{APP_BASE_URL}/register",
+                    cta_url=join_url,
                     cta_label="Open Tskflow",
                 ),
             )

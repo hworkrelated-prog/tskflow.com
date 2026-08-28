@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, API } from '@/App';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
@@ -11,12 +11,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { ArrowLeft, UserPlus, Trash2, DollarSign, Users as UsersIcon, GitBranch, ChevronRight, Clock, CheckCircle2, AlertCircle, UserCheck } from 'lucide-react';
+import { ArrowLeft, UserPlus, Trash2, DollarSign, Users as UsersIcon, GitBranch, ChevronRight, Clock, CheckCircle2, AlertCircle, UserCheck, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import GroupsManager from '@/components/GroupsManager';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
 import TeamClaimsInbox from '@/components/TeamClaimsInbox';
+import TeamInviteProgress from '@/components/TeamInviteProgress';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
@@ -53,12 +54,23 @@ const TeamManagementPage = () => {
     const [performance, setPerformance] = useState(null);
     
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const isTeams = user?.subscription_tier === 'teams';
     const isPro = user?.subscription_tier === 'pro';
     const isOwner = Boolean(user?.is_team_owner);
+    const [tab, setTab] = useState(() => (
+        (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('joining') === '1' || new URLSearchParams(window.location.search).get('tab') === 'joining'))
+            ? 'joining'
+            : ''
+    ));
+    const [progressKey, setProgressKey] = useState(0);
+    const resolvedTab = tab || (isPro ? 'my-hierarchy' : 'direct-reports');
 
     useEffect(() => {
         if (!user) return;
+        if (searchParams.get('joining') === '1' || searchParams.get('tab') === 'joining') {
+            setTab('joining');
+        }
         if (user.subscription_tier === 'free') {
             navigate('/settings');
             return;
@@ -121,6 +133,8 @@ const TeamManagementPage = () => {
             toast.success(`Invitation sent to ${inviteEmail}`);
             setInviteEmail('');
             setShowInviteDialog(false);
+            setTab('joining');
+            setProgressKey((k) => k + 1);
             fetchAllData();
         } catch (error) {
             toast.error(getErrorMessage(error, 'Failed to send invitation'));
@@ -248,13 +262,13 @@ const TeamManagementPage = () => {
                         </h1>
                     </div>
 
-                    <Tabs defaultValue={isPro ? 'my-hierarchy' : 'direct-reports'} className="w-full">
+                    <Tabs value={resolvedTab} onValueChange={setTab} className="w-full">
                         <TabsList className={`grid w-full mb-8 ${
                             isPro
                                 ? 'grid-cols-2 max-w-md'
                                 : isOwner
-                                    ? 'grid-cols-2 sm:grid-cols-5'
-                                    : 'grid-cols-2 sm:grid-cols-4'
+                                    ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                                    : 'grid-cols-2 sm:grid-cols-5'
                         }`}>
                             {(isTeams || isPro) && (
                                 <TabsTrigger value="my-hierarchy" className="rounded-full">
@@ -267,6 +281,10 @@ const TeamManagementPage = () => {
                                     <TabsTrigger value="direct-reports" className="rounded-full">
                                         <GitBranch className="w-4 h-4 mr-2" />
                                         Direct Reports
+                                    </TabsTrigger>
+                                    <TabsTrigger value="joining" className="rounded-full" data-testid="team-tab-joining">
+                                        <Trophy className="w-4 h-4 mr-2" />
+                                        Joining
                                     </TabsTrigger>
                                     <TabsTrigger value="performance" className="rounded-full">
                                         <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -299,6 +317,26 @@ const TeamManagementPage = () => {
                                 </CardContent>
                             </Card>
                         </TabsContent>
+
+                        {/* Invite progress / joining leaderboard */}
+                        {isTeams && (
+                        <TabsContent value="joining">
+                            <Card className="border-2 shadow-soft rounded-2xl">
+                                <CardHeader>
+                                    <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
+                                        <Trophy className="w-6 h-6" />
+                                        Who’s joining
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Opened invite → signed up → verified → logged in. Fastest at the top; still waiting at the bottom.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <TeamInviteProgress key={progressKey} />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                        )}
 
                         {/* Performance Analytics Tab */}
                         {isTeams && (

@@ -5,8 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Users, GitBranch, UserCheck } from 'lucide-react';
+import { Users, GitBranch, UserCheck, Trophy } from 'lucide-react';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
+import TeamInviteProgress from '@/components/TeamInviteProgress';
+import { useNavigate } from 'react-router-dom';
 
 const FREQUENCIES = [
     { value: 'weekly', label: 'Weekly', help: 'Teams reshuffle often' },
@@ -20,6 +22,7 @@ const FREQUENCIES = [
  */
 const TeamSetupModal = () => {
     const { user, refreshUser } = useAuth();
+    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [potential, setPotential] = useState([]);
     const [managerId, setManagerId] = useState('');
@@ -28,6 +31,7 @@ const TeamSetupModal = () => {
     const [frequency, setFrequency] = useState('monthly');
     const [saving, setSaving] = useState(false);
     const [step, setStep] = useState(1);
+    const [reportsSent, setReportsSent] = useState(false);
 
     useEffect(() => {
         if (!user) return;
@@ -60,7 +64,19 @@ const TeamSetupModal = () => {
         return () => { cancelled = true; };
     }, [user]);
 
-    const finish = async ({ skip = false } = {}) => {
+    const sendTeamRequests = async () => {
+        if (reportsSent) return;
+        if (!teamIds.length && !teamEmails.length) return;
+        const res = await axios.post(`${API}/team/propose-reports`, {
+            user_ids: teamIds,
+            emails: teamEmails,
+        });
+        const n = (res.data?.created || []).length;
+        if (n) toast.success(`Sent ${n} team request${n === 1 ? '' : 's'} — they’ll confirm or dispute`);
+        setReportsSent(true);
+    };
+
+    const finish = async ({ skip = false, goToJoining = false } = {}) => {
         setSaving(true);
         try {
             if (!skip) {
@@ -69,14 +85,7 @@ const TeamSetupModal = () => {
                 } else if (managerId === 'none') {
                     await axios.post(`${API}/team/set-manager`, { manager_id: null }).catch(() => {});
                 }
-                if (teamIds.length || teamEmails.length) {
-                    const res = await axios.post(`${API}/team/propose-reports`, {
-                        user_ids: teamIds,
-                        emails: teamEmails,
-                    });
-                    const n = (res.data?.created || []).length;
-                    if (n) toast.success(`Sent ${n} team request${n === 1 ? '' : 's'} — they’ll confirm or dispute`);
-                }
+                await sendTeamRequests();
             }
             await axios.put(`${API}/auth/preferences`, {
                 team_setup_complete: true,
@@ -85,6 +94,7 @@ const TeamSetupModal = () => {
             await refreshUser?.();
             setOpen(false);
             if (!skip) toast.success('Team setup saved');
+            if (goToJoining) navigate('/team?joining=1');
         } catch (err) {
             toast.error(err?.response?.data?.detail || 'Could not save team setup');
         } finally {
@@ -98,11 +108,13 @@ const TeamSetupModal = () => {
         1: 'Who do you report to?',
         2: 'Who’s on your team?',
         3: 'How often does it change?',
+        4: 'Watch who joins',
     };
     const icons = {
         1: <UserCheck className="w-5 h-5" />,
         2: <Users className="w-5 h-5" />,
         3: <GitBranch className="w-5 h-5" />,
+        4: <Trophy className="w-5 h-5" />,
     };
 
     return (
@@ -166,7 +178,15 @@ const TeamSetupModal = () => {
                             <Button type="button" variant="ghost" className="rounded-full" onClick={() => setStep(1)}>
                                 Back
                             </Button>
-                            <Button type="button" className="rounded-full" onClick={() => setStep(3)} data-testid="team-setup-team-next">
+                            <Button type="button" className="rounded-full" onClick={async () => {
+                                try {
+                                    await sendTeamRequests();
+                                } catch (err) {
+                                    toast.error(err?.response?.data?.detail || 'Could not send team requests');
+                                    return;
+                                }
+                                setStep(3);
+                            }} data-testid="team-setup-team-next">
                                 Continue
                             </Button>
                         </div>
@@ -203,11 +223,36 @@ const TeamSetupModal = () => {
                             <Button
                                 type="button"
                                 className="rounded-full"
-                                onClick={() => finish()}
+                                onClick={() => setStep(4)}
+                                data-testid="team-setup-cadence-next"
+                            >
+                                Continue
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {step === 4 && (
+                    <div className="space-y-4 pt-1">
+                        <p className="text-sm text-slate-600">
+                            Track whether people <strong>opened the invite</strong>, <strong>signed up</strong>, and <strong>logged in</strong>. Fastest joiners sit at the top — late or waiting at the bottom.
+                        </p>
+                        <p className="text-sm rounded-xl bg-teal-50 border border-teal-100 px-3 py-2 text-teal-900">
+                            Find this anytime under <strong>Team → Joining</strong>.
+                        </p>
+                        <TeamInviteProgress compact />
+                        <div className="flex justify-between gap-2">
+                            <Button type="button" variant="ghost" className="rounded-full" onClick={() => setStep(3)}>
+                                Back
+                            </Button>
+                            <Button
+                                type="button"
+                                className="rounded-full"
+                                onClick={() => finish({ goToJoining: true })}
                                 disabled={saving}
                                 data-testid="team-setup-finish"
                             >
-                                {saving ? 'Saving…' : 'Done'}
+                                {saving ? 'Saving…' : 'Open joining board'}
                             </Button>
                         </div>
                     </div>
