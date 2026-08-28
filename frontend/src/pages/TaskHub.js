@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -75,10 +76,12 @@ const TaskHub = () => {
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
-    const panelsRef = useRef(null);
     const lastFilterKeyRef = useRef('');
-    const ignoreScrollRef = useRef(false);
     const [activeColumnIndex, setActiveColumnIndex] = useState(0);
+    const [carouselApi, setCarouselApi] = useState(null);
+    const [isMobileDashboard, setIsMobileDashboard] = useState(
+        () => typeof window !== 'undefined' && window.matchMedia(DASHBOARD_MOBILE_MQ).matches
+    );
     const navigate = useNavigate();
 
     // User groups (Pro & Teams)
@@ -95,6 +98,14 @@ const TaskHub = () => {
     const [bulkApproving, setBulkApproving] = useState(false);
     
     const { showOnboarding, closeOnboarding } = useOnboarding('dashboard');
+
+    useEffect(() => {
+        const mq = window.matchMedia(DASHBOARD_MOBILE_MQ);
+        const onChange = () => setIsMobileDashboard(mq.matches);
+        onChange();
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
 
     useEffect(() => {
         const calendar = searchParams.get('calendar');
@@ -1061,46 +1072,25 @@ const TaskHub = () => {
     );
     const filterKey = `${viewMode}|${dateFilter}|${salesOnly}|${searchQuery}|${customDateRange.from || ''}|${customDateRange.to || ''}`;
 
-    const isMobileDashboard = () => (
-        typeof window !== 'undefined' && window.matchMedia(DASHBOARD_MOBILE_MQ).matches
-    );
-
-    const scrollToColumn = (index, { smooth = true } = {}) => {
-        const el = panelsRef.current;
-        if (!el || !isMobileDashboard()) return;
-        const width = el.clientWidth || 1;
-        const nextLeft = Math.max(0, Math.min(2, index)) * width;
-        ignoreScrollRef.current = true;
-        el.scrollTo({ left: nextLeft, behavior: smooth ? 'smooth' : 'auto' });
-        window.setTimeout(() => { ignoreScrollRef.current = false; }, smooth ? 400 : 50);
-    };
-
-    useLayoutEffect(() => {
-        if (loading || !dashboard) return;
-        const shouldSnap = lastFilterKeyRef.current !== filterKey;
-        if (!shouldSnap) return;
-        lastFilterKeyRef.current = filterKey;
-        setActiveColumnIndex(urgentColumnIndex);
-        scrollToColumn(urgentColumnIndex, { smooth: false });
-    }, [loading, dashboard, filterKey, urgentColumnIndex]);
+    useEffect(() => {
+        if (!carouselApi) return undefined;
+        const sync = () => setActiveColumnIndex(carouselApi.selectedScrollSnap());
+        sync();
+        carouselApi.on('select', sync);
+        return () => carouselApi.off('select', sync);
+    }, [carouselApi]);
 
     useEffect(() => {
-        const onResize = () => {
-            const el = panelsRef.current;
-            if (!el) return;
-            if (!isMobileDashboard()) {
-                el.scrollLeft = 0;
-                return;
-            }
-            scrollToColumn(activeColumnIndex, { smooth: false });
-        };
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
-    }, [activeColumnIndex, loading]);
+        if (loading || !dashboard) return;
+        if (lastFilterKeyRef.current === filterKey) return;
+        lastFilterKeyRef.current = filterKey;
+        setActiveColumnIndex(urgentColumnIndex);
+        if (carouselApi) carouselApi.scrollTo(urgentColumnIndex, true);
+    }, [loading, dashboard, filterKey, urgentColumnIndex, carouselApi]);
 
     const selectColumn = (index) => {
         setActiveColumnIndex(index);
-        scrollToColumn(index, { smooth: true });
+        if (carouselApi) carouselApi.scrollTo(index);
     };
 
     const downloadAllTasksCSV = () => {
@@ -1182,6 +1172,56 @@ const TaskHub = () => {
     }
 
     const overdueCount = getOverdueCount();
+
+    const columnCards = [
+        <DashboardColumnCard key="to-me" title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
+            {toMeTasks.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
+            ) : (
+                toMeTasks.map((task, index) => (
+                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                ))
+            )}
+        </DashboardColumnCard>,
+        <DashboardColumnCard key="personal" title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
+            {personalTasks.length === 0 ? (
+                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
+                    {viewMode === 'active' && !salesOnly && (
+                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+                    )}
+                </div>
+            ) : (
+                personalTasks.map((task, index) => (
+                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                ))
+            )}
+        </DashboardColumnCard>,
+        <DashboardColumnCard key="delegated" title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
+            {visibleGroups.map((group) => (
+                <ParentTaskGroup
+                    key={group.id}
+                    group={group}
+                    onChanged={fetchParentGroups}
+                    selectable={selectionMode}
+                    selected={selectedTasks.has(group.id)}
+                    onToggleSelect={toggleTaskSelection}
+                />
+            ))}
+            {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
+                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
+                    {viewMode === 'active' && !salesOnly && (
+                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                    )}
+                </div>
+            ) : (
+                delegatedTasks.map((task, index) => (
+                    <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                ))
+            )}
+        </DashboardColumnCard>,
+    ];
 
     return (
         <div data-testid="task-hub" className="page-shell">
@@ -1768,130 +1808,82 @@ const TaskHub = () => {
                     </DialogContent>
                 </Dialog>
 
-                <div className="md:hidden mb-3" data-testid="dashboard-column-tabs">
-                    <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1" role="tablist" aria-label="Task lists">
-                        {DASHBOARD_COLUMNS.map((tab, index) => {
-                            const selected = activeColumnIndex === index;
-                            const count = columnCounts[index];
-                            return (
-                                <button
-                                    key={tab.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={selected}
-                                    data-testid={`dashboard-column-tab-${tab.id}`}
-                                    onClick={() => selectColumn(index)}
-                                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white shadow-sm text-teal-700' : 'text-gray-600'}`}
-                                >
-                                    <span className="truncate">{tab.name}</span>
-                                    {count > 0 && (
-                                        <span className={`ml-1 tabular-nums ${selected ? 'text-teal-600' : 'text-gray-400'}`}>{count}</span>
-                                    )}
-                                </button>
-                            );
-                        })}
+                {isMobileDashboard && (
+                    <div className="mb-3" data-testid="dashboard-column-tabs">
+                        <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1" role="tablist" aria-label="Task lists">
+                            {DASHBOARD_COLUMNS.map((tab, index) => {
+                                const selected = activeColumnIndex === index;
+                                const count = columnCounts[index];
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={selected}
+                                        data-testid={`dashboard-column-tab-${tab.id}`}
+                                        onClick={() => selectColumn(index)}
+                                        className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white shadow-sm text-teal-700' : 'text-gray-600'}`}
+                                    >
+                                        <span className="truncate">{tab.name}</span>
+                                        {count > 0 && (
+                                            <span className={`ml-1 tabular-nums ${selected ? 'text-teal-600' : 'text-gray-400'}`}>{count}</span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
+                )}
 
-                <div
-                    ref={panelsRef}
-                    className="dashboard-panels"
-                    data-testid="dashboard-panels"
-                    onScroll={(e) => {
-                        if (ignoreScrollRef.current || !isMobileDashboard()) return;
-                        const el = e.currentTarget;
-                        const width = el.clientWidth || 1;
-                        const idx = Math.round(el.scrollLeft / width);
-                        const next = Math.max(0, Math.min(2, idx));
-                        if (next !== activeColumnIndex) setActiveColumnIndex(next);
-                    }}
-                >
-                    <motion.div
-                        className="dashboard-panel"
-                        data-testid="dashboard-column-to-me"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.2 }}
+                {isMobileDashboard ? (
+                    <Carousel
+                        opts={{ align: 'start', loop: false, startIndex: urgentColumnIndex, duration: 18 }}
+                        setApi={setCarouselApi}
+                        className="w-full cursor-grab active:cursor-grabbing"
+                        data-testid="dashboard-panels"
                     >
-                        <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me">
-                            {toMeTasks.length === 0 ? (
-                                <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
-                            ) : (
-                                toMeTasks.map((task, index) => (
-                                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                ))
-                            )}
-                        </DashboardColumnCard>
-                    </motion.div>
-
-                    <motion.div
-                        className="dashboard-panel"
-                        data-testid="dashboard-column-personal"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal">
-                            {personalTasks.length === 0 ? (
-                                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
-                                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
-                                    {viewMode === 'active' && !salesOnly && (
-                                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
-                                    )}
-                                </div>
-                            ) : (
-                                personalTasks.map((task, index) => (
-                                    <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                ))
-                            )}
-                        </DashboardColumnCard>
-                    </motion.div>
-
-                    <motion.div
-                        className="dashboard-panel"
-                        data-testid="dashboard-column-delegated"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated">
-                            {visibleGroups.map((group) => (
-                                <ParentTaskGroup
-                                    key={group.id}
-                                    group={group}
-                                    onChanged={fetchParentGroups}
-                                    selectable={selectionMode}
-                                    selected={selectedTasks.has(group.id)}
-                                    onToggleSelect={toggleTaskSelection}
-                                />
+                        <CarouselContent className="-ml-0">
+                            {columnCards.map((card, index) => (
+                                <CarouselItem
+                                    key={DASHBOARD_COLUMNS[index].id}
+                                    className="pl-0 basis-full"
+                                    data-testid={`dashboard-column-${DASHBOARD_COLUMNS[index].id}`}
+                                >
+                                    {card}
+                                </CarouselItem>
                             ))}
-                            {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
-                                <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
-                                    <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
-                                    {viewMode === 'active' && !salesOnly && (
-                                        <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
-                                    )}
-                                </div>
-                            ) : (
-                                delegatedTasks.map((task, index) => (
-                                    <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                ))
-                            )}
-                        </DashboardColumnCard>
-                    </motion.div>
-                </div>
+                        </CarouselContent>
+                    </Carousel>
+                ) : (
+                    <div className="grid grid-cols-3 gap-4 sm:gap-6 items-stretch" data-testid="dashboard-panels">
+                        {columnCards.map((card, index) => (
+                            <motion.div
+                                key={DASHBOARD_COLUMNS[index].id}
+                                className="h-full min-w-0"
+                                data-testid={`dashboard-column-${DASHBOARD_COLUMNS[index].id}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                {card}
+                            </motion.div>
+                        ))}
+                    </div>
+                )}
 
-                <div className="md:hidden flex justify-center gap-1.5 mt-3" data-testid="dashboard-column-dots" aria-hidden="true">
-                    {[0, 1, 2].map((index) => (
-                        <button
-                            key={index}
-                            type="button"
-                            onClick={() => selectColumn(index)}
-                            className={`h-1.5 rounded-full transition-all ${activeColumnIndex === index ? 'w-5 bg-teal-600' : 'w-1.5 bg-gray-300'}`}
-                            aria-label={`Show ${DASHBOARD_COLUMNS[index].name}`}
-                        />
-                    ))}
-                </div>
+                {isMobileDashboard && (
+                    <div className="flex justify-center gap-1.5 mt-3" data-testid="dashboard-column-dots" aria-hidden="true">
+                        {DASHBOARD_COLUMNS.map((col, index) => (
+                            <button
+                                key={col.id}
+                                type="button"
+                                onClick={() => selectColumn(index)}
+                                className={`h-1.5 rounded-full transition-all ${activeColumnIndex === index ? 'w-5 bg-teal-600' : 'w-1.5 bg-gray-300'}`}
+                                aria-label={`Show ${col.name}`}
+                            />
+                        ))}
+                    </div>
+                )}
 
                 {/* Recently Deleted has been moved to inside the individual task view.
                     The trash/restore controls now live only on TaskDetail. */}

@@ -13,10 +13,11 @@ def test_source_uses_delegated_and_swipe_shell():
     assert "Delegated" in hub
     assert "Nothing delegated" in hub
     assert "dashboard-panels" in hub
-    assert "dashboard-column-tab-${tab.id}" in hub
+    assert "startIndex: urgentColumnIndex" in hub
+    assert "Carousel" in hub
     assert "columnWithSoonestDue" in hub
     assert "Sent</CardTitle>" not in hub
-    assert "scroll-snap-type: x mandatory" in css
+    assert "dashboard-panel-card" in css
 
 
 def test_column_with_soonest_due():
