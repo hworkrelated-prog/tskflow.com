@@ -18,6 +18,7 @@ import GroupsManager from '@/components/GroupsManager';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
 import TeamClaimsInbox from '@/components/TeamClaimsInbox';
 import TeamInviteProgress from '@/components/TeamInviteProgress';
+import InviteManagerField from '@/components/InviteManagerField';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
@@ -714,6 +715,18 @@ const TeamManagementPage = () => {
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
+                                                    <InviteManagerField
+                                                        domain={user?.company_domain || user?.email?.split('@')[1]}
+                                                        people={potentialReports}
+                                                        testId="hierarchy-manager-email"
+                                                        onLinked={({ manager, pending }) => {
+                                                            if (manager?.id) setSelectedManager(manager.id);
+                                                            if (pending || manager?.id) {
+                                                                setShowSetManagerDialog(false);
+                                                                fetchAllData();
+                                                            }
+                                                        }}
+                                                    />
                                                     <div className="flex gap-2 justify-end">
                                                         <Button variant="outline" onClick={() => setShowSetManagerDialog(false)} className="rounded-full">Cancel</Button>
                                                         <Button onClick={handleSetManager} disabled={settingManager} className="rounded-full">
