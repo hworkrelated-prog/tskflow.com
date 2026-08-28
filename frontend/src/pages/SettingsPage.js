@@ -1491,9 +1491,10 @@ const SmartRemindersCard = ({ slackConnected }) => {
         no_progress: 'No progress',
         overdue: 'Past due',
     };
+    const selectedPreset = activePreset ? REMINDER_PRESETS[activePreset] : null;
     const summary = !rule.enabled
         ? 'Off'
-        : `${(rule.priorities || []).join(', ') || 'No priorities'} · ${(rule.channels || []).map((c) => channelLabels[c] || c).join(', ') || 'No channels'}`;
+        : (selectedPreset?.help || `${(rule.priorities || []).join(', ') || 'Custom'} · ${(rule.channels || []).map((c) => channelLabels[c] || c).join(', ')}`);
 
     const nudgeWhen = [
         { key: 'time_before_due', label: 'Before due' },
@@ -1503,18 +1504,25 @@ const SmartRemindersCard = ({ slackConnected }) => {
     ];
 
     const channels = [
-        { key: 'in_app', label: 'In the app', disabled: false },
-        { key: 'email', label: 'Email', disabled: false },
-        { key: 'slack', label: 'Slack', disabled: !slackConnected },
+        { key: 'in_app', label: 'App' },
+        { key: 'email', label: 'Email' },
+        { key: 'slack', label: 'Slack', hidden: !slackConnected },
     ];
 
+    const pillClass = (on) =>
+        `px-2.5 py-1 rounded-full text-xs border transition-colors ${
+            on ? 'bg-foreground text-background border-foreground font-medium' : 'bg-transparent border-border text-muted-foreground'
+        }`;
+
+    const fieldClass = 'rounded-lg mt-1 h-9 bg-background';
+
     return (
-        <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="reminders-settings-card">
+        <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-3" data-testid="reminders-settings-card">
             <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Nudges when work is stuck or due.</p>
+                    <p className="text-xs text-muted-foreground truncate" data-testid="reminders-value-summary">{summary}</p>
                 </div>
                 <IosSwitch
                     checked={rule.enabled}
@@ -1523,11 +1531,9 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 />
             </div>
 
-            <p className="text-xs text-muted-foreground" data-testid="reminders-value-summary">{summary}</p>
-
             {rule.enabled && (
-                <div className="space-y-3 pt-2 border-t">
-                    <div className="grid grid-cols-3 gap-2" role="group" aria-label="Reminder intensity">
+                <div className="space-y-3">
+                    <div className="flex rounded-xl border border-border p-0.5" role="group" aria-label="Reminder intensity">
                         {Object.entries(REMINDER_PRESETS).map(([key, p]) => {
                             const selected = activePreset === key;
                             return (
@@ -1535,30 +1541,29 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                     key={key}
                                     type="button"
                                     onClick={() => applyPreset(key)}
-                                    className={`text-left p-3 rounded-xl border transition-colors ${
+                                    className={`flex-1 py-2 px-2 rounded-lg text-sm font-medium transition-colors ${
                                         selected
-                                            ? 'border-rose-500 bg-rose-600 text-white ring-1 ring-rose-500'
-                                            : 'border-border bg-background text-foreground hover:border-rose-300'
+                                            ? 'bg-rose-600 text-white'
+                                            : 'text-muted-foreground hover:text-foreground'
                                     }`}
                                     data-testid={`reminder-preset-${key}`}
                                     aria-pressed={selected}
                                 >
-                                    <span className={`text-sm font-semibold block ${selected ? 'text-white' : 'text-foreground'}`}>{p.label}</span>
-                                    <span className={`text-[11px] leading-snug block ${selected ? 'text-white' : 'text-muted-foreground'}`}>{p.help}</span>
+                                    {p.label}
                                 </button>
                             );
                         })}
                     </div>
 
-                    <details className="rounded-xl border border-border bg-muted/40 group">
-                        <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium text-foreground flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
+                    <details className="group">
+                        <summary className="cursor-pointer select-none text-sm text-muted-foreground flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
                             <span>Customize</span>
-                            <span className="text-xs text-slate-500 group-open:hidden">Show</span>
-                            <span className="text-xs text-slate-500 hidden group-open:inline">Hide</span>
+                            <span className="text-xs group-open:hidden">Show</span>
+                            <span className="text-xs hidden group-open:inline">Hide</span>
                         </summary>
-                        <div className="px-4 pb-4 space-y-4 border-t border-slate-200/80 pt-3">
+                        <div className="mt-3 space-y-3">
                             <div>
-                                <p className="text-xs font-medium text-slate-600 mb-1.5">When</p>
+                                <p className="text-xs text-muted-foreground mb-1.5">When</p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {nudgeWhen.map((t) => {
                                         const on = (rule.triggers || []).includes(t.key);
@@ -1567,9 +1572,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                                 key={t.key}
                                                 type="button"
                                                 onClick={() => save({ triggers: toggleFrom(rule.triggers || [], t.key) })}
-                                                className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                                                    on ? 'bg-muted border-border text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
-                                                }`}
+                                                className={pillClass(on)}
                                                 data-testid={`reminder-trigger-${t.key}`}
                                                 aria-pressed={on}
                                             >
@@ -1581,7 +1584,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                             </div>
 
                             <div>
-                                <p className="text-xs font-medium text-slate-600 mb-1.5">Priorities</p>
+                                <p className="text-xs text-muted-foreground mb-1.5">Priorities</p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {['Low', 'Medium', 'High', 'Urgent'].map((p) => {
                                         const on = (rule.priorities || []).includes(p);
@@ -1590,9 +1593,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                                 key={p}
                                                 type="button"
                                                 onClick={() => save({ priorities: toggleFrom(rule.priorities || [], p) })}
-                                                className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                                                    on ? 'bg-muted border-border text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
-                                                }`}
+                                                className={pillClass(on)}
                                                 data-testid={`reminder-priority-${p}`}
                                                 aria-pressed={on}
                                             >
@@ -1604,7 +1605,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                             </div>
 
                             <div>
-                                <p className="text-xs font-medium text-slate-600 mb-1.5">Send via</p>
+                                <p className="text-xs text-muted-foreground mb-1.5">Send</p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {channels.map((c) => {
                                         const on = (rule.channels || []).includes(c.key);
@@ -1612,16 +1613,8 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                             <button
                                                 key={c.key}
                                                 type="button"
-                                                disabled={c.disabled}
-                                                title={c.disabled ? 'Connect Slack first' : undefined}
-                                                onClick={() => !c.disabled && save({ channels: toggleFrom(rule.channels || [], c.key) })}
-                                                className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                                                    c.disabled
-                                                        ? 'opacity-40 cursor-not-allowed bg-background border-border text-muted-foreground'
-                                                        : on
-                                                            ? 'bg-muted border-border text-foreground font-medium'
-                                                            : 'bg-background border-border text-muted-foreground'
-                                                }`}
+                                                onClick={() => !c.hidden && save({ channels: toggleFrom(rule.channels || [], c.key) })}
+                                                className={`${pillClass(on)}${c.hidden ? ' hidden' : ''}`}
                                                 data-testid={`reminder-channel-${c.key}`}
                                                 aria-pressed={on}
                                             >
@@ -1632,77 +1625,71 @@ const SmartRemindersCard = ({ slackConnected }) => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <div>
-                                    <Label className="text-xs text-muted-foreground">Hours before due</Label>
+                                    <Label className="text-xs text-muted-foreground">Hours before</Label>
                                     <Input
                                         type="number"
                                         min={1}
                                         max={72}
                                         value={rule.hours_before_due}
                                         onChange={(e) => save({ hours_before_due: parseInt(e.target.value || '1', 10) })}
-                                        className="rounded-xl mt-1 bg-white"
+                                        className={fieldClass}
                                         data-testid="reminder-hours-before"
                                     />
                                 </div>
                                 <div>
-                                    <Label className="text-xs text-muted-foreground">Min hours between nudges</Label>
+                                    <Label className="text-xs text-muted-foreground">Every (hours)</Label>
                                     <Input
                                         type="number"
                                         min={2}
                                         max={72}
                                         value={rule.frequency_hours}
                                         onChange={(e) => save({ frequency_hours: parseInt(e.target.value || '2', 10) })}
-                                        className="rounded-xl mt-1 bg-white"
+                                        className={fieldClass}
                                         data-testid="reminder-frequency"
                                     />
                                 </div>
                                 <div>
-                                    <Label className="text-xs text-muted-foreground">Max emails / day</Label>
+                                    <Label className="text-xs text-muted-foreground">Quiet from</Label>
                                     <Input
                                         type="number"
                                         min={0}
-                                        max={20}
-                                        value={rule.max_emails_per_day ?? 5}
-                                        onChange={(e) => save({ max_emails_per_day: parseInt(e.target.value || '0', 10) })}
-                                        className="rounded-xl mt-1 bg-white"
-                                        data-testid="reminder-max-emails"
-                                        disabled={!(rule.channels || []).includes('email')}
+                                        max={23}
+                                        value={rule.quiet_hours_start ?? 21}
+                                        onChange={(e) => save({ quiet_hours_start: parseInt(e.target.value || '21', 10) })}
+                                        className={fieldClass}
+                                        data-testid="reminder-quiet-start"
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <Label className="text-xs text-muted-foreground">Quiet from</Label>
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            max={23}
-                                            value={rule.quiet_hours_start ?? 21}
-                                            onChange={(e) => save({ quiet_hours_start: parseInt(e.target.value || '21', 10) })}
-                                            className="rounded-xl mt-1 bg-white"
-                                            data-testid="reminder-quiet-start"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs text-muted-foreground">until</Label>
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            max={23}
-                                            value={rule.quiet_hours_end ?? 8}
-                                            onChange={(e) => save({ quiet_hours_end: parseInt(e.target.value || '8', 10) })}
-                                            className="rounded-xl mt-1 bg-white"
-                                            data-testid="reminder-quiet-end"
-                                        />
-                                    </div>
+                                <div>
+                                    <Label className="text-xs text-muted-foreground">until</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={23}
+                                        value={rule.quiet_hours_end ?? 8}
+                                        onChange={(e) => save({ quiet_hours_end: parseInt(e.target.value || '8', 10) })}
+                                        className={fieldClass}
+                                        data-testid="reminder-quiet-end"
+                                    />
                                 </div>
                             </div>
-                            {/* Keep timing toggle test id for compatibility */}
+                            <div className={`max-w-[10rem] ${(rule.channels || []).includes('email') ? '' : 'hidden'}`}>
+                                <Label className="text-xs text-muted-foreground">Max emails / day</Label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    max={20}
+                                    value={rule.max_emails_per_day ?? 5}
+                                    onChange={(e) => save({ max_emails_per_day: parseInt(e.target.value || '0', 10) })}
+                                    className={fieldClass}
+                                    data-testid="reminder-max-emails"
+                                />
+                            </div>
                             <span className="sr-only" data-testid="reminder-timing-toggle">{(rule.triggers || []).map((t) => triggerLabels[t] || t).join(', ')}</span>
                         </div>
                     </details>
-
-                    {saving && <p className="text-xs text-muted-foreground">Saving…</p>}
                 </div>
             )}
         </div>

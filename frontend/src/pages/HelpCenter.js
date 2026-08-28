@@ -68,7 +68,7 @@ const topics = [
         id: 'reminders',
         icon: <HelpCircle className="w-4 h-4" />, title: 'Reminders', category: 'Notifications',
         body: (
-            <p className="text-sm">Settings → Reminders. Pick Essential, Balanced, or Assertive. Customize only if you need to.</p>
+            <p className="text-sm">Settings → Reminders. Quiet, Balanced, or Assertive. Customize only if you need to.</p>
         )
     },
     {
