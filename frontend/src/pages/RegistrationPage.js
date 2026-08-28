@@ -5,7 +5,7 @@ import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Target } from 'lucide-react';
@@ -63,11 +63,9 @@ const RegistrationPage = () => {
                 <Card className="border-2 shadow-soft rounded-2xl">
                     <CardHeader className="space-y-2 text-center">
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome to Tskflow
+                            Create your account
                         </CardTitle>
-                        <CardDescription className="text-base">
-                            Create your account to start managing tasks
-                        </CardDescription>
+                        <p className="text-sm text-muted-foreground">No credit card. Assign anyone by email.</p>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">

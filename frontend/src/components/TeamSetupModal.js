@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
+import InviteManagerField from '@/components/InviteManagerField';
 import TeamInviteProgress from '@/components/TeamInviteProgress';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -26,6 +27,8 @@ const TeamSetupModal = () => {
     const [open, setOpen] = useState(false);
     const [potential, setPotential] = useState([]);
     const [managerId, setManagerId] = useState('');
+    const [managerEmail, setManagerEmail] = useState('');
+    const [managerInviteSent, setManagerInviteSent] = useState(false);
     const [teamIds, setTeamIds] = useState([]);
     const [teamEmails, setTeamEmails] = useState([]);
     const [frequency, setFrequency] = useState('monthly');
@@ -82,6 +85,8 @@ const TeamSetupModal = () => {
             if (!skip) {
                 if (managerId && managerId !== 'none') {
                     await axios.post(`${API}/team/set-manager`, { manager_id: managerId });
+                } else if (managerEmail && !managerInviteSent) {
+                    await axios.post(`${API}/team/set-manager`, { manager_email: managerEmail });
                 } else if (managerId === 'none') {
                     await axios.post(`${API}/team/set-manager`, { manager_id: null }).catch(() => {});
                 }
@@ -134,7 +139,16 @@ const TeamSetupModal = () => {
 
                 {step === 1 && (
                     <div className="space-y-4 pt-1">
-                        <Select value={managerId || 'none'} onValueChange={setManagerId}>
+                        <Select
+                            value={managerId || 'none'}
+                            onValueChange={(v) => {
+                                setManagerId(v);
+                                if (v && v !== 'none') {
+                                    setManagerEmail('');
+                                    setManagerInviteSent(false);
+                                }
+                            }}
+                        >
                             <SelectTrigger className="rounded-xl h-12" data-testid="team-setup-manager">
                                 <SelectValue placeholder="Choose…" />
                             </SelectTrigger>
@@ -147,6 +161,27 @@ const TeamSetupModal = () => {
                                 ))}
                             </SelectContent>
                         </Select>
+                        <InviteManagerField
+                            domain={user?.company_domain || user?.email?.split('@')[1]}
+                            people={potential}
+                            value={managerEmail}
+                            onChange={(email) => {
+                                setManagerEmail(email);
+                                setManagerInviteSent(false);
+                                if (email) setManagerId('none');
+                            }}
+                            onLinked={({ manager, email, pending }) => {
+                                if (manager?.id) {
+                                    setManagerId(manager.id);
+                                    setManagerEmail('');
+                                    setManagerInviteSent(false);
+                                } else if (pending && email) {
+                                    setManagerId('none');
+                                    setManagerEmail(email);
+                                    setManagerInviteSent(true);
+                                }
+                            }}
+                        />
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="ghost" className="rounded-full" onClick={() => finish({ skip: true })} disabled={saving}>
                                 Not now

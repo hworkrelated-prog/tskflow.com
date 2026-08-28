@@ -3,15 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp, HelpCircle, Download, Trophy, AlertTriangle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import OnboardingPopup, { useOnboarding } from '@/components/OnboardingPopup';
+import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import { ActivityLogTab } from '@/pages/ActivityLogPage';
 
@@ -62,9 +61,6 @@ const AnalyticsPage = () => {
     const [analytics, setAnalytics] = useState(null);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    
-    // Onboarding
-    const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('analytics');
 
     const selectSection = (key) => {
         setSection(key);
@@ -155,13 +151,6 @@ const AnalyticsPage = () => {
 
     return (
         <div data-testid="analytics-page" className="page-shell">
-            {/* Onboarding Popup */}
-            <AnimatePresence>
-                {showOnboarding && (
-                    <OnboardingPopup page="analytics" onClose={closeOnboarding} />
-                )}
-            </AnimatePresence>
-
             <header className="glass-header border-b sticky top-0 z-30 bg-white/95 backdrop-blur">
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <Button
@@ -176,9 +165,9 @@ const AnalyticsPage = () => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        onClick={reopenOnboarding}
+                        onClick={() => navigate('/help')}
                         className="rounded-full"
-                        title="Help & Walkthrough"
+                        title="Help"
                     >
                         <HelpCircle className="w-5 h-5" />
                     </Button>
@@ -227,8 +216,7 @@ const AnalyticsPage = () => {
                     <>
                     <Card className="border-2 shadow-soft rounded-2xl">
                         <CardHeader>
-                            <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Select Time Period</CardTitle>
-                            <CardDescription>Choose a shortcut or a custom date range</CardDescription>
+                            <CardTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Time period</CardTitle>
                         </CardHeader>
                         <CardContent>
                             {/* Shortcut buttons */}
@@ -309,7 +297,7 @@ const AnalyticsPage = () => {
                                                 <Users className="w-6 h-6 text-teal-600" />
                                             </div>
                                             <div>
-                                                <p className="text-sm text-muted-foreground">Assigned to Others</p>
+                                                <p className="text-sm text-muted-foreground">Sent</p>
                                                 <p className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>{analytics.assigned_to_others_count}</p>
                                             </div>
                                         </div>
@@ -323,7 +311,7 @@ const AnalyticsPage = () => {
                                                 <Calendar className="w-6 h-6 text-emerald-600" />
                                             </div>
                                             <div>
-                                                <p className="text-sm text-muted-foreground">Self-Assigned</p>
+                                                <p className="text-sm text-muted-foreground">Personal</p>
                                                 <p className="text-3xl font-bold" style={{ fontFamily: 'Outfit' }}>{analytics.assigned_to_self_count}</p>
                                             </div>
                                         </div>
@@ -372,9 +360,8 @@ const AnalyticsPage = () => {
                                             <div>
                                                 <CardTitle className="text-2xl flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
                                                     <TrendingUp className="w-6 h-6" />
-                                                    Team Performance Breakdown
+                                                    Team
                                                 </CardTitle>
-                                                <CardDescription>Detailed metrics per assignee</CardDescription>
                                             </div>
                                             <Button
                                                 type="button"

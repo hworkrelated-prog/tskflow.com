@@ -12,7 +12,7 @@ import re
 import secrets
 import httpx
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from typing import List, Optional, Dict, Any
 import uuid
@@ -99,6 +99,7 @@ from engagement import (
     should_send_weekly,
     week_id,
 )
+from billing_nudge import show_billing_nudge
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -183,6 +184,7 @@ class UserResponse(BaseModel):
     reports_to: Optional[str] = None
     company_domain: Optional[str] = None
     org_role: Optional[str] = None
+    show_billing_nudge: Optional[bool] = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -336,6 +338,7 @@ class TaskHubDashboard(BaseModel):
     counts: dict
     subscription_tier: str
     task_limit_reached: bool
+    show_billing_nudge: bool = False
 
 class AnalyticsQuery(BaseModel):
     start_date: str
@@ -600,6 +603,10 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         {"target_email": email_norm, "target_user_id": None},
         {"$set": {"target_user_id": user_id}},
     )
+    await db.users.update_many(
+        {"pending_manager_email": email_norm},
+        {"$set": {"reports_to": user_id}, "$unset": {"pending_manager_email": ""}},
+    )
     accepted = await db.team_claims.find_one(
         {"target_email": email_norm, "claim_type": "direct_report", "status": "accepted"},
         {"_id": 0, "claimer_id": 1},
@@ -852,6 +859,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         reports_to=current_user.get("reports_to"),
         company_domain=current_user.get("company_domain"),
         org_role=current_user.get("org_role") or "ic",
+        show_billing_nudge=await show_billing_nudge(db, current_user),
     )
 
 class UpdateProfileRequest(BaseModel):
@@ -1773,7 +1781,8 @@ async def get_dashboard(
         assigned_by_me=assigned_by_me,
         counts=counts,
         subscription_tier=current_user["subscription_tier"],
-        task_limit_reached=task_limit_reached
+        task_limit_reached=task_limit_reached,
+        show_billing_nudge=await show_billing_nudge(db, current_user),
     )
 
 # Deleted tasks endpoints - MUST be before /tasks/{task_id} to avoid route conflict
@@ -4471,6 +4480,7 @@ class TeamMemberResponse(BaseModel):
 
 class SetManagerRequest(BaseModel):
     manager_id: Optional[str] = None  # None to remove manager
+    manager_email: Optional[str] = None  # invite or match by email if they are not in the list yet
 
 ORG_ROLE_VALUES = ("ic", "manager", "sr_manager", "director", "avp")
 ORG_ROLE_LABELS = {
@@ -4764,39 +4774,88 @@ async def get_my_manager(current_user: dict = Depends(get_current_user)):
     manager = await db.users.find_one({"id": reports_to}, {"_id": 0, "id": 1, "name": 1, "email": 1})
     return {"manager": manager}
 
+async def _link_existing_manager(current_user: dict, manager: dict):
+    if manager["id"] == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot report to yourself")
+    if manager.get("company_domain") != current_user.get("company_domain"):
+        raise HTTPException(status_code=403, detail="Can only report to someone in your organization")
+    if manager.get("reports_to") == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Circular reporting not allowed")
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"reports_to": manager["id"]}, "$unset": {"pending_manager_email": ""}},
+    )
+    return {
+        "message": f"Now reporting to {manager.get('name') or manager.get('email')}",
+        "manager": {"id": manager["id"], "name": manager.get("name"), "email": manager.get("email")},
+        "pending": False,
+    }
+
+
 @api_router.post("/team/set-manager")
-async def set_manager(request: SetManagerRequest, current_user: dict = Depends(get_current_user)):
-    """Set who you report to (your manager)"""
+async def set_manager(
+    request: SetManagerRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Set who you report to. Pass a teammate id, or an email to invite someone new."""
     if current_user["subscription_tier"] != "teams":
         raise HTTPException(status_code=403, detail="Teams subscription required")
-    
+
+    email = str(request.manager_email or "").strip().lower()
     if request.manager_id:
-        # Validate manager exists and is in same domain
         manager = await db.users.find_one({"id": request.manager_id}, {"_id": 0})
         if not manager:
             raise HTTPException(status_code=404, detail="Manager not found")
-        
-        if manager["company_domain"] != current_user["company_domain"]:
-            raise HTTPException(status_code=403, detail="Can only report to someone in your organization")
-        
-        if manager["id"] == current_user["id"]:
+        return await _link_existing_manager(current_user, manager)
+
+    if email:
+        if "@" not in email:
+            raise HTTPException(status_code=400, detail="Enter a valid email")
+        domain = email.split("@", 1)[1]
+        if domain != current_user.get("company_domain"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Use an @{current_user.get('company_domain')} email",
+            )
+        if email == str(current_user.get("email") or "").strip().lower():
             raise HTTPException(status_code=400, detail="Cannot report to yourself")
-        
-        # Prevent circular reporting (A reports to B, B reports to A)
-        if manager.get("reports_to") == current_user["id"]:
-            raise HTTPException(status_code=400, detail="Circular reporting not allowed")
-    
-    # Update current user's reports_to field
+        existing = await find_user_by_email(email)
+        if existing:
+            return await _link_existing_manager(current_user, existing)
+
+        inv = await _issue_team_invitation(current_user, email)
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$set": {"pending_manager_email": email, "reports_to": None}},
+        )
+        join_url = _team_join_url(inv["token"], email)
+        who = current_user.get("name") or current_user.get("email")
+        html = f"""
+        <html><body>
+            <p>{who} named you as their manager on Tskflow.</p>
+            <p><a href="{join_url}">Join to confirm</a></p>
+        </body></html>
+        """
+        background_tasks.add_task(
+            send_email_notification,
+            email,
+            f"{who} named you as their manager",
+            html,
+        )
+        return {
+            "message": f"Invite sent to {email}",
+            "pending": True,
+            "email": email,
+            "join_url": join_url,
+            "manager": None,
+        }
+
     await db.users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"reports_to": request.manager_id}}
+        {"$set": {"reports_to": None}, "$unset": {"pending_manager_email": ""}},
     )
-    
-    if request.manager_id:
-        manager = await db.users.find_one({"id": request.manager_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
-        return {"message": f"Now reporting to {manager['name']}", "manager": manager}
-    else:
-        return {"message": "Manager removed", "manager": None}
+    return {"message": "Manager removed", "manager": None, "pending": False}
 
 
 async def _all_subordinates(root_id: str) -> List[dict]:
@@ -8902,6 +8961,14 @@ async def test_slack_webhook(body: dict, current_user: dict = Depends(get_curren
     return {"ok": True}
 
 
+def _slack_oauth_configured() -> bool:
+    return bool((os.getenv("SLACK_CLIENT_ID") or "").strip() and (os.getenv("SLACK_CLIENT_SECRET") or "").strip())
+
+
+def _slack_oauth_redirect_uri() -> str:
+    return f"{APP_BASE_URL}/api/integrations/slack/oauth/callback"
+
+
 @api_router.get("/integrations/slack/status")
 async def slack_integration_status(current_user: dict = Depends(get_current_user)):
     """Webhook (channel posts) vs bot (Jarvis DMs ignored assignees)."""
@@ -8912,7 +8979,70 @@ async def slack_integration_status(current_user: dict = Depends(get_current_user
         "webhook": webhook.startswith("https://hooks.slack.com/"),
         "bot": bot,
         "followup_enabled": bot,
+        "oauth": _slack_oauth_configured(),
     }
+
+
+@api_router.get("/integrations/slack/connect")
+async def slack_oauth_connect(current_user: dict = Depends(get_current_user)):
+    """Start Slack OAuth (incoming-webhook). Teams admin only."""
+    if not _can_manage_slack_webhook(current_user):
+        raise HTTPException(status_code=403, detail="Only the Teams admin can connect Slack.")
+    if not _slack_oauth_configured():
+        raise HTTPException(status_code=503, detail="Slack OAuth is not configured")
+    state = secrets.token_urlsafe(24)
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "provider": "slack",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    params = urlencode({
+        "client_id": os.getenv("SLACK_CLIENT_ID").strip(),
+        "scope": "incoming-webhook",
+        "redirect_uri": _slack_oauth_redirect_uri(),
+        "state": state,
+    })
+    return {"auth_url": f"https://slack.com/oauth/v2/authorize?{params}"}
+
+
+@api_router.get("/integrations/slack/oauth/callback")
+async def slack_oauth_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Finish Slack OAuth and store the incoming webhook URL."""
+    fail = f"{APP_BASE_URL}/settings?slack=failed"
+    if error or not code or not state:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?slack=denied")
+    state_doc = await db.oauth_states.find_one({"state": state, "provider": "slack"})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    await db.oauth_states.delete_one({"state": state, "provider": "slack"})
+    try:
+        async with httpx.AsyncClient(timeout=12) as client_http:
+            r = await client_http.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "client_id": (os.getenv("SLACK_CLIENT_ID") or "").strip(),
+                    "client_secret": (os.getenv("SLACK_CLIENT_SECRET") or "").strip(),
+                    "code": code,
+                    "redirect_uri": _slack_oauth_redirect_uri(),
+                },
+            )
+        data = r.json() if r.content else {}
+    except Exception:
+        return RedirectResponse(url=fail)
+    webhook = str(((data or {}).get("incoming_webhook") or {}).get("url") or "").strip()
+    if not (data or {}).get("ok") or not webhook.startswith("https://hooks.slack.com/"):
+        return RedirectResponse(url=fail)
+    user = await db.users.find_one({"id": state_doc["user_id"]}, {"_id": 0})
+    if not user or not _can_manage_slack_webhook(user):
+        return RedirectResponse(url=fail)
+    prefs = {**(user.get("preferences") or {}), "slack_webhook_url": webhook}
+    await db.users.update_one({"id": user["id"]}, {"$set": {"preferences": prefs}})
+    return RedirectResponse(url=f"{APP_BASE_URL}/settings?slack=connected")
 
 
 @api_router.post("/slack/events")

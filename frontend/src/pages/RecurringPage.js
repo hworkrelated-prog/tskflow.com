@@ -27,7 +27,7 @@ const endLabel = (rule) => {
     if (!rule) return '';
     if (rule.end_type === 'on_date' && rule.end_date) return `until ${rule.end_date}`;
     if (rule.end_type === 'after_count' && rule.end_count) return `for ${rule.end_count} occurrences`;
-    return 'never ends (until you stop it)';
+    return 'ongoing';
 };
 
 const safeDate = (d) => {
@@ -104,9 +104,8 @@ const RecurringPage = () => {
                     <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="rounded-full"><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
                     <div className="flex-1">
                         <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
-                            <Repeat className="w-6 h-6 text-teal-600" /> Recurring Series
+                            <Repeat className="w-6 h-6 text-teal-600" /> Recurring
                         </h1>
-                        <p className="text-xs text-muted-foreground">Automate recurring commitments - daily standups, weekly reports, monthly reviews.</p>
                     </div>
                 </div>
             </header>
@@ -118,8 +117,8 @@ const RecurringPage = () => {
                     <Card className="rounded-2xl border-2 border-dashed">
                         <CardContent className="py-12 text-center">
                             <Repeat className="w-12 h-12 mx-auto text-teal-300 mb-4" />
-                            <h3 className="font-semibold text-lg mb-1">No recurring series yet</h3>
-                            <p className="text-sm text-muted-foreground mb-4">Turn a task into a series to have it repeat automatically.</p>
+                            <h3 className="font-semibold text-lg mb-1">No recurring series</h3>
+                            <p className="text-sm text-muted-foreground mb-4">Say how often when you assign.</p>
                             <Button
                                 onClick={() => {
                                     window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));

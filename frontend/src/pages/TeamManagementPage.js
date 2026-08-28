@@ -18,6 +18,7 @@ import GroupsManager from '@/components/GroupsManager';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
 import TeamClaimsInbox from '@/components/TeamClaimsInbox';
 import TeamInviteProgress from '@/components/TeamInviteProgress';
+import InviteManagerField from '@/components/InviteManagerField';
 
 const TeamManagementPage = () => {
     const { user } = useAuth();
@@ -341,7 +342,6 @@ const TeamManagementPage = () => {
                                         <CheckCircle2 className="w-6 h-6" />
                                         Team Performance
                                     </CardTitle>
-                                    <CardDescription>Performance metrics for your direct reports</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     {performance?.direct_reports?.length > 0 ? (
@@ -431,7 +431,6 @@ const TeamManagementPage = () => {
                                                 <GitBranch className="w-6 h-6" />
                                                 My Direct Reports
                                             </CardTitle>
-                                            <CardDescription>People who report to you with task metrics</CardDescription>
                                         </div>
                                         <Dialog open={showAddReportDialog} onOpenChange={setShowAddReportDialog}>
                                             <DialogTrigger asChild>
@@ -584,10 +583,9 @@ const TeamManagementPage = () => {
                             {/* Privacy Notice */}
                             <Card className="border-2 shadow-soft rounded-2xl bg-blue-50 mt-6">
                                 <CardContent className="p-6">
-                                    <h3 className="font-semibold mb-2">🔒 Privacy Notice</h3>
+                                    <h3 className="font-semibold mb-2">Privacy</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        You can only see tasks that <strong>you assigned</strong> to your direct reports.
-                                        Their self-assigned tasks and tasks from others remain private.
+                                        You only see work you assigned them.
                                     </p>
                                 </CardContent>
                             </Card>
@@ -605,8 +603,7 @@ const TeamManagementPage = () => {
                                         My Hierarchy
                                     </CardTitle>
                                     <CardDescription>
-                                        IC → Manager → Sr Manager / Regional Director → Director → Area Vice President.
-                                        “My team” includes everyone under you. “My direct reports” is just the people who report to you.
+                                        “My team” is everyone under you. Direct reports are the people who report to you.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
@@ -718,6 +715,18 @@ const TeamManagementPage = () => {
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
+                                                    <InviteManagerField
+                                                        domain={user?.company_domain || user?.email?.split('@')[1]}
+                                                        people={potentialReports}
+                                                        testId="hierarchy-manager-email"
+                                                        onLinked={({ manager, pending }) => {
+                                                            if (manager?.id) setSelectedManager(manager.id);
+                                                            if (pending || manager?.id) {
+                                                                setShowSetManagerDialog(false);
+                                                                fetchAllData();
+                                                            }
+                                                        }}
+                                                    />
                                                     <div className="flex gap-2 justify-end">
                                                         <Button variant="outline" onClick={() => setShowSetManagerDialog(false)} className="rounded-full">Cancel</Button>
                                                         <Button onClick={handleSetManager} disabled={settingManager} className="rounded-full">

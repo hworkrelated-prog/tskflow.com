@@ -147,7 +147,7 @@ const tryLocalCommand = (raw) => {
     if (search) {
         return { type: 'search', query: search[2].trim() };
     }
-    if (/^\/form\b/i.test(t) || /^manual form\b/i.test(t)) {
+    if (/^\/form\b/i.test(t) || /^manual form\b/i.test(t) || /^full form\b/i.test(t)) {
         return { type: 'manual' };
     }
     return null;
@@ -559,11 +559,11 @@ const AIQuickCreate = ({
                     members: [],
                     member_count: 0,
                 });
-                toast.success(`Group “${g.name}” created - add members in Manual form or Team → Groups`);
+                toast.success(`Group “${g.name}” created`);
             } catch (err) {
                 // Free tier / errors: still put the @mention in the prompt for the parser
                 replaceMention(`@${name} `);
-                toast.message(`Mentioned “${name}” - create the group in Manual form if needed`);
+                toast.message(`Mentioned “${name}”`);
             }
         }
     }, [mention, replaceMention, addAssigneeChip]);
@@ -998,7 +998,7 @@ const AIQuickCreate = ({
         setComposerFocused(true);
         appendThread({
             role: 'assistant',
-            text: 'What should happen on a repeat? Tell me the work, who it’s for, and how often - I’ll fill in anything that’s missing.',
+            text: 'Who, what, and how often?',
         });
         focusInput();
     };
@@ -1044,7 +1044,7 @@ const AIQuickCreate = ({
             }
         } catch (err) {
             const fallback =
-                "I can still help from here. Type an assignment like “Ask Alice to send the Q3 recap by Friday” and I’ll send it and follow up if they go quiet. Or ask what’s outstanding.";
+                "Type an assignment, or ask what’s outstanding.";
             const detail = err?.response?.data?.detail;
             appendThread({
                 role: 'assistant',
@@ -1058,7 +1058,7 @@ const AIQuickCreate = ({
     const runPreview = async (overrideText, overrideAnswers, opts = {}) => {
         const t = (overrideText ?? text).trim();
         if (!t || t.length < 2) {
-            toast.error('Type a bit more so I can understand what you need.');
+            toast.error('Type a bit more.');
             return;
         }
         if (!opts.skipThreadUser) {
@@ -1826,7 +1826,7 @@ const AIQuickCreate = ({
                                     className="text-xs text-slate-500 hover:text-slate-800"
                                     data-testid="ai-advanced-btn"
                                 >
-                                    Manual form
+                                    Full form
                                 </button>
                             </div>
                         )}
@@ -2394,8 +2394,8 @@ const AIQuickCreate = ({
                                                     </div>
                                                 )}
 
-                                                <p className="text-xs text-muted-foreground" data-testid="ai-confirm-chat-hint">
-                                                    Want to change priority, due date, the message, or require a screen recording? Just type it below.
+                                                <p className="sr-only" data-testid="ai-confirm-chat-hint">
+                                                    Type a change below, then send.
                                                 </p>
 
                                                 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -2479,7 +2479,7 @@ const AIQuickCreate = ({
                                             </label>
                                             <div className="flex flex-wrap gap-2">
                                                 {editAssignees.length === 0 && (
-                                                    <p className="text-xs text-slate-500 italic">No one identified yet. Reply above, or open the advanced form.</p>
+                                                    <p className="text-xs text-slate-500 italic">No one yet</p>
                                                 )}
                                                 {editAssignees.map((a, i) => (
                                                     <div
@@ -2527,7 +2527,7 @@ const AIQuickCreate = ({
                                             </div>
                                             {unresolved.length > 0 && (
                                                 <p className="text-xs text-slate-500 italic">
-                                                    {`Couldn't identify: ${unresolved.join(', ')}. Add via the manual form.`}
+                                                    {`Couldn't identify: ${unresolved.join(', ')}. Add via Full form.`}
                                                 </p>
                                             )}
                                         </div>
@@ -2575,7 +2575,7 @@ const AIQuickCreate = ({
                                                     className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
                                                     data-testid="ai-open-advanced"
                                                 >
-                                                    Open manual form
+                                                    Full form
                                                 </button>
                                                 <Button
                                                     type="button"
@@ -2608,7 +2608,7 @@ const AIQuickCreate = ({
                                                     className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
                                                     data-testid="ai-open-advanced"
                                                 >
-                                                    Open manual form
+                                                    Full form
                                                 </button>
                                             </div>
                                         )}
@@ -2836,11 +2836,6 @@ const AIQuickCreate = ({
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                                             Assign to{mention.query ? ` · ${mention.query}` : ''}
                                         </p>
-                                        {mentionGroups.length > 0 && (
-                                            <p className="text-[10px] text-teal-700/80 mt-0.5" data-testid="mention-groups-hint">
-                                                Groups appear first
-                                            </p>
-                                        )}
                                     </div>
                                     <div
                                         className="overflow-y-auto overscroll-contain px-1.5 pb-1.5 clean-scroll"

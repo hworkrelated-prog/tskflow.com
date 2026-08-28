@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,22 @@ import RecurrenceEditor from '@/components/RecurrenceEditor';
 import GroupsManager from '@/components/GroupsManager';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
+import { columnWithSoonestDue, DASHBOARD_MOBILE_MQ, DASHBOARD_COLUMNS } from '@/lib/dashboardColumns';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
+
+const DashboardColumnCard = ({ title, dotClass, testId, columnId, children }) => (
+    <Card data-testid={testId} data-column={columnId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl min-h-[20rem] min-w-0 w-full flex flex-col self-stretch">
+        <CardHeader className="hidden md:flex pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6 shrink-0">
+            <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${dotClass}`} />
+                {title}
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 flex-1 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
+            {children}
+        </CardContent>
+    </Card>
+);
 
 const TaskHub = () => {
     const { user, logout, refreshUser } = useAuth();
@@ -60,6 +76,12 @@ const TaskHub = () => {
     const [emailInput, setEmailInput] = useState('');
     const [showUserDropdown, setShowUserDropdown] = useState(false);
     const dropdownRef = useRef(null);
+    const lastFilterKeyRef = useRef('');
+    const [activeColumnIndex, setActiveColumnIndex] = useState(0);
+    const [carouselApi, setCarouselApi] = useState(null);
+    const [isMobileDashboard, setIsMobileDashboard] = useState(
+        () => typeof window !== 'undefined' && window.matchMedia(DASHBOARD_MOBILE_MQ).matches
+    );
     const navigate = useNavigate();
 
     // User groups (Pro & Teams)
@@ -75,7 +97,15 @@ const TaskHub = () => {
     const [loadingAiSummary, setLoadingAiSummary] = useState(false);
     const [bulkApproving, setBulkApproving] = useState(false);
     
-    const { showOnboarding, closeOnboarding, reopenOnboarding } = useOnboarding('dashboard');
+    const { showOnboarding, closeOnboarding } = useOnboarding('dashboard');
+
+    useEffect(() => {
+        const mq = window.matchMedia(DASHBOARD_MOBILE_MQ);
+        const onChange = () => setIsMobileDashboard(mq.matches);
+        onChange();
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
 
     useEffect(() => {
         const calendar = searchParams.get('calendar');
@@ -109,25 +139,19 @@ const TaskHub = () => {
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // Manual form is opened from the command bar (`/form`) or `?create=advanced`.
+    // Full form is opened from the command bar (`/form`) or `?create=advanced`.
 
     // Recently deleted
     const [deletedTasks, setDeletedTasks] = useState([]);
     const [showDeleted, setShowDeleted] = useState(false);
 
-    // Upgrade nudges
+    // Upgrade nudges — only after send/receive usage over time (server flag).
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [upgradeModalShown, setUpgradeModalShown] = useState(() => localStorage.getItem('upgradeModalShown') === 'true');
+    const [nudgeDismissed, setNudgeDismissed] = useState(() => localStorage.getItem('billingNudgeDismissed') === 'true');
 
-    const getActiveTaskCount = () => {
-        if (!dashboard) return 0;
-        return (dashboard.assigned_to_me?.length || 0) + (dashboard.self_assigned?.length || 0) + (dashboard.assigned_by_me?.length || 0);
-    };
-
-    const activeTaskCount = getActiveTaskCount();
     const isFreeUser = user?.subscription_tier === 'free';
-    const showLightBanner = isFreeUser && activeTaskCount >= 10;
-    const showPersistentBanner = isFreeUser && activeTaskCount >= 30;
+    const showBillingNudge = isFreeUser && Boolean(dashboard?.show_billing_nudge) && !nudgeDismissed;
 
     React.useEffect(() => {
         try {
@@ -140,12 +164,12 @@ const TaskHub = () => {
     }, []);
 
     React.useEffect(() => {
-        if (isFreeUser && activeTaskCount >= 20 && !upgradeModalShown) {
+        if (showBillingNudge && !upgradeModalShown) {
             setShowUpgradeModal(true);
             setUpgradeModalShown(true);
             localStorage.setItem('upgradeModalShown', 'true');
         }
-    }, [activeTaskCount, isFreeUser, upgradeModalShown]);
+    }, [showBillingNudge, upgradeModalShown]);
 
     const getDateRange = (filter) => {
         const now = new Date();
@@ -191,7 +215,7 @@ const TaskHub = () => {
         registerPush();
     }, []);
 
-    // Manual form + refresh hooks for the app-wide AI dock
+    // Full form + refresh hooks for the app-wide AI dock
     useEffect(() => {
         const applyPrefill = (prefill) => {
             if (!prefill) return;
@@ -1018,10 +1042,62 @@ const TaskHub = () => {
         );
     };
 
+    const toMeTasks = getFilteredTasks(dashboard?.assigned_to_me || []);
+    const personalTasks = getFilteredTasks(dashboard?.self_assigned || []);
+    const delegatedTasks = getFilteredTasks(dashboard?.assigned_by_me || []);
+    const visibleGroups = (parentGroups || [])
+        .filter(matchesGroupSearch)
+        .filter((g) => !salesOnly || isSalesGroup(g));
+    const columnCounts = [toMeTasks.length, personalTasks.length, delegatedTasks.length + visibleGroups.length];
+    const filteredColumns = [
+        { items: toMeTasks },
+        { items: personalTasks },
+        { items: [...delegatedTasks, ...visibleGroups] },
+    ];
+    const anyVisible = columnCounts.some((n) => n > 0);
+    const urgentColumnIndex = columnWithSoonestDue(
+        anyVisible
+            ? filteredColumns
+            : [
+                { items: dashboard?.assigned_to_me || [] },
+                { items: dashboard?.self_assigned || [] },
+                { items: [...(dashboard?.assigned_by_me || []), ...(parentGroups || [])] },
+            ]
+    );
+    const filterKey = `${viewMode}|${dateFilter}|${salesOnly}|${searchQuery}|${customDateRange.from || ''}|${customDateRange.to || ''}`;
+
+    useEffect(() => {
+        if (!carouselApi) return undefined;
+        carouselApi.scrollTo(urgentColumnIndex, true);
+        setActiveColumnIndex(urgentColumnIndex);
+        const sync = () => setActiveColumnIndex(carouselApi.selectedScrollSnap());
+        carouselApi.on('select', sync);
+        carouselApi.on('settle', sync);
+        return () => {
+            carouselApi.off('select', sync);
+            carouselApi.off('settle', sync);
+        };
+        // Only when the carousel mounts; filter changes are handled below.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [carouselApi]);
+
+    useEffect(() => {
+        if (loading || !dashboard) return;
+        if (lastFilterKeyRef.current === filterKey) return;
+        lastFilterKeyRef.current = filterKey;
+        setActiveColumnIndex(urgentColumnIndex);
+        if (carouselApi) carouselApi.scrollTo(urgentColumnIndex, true);
+    }, [loading, dashboard, filterKey, urgentColumnIndex, carouselApi]);
+
+    const selectColumn = (index) => {
+        setActiveColumnIndex(index);
+        if (carouselApi) carouselApi.scrollTo(index);
+    };
+
     const downloadAllTasksCSV = () => {
         const buckets = [
-            { name: 'Assigned to Me', tasks: dashboard?.assigned_to_me || [] },
-            { name: 'Self-Assigned', tasks: dashboard?.self_assigned || [] },
+            { name: 'To me', tasks: dashboard?.assigned_to_me || [] },
+            { name: 'Personal', tasks: dashboard?.self_assigned || [] },
             { name: 'Delegated', tasks: dashboard?.assigned_by_me || [] }
         ];
         const rows = [[
@@ -1086,15 +1162,77 @@ const TaskHub = () => {
         toast.success('Tasks exported to CSV');
     };
 
+    const openCreate = () => window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen gradient-mesh">
-                <div className="text-lg font-medium">Loading your tasks...</div>
+                <div className="text-lg font-medium">Loading…</div>
             </div>
         );
     }
 
     const overdueCount = getOverdueCount();
+
+    const renderColumnCard = (id) => {
+        if (id === 'to-me') {
+            return (
+                <DashboardColumnCard title="To me" dotClass="bg-blue-500" testId="dashboard-column-card-to-me" columnId="to-me">
+                    {toMeTasks.length === 0 ? (
+                        <p className="text-center text-sm text-muted-foreground py-8 min-h-[8rem] flex items-center justify-center">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing incoming'}</p>
+                    ) : (
+                        toMeTasks.map((task, index) => (
+                            <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                        ))
+                    )}
+                </DashboardColumnCard>
+            );
+        }
+        if (id === 'personal') {
+            return (
+                <DashboardColumnCard title="Personal" dotClass="bg-teal-500" testId="dashboard-column-card-personal" columnId="personal">
+                    {personalTasks.length === 0 ? (
+                        <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                            <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing personal'}</p>
+                            {viewMode === 'active' && !salesOnly && (
+                                <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Add one</button>
+                            )}
+                        </div>
+                    ) : (
+                        personalTasks.map((task, index) => (
+                            <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                        ))
+                    )}
+                </DashboardColumnCard>
+            );
+        }
+        return (
+            <DashboardColumnCard title="Delegated" dotClass="bg-green-500" testId="dashboard-column-card-delegated" columnId="delegated">
+                {visibleGroups.map((group) => (
+                    <ParentTaskGroup
+                        key={group.id}
+                        group={group}
+                        onChanged={fetchParentGroups}
+                        selectable={selectionMode}
+                        selected={selectedTasks.has(group.id)}
+                        onToggleSelect={toggleTaskSelection}
+                    />
+                ))}
+                {delegatedTasks.length === 0 && visibleGroups.length === 0 ? (
+                    <div className="text-center py-8 min-h-[8rem] flex flex-col items-center justify-center">
+                        <p className="text-sm text-muted-foreground">{viewMode === 'completed' ? 'None completed' : salesOnly ? 'No sales tasks' : 'Nothing delegated'}</p>
+                        {viewMode === 'active' && !salesOnly && (
+                            <button type="button" onClick={openCreate} className="mt-2 text-sm font-medium text-teal-700 hover:underline">Assign someone</button>
+                        )}
+                    </div>
+                ) : (
+                    delegatedTasks.map((task, index) => (
+                        <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
+                    ))
+                )}
+            </DashboardColumnCard>
+        );
+    };
 
     return (
         <div data-testid="task-hub" className="page-shell">
@@ -1185,9 +1323,6 @@ const TaskHub = () => {
                         <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
                             Welcome, {user?.name}
                         </h2>
-                        <p className="text-sm text-muted-foreground/80 mt-1 tracking-wide">
-                            When something needs doing, start below.
-                        </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                         {(drafts.length > 0 || transcriptSessions.length > 0) && (
@@ -1301,8 +1436,8 @@ const TaskHub = () => {
                                         <DialogHeader className="pr-8">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>Manual form</DialogTitle>
-                                                    <DialogDescription className="sr-only">Create a task with the full form</DialogDescription>
+                                                    <DialogTitle className="text-2xl" style={{ fontFamily: 'Outfit' }}>New task</DialogTitle>
+                                                    <DialogDescription className="sr-only">Create a task</DialogDescription>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
@@ -1326,15 +1461,15 @@ const TaskHub = () => {
                                                 </button>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="title">Task Title</Label>
-                                                <Input id="title" data-testid="task-title-input" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Enter task title" required className="rounded-xl" />
+                                                <Label htmlFor="title">Title</Label>
+                                                <Input id="title" data-testid="task-title-input" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Title" required className="rounded-xl" />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor="description">Description</Label>
                                                 <RichTextEditor
                                                     value={taskForm.description}
                                                     onChange={(value) => setTaskForm({ ...taskForm, description: value })}
-                                                    placeholder="Describe the task with formatting..."
+                                                    placeholder="What needs to happen"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -1344,7 +1479,7 @@ const TaskHub = () => {
                                                     data-testid="task-success-criteria"
                                                     value={taskForm.success_criteria || ''}
                                                     onChange={(e) => setTaskForm({ ...taskForm, success_criteria: e.target.value })}
-                                                    placeholder="What does a good completion look like?"
+                                                    placeholder="What good looks like"
                                                     className="rounded-xl min-h-[64px]"
                                                     rows={2}
                                                 />
@@ -1371,13 +1506,13 @@ const TaskHub = () => {
                                                     </div>
                                                 )}
                                                 <div className="relative" ref={dropdownRef}>
-                                                    <Input placeholder="Type email or click to select team members..." value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onFocus={() => setShowUserDropdown(true)} onKeyDown={handleEmailKeyDown} className="rounded-xl" />
+                                                    <Input placeholder="Name, email, or group" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} onFocus={() => setShowUserDropdown(true)} onKeyDown={handleEmailKeyDown} className="rounded-xl" />
                                                     {showUserDropdown && (
                                                         <div className="absolute z-50 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-64 overflow-y-auto">
                                                             {!selectedAssignees.some(a => a.type === 'self') && (
                                                                 <div onClick={() => addAssignee({ type: 'self' })} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-b">
                                                                     <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-teal-600" /></div>
-                                                                    <div><p className="font-medium">Assign to Self</p><p className="text-xs text-muted-foreground">Auto-accept this task</p></div>
+                                                                    <div><p className="font-medium">Me</p></div>
                                                                 </div>
                                                             )}
                                                             {!isFreeUser && groups.length > 0 && (
@@ -1406,13 +1541,12 @@ const TaskHub = () => {
                                                             {emailInput && emailInput.includes('@') && (
                                                                 <div onClick={() => { const existingUser = users.find(u => u.email.toLowerCase() === emailInput.toLowerCase()); if (existingUser) { addAssignee({ type: 'user', id: existingUser.id, name: existingUser.name, email: existingUser.email }); } else { addAssignee({ type: 'email', email: emailInput.trim() }); } }} className="flex items-center gap-3 px-4 py-3 hover:bg-teal-50 cursor-pointer border-t">
                                                                     <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center"><Plus className="w-4 h-4 text-green-600" /></div>
-                                                                    <div><p className="font-medium">Invite "{emailInput}"</p><p className="text-xs text-muted-foreground">Send task via email</p></div>
+                                                                    <div><p className="font-medium">Invite "{emailInput}"</p></div>
                                                                 </div>
                                                             )}
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-muted-foreground">Select multiple team members or type any email. Press Enter to add email.</p>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="space-y-2">
@@ -1428,7 +1562,7 @@ const TaskHub = () => {
                                                     </Select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="due_date">Due Date & Time</Label>
+                                                    <Label htmlFor="due_date">Due</Label>
                                                     <DateTimePicker
                                                         value={taskForm.due_date}
                                                         onChange={(val) => setTaskForm({ ...taskForm, due_date: val })}
@@ -1437,7 +1571,7 @@ const TaskHub = () => {
                                                 </div>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label>Attachments & Screen Recording</Label>
+                                                <Label>Attachments</Label>
                                                 <AttachmentPicker attachments={attachments} setAttachments={setAttachments} />
                                             </div>
                                             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -1449,7 +1583,7 @@ const TaskHub = () => {
                                                     className="rounded"
                                                 />
                                                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                                                <span>This is a Sales Task <span className="text-xs text-muted-foreground">(involves a customer or prospect)</span></span>
+                                                <span>Sales</span>
                                             </label>
 
                                             {/* Advanced options - collapsed by default so the form stays short */}
@@ -1468,10 +1602,7 @@ const TaskHub = () => {
                                                             className="rounded mt-0.5"
                                                         />
                                                         <Video className="w-4 h-4 text-violet-600 mt-0.5 shrink-0" />
-                                                        <span>
-                                                            <span className="font-medium">Require a screen recording from the assignee</span>
-                                                            <span className="block text-xs text-muted-foreground mt-0.5">A prominent banner will appear on their task view asking them to attach a Loom-style recording before they can mark it done.</span>
-                                                        </span>
+                                                        <span className="font-medium">Require screen recording</span>
                                                     </label>
                                                     <div className="pt-3 border-t">
                                                         <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
@@ -1655,108 +1786,109 @@ const TaskHub = () => {
                     </div>
                 </div>
 
-                {/* Upgrade Nudges */}
-                {showLightBanner && !showPersistentBanner && (
-                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <p className="text-sm text-teal-800">You have {activeTaskCount} active tasks. Upgrade for advanced features!</p>
-                        <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs shrink-0 self-start sm:self-auto"><Crown className="w-3 h-3 mr-1" />Upgrade</Button>
+                {showBillingNudge && (
+                    <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2" data-testid="billing-nudge-banner">
+                        <p className="text-sm text-teal-800">You and your team are exchanging work. Pro adds reminders and recordings.</p>
+                        <div className="flex gap-2 shrink-0">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="rounded-full text-xs"
+                                onClick={() => {
+                                    setNudgeDismissed(true);
+                                    localStorage.setItem('billingNudgeDismissed', 'true');
+                                }}
+                            >
+                                Not now
+                            </Button>
+                            <Button size="sm" onClick={() => navigate('/settings')} className="rounded-full text-xs"><Crown className="w-3 h-3 mr-1" />See plans</Button>
+                        </div>
                     </div>
                 )}
 
-                {showPersistentBanner && (
-                    <Card className="mb-6 border-amber-200 bg-amber-50 rounded-2xl">
-                        <CardContent className="py-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div className="flex items-start sm:items-center gap-3"><Crown className="w-5 h-5 text-amber-600 shrink-0" /><p className="text-amber-800 text-sm sm:text-base">You're managing {activeTaskCount} tasks! Upgrade to Pro or Teams for priority support and team features.</p></div>
-                                <Button onClick={() => navigate('/settings')} className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 shrink-0 self-start sm:self-auto"><Crown className="w-4 h-4 mr-2" />Upgrade</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Upgrade Modal (shown once at 20 tasks) */}
                 <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
-                    <DialogContent className="rounded-2xl">
+                    <DialogContent className="rounded-2xl" data-testid="billing-nudge-modal">
                         <DialogHeader>
-                            <DialogTitle className="text-foreground">You're Growing Fast!</DialogTitle>
-                            <DialogDescription>You now have {activeTaskCount} active tasks. Consider upgrading to Pro or Teams for team collaboration, analytics, and priority support.</DialogDescription>
+                            <DialogTitle className="text-foreground">You are using Tskflow</DialogTitle>
+                            <DialogDescription>Reminders and recordings help when the volume sticks. No rush.</DialogDescription>
                         </DialogHeader>
                         <div className="flex gap-2 justify-end pt-4">
-                            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Maybe Later</Button>
-                            <Button onClick={() => { setShowUpgradeModal(false); navigate('/settings'); }} className="rounded-full"><Crown className="w-4 h-4 mr-2" />View Plans</Button>
+                            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Not now</Button>
+                            <Button onClick={() => { setShowUpgradeModal(false); navigate('/settings'); }} className="rounded-full"><Crown className="w-4 h-4 mr-2" />See plans</Button>
                         </div>
                     </DialogContent>
                 </Dialog>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-start">
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500"></div>Assigned to Me</CardTitle>
-                                <CardDescription>Tasks from others</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {getFilteredTasks(dashboard?.assigned_to_me || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No tasks assigned to you'}</p>
-                                ) : (
-                                    getFilteredTasks(dashboard?.assigned_to_me || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                {isMobileDashboard && (
+                    <div className="mb-3" data-testid="dashboard-column-tabs">
+                        <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1" role="tablist" aria-label="Task lists">
+                            {DASHBOARD_COLUMNS.map((tab, index) => {
+                                const selected = activeColumnIndex === index;
+                                const count = columnCounts[index];
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={selected}
+                                        data-testid={`dashboard-column-tab-${tab.id}`}
+                                        onClick={() => selectColumn(index)}
+                                        className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white dark:bg-slate-700 shadow-sm text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400'}`}
+                                    >
+                                        <span className="truncate">{tab.name}</span>
+                                        {count > 0 && (
+                                            <span className={`ml-1 tabular-nums ${selected ? 'text-teal-600' : 'text-gray-400'}`}>{count}</span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-teal-500"></div>Self-Assigned</CardTitle>
-                                <CardDescription>Your personal tasks</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {getFilteredTasks(dashboard?.self_assigned || []).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No self-assigned tasks'}</p>
-                                ) : (
-                                    getFilteredTasks(dashboard?.self_assigned || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} onComplete={handleQuickComplete} selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                {isMobileDashboard ? (
+                    <Carousel
+                        opts={{ align: 'start', loop: false, containScroll: 'trimSnaps', watchDrag: true }}
+                        setApi={setCarouselApi}
+                        className="w-full cursor-grab active:cursor-grabbing"
+                        data-testid="dashboard-panels"
+                    >
+                        <CarouselContent className="-ml-0">
+                            {DASHBOARD_COLUMNS.map((col) => (
+                                <CarouselItem
+                                    key={col.id}
+                                    className="pl-0 min-w-0 shrink-0 grow-0 basis-full"
+                                    style={{ flex: '0 0 100%' }}
+                                    data-testid={`dashboard-column-${col.id}`}
+                                >
+                                    {renderColumnCard(col.id)}
+                                </CarouselItem>
+                            ))}
+                        </CarouselContent>
+                    </Carousel>
+                ) : (
+                    <div className="grid grid-cols-3 gap-4 sm:gap-6 items-stretch" data-testid="dashboard-panels">
+                        {DASHBOARD_COLUMNS.map((col) => (
+                            <React.Fragment key={col.id}>
+                                {renderColumnCard(col.id)}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                )}
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                        <Card className="border-2 shadow-soft rounded-2xl">
-                            <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-                                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-500"></div>Delegated</CardTitle>
-                                <CardDescription>Tasks you assigned</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3 max-h-none md:max-h-[calc(100vh-320px)] overflow-y-visible md:overflow-y-auto pr-1 clean-scroll px-4 sm:px-6 pt-2 pb-4 sm:pb-6">
-                                {parentGroups
-                                    .filter(matchesGroupSearch)
-                                    .filter((g) => !salesOnly || isSalesGroup(g))
-                                    .map((group) => (
-                                    <ParentTaskGroup
-                                        key={group.id}
-                                        group={group}
-                                        onChanged={fetchParentGroups}
-                                        selectable={selectionMode}
-                                        selected={selectedTasks.has(group.id)}
-                                        onToggleSelect={toggleTaskSelection}
-                                    />
-                                ))}
-                                {getFilteredTasks(dashboard?.assigned_by_me || []).length === 0
-                                    && parentGroups.filter(matchesGroupSearch).filter((g) => !salesOnly || isSalesGroup(g)).length === 0 ? (
-                                    <p className="text-center text-muted-foreground py-8">{viewMode === 'completed' ? 'No completed tasks' : salesOnly ? 'No sales tasks in this view' : 'No delegated tasks'}</p>
-                                ) : (
-                                    getFilteredTasks(dashboard?.assigned_by_me || []).map((task, index) => (
-                                        <TaskCard key={task.id} task={task} index={index} showAssignee selectionMode={selectionMode} selected={selectedTasks.has(task.id)} onSelect={toggleTaskSelection} />
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                </div>
+                {isMobileDashboard && (
+                    <div className="flex justify-center gap-1.5 mt-3" data-testid="dashboard-column-dots" aria-hidden="true">
+                        {DASHBOARD_COLUMNS.map((col, index) => (
+                            <button
+                                key={col.id}
+                                type="button"
+                                onClick={() => selectColumn(index)}
+                                className={`h-1.5 rounded-full transition-all ${activeColumnIndex === index ? 'w-5 bg-teal-600' : 'w-1.5 bg-gray-300'}`}
+                                aria-label={`Show ${col.name}`}
+                            />
+                        ))}
+                    </div>
+                )}
 
                 {/* Recently Deleted has been moved to inside the individual task view.
                     The trash/restore controls now live only on TaskDetail. */}

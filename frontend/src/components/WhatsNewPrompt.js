@@ -23,6 +23,8 @@ const WhatsNewPrompt = () => {
         let cancelled = false;
         (async () => {
             try {
+                // First-run onboarding owns the screen. Do not stack a changelog on top.
+                if (!localStorage.getItem('Tskflow_onboarding_dashboard')) return;
                 const seenLocal = localStorage.getItem(SEEN_KEY);
                 if (seenLocal === FEATURE_BATCH_ID) return;
 
@@ -68,7 +70,7 @@ const WhatsNewPrompt = () => {
                         What&apos;s new in Tskflow
                     </DialogTitle>
                     <DialogDescription>
-                        A quicker AI prompt, cleaner recordings, and smarter team assignment. Take a minute to review.
+                        Quicker prompt, cleaner recordings, smarter assignment.
                     </DialogDescription>
                 </DialogHeader>
                 <ul className="space-y-2.5 text-sm text-slate-700">
@@ -88,7 +90,7 @@ const WhatsNewPrompt = () => {
                         Later
                     </Button>
                     <Button type="button" className="rounded-full" data-testid="whats-new-review-btn" onClick={() => dismiss(true)}>
-                        Review in Help Center
+                        Review in Help
                     </Button>
                 </div>
             </DialogContent>

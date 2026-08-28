@@ -304,7 +304,7 @@ const GlobalAIDock = () => {
                 type="button"
                 className="ai-dock-fab"
                 data-testid="ai-dock-fab"
-                title="Create with AI"
+                title="New task"
                 aria-label="Create a task"
                 aria-expanded={open}
                 tabIndex={open ? -1 : 0}

@@ -52,13 +52,13 @@ const localJarvisReply = (text) => {
     if (/\b(what can you (do|help with)|who are you|what do you do|help me get started)\b/i.test(t)) {
         return {
             reply:
-                "I'm Jarvis - think of me as your ops lead in the app. I can create and assign tasks from plain English, list what's still open, nudge status updates, and jump you to pages like analytics or settings. What do you want to tackle?",
+                "I can assign, list what's open, and jump you to a page. What do you need?",
             action: { type: 'assistant_answer' },
         };
     }
     if (/\b(guide me|show yourself|show me|help me|walk me through)\b/i.test(t) && t.length < 80) {
         return {
-            reply: "Sure. Tell me what you're stuck on - a task, an assignee, a due date - and I'll walk you through it.",
+            reply: "What are you stuck on?",
             action: { type: 'assistant_answer' },
         };
     }

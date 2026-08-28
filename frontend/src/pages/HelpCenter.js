@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API, useAuth } from '@/App';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { API } from '@/App';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,83 +12,63 @@ import { motion } from 'framer-motion';
 const topics = [
     {
         id: 'quickstart',
-        icon: <Rocket className="w-4 h-4" />, title: 'Quick Start Guide', category: 'Getting Started',
+        icon: <Rocket className="w-4 h-4" />, title: 'Quick start', category: 'Getting Started',
         body: (
             <ol className="list-decimal ml-5 space-y-2 text-sm">
-                <li>Sign in and open your dashboard. You’ll see three columns: <strong>Assigned to Me</strong>, <strong>Self-Assigned</strong>, and <strong>Delegated</strong>.</li>
-                <li>Use the floating bar at the bottom to create a task, search, or jump to any page - type in plain English, or press <kbd className="px-1.5 py-0.5 border rounded text-xs">/</kbd> / <kbd className="px-1.5 py-0.5 border rounded text-xs">⌘K</kbd>.</li>
-                <li>Tell TskFlow what you need done in plain English - e.g. &ldquo;Have Sarah email the Q3 update by tomorrow 3pm.&rdquo;</li>
-                <li>Confirm the summary (or answer one clarifying question if something critical is missing), then send.</li>
-                <li>Use <strong>Advanced create</strong> only when you need attachments, groups, or recurrence extras.</li>
-                <li>Ready for more? Ask in the bottom bar - Jarvis lives in the prompt. Try &ldquo;What’s outstanding?&rdquo;</li>
+                <li>Type who, what, and when in the bar. Press Enter.</li>
+                <li>Confirm and send. They accept. You see it through.</li>
+                <li>Dashboard columns: <strong>To me</strong>, <strong>Personal</strong>, <strong>Delegated</strong>.</li>
+                <li>Need extras (attachments, recurrence)? Open <strong>Full form</strong>.</li>
             </ol>
         )
     },
     {
         id: 'drafts',
-        icon: <Sparkles className="w-4 h-4" />, title: 'Drafts - never lose a task in progress', category: 'Core Feature',
+        icon: <Sparkles className="w-4 h-4" />, title: 'Drafts', category: 'Core Feature',
         body: (
-            <div className="text-sm space-y-2">
-                <p>As soon as you start filling in Create Task, TskFlow saves a draft in the background. If you close the modal, refresh, or lose Wi-Fi - nothing is lost.</p>
-                <ul className="list-disc ml-5 space-y-1">
-                    <li>Resume drafts from the yellow <em>Unfinished Drafts</em> strip on your dashboard.</li>
-                    <li>Delete drafts you no longer need with the trash icon.</li>
-                    <li>Offline edits sync automatically the moment you’re back online.</li>
-                </ul>
-            </div>
+            <p className="text-sm">Unfinished asks save automatically. Resume them from Drafts in the header.</p>
         )
     },
     {
         id: 'recurring',
-        icon: <Compass className="w-4 h-4" />, title: 'Recurring tasks', category: 'Core Feature',
+        icon: <Compass className="w-4 h-4" />, title: 'Recurring', category: 'Core Feature',
         body: (
-            <div className="text-sm space-y-2">
-                <p>Turn any task into a series. Frequencies supported: <strong>Daily, Weekdays, Weekly, Every 2 Weeks, Monthly, Yearly, Custom</strong>.</p>
-                <p>You control when it ends: never (until you stop it), on a specific date, or after N occurrences. Edit a series with three scopes: <em>This occurrence, This + future, Entire series</em>. Skip an occurrence any time.</p>
-            </div>
+            <p className="text-sm">Say how often in the bar, or toggle Repeat on the form. Skip or edit any occurrence later.</p>
         )
     },
     {
         id: 'voice',
-        icon: <PlayCircle className="w-4 h-4" />, title: 'Voice Mode & Assistant', category: 'AI Assistant',
+        icon: <PlayCircle className="w-4 h-4" />, title: 'Voice', category: 'AI Assistant',
         body: (
-            <div className="text-sm space-y-2">
-                <p>Tap the mic in the prompt bar - no popup, it listens immediately. Use it to:</p>
-                <ul className="list-disc ml-5">
-                    <li>Ask about outstanding tasks or open a page.</li>
-                    <li>Create tasks by voice (&ldquo;Create a task to call the vendor Friday at 10&rdquo;).</li>
-                    <li>Ask how-to questions (&ldquo;How does the leaderboard rank people?&rdquo;).</li>
-                </ul>
-                <p>Voice Mode persists across pages. Tip: keyboard shortcut <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd> toggles it.</p>
-            </div>
+            <p className="text-sm">Tap the mic. It listens immediately. Shortcut: <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd>.</p>
         )
     },
     {
         id: 'smart-create',
-        icon: <Sparkles className="w-4 h-4" />, title: 'Smart Task Creation', category: 'AI Assistant',
+        icon: <Sparkles className="w-4 h-4" />, title: 'Smart create', category: 'AI Assistant',
         body: (
-            <p className="text-sm">Type a natural description or dictate one. TskFlow infers the title, due date, priority, category, action items, and even hints at assignees when they’re explicitly named. You always get final say - every field is editable.</p>
+            <p className="text-sm">Name, due date, and priority are inferred. Every field stays editable before you send.</p>
         )
     },
     {
         id: 'group',
-        icon: <MessageSquare className="w-4 h-4" />, title: 'Group tasks & leaderboards', category: 'Team',
+        icon: <MessageSquare className="w-4 h-4" />, title: 'Group tasks', category: 'Team',
         body: (
-            <p className="text-sm">When you assign a task to more than one person, TskFlow builds a shared parent with one subtask per assignee. Everyone sees a live leaderboard ranking participants by speed and engagement - great motivation to close things out.</p>
+            <p className="text-sm">Assign more than one person and you get one ask per person, plus a live leaderboard.</p>
         )
     },
     {
         id: 'analytics',
-        icon: <BookOpen className="w-4 h-4" />, title: 'Analytics & Team Leaderboard', category: 'Reporting',
+        icon: <BookOpen className="w-4 h-4" />, title: 'Analytics', category: 'Reporting',
         body: (
-            <p className="text-sm">Head to /analytics. Tabs include: <strong>Overall Analytics</strong> (completion rate, overdue count, avg completion, avg response, trends, filters), <strong>Activity Log</strong> (full task data with reminders/chatter + CSV export), and the <strong>Team Leaderboard</strong> (fastest, highest completion, most completed, streaks, badges).</p>
+            <p className="text-sm">Completion, overdue, speed, and the team leaderboard. Export from Activity if you need a CSV.</p>
         )
     },
     {
         id: 'reminders',
-        icon: <HelpCircle className="w-4 h-4" />, title: 'Smart Reminders', category: 'Notifications',
+        icon: <HelpCircle className="w-4 h-4" />, title: 'Reminders', category: 'Notifications',
         body: (
-            <p className="text-sm">Enable Smart Reminders in Settings → Reminders. Start from Essential / Balanced / Assertive, then choose triggers (before due, no response, no progress, overdue), priorities, channels (in-app, email, Slack), timing, quiet hours, and a daily email cap. Defaults stay quiet so nudges help instead of overwhelm.</p>
+            <p className="text-sm">Settings → Reminders. Pick Essential, Balanced, or Assertive. Customize only if you need to.</p>
         )
     },
     {
@@ -96,25 +76,17 @@ const topics = [
         icon: <HelpCircle className="w-4 h-4" />, title: 'FAQs', category: 'FAQs',
         body: (
             <div className="text-sm space-y-2">
-                <p><strong>Do I need to install anything?</strong> No - TskFlow runs in your browser.</p>
-                <p><strong>What happens if someone ignores a task?</strong> After two pings, Jarvis starts an email thread with them (and a Slack DM if Slack is connected), talks like a teammate, and updates the task from whatever they reply. Email replies go to the unique reply address on that thread. Slack needs a bot token and signing secret, with Events API pointed at <code>/api/slack/events</code> (subscribe to <code>message.im</code>).</p>
-                <p><strong>Can external people receive tasks?</strong> Yes - use their email; we’ll send them an invite link.</p>
-                <p><strong>Is my data private?</strong> Your task metrics for direct reports only include tasks you assigned to them.</p>
-                <p><strong>Does Voice Mode work in Safari?</strong> Best in Chrome / Edge. Safari support is partial.</p>
+                <p><strong>Install anything?</strong> No. It runs in the browser.</p>
+                <p><strong>Someone ignores a task?</strong> After two pings, Jarvis follows up. Replies update the task.</p>
+                <p><strong>People not on Tskflow?</strong> Assign by email. They get a link.</p>
+                <p><strong>Direct-report privacy?</strong> You only see work you assigned them.</p>
+                <p><strong>Safari?</strong> Voice works best in Chrome or Edge.</p>
             </div>
-        )
-    },
-    {
-        id: 'positioning',
-        icon: <Rocket className="w-4 h-4" />, title: 'Accountability Management - what is that?', category: 'Getting Started',
-        body: (
-            <p className="text-sm">TskFlow is not just a to-do app. It’s an accountability platform: every commitment has a clear owner, a due time, an acceptance step, and completion proof. Group tasks, leaderboards, EOD reports, and smart reminders together make follow-through visible and unavoidable.</p>
         )
     },
 ];
 
 const HelpCenter = () => {
-    const { user } = useAuth();
     const navigate = useNavigate();
     const [q, setQ] = useState('');
     const [updates, setUpdates] = useState([]);
@@ -148,8 +120,7 @@ const HelpCenter = () => {
                             <ArrowLeft className="w-4 h-4 mr-1" /> Back
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>Help Center</h1>
-                            <p className="text-xs text-muted-foreground">Guides, walkthroughs, FAQs - and remember, you can just ask Voice Mode too.</p>
+                            <h1 className="text-2xl font-bold" style={{ fontFamily: 'Outfit' }}>Help</h1>
                         </div>
                     </div>
                     <div className="hidden sm:flex items-center gap-2">
@@ -165,7 +136,7 @@ const HelpCenter = () => {
                     <>
                         <div className="mb-6 relative">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search docs - e.g. drafts, recurring, voice, analytics" className="pl-9 rounded-full" />
+                            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className="pl-9 rounded-full" />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {filtered.map((t, i) => (
@@ -184,7 +155,7 @@ const HelpCenter = () => {
                                     </Card>
                                 </motion.div>
                             ))}
-                            {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center col-span-2 py-12">No topics match “{q}”. Try asking Voice Mode instead - it can answer freely.</p>}
+                            {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center col-span-2 py-12">No match for “{q}”.</p>}
                         </div>
                     </>
                 )}
@@ -192,22 +163,20 @@ const HelpCenter = () => {
                 {tab === 'walkthrough' && (
                     <Card className="rounded-2xl">
                         <CardHeader>
-                            <CardTitle style={{ fontFamily: 'Outfit' }}>5-minute walkthrough</CardTitle>
-                            <CardDescription>Everything you need to start being productive.</CardDescription>
+                            <CardTitle style={{ fontFamily: 'Outfit' }}>Start here</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {[
-                                { step: '1', title: 'Create your first task', body: 'Use the floating bar at the bottom - create, search, or go to any page in plain English. Confirm and send.' },
-                                { step: '2', title: 'Turn a routine into recurring', body: 'Open Advanced Options in Create Task. Pick a frequency, set an end (or never). TskFlow keeps future occurrences pre-filled.' },
-                                { step: '3', title: 'Delegate to your team', body: 'Type an email or search a teammate. Assign to multiple people to create a group task with a live leaderboard.' },
-                                { step: '4', title: 'Ask Jarvis', body: 'Type in the bottom bar - Jarvis is in the prompt. Ask &ldquo;What’s overdue?&rdquo; or &ldquo;How do drafts work?&rdquo; - it does both.' },
-                                { step: '5', title: 'Turn on Smart Reminders', body: 'Settings → Reminders. Set triggers, frequency, and channels so nothing important goes cold.' },
+                                { step: '1', title: 'Assign', body: 'Type who, what, and when. Confirm. Send.' },
+                                { step: '2', title: 'Repeat', body: 'Say how often, or open Full form → Repeat.' },
+                                { step: '3', title: 'Team', body: 'Assign more than one person for a group ask.' },
+                                { step: '4', title: 'Ask', body: '“What’s overdue?” works in the same bar.' },
                             ].map((s) => (
                                 <div key={s.step} className="flex gap-4">
                                     <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold shrink-0">{s.step}</div>
                                     <div>
                                         <h3 className="font-semibold">{s.title}</h3>
-                                        <p className="text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: s.body }} />
+                                        <p className="text-sm text-muted-foreground">{s.body}</p>
                                     </div>
                                 </div>
                             ))}
@@ -223,21 +192,16 @@ const HelpCenter = () => {
                                     <CardTitle className="text-base flex items-center gap-2">
                                         <Sparkles className="w-4 h-4 text-teal-500" /> {u.area}
                                     </CardTitle>
+                                    {u.was && <p className="text-xs text-muted-foreground mt-1">Before: {u.was}</p>}
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-sm">{u.change}</p>
-                                    {u.was && <p className="text-xs text-muted-foreground mt-1">Before: {u.was}</p>}
                                 </CardContent>
                             </Card>
                         ))}
-                        {updates.length === 0 && <p className="text-sm text-muted-foreground text-center py-12">Loading updates…</p>}
+                        {updates.length === 0 && <p className="text-sm text-muted-foreground text-center py-12">Loading…</p>}
                     </div>
                 )}
-
-                <div className="mt-10 p-4 rounded-2xl bg-teal-50 border border-teal-100 text-sm text-teal-900 flex items-center gap-3">
-                    <HelpCircle className="w-5 h-5 text-teal-500" />
-                    <div>Can’t find what you need? Ask in the bottom bar - Jarvis is in the prompt.</div>
-                </div>
             </main>
         </div>
     );

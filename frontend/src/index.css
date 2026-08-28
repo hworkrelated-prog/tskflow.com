@@ -184,6 +184,13 @@ h1, h2, h3, h4, h5, h6 {
     .mobile-h-scroll::-webkit-scrollbar {
         display: none;
     }
+
+    .dashboard-panel-card {
+        min-height: 20rem;
+        display: flex;
+        flex-direction: column;
+        align-self: stretch;
+    }
 }
 
 /* Rich text content styling */

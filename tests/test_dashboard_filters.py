@@ -237,7 +237,7 @@ class TestDashboardResponseStructure:
         data = response.json()
         
         # Required top-level fields
-        required_fields = ["assigned_to_me", "self_assigned", "assigned_by_me", "counts", "subscription_tier", "task_limit_reached"]
+        required_fields = ["assigned_to_me", "self_assigned", "assigned_by_me", "counts", "subscription_tier", "task_limit_reached", "show_billing_nudge"]
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
         

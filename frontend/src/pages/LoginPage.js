@@ -5,7 +5,7 @@ import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { LogIn, Target } from 'lucide-react';
@@ -62,11 +62,8 @@ const LoginPage = () => {
                             <LogIn className="w-8 h-8 text-primary" />
                         </div>
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome Back
+                            Welcome back
                         </CardTitle>
-                        <CardDescription className="text-base">
-                            Sign in to your Tskflow account
-                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
