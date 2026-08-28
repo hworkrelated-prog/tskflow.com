@@ -45,6 +45,7 @@ const SettingsPage = () => {
     const [canManageSlack, setCanManageSlack] = React.useState(false);
     const [slackTeamConnected, setSlackTeamConnected] = React.useState(false);
     const [slackBotEnabled, setSlackBotEnabled] = React.useState(false);
+    const [slackOauthReady, setSlackOauthReady] = React.useState(false);
     const [savingSlack, setSavingSlack] = React.useState(false);
     const [testingSlack, setTestingSlack] = React.useState(false);
     const [displayName, setDisplayName] = React.useState('');
@@ -113,15 +114,20 @@ const SettingsPage = () => {
     React.useEffect(() => {
         const calendar = searchParams.get('calendar');
         const sheets = searchParams.get('sheets');
+        const slack = searchParams.get('slack');
         const oauthError = searchParams.get('error');
-        if (!calendar && !sheets && !oauthError) return;
+        if (!calendar && !sheets && !slack && !oauthError) return;
         if (calendar === 'connected') toast.success('Google Calendar connected');
         if (sheets === 'connected') toast.success('Google Sheets connected');
+        if (slack === 'connected') toast.success('Slack connected');
+        if (slack === 'denied' || slack === 'failed') toast.error('Slack connection did not finish. Try again.');
         if (oauthError) toast.error('Google connection did not finish. Try again.');
         refreshUser?.();
+        fetchPreferences();
         const next = new URLSearchParams(searchParams);
         next.delete('calendar');
         next.delete('sheets');
+        next.delete('slack');
         next.delete('error');
         setSearchParams(next, { replace: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,6 +143,7 @@ const SettingsPage = () => {
             try {
                 const slack = await axios.get(`${API}/integrations/slack/status`);
                 setSlackBotEnabled(Boolean(slack.data?.bot || slack.data?.followup_enabled));
+                setSlackOauthReady(Boolean(slack.data?.oauth));
             } catch (_) { /* optional */ }
             setEodEnabled(Boolean(response.data.eod_enabled));
             setEodHour(response.data.eod_hour ?? 17);
@@ -255,6 +262,44 @@ const SettingsPage = () => {
             saveSlack({ value: clean, silent: true }).then((ok) => { if (ok) toast.success('Slack connected 🎉'); });
         }
     };
+
+    const startSlackOauth = async () => {
+        try {
+            const res = await axios.get(`${API}/integrations/slack/connect`);
+            if (res.data?.auth_url) window.location.assign(res.data.auth_url);
+            else toast.error('Could not start Slack connection');
+        } catch (e) {
+            toast.error(e?.response?.data?.detail || 'Could not start Slack connection');
+        }
+    };
+
+    const slackPasteField = (
+        <div>
+            <Label htmlFor="slack-webhook" className="text-xs text-muted-foreground">Paste webhook URL</Label>
+            <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                <input
+                    id="slack-webhook"
+                    type="url"
+                    placeholder="https://hooks.slack.com/services/…"
+                    value={slackWebhook}
+                    onChange={(e) => handleSlackInput(e.target.value)}
+                    onPaste={(e) => {
+                        setTimeout(() => handleSlackInput(e.target.value), 0);
+                    }}
+                    className="flex-1 px-3 py-2.5 border border-input rounded-xl text-sm bg-background text-foreground focus:border-teal-500 focus:outline-none font-mono"
+                    data-testid="slack-webhook-input"
+                />
+                {slackWebhook.trim() && !slackWebhook.startsWith('https://hooks.slack.com/') ? null : (
+                    <Button size="sm" onClick={() => saveSlack()} disabled={savingSlack || !slackWebhook.trim().startsWith('https://hooks.slack.com/')} className="rounded-xl px-4" data-testid="slack-save-btn">
+                        {savingSlack ? 'Connecting...' : 'Connect'}
+                    </Button>
+                )}
+            </div>
+            {slackWebhook && !slackWebhook.startsWith('https://hooks.slack.com/') && (
+                <p className="text-xs text-red-600 mt-2">Use a URL that starts with https://hooks.slack.com/</p>
+            )}
+        </div>
+    );
 
     const testSlack = async () => {
         if (!slackWebhook.trim()) { toast.error('Paste your webhook URL first'); return; }
@@ -818,6 +863,100 @@ const SettingsPage = () => {
                         </CardContent>
                     </Card>
 
+                    {canManageSlack ? (
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-base">Slack</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {slackBotEnabled ? 'Follow-up DMs are on.' : 'Posts to a channel you pick.'}
+                                </p>
+                            </div>
+                            {slackWebhook && (
+                                <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Connected
+                                </span>
+                            )}
+                        </div>
+
+                        {!slackWebhook ? (
+                            <div className="space-y-3">
+                                {slackOauthReady ? (
+                                    <Button
+                                        type="button"
+                                        onClick={startSlackOauth}
+                                        className="w-full h-12 rounded-xl bg-[#4A154B] hover:bg-[#611f5f] text-white font-semibold"
+                                        data-testid="slack-connect-btn"
+                                    >
+                                        Add to Slack
+                                    </Button>
+                                ) : (
+                                    <a
+                                        href="https://slack.com/apps/A0F7XDUAZ-incoming-webhooks"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-3 w-full py-3.5 px-4 rounded-xl bg-[#4A154B] hover:bg-[#611f5f] text-white font-semibold transition-colors"
+                                        data-testid="slack-connect-btn"
+                                    >
+                                        Add Incoming Webhook in Slack
+                                    </a>
+                                )}
+                                {slackOauthReady ? (
+                                    <details className="rounded-xl border border-border group">
+                                        <summary className="cursor-pointer select-none px-4 py-2.5 text-sm text-muted-foreground">
+                                            Paste a webhook instead
+                                        </summary>
+                                        <div className="px-4 pb-4">{slackPasteField}</div>
+                                    </details>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-muted-foreground">Pick a channel, copy the URL, paste it here.</p>
+                                        {slackPasteField}
+                                    </>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                                        <Check className="w-4 h-4" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-emerald-900">Slack is connected</p>
+                                        <p className="text-xs text-emerald-700 truncate font-mono mt-0.5">{slackWebhook.replace(/(https:\/\/hooks\.slack\.com\/services\/)([^/]+\/[^/]+)\/.*/, '$1$2/••••••')}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 flex-wrap">
+                                    <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack} data-testid="slack-test-btn" className="rounded-lg">
+                                        {testingSlack ? 'Sending test...' : 'Send test message'}
+                                    </Button>
+                                    <Button variant="outline" size="sm" onClick={async () => { const ok = await saveSlack({ value: '', silent: true }); if (ok) { setSlackWebhook(''); setSlackTeamConnected(false); toast.success('Slack disconnected'); } }} className="text-red-600 border-red-200 hover:bg-red-50 rounded-lg">
+                                        Disconnect
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    ) : user?.subscription_tier === 'teams' ? (
+                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
+                        <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
+                            <div>
+                                <h3 className="font-semibold text-base">Slack</h3>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {slackTeamConnected
+                                        ? (slackBotEnabled ? 'Connected. Follow-up DMs are on.' : 'Connected.')
+                                        : 'Ask your Teams admin to connect Slack.'}
+                                </p>
+                            </div>
+                            {slackTeamConnected && (
+                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected</span>
+                            )}
+                        </div>
+                    </div>
+                    ) : null}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Password Change */}
                         <Card className="border shadow-soft rounded-2xl">
@@ -1054,145 +1193,6 @@ const SettingsPage = () => {
                     {/* Smart Reminders */}
                     <SmartRemindersCard slackConnected={slackTeamConnected} />
 
-                    {/* Slack Bridge - Teams admin only */}
-                    {canManageSlack ? (
-                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
-                        <div className="flex items-center gap-3">
-                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
-                            <div className="flex-1">
-                                <h3 className="font-semibold text-base">Slack</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {slackBotEnabled ? 'Follow-up DMs are on.' : 'Channel posts use a webhook. Jarvis DMs after two ignored pings.'}
-                                </p>
-                            </div>
-                            {slackWebhook && (
-                                <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Connected
-                                </span>
-                            )}
-                        </div>
-
-                        {!slackWebhook ? (
-                            <div className="space-y-3">
-                                {/* Big one-click button */}
-                                <a
-                                    href="https://api.slack.com/apps?new_app=1"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-3 w-full py-3.5 px-4 rounded-xl bg-[#4A154B] hover:bg-[#611f5f] text-white font-semibold transition-colors shadow-sm"
-                                    data-testid="slack-connect-btn"
-                                >
-                                    <svg width="20" height="20" viewBox="0 0 122.8 122.8" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M25.8 77.6c0 7.1-5.8 12.9-12.9 12.9S0 84.7 0 77.6s5.8-12.9 12.9-12.9h12.9v12.9zm6.5 0c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9v32.3c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V77.6z" fill="#e01e5a"/>
-                                        <path d="M45.2 25.8c-7.1 0-12.9-5.8-12.9-12.9S38.1 0 45.2 0s12.9 5.8 12.9 12.9v12.9H45.2zm0 6.5c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H12.9C5.8 58.1 0 52.3 0 45.2s5.8-12.9 12.9-12.9h32.3z" fill="#36c5f0"/>
-                                        <path d="M97 45.2c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9-5.8 12.9-12.9 12.9H97V45.2zm-6.5 0c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V12.9C64.7 5.8 70.5 0 77.6 0s12.9 5.8 12.9 12.9v32.3z" fill="#2eb67d"/>
-                                        <path d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9zm0-6.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z" fill="#ecb22e"/>
-                                    </svg>
-                                    Open Slack &amp; create a webhook
-                                </a>
-
-                                <details className="rounded-xl border bg-gray-50/60 group">
-                                    <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-gray-100 rounded-xl">
-                                        <span>Show me how (30 seconds)</span>
-                                        <span className="text-xs text-muted-foreground group-open:hidden">Expand</span>
-                                        <span className="text-xs text-muted-foreground hidden group-open:inline">Collapse</span>
-                                    </summary>
-                                    <ol className="px-5 pb-4 pt-2 text-sm text-gray-700 space-y-2 list-decimal ml-4">
-                                        <li>On Slack&apos;s page, click <strong>&quot;Create New App&quot;</strong> → <strong>From scratch</strong>, name it <em>Tskflow</em>, pick your workspace.</li>
-                                        <li>In the sidebar, click <strong>Incoming Webhooks</strong> → toggle it <strong>On</strong>.</li>
-                                        <li>Click <strong>&quot;Add New Webhook to Workspace&quot;</strong> and choose the channel you want messages in.</li>
-                                        <li>Copy the webhook URL that starts with <code className="bg-white px-1 py-0.5 rounded text-xs">https://hooks.slack.com/services/...</code></li>
-                                        <li>Paste it below. It&apos;ll connect automatically. That&apos;s it! 🎉</li>
-                                    </ol>
-                                </details>
-
-                                <div>
-                                    <Label htmlFor="slack-webhook" className="text-xs text-muted-foreground">Paste your webhook URL</Label>
-                                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
-                                        <input
-                                            id="slack-webhook"
-                                            type="url"
-                                            placeholder="https://hooks.slack.com/services/T0.../B0.../..."
-                                            value={slackWebhook}
-                                            onChange={(e) => handleSlackInput(e.target.value)}
-                                            onPaste={(e) => {
-                                                // Handle paste directly to auto-connect on next tick with the pasted value
-                                                setTimeout(() => handleSlackInput(e.target.value), 0);
-                                            }}
-                                            className="flex-1 px-3 py-2.5 border border-input rounded-xl text-sm bg-background text-foreground focus:border-teal-500 focus:outline-none font-mono"
-                                            data-testid="slack-webhook-input"
-                                        />
-                                        {slackWebhook.trim() && !slackWebhook.startsWith('https://hooks.slack.com/') ? null : (
-                                            <Button size="sm" onClick={() => saveSlack()} disabled={savingSlack || !slackWebhook.trim().startsWith('https://hooks.slack.com/')} className="rounded-xl px-4" data-testid="slack-save-btn">
-                                                {savingSlack ? 'Connecting...' : 'Connect'}
-                                            </Button>
-                                        )}
-                                    </div>
-                                    {slackWebhook && !slackWebhook.startsWith('https://hooks.slack.com/') && (
-                                        <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                                            <span>⚠️</span> Doesn&apos;t look like a Slack URL. Should start with <code className="bg-red-50 px-1 rounded">https://hooks.slack.com/</code>
-                                        </p>
-                                    )}
-                                    {slackWebhook.startsWith('https://hooks.slack.com/') && (
-                                        <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                            <span>✓</span> Looks good! Auto-connecting...
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
-                                        <Check className="w-4 h-4" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-emerald-900">Slack is connected</p>
-                                        <p className="text-xs text-emerald-700 truncate font-mono mt-0.5">{slackWebhook.replace(/(https:\/\/hooks\.slack\.com\/services\/)([^/]+\/[^/]+)\/.*/, '$1$2/••••••')}</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 flex-wrap">
-                                    <Button variant="outline" size="sm" onClick={testSlack} disabled={testingSlack} data-testid="slack-test-btn" className="rounded-lg">
-                                        {testingSlack ? 'Sending test...' : '📨 Send test message'}
-                                    </Button>
-                                    <Button variant="outline" size="sm" onClick={async () => { const ok = await saveSlack({ value: '', silent: true }); if (ok) { setSlackWebhook(''); setSlackTeamConnected(false); toast.success('Slack disconnected'); } }} className="text-red-600 border-red-200 hover:bg-red-50 rounded-lg">
-                                        Disconnect
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    ) : user?.subscription_tier === 'teams' ? (
-                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-5 space-y-2" data-testid="slack-settings-member">
-                        <div className="flex items-center gap-3">
-                            <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
-                            <div>
-                                <h3 className="font-semibold text-base">Slack</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {slackTeamConnected
-                                        ? (slackBotEnabled
-                                            ? 'Connected. Jarvis DMs after two ignored pings.'
-                                            : 'Connected for channel posts.')
-                                        : 'Ask your admin to connect Slack.'}
-                                </p>
-                            </div>
-                            {slackTeamConnected && (
-                                <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">Connected</span>
-                            )}
-                        </div>
-                    </div>
-                    ) : (
-                    <div className="bg-card text-card-foreground border border-border rounded-2xl p-5" data-testid="slack-settings-upgrade">
-                        <div className="flex items-center gap-3">
-                            <span className="w-10 h-10 rounded-xl bg-[#4A154B]/80 text-white flex items-center justify-center font-bold text-lg">S</span>
-                            <div>
-                                <h3 className="font-semibold text-base">Slack</h3>
-                                <p className="text-xs text-muted-foreground mt-0.5">Available on Teams</p>
-                            </div>
-                        </div>
-                    </div>
-                    )}
-
                     {/* Feedback Link */}
                     <div className="text-center">
                         <a 
@@ -1224,8 +1224,8 @@ const SettingsPage = () => {
                         </Button>
                     </div>
 
-                    {!(user?.subscription_tier === 'teams' && !user?.is_team_owner) && (
-                    <div>
+                    {user?.subscription_tier !== 'teams' && (
+                    <div data-testid="settings-plans">
                         <h2 className="text-2xl font-bold mb-6 text-foreground" style={{ fontFamily: 'Outfit' }}>Plans</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Free Plan */}

@@ -12,7 +12,7 @@ import re
 import secrets
 import httpx
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from typing import List, Optional, Dict, Any
 import uuid
@@ -8956,6 +8956,14 @@ async def test_slack_webhook(body: dict, current_user: dict = Depends(get_curren
     return {"ok": True}
 
 
+def _slack_oauth_configured() -> bool:
+    return bool((os.getenv("SLACK_CLIENT_ID") or "").strip() and (os.getenv("SLACK_CLIENT_SECRET") or "").strip())
+
+
+def _slack_oauth_redirect_uri() -> str:
+    return f"{APP_BASE_URL}/api/integrations/slack/oauth/callback"
+
+
 @api_router.get("/integrations/slack/status")
 async def slack_integration_status(current_user: dict = Depends(get_current_user)):
     """Webhook (channel posts) vs bot (Jarvis DMs ignored assignees)."""
@@ -8966,7 +8974,70 @@ async def slack_integration_status(current_user: dict = Depends(get_current_user
         "webhook": webhook.startswith("https://hooks.slack.com/"),
         "bot": bot,
         "followup_enabled": bot,
+        "oauth": _slack_oauth_configured(),
     }
+
+
+@api_router.get("/integrations/slack/connect")
+async def slack_oauth_connect(current_user: dict = Depends(get_current_user)):
+    """Start Slack OAuth (incoming-webhook). Teams admin only."""
+    if not _can_manage_slack_webhook(current_user):
+        raise HTTPException(status_code=403, detail="Only the Teams admin can connect Slack.")
+    if not _slack_oauth_configured():
+        raise HTTPException(status_code=503, detail="Slack OAuth is not configured")
+    state = secrets.token_urlsafe(24)
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "provider": "slack",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    params = urlencode({
+        "client_id": os.getenv("SLACK_CLIENT_ID").strip(),
+        "scope": "incoming-webhook",
+        "redirect_uri": _slack_oauth_redirect_uri(),
+        "state": state,
+    })
+    return {"auth_url": f"https://slack.com/oauth/v2/authorize?{params}"}
+
+
+@api_router.get("/integrations/slack/oauth/callback")
+async def slack_oauth_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Finish Slack OAuth and store the incoming webhook URL."""
+    fail = f"{APP_BASE_URL}/settings?slack=failed"
+    if error or not code or not state:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?slack=denied")
+    state_doc = await db.oauth_states.find_one({"state": state, "provider": "slack"})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    await db.oauth_states.delete_one({"state": state, "provider": "slack"})
+    try:
+        async with httpx.AsyncClient(timeout=12) as client_http:
+            r = await client_http.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "client_id": (os.getenv("SLACK_CLIENT_ID") or "").strip(),
+                    "client_secret": (os.getenv("SLACK_CLIENT_SECRET") or "").strip(),
+                    "code": code,
+                    "redirect_uri": _slack_oauth_redirect_uri(),
+                },
+            )
+        data = r.json() if r.content else {}
+    except Exception:
+        return RedirectResponse(url=fail)
+    webhook = str(((data or {}).get("incoming_webhook") or {}).get("url") or "").strip()
+    if not (data or {}).get("ok") or not webhook.startswith("https://hooks.slack.com/"):
+        return RedirectResponse(url=fail)
+    user = await db.users.find_one({"id": state_doc["user_id"]}, {"_id": 0})
+    if not user or not _can_manage_slack_webhook(user):
+        return RedirectResponse(url=fail)
+    prefs = {**(user.get("preferences") or {}), "slack_webhook_url": webhook}
+    await db.users.update_one({"id": user["id"]}, {"$set": {"preferences": prefs}})
+    return RedirectResponse(url=f"{APP_BASE_URL}/settings?slack=connected")
 
 
 @api_router.post("/slack/events")

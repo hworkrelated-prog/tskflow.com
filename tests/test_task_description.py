@@ -42,7 +42,7 @@ def test_task_card_keeps_border_on_hover():
 def test_settings_slack_is_admin_only():
     src = _read("pages", "SettingsPage.js")
     assert "canManageSlack" in src
-    assert "Only your Teams admin can connect Slack" in src
+    assert "Ask your Teams admin to connect Slack." in src
     assert 'data-testid="slack-settings-member"' in src
     server = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
     assert "Only the Teams admin can connect or change the Slack webhook." in server
