@@ -60,7 +60,9 @@ const GlobalAIDock = () => {
         !!user
         && !HIDDEN.includes(location.pathname)
         && !LANDINGish.includes(location.pathname)
-        && !location.pathname.startsWith('/recording/controls');
+        && !location.pathname.startsWith('/recording/controls')
+        && !location.pathname.startsWith('/api/auth/google')
+        && !location.pathname.startsWith('/oauth/google');
 
     useEffect(() => {
         if (!visible) return undefined;

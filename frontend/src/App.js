@@ -40,6 +40,7 @@ import LegalPage from '@/pages/LegalPage';
 import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
+import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
@@ -484,6 +485,9 @@ function App() {
                     <Route path="/terms" element={<TermsOfService />} />
                     <Route path="/legal" element={<LegalPage />} />
                     <Route path="/contact" element={<ContactPage />} />
+                    <Route path="/api/auth/google/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/api/auth/google/sheets/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/oauth/google/callback" element={<GoogleOAuthHandoff />} />
                     <Route
                         path="/dashboard"
                         element={
