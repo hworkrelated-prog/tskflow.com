@@ -10,7 +10,8 @@ const SELF_ASSIGN_TO_RE = /\bassign(?:ed)?(?:\s+\w+){0,4}\s+to\s+(?:me|myself)\b
 const SELF_TASK_FOR_RE = /\b(?:a\s+)?(?:task|reminder|todo|note)\s+for\s+(?:me|myself)\b/i;
 const SELF_FIRST_PERSON_RE = /\bi(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\b/i;
 const DELIVER_TO_ME_RE = /\b(?:send|give|email|forward|cc|show|tell|share|text|shoot|get|draft|write)\s+me\b|\b(?:send|give|email|forward|share|draft|write|shoot)\b(?:\s+\S+){0,10}\s+(?:with|to)\s+me\b|\b(?:share|send|email|draft|write)\b(?:\s+\S+){0,10}\s+for\s+me\b/i;
-const HAVE_NAME_RE = /\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:to|go|do|review|send|look|check|update|through)/gi;
+const HAVE_NAME_RE = /\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+(?:to|go|do|review|send|look|check|update|through|that)/gi;
+const TELL_PERSON_RE = /\b(?:make sure (?:to\s+)?|please\s+|kindly\s+|go (?:ahead and\s+)?(?:and\s+)?)?(?:tell|ask|inform|remind)\s+(?!me\b|my\b|the\b|our\b|them\b|him\b|her\b)([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,3})(?:\s+that)?(?:\s+(?:she|he|they))?\s+(?:needs|need|has|have|gotta|got to|should|must|will|to)\b/gi;
 const ASKED_TO_NAME_RE = /\b(?:i(?:'ve| have|'d| had)?\s+)?(?:just\s+)?(?:please\s+)?(?:asked|told|ask|tell)\s+(?!me\b)([A-Za-z][A-Za-z']*)\s+to\b/gi;
 const WANT_PERSON_TO_RE = /\bi\s+(?:want|need|would like)\s+(?!my\b|the\b|our\b|to\b|them\b)([A-Za-z][A-Za-z']*)\s+to\b/gi;
 const HAVE_NAME_RUN_RE = /\b(?:have|had|get|got)\s+([A-Za-z][A-Za-z']*)\s+run\b/gi;
@@ -22,7 +23,11 @@ const NAME_STOP = new Set([
     'please', 'today', 'tomorrow', 'team', 'all', 'each', 'both', 'his', 'hers',
     'just', 'also', 'then', 'can',
 ]);
-const NAME_TRAIL_STOP = new Set([...NAME_STOP, 'to', 'go', 'do', 'run', 'give', 'share', 'send', 'through', 'and']);
+const NAME_TRAIL_STOP = new Set([
+    ...NAME_STOP, 'to', 'go', 'do', 'run', 'give', 'share', 'send', 'through', 'and',
+    'that', 'needs', 'need', 'has', 'have', 'should', 'must', 'will',
+]);
+const TIMEISH_RE = /^(?:(?:due|by|at|before|until)\s+)?(?:asap|eod|eom|now|immediately|urgent|today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week|end of (?:the )?day|end of (?:the )?month|\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s*(?:pst|pdt|pt|est|edt|et|cst|mst|utc|gmt))?|in\s+\d+\s*(?:min|mins|minutes|hours?|days?|weeks?))$/i;
 
 function cleanNameHint(name) {
     const tokens = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -30,14 +35,80 @@ function cleanNameHint(name) {
     while (tokens.length && NAME_TRAIL_STOP.has(tokens[tokens.length - 1].toLowerCase().replace(/[.,;:]+$/g, ''))) tokens.pop();
     const first = (tokens[0] || '').toLowerCase().replace(/[.,;:]+$/g, '');
     if (!tokens.length || NAME_STOP.has(first) || first.length < 2) return '';
-    return tokens.join(' ');
+    const deduped = [];
+    tokens.forEach((tok) => {
+        if (!deduped.length || deduped[deduped.length - 1].toLowerCase() !== tok.toLowerCase()) {
+            deduped.push(tok);
+        }
+    });
+    return deduped.join(' ');
+}
+
+/** Undo dictation glue: sheNeeds → she Needs, sendPictures → send Pictures. */
+export function repairMessyPrompt(text) {
+    let s = String(text || '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/([A-Za-z])(\d)/g, '$1 $2')
+        .replace(/(\d)([A-Za-z])/g, '$1 $2')
+        .replace(/\bof\s+via\b/gi, 'via');
+    for (const word of ['That', 'This', 'She', 'He', 'They', 'Needs', 'Need', 'Has', 'Have', 'Will', 'Must', 'Should', 'The', 'And', 'Of', 'To', 'For']) {
+        s = s.replace(new RegExp(`\\b${word}\\b`, 'g'), word.toLowerCase());
+    }
+    return s.replace(/\s+/g, ' ').trim();
+}
+
+export function looksLikeTimeOnly(text) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return false;
+    if (TIMEISH_RE.test(t)) return true;
+    return /^(?:(?:due|by|at|before|until)\s+)?\d{1,2}(?::\d{2})?\s*(?:o'?clock\s*)?(?:am|pm)?(?:\s*(?:pst|pdt|pt|est|edt|et|cst|mst|utc|gmt))?\s*$/i.test(t);
+}
+
+export function looksLikePersonName(text) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim().replace(/^@/, '');
+    if (!t || looksLikeTimeOnly(t)) return false;
+    if (NAME_STOP.has(t.toLowerCase())) return false;
+    if (!/^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3}$/.test(t)) return false;
+    const first = t.split(/\s+/)[0].toLowerCase().replace(/[.,;:]+$/g, '');
+    if (NAME_STOP.has(first)) return false;
+    if (/\b(need|send|review|make|tell|ask|have|complete|fix|update|create|remind|submit|share|draft|call|write|please)\b/i.test(t)) {
+        return false;
+    }
+    return true;
+}
+
+export function looksLikeFollowupFragment(text) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return true;
+    if (/^(yes|no|yeah|yep|y|n|ok|okay|sure|thanks|please)$/i.test(t)) return true;
+    if (looksLikeTimeOnly(t) || looksLikePersonName(t)) return true;
+    const words = t.split(/\s+/);
+    if (
+        words.length <= 6
+        && !/\b(need|send|review|make sure|tell|ask|have|complete|fix|update|create|remind|assign|submit|share|draft|call|write|prepare|finish|solve|drivers?|pictures?)\b/i.test(t)
+    ) {
+        return true;
+    }
+    return false;
+}
+
+export function classifyClarifyAnswer(question, value) {
+    const v = String(value || '').replace(/\s+/g, ' ').trim();
+    const q = String(question || '');
+    if (!v) return {};
+    if (looksLikeTimeOnly(v)) return { when: v };
+    if (looksLikePersonName(v) || /\b(team|reports|everyone)\b/i.test(v)) return { who: v };
+    if (/who|own|assign/i.test(q)) return { who: v };
+    if (/when|due|deadline/i.test(q)) return { when: v };
+    if (/often|repeat|cadence/i.test(q)) return { cadence: v };
+    return { extra: v };
 }
 
 export function nameHintsFromText(text) {
-    const t = String(text || '');
+    const t = repairMessyPrompt(String(text || ''));
     if (!t.trim()) return [];
     const found = [];
-    for (const rx of [ASKED_TO_NAME_RE, WANT_PERSON_TO_RE, HAVE_NAME_RUN_RE, HAVE_NAME_RE, OWNER_NEEDS_RE]) {
+    for (const rx of [TELL_PERSON_RE, ASKED_TO_NAME_RE, WANT_PERSON_TO_RE, HAVE_NAME_RUN_RE, HAVE_NAME_RE, OWNER_NEEDS_RE]) {
         rx.lastIndex = 0;
         let m = rx.exec(t);
         while (m) {
@@ -48,7 +119,11 @@ export function nameHintsFromText(text) {
             m = rx.exec(t);
         }
     }
-    return found;
+    return found.filter((name) => {
+        const others = found.filter((o) => o.toLowerCase() !== name.toLowerCase());
+        const tokens = others.flatMap((o) => o.toLowerCase().split(/\s+/));
+        return !(name.split(/\s+/).length === 1 && tokens.includes(name.toLowerCase()));
+    });
 }
 
 export function subjectForPhrase(text) {
@@ -74,7 +149,13 @@ export function matchAssigneesFromPeople(text, people) {
             const name = String(p?.name || '').toLowerCase();
             if (!name) return false;
             const tokens = name.split(/\s+/);
-            return name === n || name.startsWith(`${n} `) || tokens[0] === n || tokens.includes(n);
+            const hintTokens = n.split(/\s+/);
+            const first = hintTokens[0];
+            return name === n
+                || name.startsWith(`${n} `)
+                || tokens[0] === n
+                || tokens.includes(n)
+                || (first && (tokens[0] === first || tokens.includes(first)));
         });
         if (matches.length !== 1) continue;
         const p = matches[0];

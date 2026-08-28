@@ -39,6 +39,9 @@ export function layoutTaskDescription(raw) {
     // Strip clarifying-chat debris that used to leak into assignee copy
     s = s.replace(/\s*\.?\s*Additional info:\s*[\s\S]*?(?=(?:\n\n(?:Next\s+)?steps?:)|$)/i, '');
     s = s.replace(/\s*\.?\s*Assign to\s+(?:ASAP|EOD|EOM|today|tomorrow|urgent|now)\.?/gi, '');
+    s = s.replace(/\s*\.?\s*Assign this to\s+[^.|\n]+\.?/gi, '');
+    s = s.replace(/\s*\.?\s*This is due\s+[^.|\n]+\.?/gi, '');
+    s = s.replace(/\bThis is\.\s*/gi, '');
     s = s.replace(/\s*When should this be done by\?\s*:\s*[^\n.]+/gi, '');
     // Speak TO the assignee - never "with their understanding"
     s = s.replace(
@@ -130,7 +133,8 @@ const TITLE_DANGLING = new Set([
 /** Titles like "Complete This is a reminder…" - drop the glued command. */
 export function displayTaskTitle(raw) {
     let s = cleanDisplayText(raw).replace(/\s+/g, ' ').trim();
-    s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
+    s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b|\d{1,2}\b))/i, '');
+    s = s.replace(/^Assign this\b.*$/i, '');
     s = s.replace(/^this is a reminder for myself\s+to\s+/i, '');
     s = s.replace(
         /^(please\s+)?(update|complete|finish|review|send|share|prepare|submit)\s+(their|his|her)\s+/i,
@@ -159,6 +163,11 @@ export function fallbackTaskTitle(seed) {
         .slice(0, 8)
         .join(' ');
     if (!cleaned) return '';
+    if (/^\d{1,2}(?::\d{2})?\s*(am|pm)?(\s*(pst|pdt|pt|est|et))?$/i.test(cleaned)
+        || /^assign this\b/i.test(cleaned)
+        || /^(complete\s+)?\d{1,2}\b/i.test(cleaned)) {
+        return '';
+    }
     if (/^(complete|this|that|these|those|i|my|prepare|send|review|update|create|fix|draft|remind)\b/i.test(cleaned)) {
         return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
     }

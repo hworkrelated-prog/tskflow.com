@@ -9500,7 +9500,9 @@ class SmartParseRequest(BaseModel):
 
 SMART_PARSE_SYSTEM = """You are Tskflow's task-creation AI — a sharp, fully-present colleague, not a form parser.
 
-Read the request the way a human would: messy speech, half-sentences, slang, implied owners ("her", "same as last time", "the team"), work buried in a story, and follow-ups that only make sense with the recent conversation. Infer everything you can. Only leave a field empty if it is truly unknown.
+Read the request the way a human would: messy speech, glued words (sendPictures, sheNeeds), half-sentences, slang, implied owners ("her", "same as last time", "the team"), work buried in a story, and follow-ups that only make sense with the recent conversation. Infer everything you can. Only leave a field empty if it is truly unknown.
+
+The CURRENT user text may be a short follow-up ("7 am pst", a name, "yes"). NEVER treat a follow-up as the task itself. Reconstruct the original ask from Recent conversation, then apply the follow-up as metadata (due date, assignee, tweak). Title and description must come from the original work, not from "7 am" or "Assign this".
 
 Return ONE JSON object ONLY (no markdown, no prose):
 {
@@ -9572,7 +9574,9 @@ PRIORITY RULES:
 
 ASSIGNEE HINTS:
 - Extract explicit @mentions (strip @ prefix)
-- Extract first names/full names that appear in a "for X", "assign to X", "have X", "tell X", "@X", "I want X to...", "I need my @X to..." pattern
+- Extract first names/full names that appear in a "for X", "assign to X", "have X", "tell X", "make sure to tell X", "@X", "I want X to...", "I need my @X to..." pattern
+- Glued speech still names an owner: "tell Sophia Sophia SadikiThat sheNeeds to…" → assignee_hints: ["Sophia"]. Split camelCase (sheNeeds → she needs, sendPictures → send pictures) before you decide nobody was named.
+- "Make sure to tell {Name}…" / "tell {Name} that she/he needs to…" means that person owns the work. Do NOT ask who. Do NOT pick a later name in the story ("solve David…") as the assignee.
 - "to their managers" / "to your manager" is WHERE the work is delivered, NOT an assignee. Do not add "managers" to assignee_hints unless they were @mentioned as the owner.
 - Extract team/group names that OWN the work (e.g. "@HM Org", "sales team"). The people who do the verb are the assignees.
 - If speaker refers to "my team" or "the team" or "our team", include the literal string "my team" (everyone under them)
@@ -9596,6 +9600,9 @@ CLARIFYING QUESTIONS:
 - Prefer asking about the assignee (who) over the due date (when), and cadence if this is a recurring series.
 - Only ask if something critical is missing. Don't ask questions the sentence (or earlier chat) already answered.
 - After they answer, combine the original request + every answer into one complete task. Do not forget earlier details.
+- If you asked who and they reply with a time ("7 am pst"), that is a DUE DATE, not an assignee. Keep the original work; set due_date; ask who only if still unknown.
+- If you asked when and they reply with a name, that is the assignee, not the due date.
+- Never write title/description from a follow-up fragment. "Complete 7 am pst" / "Please 7 am pst. Assign this to…" is always wrong.
 - Prefer yes/no or A-or-B questions when there are two clear options; otherwise one short open question.
 - Never ask about title, description, priority, category, or success criteria if you can infer them.
 - Never ask about success criteria / expectations — those are optional.
@@ -9639,7 +9646,8 @@ DESCRIPTION RULES (critical — write for the assignee, not the manager):
   Manager-voice wrappers to strip: "Tell my team that…", "Tell my team to…", "Ask my team to…",
   "I want them to…", "we need to…", "have X do…". Those are routing, not the task.
 - NEVER include clarifying-chat debris: "Additional info:", "When should this be done by?: …",
-  "Assign to ASAP", or any Q&A labels. Due dates belong in due_date — not the description body.
+  "Assign to ASAP", "Assign this to {name}", "This is due {when}", or any Q&A labels.
+  Due dates belong in due_date; people belong in assignee_hints — not the description body.
 - Screen-recording response asks: write "Please review the assigned work and reply with a screen recording
   that shows your understanding." NEVER "with their understanding" (you are speaking TO them).
 - Example: "Tell my team that on Monday we need to finish outreach training"
@@ -9863,8 +9871,18 @@ _EVERYONE_HINTS = {
 _HAVE_NAME_RE = re.compile(
     r"\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+"
     r"([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+"
-    r"(?:to|go|do|review|send|look|check|update|through)",
+    r"(?:to|go|do|review|send|look|check|update|through|that)",
     re.I,
+)
+# "Make sure to tell Sophia … that she needs to" / glued last names after repair.
+_TELL_PERSON_RE = re.compile(
+    r"(?i)\b(?:make sure (?:to\s+)?|please\s+|kindly\s+|go (?:ahead and\s+)?(?:and\s+)?)?"
+    r"(?:tell|ask|inform|remind)\s+"
+    r"(?!me\b|my\b|the\b|our\b|them\b|him\b|her\b)"
+    r"([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,3})"
+    r"(?:\s+that)?"
+    r"(?:\s+(?:she|he|they))?"
+    r"\s+(?:needs|need|has|have|gotta|got to|should|must|will|to)\b"
 )
 _OWNER_NEEDS_RE = re.compile(
     r"\b([A-Za-z][A-Za-z']*(?:\s+[A-Za-z][A-Za-z']*){0,2})\s+"
@@ -9891,6 +9909,7 @@ _NAME_STOP = {
 }
 _NAME_TRAIL_STOP = _NAME_STOP | {
     "to", "go", "do", "run", "give", "share", "send", "through", "and",
+    "that", "needs", "need", "has", "have", "should", "must", "will",
 }
 
 
@@ -9904,15 +9923,24 @@ def _classify_team_hint(low: str) -> Optional[str]:
 
 
 _TIMEISH_ANSWER_RE = re.compile(
-    r"(?i)^(asap|eod|eom|now|immediately|urgent|today|tomorrow|tonight|"
+    r"(?i)^(?:(?:due|by|at|before|until)\s+)?"
+    r"(?:"
+    r"asap|eod|eom|now|immediately|urgent|today|tomorrow|tonight|"
     r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
     r"next week|this week|end of (?:the )?day|end of (?:the )?month|"
-    r"\d{1,2}(?::\d{2})?\s*(?:am|pm|pst|est|cst|mst)?|"
+    r"\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s*(?:pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?|"
     r"(?:by\s+)?(?:fri|mon|tue|wed|thu|sat|sun)\w*"
     r"(?:\s+\w+){0,4}|"
-    r"in\s+\d+\s*(?:min|mins|minutes|hours?|days?|weeks?))$"
+    r"in\s+\d+\s*(?:min|mins|minutes|hours?|days?|weeks?)"
+    r")$"
 )
 _PRIORITYISH_ANSWER = {"high", "low", "medium", "urgent", "asap"}
+_FRAGMENT_YESNO_RE = re.compile(
+    r"(?i)^(yes|no|yeah|yep|y|n|ok|okay|sure|thanks|please)$"
+)
+_PERSONISH_ANSWER_RE = re.compile(
+    r"(?i)^(?:@)?[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3}$"
+)
 
 
 def _hints_from_answers(answers: Optional[dict]) -> List[str]:
@@ -9957,6 +9985,182 @@ def _answers_as_natural_context(answers: Optional[dict]) -> str:
     return ". ".join(bits)
 
 
+def _looks_like_time_only(text: str) -> bool:
+    t = re.sub(r"\s+", " ", (text or "").strip())
+    if not t:
+        return False
+    if _TIMEISH_ANSWER_RE.match(t):
+        return True
+    return bool(re.match(
+        r"(?i)^(?:(?:due|by|at|before|until)\s+)?"
+        r"\d{1,2}(?::\d{2})?\s*(?:o'?clock\s*)?(?:am|pm)?"
+        r"(?:\s*(?:pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?\s*$",
+        t,
+    ))
+
+
+def _looks_like_person_name(text: str) -> bool:
+    t = re.sub(r"\s+", " ", (text or "").strip().lstrip("@"))
+    if not t or _looks_like_time_only(t):
+        return False
+    if t.lower() in _NAME_STOP or t.lower() in _PRIORITYISH_ANSWER:
+        return False
+    if not _PERSONISH_ANSWER_RE.match(t):
+        return False
+    first = t.split()[0].lower().strip(".,;:")
+    if first in _NAME_STOP:
+        return False
+    if re.search(r"(?i)\b(need|send|review|make|tell|ask|have|complete|fix|update|create|remind|submit|share|draft|call|write|please)\b", t):
+        return False
+    return True
+
+
+def _looks_like_followup_fragment(text: str) -> bool:
+    """True when this turn is an answer/tweak, not a new task request."""
+    t = re.sub(r"\s+", " ", (text or "").strip())
+    if not t:
+        return True
+    if _FRAGMENT_YESNO_RE.match(t) or _looks_like_time_only(t) or _looks_like_person_name(t):
+        return True
+    words = t.split()
+    if len(words) <= 6 and not re.search(
+        r"(?i)\b(need|send|review|make sure|tell|ask|have|complete|fix|update|create|"
+        r"remind|assign|submit|share|draft|call|write|prepare|finish|solve|drivers?|pictures?)\b",
+        t,
+    ):
+        return True
+    return False
+
+
+def _split_glued_tokens(text: str) -> str:
+    """Undo dictation glue: sheNeeds → she Needs, sendPictures → send Pictures."""
+    s = str(text or "")
+    if not s:
+        return ""
+    s = re.sub(r"([a-z])([A-Z])", r"\1 \2", s)
+    s = re.sub(r"([A-Za-z])(\d)", r"\1 \2", s)
+    s = re.sub(r"(\d)([A-Za-z])", r"\1 \2", s)
+    s = re.sub(r"(?i)\bof\s+via\b", "via", s)
+    for word in (
+        "That", "This", "She", "He", "They", "Needs", "Need", "Has", "Have",
+        "Will", "Must", "Should", "The", "And", "Of", "To", "For",
+    ):
+        s = re.sub(rf"\b{word}\b", word.lower(), s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _dedupe_name_tokens(name: str) -> str:
+    tokens = [t for t in re.split(r"\s+", (name or "").strip()) if t]
+    out = []
+    for tok in tokens:
+        if out and out[-1].lower() == tok.lower():
+            continue
+        out.append(tok)
+    return " ".join(out)
+
+
+def _classify_clarify_answer(question: str, value: str) -> dict:
+    """Route a chat reply by what it *is*, not only by the question we asked."""
+    val = re.sub(r"\s+", " ", (value or "").strip())
+    key = str(question or "")
+    if not val:
+        return {}
+    if _looks_like_time_only(val):
+        return {"when": val}
+    if _looks_like_person_name(val) or re.search(r"(?i)\b(team|reports|everyone)\b", val):
+        return {"who": val}
+    if re.search(r"(?i)who|own|assign", key):
+        return {"who": val}
+    if re.search(r"(?i)when|due|deadline", key):
+        return {"when": val}
+    if re.search(r"(?i)often|repeat|cadence", key):
+        return {"cadence": val}
+    return {"extra": val}
+
+
+def _remap_clarify_answers(answers: Optional[dict]) -> dict:
+    """If they answered 'who' with a time (or 'when' with a name), put it in the right slot."""
+    out: dict = {}
+    for k, v in (answers or {}).items():
+        classified = _classify_clarify_answer(str(k or ""), str(v or ""))
+        if classified.get("when"):
+            out["When should this be done by?"] = classified["when"]
+        elif classified.get("who"):
+            out["Who should this be assigned to?"] = classified["who"]
+        elif classified.get("cadence"):
+            out["How often should this repeat - daily, weekdays, weekly, or monthly?"] = classified["cadence"]
+        elif classified.get("extra"):
+            out[str(k or "note")] = classified["extra"]
+        elif str(v or "").strip():
+            out[str(k or "")] = str(v).strip()
+    return out
+
+
+def _primary_user_request(text: str, history: Optional[List[dict]] = None) -> str:
+    """Never let a short follow-up replace the original task ask."""
+    current = (text or "").strip()
+    if current and not _looks_like_followup_fragment(current):
+        return current
+    for turn in history or []:
+        if not isinstance(turn, dict):
+            continue
+        if (turn.get("role") or "").strip().lower() != "user":
+            continue
+        ht = (turn.get("text") or "").strip()
+        if ht and not _looks_like_followup_fragment(ht) and len(ht) >= 8:
+            return ht
+    return current
+
+
+def _canonicalize_task_input(
+    text: str,
+    history: Optional[List[dict]] = None,
+    answers: Optional[dict] = None,
+) -> dict:
+    """Recover the original ask, repair glued speech, and classify follow-ups."""
+    repaired_current, speech_hints = _repair_speech_prompt(text or "")
+    current = (repaired_current or text or "").strip()
+    primary = _primary_user_request(current, history)
+    if primary != current:
+        repaired_primary, extra_hints = _repair_speech_prompt(primary)
+        primary = (repaired_primary or primary).strip()
+        for h in extra_hints:
+            if h and h not in speech_hints:
+                speech_hints.append(h)
+    else:
+        primary = current or primary
+
+    remapped = _remap_clarify_answers(answers)
+    # Current turn was a fragment that never made it into answers.
+    if current and current != primary and _looks_like_followup_fragment(current):
+        classified = _classify_clarify_answer("", current)
+        if classified.get("when") and "When should this be done by?" not in remapped:
+            remapped["When should this be done by?"] = classified["when"]
+        elif classified.get("who") and "Who should this be assigned to?" not in remapped:
+            remapped["Who should this be assigned to?"] = classified["who"]
+        elif classified.get("extra"):
+            remapped.setdefault("note", classified["extra"])
+
+    extras = []
+    for k, v in remapped.items():
+        if re.search(r"(?i)who|own|assign|when|due|deadline|often|repeat|cadence", str(k or "")):
+            continue
+        val = str(v or "").strip()
+        if val and not _looks_like_time_only(val) and not _looks_like_person_name(val):
+            extras.append(val)
+    work = primary
+    if extras:
+        extra_blob = ". ".join(extras)
+        if extra_blob.lower() not in work.lower():
+            work = f"{work.rstrip('. ')}. {extra_blob}".strip()
+    return {
+        "text": work,
+        "answers": remapped,
+        "speech_hints": speech_hints,
+        "primary": primary,
+    }
+
+
 def _clean_name_hint(name: str) -> str:
     tokens = [t for t in re.split(r"\s+", (name or "").strip()) if t]
     while tokens and tokens[0].lower().strip(".,;:") in _NAME_STOP:
@@ -9968,24 +10172,44 @@ def _clean_name_hint(name: str) -> str:
     first = tokens[0].lower().strip(".,;:")
     if first in _NAME_STOP or len(first) < 2:
         return ""
-    return " ".join(tokens)
+    return _dedupe_name_tokens(" ".join(tokens))
 
 
 def _name_hints_from_text(text: str) -> List[str]:
-    """Pull first/full names from 'have Harold…' / 'I've asked Sam to…' / 'Benjamin needs to…'."""
+    """Pull first/full names from 'have Harold…' / 'I've asked Sam to…' / 'tell Sophia…'."""
     if not text:
         return []
+    source = _split_glued_tokens(text)
     found = []
     seen = set()
-    for rx in (_ASKED_TO_NAME_RE, _WANT_PERSON_TO_RE, _HAVE_NAME_RUN_RE, _HAVE_NAME_RE, _OWNER_NEEDS_RE):
-        for m in rx.finditer(text):
+    for rx in (
+        _TELL_PERSON_RE,
+        _ASKED_TO_NAME_RE,
+        _WANT_PERSON_TO_RE,
+        _HAVE_NAME_RUN_RE,
+        _HAVE_NAME_RE,
+        _OWNER_NEEDS_RE,
+    ):
+        for m in rx.finditer(source):
             name = _clean_name_hint(m.group(1) or "")
             key = name.lower()
             if not name or key in seen:
                 continue
             seen.add(key)
             found.append(name)
-    return found
+    # Drop "Sadiki" when "Sophia Sadiki" is already the owner
+    kept = []
+    for name in found:
+        tokens_of_others = {
+            tok
+            for other in found
+            if other.lower() != name.lower()
+            for tok in other.lower().split()
+        }
+        if name.lower() in tokens_of_others and len(name.split()) == 1:
+            continue
+        kept.append(name)
+    return kept
 
 
 _SELF_REMIND_RE = re.compile(r"(?i)\b(?:remind|nudge|ping|notify)\s+me\b")
@@ -10249,8 +10473,11 @@ def _repair_speech_prompt(text: str) -> tuple:
     """
     if not text:
         return "", []
-    s = str(text).strip()
+    s = _split_glued_tokens(str(text).strip())
     hints: List[str] = []
+    for name in _name_hints_from_text(s):
+        if name and name not in hints:
+            hints.append(name)
 
     m = re.match(
         r"^(?:[Pp]lease\s+)?[Cc]an\s+you\s+([A-Z][A-Za-z'.-]{1,30})"
@@ -10332,7 +10559,7 @@ _SUBJECT_STOP = {
 
 def _normalize_spoken_ask(text: str) -> str:
     """Fix dictation glue so clauses and owners parse as a human would hear them."""
-    s = str(text or "").strip()
+    s = _split_glued_tokens(str(text or "").strip())
     if not s:
         return ""
     s = re.sub(r"(?i)\bi(?:'ve| have|'d| had)\s+(asked|told)\s+", r"\1 ", s)
@@ -10351,6 +10578,16 @@ def _normalize_spoken_ask(text: str) -> str:
     )
     s = re.sub(r"(?i)\b(context)\s+(share|send|draft|write)\b", r"\1 and \2", s)
     s = re.sub(r"(?i)\b(context)\s+and\s+(share|send|draft|write)\b", r"\1, and \2", s)
+    # "which is to have the drivers be able to send pictures" → the actual work
+    m_which = re.search(r"(?i)\bwhich is(?:\s+to)?\s+(.+)$", s)
+    if m_which and len((m_which.group(1) or "").split()) >= 4:
+        s = m_which.group(1).strip()
+    s = re.sub(
+        r"(?i)^(?:to\s+)?have\s+(?:the\s+)?(.+?)\s+be able to\s+",
+        r"let \1 ",
+        s,
+    )
+    s = re.sub(r"(?i)\bbe able to\s+", "", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -10423,6 +10660,23 @@ def _copy_drops_prompt_facts(raw: str, title: str, description: str = "") -> boo
     if re.search(r"(?i)\bdo the work\b", description or "") and re.search(
         r"(?i)\b(template|ai agent|account|email)\b", raw or ""
     ):
+        return True
+    # Original ask had real work nouns that vanished (follow-up stole the title).
+    blob_words = set(re.findall(r"[a-z]{5,}", blob))
+    stop = {
+        "about", "after", "again", "being", "could", "make", "sure", "tell", "asked",
+        "please", "today", "tomorrow", "needs", "should", "would", "their", "there",
+        "these", "those", "which", "where", "whose", "while", "have", "able", "biggest",
+        "problem", "solve", "assign", "complete", "thanks",
+    }
+    name_like = {n.lower() for n in re.findall(r"\b[A-Z][A-Za-z']{2,}", raw or "")}
+    content = []
+    for w in re.findall(r"[a-z]{5,}", (raw or "").lower()):
+        if w in stop or w in content or w in name_like:
+            continue
+        content.append(w)
+    survived = [w for w in content if w in blob_words]
+    if len(content) >= 3 and len(raw or "") > 40 and not survived:
         return True
     return False
 
@@ -10631,10 +10885,21 @@ def _strip_clarify_leakage(text: str) -> str:
         s,
     )
     s = re.sub(
+        r"(?i)\s*\.?\s*Assign this to\s+[^.\n]+\.?",
+        "",
+        s,
+    )
+    s = re.sub(
+        r"(?i)\s*\.?\s*This is due\s+[^.\n]+\.?",
+        "",
+        s,
+    )
+    s = re.sub(
         r"(?i)\s*When should this be done by\?\s*:\s*[^.|\n]+",
         "",
         s,
     )
+    s = re.sub(r"(?i)\bThis is\.\s*", " ", s)
     return re.sub(r"[ \t]{2,}", " ", s).strip(" .")
 
 
@@ -10920,6 +11185,14 @@ def _infer_next_steps(desc: str, title: str = "", self_assign: bool = False) -> 
         steps.append("Review the material and note anything that needs a decision.")
     if re.search(r"(?i)\b(eod|end of day)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append("Send the EOD update.")
+    if re.search(r"(?i)\b(picture|photo|image)s?\b", blob):
+        if re.search(r"(?i)\bdrivers?\b", blob):
+            steps = [
+                "Make it possible for drivers to send pictures during the trip.",
+                "Confirm they can attach photos without extra steps.",
+            ]
+        else:
+            steps.append("Collect and send the pictures.")
     if re.search(r"(?i)\b(meet|talk|meeting)\b", blob) and not re.search(r"(?i)\bsubmit\b", blob):
         steps.append("Complete the conversation and capture the outcome.")
     elif re.search(r"(?i)\bcall\b", blob) and not re.search(r"(?i)\b(bamfam|submit)\b", blob):
@@ -10987,10 +11260,15 @@ def _copy_looks_illogical(title: str, description: str) -> bool:
         return True
     # Clarifying answers or third-person "their" leaked into assignee-facing copy
     if re.search(
-        r"(?i)additional info:|assign to asap|with their understanding|"
-        r"when should this be done by\?",
+        r"(?i)additional info:|assign to asap|assign this to|this is due |"
+        r"with their understanding|when should this be done by\?",
         description or "",
     ):
+        return True
+    lead_l = (first or "").strip()
+    if _looks_like_time_only(lead_l) or re.match(r"(?i)^please\s+\d{1,2}\b", lead_l):
+        return True
+    if _title_is_time_or_routing(title or ""):
         return True
     return False
 
@@ -11081,12 +11359,44 @@ def _drop_destination_assignee_hints(hints: List[str], text: str) -> List[str]:
     return out
 
 
+def _title_is_time_or_routing(title: str) -> bool:
+    t = re.sub(r"\s+", " ", (title or "").strip())
+    if not t:
+        return False
+    if _looks_like_time_only(t) or _looks_like_time_only(re.sub(r"(?i)^complete\s+", "", t)):
+        return True
+    if re.match(r"(?i)^(?:complete\s+)?assign\s+this\b", t):
+        return True
+    if re.match(r"(?i)^complete\s+\d{1,2}\b", t):
+        return True
+    clock = re.search(
+        r"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)(?:\s*(?:pst|pdt|pt|est|et))?\b",
+        t,
+    )
+    if clock and not re.search(
+        r"(?i)\b(send|review|update|call|fix|submit|share|draft|driver|picture|photo|template|report|email)\b",
+        t,
+    ):
+        filler = {
+            "complete", "am", "pm", "pst", "pdt", "est", "et", "at", "by", "due",
+            "this", "assign", "to", "please",
+        }
+        words = [w for w in re.findall(r"[a-z]+", t.lower()) if w not in filler]
+        if len(words) <= 1:
+            return True
+    return False
+
+
 def _title_from_work_text(work: str) -> str:
     """Build a short imperative title from cleaned work text."""
     if not work:
         return ""
     raw_work = work
+    if _title_is_time_or_routing(work) or _looks_like_time_only(work):
+        return ""
     s = _compact_title_work(_normalize_spoken_ask(work))
+    if _title_is_time_or_routing(s) or _looks_like_time_only(s):
+        return ""
     s = re.sub(
         r"(?i)^i(?:'m\s+going\s+to|'ll|\s+will|\s+need\s+to|\s+have\s+to|\s+gotta|\s+got\s+to|\s+should|\s+must|\s+want\s+to)\s+",
         "",
@@ -11130,12 +11440,18 @@ def _title_from_work_text(work: str) -> str:
     )
     if m_deliver and re.search(r"(?i)\b(template|email|deck|update|report)\b", m_deliver.group(0)):
         s = m_deliver.group(0)
+    elif re.match(r"(?i)^(let|enable|allow)\b", s):
+        pass
     elif m:
         s = m.group(0)
     elif s and re.match(r"(?i)^(this|that|these|those|it|i|my)\b", s):
         # A sentence leftover, not a noun phrase — never "Complete This is a reminder…"
         s = re.sub(r"(?i)^(this is |that is )", "", s).strip()
+    elif s and _looks_like_time_only(s):
+        return ""
     elif s and not re.match(r"(?i)^(complete|send|finish|do|go|review|prepare|update|create|call|fix)\b", s):
+        if _looks_like_time_only(s) or re.match(r"(?i)^assign\s+this\b", s):
+            return ""
         s = f"Complete {s}"
     s = re.sub(r"(?i)\b(by|before|due)\s+.+$", "", s).strip(" .,:;-")
     s = re.sub(r"(?i)\s+to\s+(?:their|your|his|her)\s+managers?\s*$", "", s).strip(" .,:;-")
@@ -11199,6 +11515,7 @@ def _title_looks_bad(title: str, people: List[str], raw_text: str) -> bool:
         or re.search(r"(?i)^please tell\b", title)
         or re.match(r"(?i)^complete\s+(this|that|these|those|it|a reminder)\b", title)
         or re.search(r"(?i)\bthis is a reminder\b", title)
+        or _title_is_time_or_routing(title)
         or _looks_truncated(title)
         or _too_close_to_prompt(title, raw_text)
         or (len(raw_text or "") > 80 and len(title) > 50 and title.lower()[:40] in (raw_text or "").lower())
@@ -11237,6 +11554,8 @@ def _enrich_parse_title_description(parsed: dict, raw_text: str, manager_name: O
     when, distilled_work = _split_when_and_work(work)
     distilled_work = _strip_due_phrases(distilled_work)
     distilled_work = _ground_account_refs(distilled_work, source_text)
+    if _looks_like_time_only(distilled_work) or _title_is_time_or_routing(distilled_work):
+        distilled_work = ""
     title_seed = _strip_manager_voice(title)
     title_seed_when, title_seed_work = _split_when_and_work(title_seed)
     when = when or title_seed_when
@@ -11520,9 +11839,19 @@ async def ai_sense_input(payload: SenseInputRequest, current_user: dict = Depend
 
 @api_router.post("/ai/parse-task")
 async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(get_current_user)):
-    text = (req.text or "").strip()
+    raw_in = (req.text or "").strip()
+    if not raw_in or len(raw_in) < 3:
+        # Follow-up fragments like "7 am" are short; recover from history before giving up.
+        canon_early = _canonicalize_task_input(raw_in, req.history, None)
+        raw_in = (canon_early.get("text") or "").strip()
+        if not raw_in or len(raw_in) < 3:
+            raise HTTPException(status_code=400, detail="Text too short")
+    canon = _canonicalize_task_input(raw_in, req.history, None)
+    text = _strip_clarify_leakage(canon.get("text") or raw_in)
     if not text or len(text) < 3:
         raise HTTPException(status_code=400, detail="Text too short")
+    when_followup = (canon.get("answers") or {}).get("When should this be done by?")
+    who_followup = (canon.get("answers") or {}).get("Who should this be assigned to?")
 
     now = get_pst_now()
     fallback = {
@@ -11548,6 +11877,16 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     if _self_assign_hint(text):
         parsed["assignee_hints"] = ["me"]
         parsed["clarifying_questions"] = []
+    for h in (canon.get("speech_hints") or []):
+        hints0 = list(parsed.get("assignee_hints") or [])
+        if h and h not in hints0:
+            hints0.append(h)
+            parsed["assignee_hints"] = hints0
+    if who_followup and not _looks_like_time_only(who_followup):
+        hints0 = list(parsed.get("assignee_hints") or [])
+        if who_followup not in hints0:
+            hints0.append(who_followup)
+            parsed["assignee_hints"] = hints0
 
     # Merge shape
     for k, v in fallback.items():
@@ -11580,6 +11919,12 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         ))
         if (not parsed.get("due_date")) or explicit_clock:
             parsed["due_date"] = fb
+
+    if when_followup:
+        when_due = _fallback_parse_date_expression(when_followup, now)
+        if when_due:
+            parsed["due_date"] = when_due
+            parsed["due_date_expression"] = when_followup
 
     # ASAP override — if the text is explicitly ASAP/urgent, force within-2h regardless of what LLM said
     low_text = (text or "").lower()
@@ -11658,12 +12003,15 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         cand_title = logical.get("title") or parsed.get("title")
         cand_desc = logical.get("description") or parsed.get("description")
         if not _copy_drops_prompt_facts(text, str(cand_title or ""), str(cand_desc or "")):
-            if logical.get("title"):
-                parsed["title"] = logical["title"]
-            if logical.get("description"):
-                parsed["description"] = _normalize_description_layout(logical["description"])
-            if logical.get("success_criteria"):
-                parsed["success_criteria"] = str(logical["success_criteria"]).strip()[:400]
+            if _title_is_time_or_routing(str(cand_title or "")) or _copy_looks_illogical(str(cand_title or ""), str(cand_desc or "")):
+                pass
+            else:
+                if logical.get("title"):
+                    parsed["title"] = logical["title"]
+                if logical.get("description"):
+                    parsed["description"] = _normalize_description_layout(logical["description"])
+                if logical.get("success_criteria"):
+                    parsed["success_criteria"] = str(logical["success_criteria"]).strip()[:400]
     if self_assign:
         parsed["title"], parsed["description"] = _apply_self_assign_copy(
             str(parsed.get("title") or ""),
@@ -11691,7 +12039,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
             not ar.get("resolved")
             and not ar.get("ambiguous")
             and not parsed.get("assignee_hints")
+            and not _name_hints_from_text(text)
             and not _self_assign_hint(text)
+            and not _prompt_names_other_assignee(text)
         ):
             needs_who = True
 
@@ -11726,21 +12076,42 @@ class QuickCreatePreviewRequest(BaseModel):
 @api_router.post("/ai/quick-create-preview")
 async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dict = Depends(get_current_user)):
     """Parse + resolve → ready-to-confirm preview, chatting through anything still missing."""
-    # Fold clarifying answers into natural language — never "Additional info: Q?: A"
-    # (that used to leak into description as "Assign to ASAP").
-    text = _strip_clarify_leakage(req.text or "")
-    extra_hints = _hints_from_answers(req.answers)
-    context = _answers_as_natural_context(req.answers)
-    if context:
-        text = f"{text}. {context}".strip()
+    canon = _canonicalize_task_input(req.text or "", req.history, req.answers)
+    text = _strip_clarify_leakage(canon.get("text") or "")
+    answers = canon.get("answers") or {}
+    extra_hints = _hints_from_answers(answers)
+    for h in canon.get("speech_hints") or []:
+        if h and h not in extra_hints:
+            extra_hints.append(h)
+    when_val = answers.get("When should this be done by?")
+    who_val = answers.get("Who should this be assigned to?")
+    hint_bits = []
+    if when_val:
+        hint_bits.append(f"due {when_val}")
+    if who_val and not _looks_like_time_only(who_val):
+        hint_bits.append(f"assignee {who_val}")
+        if who_val not in extra_hints:
+            extra_hints.append(who_val)
+    context_hint = req.context_hint
+    if hint_bits:
+        extra = (
+            "Follow-up answers fill missing fields only. Do not use them as the task title or body. "
+            + "; ".join(hint_bits)
+        )
+        context_hint = f"{context_hint} {extra}".strip() if context_hint else extra
 
     parse_req = SmartParseRequest(
         text=text,
         resolve=True,
-        context_hint=req.context_hint,
+        context_hint=context_hint,
         history=req.history,
     )
     parsed = await smart_parse_task(parse_req, current_user)
+    if when_val:
+        when_due = _fallback_parse_date_expression(when_val, get_pst_now())
+        if when_due:
+            parsed["due_date"] = when_due
+            parsed["due_date_expression"] = when_val
     if extra_hints:
         hints = list(parsed.get("assignee_hints") or [])
         keys = {str(h).strip().lstrip("@").lower() for h in hints}
@@ -11751,7 +12122,7 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
         parsed["assignee_hints"] = hints
         parsed["assignee_resolution"] = await _resolve_assignee_hints(hints, current_user)
         ar = parsed.get("assignee_resolution") or {}
-        if ar.get("resolved") or ar.get("ambiguous"):
+        if ar.get("resolved") or ar.get("ambiguous") or _name_hints_from_text(text):
             parsed["clarifying_questions"] = [
                 q for q in (parsed.get("clarifying_questions") or [])
                 if not re.search(r"who|own|assign", q or "", re.I)
@@ -11763,6 +12134,10 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
         parsed["description"] = _normalize_description_layout(parsed["description"])
     if parsed.get("title"):
         parsed["title"] = _strip_clarify_leakage(str(parsed["title"]))
+        if _title_is_time_or_routing(parsed["title"]):
+            rebuilt = _title_from_work_text(text)
+            if rebuilt and not _title_is_time_or_routing(rebuilt):
+                parsed["title"] = rebuilt
     parsed["ready_to_confirm"] = (
         bool(parsed.get("due_date"))
         and len(ar.get("resolved", [])) > 0

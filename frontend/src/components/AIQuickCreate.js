@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
-import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase } from '@/lib/selfAssign';
+import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase, looksLikeTimeOnly, looksLikeFollowupFragment, classifyClarifyAnswer, repairMessyPrompt } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
 
 /*
@@ -102,6 +102,9 @@ const parseConfirmChatEdit = (raw) => {
     } else if (/\b(due|deadline|by)\b/i.test(t) && /\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|asap|eod|next week|in\s+\d+)\b/i.test(t)) {
         patch.due_phrase = t;
         notes.push('updating the due date');
+    } else if (looksLikeTimeOnly(t)) {
+        patch.due_phrase = t;
+        notes.push(`due ${t}`);
     }
 
     if (notes.length) return { kind: 'patch', patch, notes };
@@ -646,7 +649,7 @@ const AIQuickCreate = ({
     };
 
     const applyPreview = (p) => {
-        const sourceText = (activePromptRef.current || text || '').trim();
+        const sourceText = repairMessyPrompt(activePromptRef.current || text || '').trim();
         const sales = !!(p.is_sales_task || looksLikeSales(sourceText, p.title, p.description, p.category));
         const fromParse = p.assignee_resolution?.resolved || [];
         const fromPeople = matchAssigneesFromPeople(sourceText, people);
@@ -704,16 +707,24 @@ const AIQuickCreate = ({
                 .replace(/\b(?:a|an)\s+(?:good|great|nice|solid|quick|strong)\s+/gi, '')
                 .replace(/\s{2,}/g, ' ')
                 .trim();
-            const mShare = seed.match(/\b(share|send|draft|write|email)\b.*$/i);
-            const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look|provide|share|write)\b.*$/i);
-            if (mShare && /template|email|deck|update|report/i.test(mShare[0])) {
-                title = mShare[0].split(/\s+/).slice(0, 10).join(' ');
-            } else if (m) {
-                title = m[0].split(/\s+/).slice(0, 8).join(' ');
-            } else if (/\beod\b|end of day|report/i.test(seed)) {
-                title = 'Send EOD report';
+            if (looksLikeTimeOnly(seed) || /^assign this\b/i.test(seed)) {
+                const fromSource = sourceText
+                    .replace(/\bwhich is(?:\s+to)?\s+/i, '')
+                    .replace(/^(?:to\s+)?have\s+.+?\s+be able to\s+/i, '');
+                const mWork = fromSource.match(/\b(send|share|enable|let|allow|review|update|submit|create|fix)\b.*$/i);
+                title = (mWork ? mWork[0] : fromSource).split(/\s+/).slice(0, 8).join(' ');
             } else {
-                title = fallbackTaskTitle(seed);
+                const mShare = seed.match(/\b(share|send|draft|write|email)\b.*$/i);
+                const m = seed.match(/\b(finalize|update|review|complete|prepare|create|send|call|fix|submit|draft|schedule|align|close|do|check|watch|look|provide|share|write)\b.*$/i);
+                if (mShare && /template|email|deck|update|report/i.test(mShare[0])) {
+                    title = mShare[0].split(/\s+/).slice(0, 10).join(' ');
+                } else if (m) {
+                    title = m[0].split(/\s+/).slice(0, 8).join(' ');
+                } else if (/\beod\b|end of day|report/i.test(seed)) {
+                    title = 'Send EOD report';
+                } else {
+                    title = fallbackTaskTitle(seed);
+                }
             }
             if (account && title && !title.toLowerCase().includes(account.toLowerCase())) {
                 title = `${title.replace(/\s+for\b.*$/i, '').trim()} for ${account}`;
@@ -803,6 +814,7 @@ const AIQuickCreate = ({
         // Skip "who" if we already have a person - a first name / "me" is enough
         const hasAssignees = mergedCount > 0
             || promptMeansSelfAssign(sourceText)
+            || promptNamesSomeoneElse(sourceText)
             || (p.assignee_resolution?.resolved || []).length > 0
             || fromPeople.length > 0
             || /@/.test(sourceText);
@@ -1084,19 +1096,27 @@ const AIQuickCreate = ({
             }
             const looksLikeQuestion = /^(how|what|where|why|when|can i|do you|is there|does|who)\b/i.test(t) && (/\?$/.test(t) || t.split(' ').length < 12);
             appendThread({ role: 'user', text: t });
-            setActivePrompt(t);
-            activePromptRef.current = t;
             setText('');
             setAnswerMode(null);
             if (looksLikeQuestion) {
+                setActivePrompt(t);
+                activePromptRef.current = t;
                 setPreview(null);
                 await runQA(t, { alreadyLogged: true });
                 return;
             }
             const pendingQs = preview?.clarifying_questions || [];
             if (preview && pendingQs.length > 0) {
+                // Keep the original ask. This turn is an answer, not a new task.
                 answerClarify(pendingQs[0], t, { alreadyLogged: true });
                 return;
+            }
+            if (!looksLikeFollowupFragment(t)) {
+                setActivePrompt(t);
+                activePromptRef.current = t;
+            } else if (!activePromptRef.current) {
+                setActivePrompt(t);
+                activePromptRef.current = t;
             }
             // Already ready to send - keep chatting to refine instead of wiping the card.
             const ambiguousNow = preview?.assignee_resolution?.ambiguous || [];
@@ -1294,7 +1314,25 @@ const AIQuickCreate = ({
         if (!opts.alreadyLogged) {
             appendThread({ role: 'user', text: v });
         }
-        const next = { ...answers, [question]: v };
+        const classified = classifyClarifyAnswer(question, v);
+        const next = { ...answers };
+        if (classified.when) {
+            next['When should this be done by?'] = classified.when;
+        } else if (classified.who) {
+            next[question && /who|own|assign/i.test(question) ? question : 'Who should this be assigned to?'] = classified.who;
+        } else if (classified.cadence) {
+            next[question || 'How often should this repeat?'] = classified.cadence;
+        } else if (classified.extra) {
+            next[question] = classified.extra;
+            const seed = activePromptRef.current || activePrompt || '';
+            if (seed && !looksLikeFollowupFragment(classified.extra)) {
+                const merged = `${seed.replace(/[. ]+$/, '')}. ${classified.extra}`;
+                activePromptRef.current = merged;
+                setActivePrompt(merged);
+            }
+        } else {
+            next[question] = v;
+        }
         setAnswers(next);
         setClarifyAnswer('');
         setPeopleSearch('');
