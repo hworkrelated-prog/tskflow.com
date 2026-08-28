@@ -1839,7 +1839,7 @@ const TaskHub = () => {
                                         aria-selected={selected}
                                         data-testid={`dashboard-column-tab-${tab.id}`}
                                         onClick={() => selectColumn(index)}
-                                        className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white shadow-sm text-teal-700' : 'text-gray-600'}`}
+                                        className={`flex-1 min-w-0 px-2.5 py-2 rounded-full text-sm font-medium transition-all ${selected ? 'bg-white dark:bg-slate-700 shadow-sm text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400'}`}
                                     >
                                         <span className="truncate">{tab.name}</span>
                                         {count > 0 && (
