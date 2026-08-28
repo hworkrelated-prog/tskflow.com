@@ -186,8 +186,10 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .dashboard-panel-card {
-        min-height: 16rem;
+        min-height: 20rem;
         height: 100%;
+        display: flex;
+        flex-direction: column;
     }
 }
 

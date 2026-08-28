@@ -13,7 +13,7 @@ def test_source_uses_delegated_and_swipe_shell():
     assert "Delegated" in hub
     assert "Nothing delegated" in hub
     assert "dashboard-panels" in hub
-    assert "startIndex: urgentColumnIndex" in hub
+    assert "scrollTo(urgentColumnIndex" in hub
     assert "Carousel" in hub
     assert "columnWithSoonestDue" in hub
     assert "Sent</CardTitle>" not in hub

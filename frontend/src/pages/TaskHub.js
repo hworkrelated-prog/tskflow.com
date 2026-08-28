@@ -36,7 +36,7 @@ import { columnWithSoonestDue, DASHBOARD_MOBILE_MQ, DASHBOARD_COLUMNS } from '@/
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const DashboardColumnCard = ({ title, dotClass, testId, children }) => (
-    <Card data-testid={testId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl h-full flex flex-col">
+    <Card data-testid={testId} className="dashboard-panel-card border-2 shadow-soft rounded-2xl h-full min-h-[20rem] w-full flex flex-col">
         <CardHeader className="hidden md:flex pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6 shrink-0">
             <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${dotClass}`} />
@@ -1074,10 +1074,13 @@ const TaskHub = () => {
 
     useEffect(() => {
         if (!carouselApi) return undefined;
+        carouselApi.scrollTo(urgentColumnIndex, true);
+        setActiveColumnIndex(carouselApi.selectedScrollSnap());
         const sync = () => setActiveColumnIndex(carouselApi.selectedScrollSnap());
-        sync();
         carouselApi.on('select', sync);
         return () => carouselApi.off('select', sync);
+        // Only when the carousel mounts; filter changes are handled below.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [carouselApi]);
 
     useEffect(() => {
@@ -1847,7 +1850,7 @@ const TaskHub = () => {
 
                 {isMobileDashboard ? (
                     <Carousel
-                        opts={{ align: 'start', loop: false, containScroll: 'trimSnaps', watchDrag: true, startIndex: urgentColumnIndex }}
+                        opts={{ align: 'start', loop: false, containScroll: 'trimSnaps', watchDrag: true }}
                         setApi={setCarouselApi}
                         className="w-full cursor-grab active:cursor-grabbing"
                         data-testid="dashboard-panels"
@@ -1869,7 +1872,7 @@ const TaskHub = () => {
                         {DASHBOARD_COLUMNS.map((col) => (
                             <div
                                 key={col.id}
-                                className="h-full min-w-0"
+                                className="min-w-0 h-full self-stretch flex flex-col"
                                 data-testid={`dashboard-column-${col.id}`}
                             >
                                 {renderColumnCard(col.id)}
