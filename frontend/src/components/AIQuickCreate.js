@@ -9,13 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { composeVoiceSubmit, shouldAutoSendVoice, createSilenceWatch, VOICE_SILENCE_MS, VOICE_RESTART_MS, tearDownSpeechRecognition } from '@/lib/promptVoice';
+import { createDictationSession } from '@/lib/promptVoice';
+import { needsIosScreenRecordFlow } from '@/lib/recordingCapabilities';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase, looksLikeTimeOnly, looksLikeFollowupFragment, classifyClarifyAnswer, repairMessyPrompt } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
@@ -165,21 +166,6 @@ const getMentionState = (value, caret) => {
 
 const isEmailLike = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
 
-const getSpeechRecognition = () => {
-    const SR = typeof window !== 'undefined'
-        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-        : null;
-    if (!SR) return null;
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-    // Continuous + our own silence watch: browsers end non-continuous sessions
-    // after a couple seconds of quiet, which kills contemplative pauses.
-    rec.continuous = true;
-    return rec;
-};
-
 const htmlToMarkdown = (html) => {
     if (!html) return '';
     let s = String(html);
@@ -270,12 +256,8 @@ const AIQuickCreate = ({
     const fileInputRef = useRef(null);
     const plusRef = useRef(null);
     const pasteZoneRef = useRef(null);
-    const recRef = useRef(null);
-    const voiceFinalRef = useRef('');
     const voiceSeedRef = useRef('');
-    const voiceWantRef = useRef(false);
-    const voiceSilenceRef = useRef(null);
-    const voiceRestartRef = useRef(null);
+    const dictationRef = useRef(null);
     const runPreviewRef = useRef(null);
     const sendRef = useRef(null);
     const threadEndRef = useRef(null);
@@ -1023,8 +1005,14 @@ const AIQuickCreate = ({
 
     // One-click capture from either Record control - must stay in the click
     // gesture so Chrome keeps user-activation for getDisplayMedia + Document PiP.
+    // On iPhone, screen capture is unavailable, so Record uses the same
+    // dictation session as the mic (Jarvis voice).
     const startComposerRecording = () => {
         setPlusOpen(false);
+        if (needsIosScreenRecordFlow()) {
+            startVoice();
+            return;
+        }
         recordPickerRef.current?.startRecording?.();
     };
 
@@ -1175,103 +1163,58 @@ const AIQuickCreate = ({
 
     runPreviewRef.current = runPreview;
 
+    const getDictation = useCallback(() => {
+        if (!dictationRef.current) {
+            dictationRef.current = createDictationSession({
+                getDisplayed: () => inputRef.current?.value || '',
+                getSeed: () => voiceSeedRef.current,
+                onTranscript: ({ shown }) => {
+                    if (shown) setText(shown);
+                },
+            });
+        }
+        return dictationRef.current;
+    }, []);
+
     const finishVoiceSession = useCallback((opts = {}) => {
         const { send = true } = opts;
-        voiceWantRef.current = false;
-        if (voiceRestartRef.current) {
-            clearTimeout(voiceRestartRef.current);
-            voiceRestartRef.current = null;
-        }
-        voiceSilenceRef.current?.clear();
-        voiceSilenceRef.current = null;
-        const rec = recRef.current;
-        recRef.current = null;
-        tearDownSpeechRecognition(rec);
+        const payload = getDictation().stop({ commit: false });
         setListening(false);
-        const spoken = voiceFinalRef.current.trim();
-        if (send && shouldAutoSendVoice(spoken)) {
-            runPreviewRef.current?.(composeVoiceSubmit(voiceSeedRef.current, spoken));
+        if (send && payload) {
+            runPreviewRef.current?.(payload);
         }
-    }, []);
+    }, [getDictation]);
 
     const stopVoice = useCallback(() => {
         finishVoiceSession({ send: false });
     }, [finishVoiceSession]);
 
     const startVoice = useCallback(() => {
-        const rec = getSpeechRecognition();
-        if (!rec) {
-            toast.error('Voice isn’t available in this browser. Try Chrome or Safari.');
-            return;
-        }
-        finishVoiceSession({ send: false });
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
-        voiceFinalRef.current = '';
-        voiceWantRef.current = true;
-
-        const silence = createSilenceWatch({
-            ms: VOICE_SILENCE_MS,
-            onSilence: () => {
-                finishVoiceSession({ send: true });
+        const result = getDictation().start({
+            onCommit: (payload) => {
+                setListening(false);
+                runPreviewRef.current?.(payload);
+            },
+            onError: (error) => {
+                setListening(false);
+                if (error === 'not-allowed') {
+                    toast.error('Microphone permission is needed for voice.');
+                } else {
+                    toast.error('Couldn’t hear that - try again.');
+                }
             },
         });
-        voiceSilenceRef.current = silence;
-        silence.bump();
-
-        rec.onresult = (event) => {
-            let interim = '';
-            let finalText = '';
-            for (let i = 0; i < event.results.length; i += 1) {
-                const piece = event.results[i][0]?.transcript || '';
-                if (event.results[i].isFinal) finalText += piece;
-                else interim += piece;
-            }
-            voiceFinalRef.current = finalText.trim();
-            const spoken = composeVoiceSubmit(voiceFinalRef.current, interim);
-            const shown = composeVoiceSubmit(voiceSeedRef.current, spoken);
-            if (shown) setText(shown);
-            silence.bump();
-        };
-        rec.onerror = (event) => {
-            if (event.error === 'no-speech') {
-                return;
-            }
-            if (event.error === 'aborted') return;
-            if (event.error === 'not-allowed') {
-                toast.error('Microphone permission is needed for voice.');
-            } else {
-                toast.error('Couldn’t hear that - try again.');
-            }
-            finishVoiceSession({ send: false });
-        };
-        rec.onend = () => {
-            if (recRef.current !== rec || !voiceWantRef.current) {
-                if (recRef.current === rec) finishVoiceSession({ send: true });
-                return;
-            }
-            // Safari/iOS ends sessions immediately; wait a beat so we don't
-            // tight-loop start/stop (glitch + stuck orange mic dot).
-            if (voiceRestartRef.current) clearTimeout(voiceRestartRef.current);
-            voiceRestartRef.current = setTimeout(() => {
-                voiceRestartRef.current = null;
-                if (!voiceWantRef.current || recRef.current !== rec) return;
-                try {
-                    rec.start();
-                } catch {
-                    finishVoiceSession({ send: true });
-                }
-            }, VOICE_RESTART_MS);
-        };
-        recRef.current = rec;
+        if (!result.started) {
+            setListening(false);
+            toast.error(result.reason === 'unsupported'
+                ? 'Voice isn’t available in this browser. Try Chrome or Safari.'
+                : 'Couldn’t start the microphone.');
+            return;
+        }
         setComposerFocused(true);
         setListening(true);
-        try {
-            rec.start();
-        } catch {
-            finishVoiceSession({ send: false });
-            toast.error('Couldn’t start the microphone.');
-        }
-    }, [finishVoiceSession]);
+    }, [getDictation]);
 
     const toggleVoice = useCallback(() => {
         if (listening) {
@@ -3121,8 +3064,8 @@ const AIQuickCreate = ({
                                         type="button"
                                         onClick={startComposerRecording}
                                         className="ai-composer-icon-btn h-8 rounded-lg inline-flex items-center justify-center gap-1 px-2 transition-colors"
-                                        title="Record screen"
-                                        aria-label="Record screen"
+                                        title={needsIosScreenRecordFlow() ? 'Speak to send' : 'Record screen'}
+                                        aria-label={needsIosScreenRecordFlow() ? 'Speak to send' : 'Record screen'}
                                         data-testid="ai-record-btn"
                                     >
                                         <Video className="w-4 h-4" strokeWidth={1.75} />
@@ -3137,7 +3080,10 @@ const AIQuickCreate = ({
                                             <button
                                                 type="button"
                                                 role="menuitem"
-                                                onClick={startComposerRecording}
+                                                onClick={() => {
+                                                    setPlusOpen(false);
+                                                    recordPickerRef.current?.startRecording?.();
+                                                }}
                                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                                 data-testid="ai-screen-record-btn"
                                             >
@@ -3207,14 +3153,20 @@ const AIQuickCreate = ({
                                         data-testid="ai-prompt-voice-btn"
                                         aria-label={listening ? 'Stop and send' : 'Speak to send'}
                                         aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak - stays on through pauses; sends after ~20s of silence'}
+                                        title={listening ? 'Tap to send now' : 'Speak to send'}
                                     >
-                                        <Mic className="w-4 h-4" />
+                                        {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => runPreview()}
-                                        disabled={loading || sending || answerLoading || listening || !text.trim()}
+                                        onClick={() => {
+                                            if (listening) {
+                                                finishVoiceSession({ send: true });
+                                                return;
+                                            }
+                                            runPreview();
+                                        }}
+                                        disabled={loading || sending || answerLoading || !text.trim()}
                                         className={`ai-composer-send h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
                                             loading || answerLoading || text.trim() ? 'is-ready' : ''
                                         }`}
