@@ -252,7 +252,7 @@ const SettingsPage = () => {
         const clean = (val || '').trim();
         const isSlackUrl = /^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9\/_-]+$/.test(clean);
         if (isSlackUrl) {
-            // Auto-save silently — one less click for the user
+            // Auto-save silently - one less click for the user
             saveSlack({ value: clean, silent: true }).then((ok) => { if (ok) toast.success('Slack connected 🎉'); });
         }
     };
@@ -536,7 +536,7 @@ const SettingsPage = () => {
                                     </div>
                                 </div>
 
-                                {/* Google Sheets daily metrics — hidden until the connector scope is approved */}
+                                {/* Google Sheets daily metrics - hidden until the connector scope is approved */}
                                 {false && (
                                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-3" data-testid="google-sheets-sync">
                                     <div className="flex items-center justify-between gap-2">
@@ -799,11 +799,8 @@ const SettingsPage = () => {
                             {user?.subscription_tier === 'teams' && (
                                 <div className="pt-2 border-t space-y-1.5" data-testid="team-changes-preference">
                                     <Label htmlFor="team-changes" className="text-sm font-medium text-foreground">
-                                        How often does your reporting line change?
+                                        Reporting line
                                     </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Used to remind you to confirm who you report to and who is on your team.
-                                    </p>
                                     <select
                                         id="team-changes"
                                         value={hierarchyReviewFrequency}
@@ -812,10 +809,10 @@ const SettingsPage = () => {
                                         className="mt-1 w-full sm:w-72 px-3 py-2 border border-input rounded-xl text-sm bg-background text-foreground focus:border-teal-500 focus:outline-none"
                                         data-testid="hierarchy-review-frequency"
                                     >
-                                        <option value="weekly">Weekly — teams reshuffle often</option>
-                                        <option value="monthly">Monthly — typical</option>
-                                        <option value="quarterly">Quarterly — mostly stable</option>
-                                        <option value="rarely">Rarely — org chart almost never changes</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="quarterly">Quarterly</option>
+                                        <option value="rarely">Rarely</option>
                                     </select>
                                 </div>
                             )}
@@ -932,7 +929,7 @@ const SettingsPage = () => {
                             <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg">🌇</span>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-semibold text-base">End-of-day report</h3>
-                                <p className="text-xs text-muted-foreground">A short glance at what got done, who didn’t finish, and today’s leaderboard. Pick the days and Pacific time — Saturday and Sunday stay on unless you turn them off.</p>
+                                <p className="text-xs text-muted-foreground">A short glance at what got done, who didn’t finish, and today’s leaderboard. Pick the days and Pacific time. Saturday and Sunday stay on unless you turn them off.</p>
                             </div>
                             <IosSwitch
                                 checked={eodEnabled}
@@ -1012,7 +1009,7 @@ const SettingsPage = () => {
                                 {(eodChannel === 'slack' || eodChannel === 'both') && !slackTeamConnected && (
                                     <p className="text-xs text-amber-700">
                                         {canManageSlack
-                                            ? 'Slack is selected but not connected yet — connect it below.'
+                                            ? 'Slack is selected but not connected yet. Connect it below.'
                                             : 'Ask your Teams admin to connect Slack.'}
                                     </p>
                                 )}
@@ -1058,7 +1055,7 @@ const SettingsPage = () => {
                     {/* Smart Reminders */}
                     <SmartRemindersCard slackConnected={slackTeamConnected} />
 
-                    {/* Slack Bridge — Teams admin only */}
+                    {/* Slack Bridge - Teams admin only */}
                     {canManageSlack ? (
                     <div className="bg-card text-card-foreground border border-border rounded-2xl p-6 space-y-4" data-testid="slack-settings-card">
                         <div className="flex items-center gap-3">
@@ -1067,7 +1064,7 @@ const SettingsPage = () => {
                                 <h3 className="font-semibold text-base">Slack</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     Channel posts use a webhook. After two ignored pings, Jarvis DMs the assignee
-                                    {slackBotEnabled ? ' — follow-up DMs are on.' : ' when SLACK_BOT_TOKEN is set on the server.'}
+                                    {slackBotEnabled ? '. Follow-up DMs are on.' : ' when SLACK_BOT_TOKEN is set on the server.'}
                                 </p>
                             </div>
                             {slackWebhook && (
@@ -1107,7 +1104,7 @@ const SettingsPage = () => {
                                         <li>In the sidebar, click <strong>Incoming Webhooks</strong> → toggle it <strong>On</strong>.</li>
                                         <li>Click <strong>&quot;Add New Webhook to Workspace&quot;</strong> and choose the channel you want messages in.</li>
                                         <li>Copy the webhook URL that starts with <code className="bg-white px-1 py-0.5 rounded text-xs">https://hooks.slack.com/services/...</code></li>
-                                        <li>Paste it below — it&apos;ll connect automatically. That&apos;s it! 🎉</li>
+                                        <li>Paste it below. It&apos;ll connect automatically. That&apos;s it! 🎉</li>
                                     </ol>
                                 </details>
 
@@ -1135,7 +1132,7 @@ const SettingsPage = () => {
                                     </div>
                                     {slackWebhook && !slackWebhook.startsWith('https://hooks.slack.com/') && (
                                         <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                                            <span>⚠️</span> Doesn&apos;t look like a Slack URL — should start with <code className="bg-red-50 px-1 rounded">https://hooks.slack.com/</code>
+                                            <span>⚠️</span> Doesn&apos;t look like a Slack URL. Should start with <code className="bg-red-50 px-1 rounded">https://hooks.slack.com/</code>
                                         </p>
                                     )}
                                     {slackWebhook.startsWith('https://hooks.slack.com/') && (
@@ -1462,7 +1459,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
 
     const save = async (patch, opts = {}) => {
         const next = { ...rule, ...patch };
-        // Never persist empty channels while enabled — fall back to in-app
+        // Never persist empty channels while enabled - fall back to in-app
         if (next.enabled && (!next.channels || next.channels.length === 0)) {
             next.channels = ['in_app'];
         }
@@ -1519,7 +1516,7 @@ const SmartRemindersCard = ({ slackConnected }) => {
                 <span className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center text-lg">⏰</span>
                 <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-base">Smart Reminders</h3>
-                    <p className="text-xs text-muted-foreground">Automatic nudges when tasks need attention — before they’re due, stuck, or overdue.</p>
+                    <p className="text-xs text-muted-foreground">Automatic nudges when tasks need attention, before they’re due, stuck, or overdue.</p>
                 </div>
                 <IosSwitch
                     checked={rule.enabled}

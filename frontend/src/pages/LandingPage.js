@@ -53,7 +53,7 @@ const TryIt = ({ onTry }) => {
     return (
         <div className="w-full" data-testid="landing-tryit">
             <label className="block text-xs uppercase tracking-[0.18em] text-teal-200/80 mb-3">
-                Try it — no account
+                Try it - no account
             </label>
             <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/15 p-3 sm:p-4 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)]">
                 <div className="relative">
@@ -200,7 +200,7 @@ const Simulation = () => {
                                 <>
                                     <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">Instead of another Slack blast</p>
                                     <p className="text-white text-xl sm:text-2xl font-semibold leading-snug mb-6" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Assign a task to 36 people in one line — and keep the ownership.
+                                        Assign a task to 36 people in one line - and keep the ownership.
                                     </p>
                                     <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-4">
                                         <p className="text-[11px] text-white/45 mb-2">You type</p>
@@ -349,7 +349,7 @@ const LandingPage = () => {
                             Still hunting for the work you already assigned?
                         </h1>
                         <p className="text-white/65 text-lg leading-relaxed max-w-md mb-8">
-                            Stop chasing work in chat. Every “quick ask” dies the same way — buried, half-owned, and somehow your problem again by Friday.
+                            Stop chasing work in chat. Every “quick ask” dies the same way - buried, half-owned, and somehow your problem again by Friday.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <Button size="lg" className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7" onClick={jumpToTry} data-testid="landing-hero-try">
@@ -391,7 +391,7 @@ const LandingPage = () => {
                         {[
                             {
                                 sting: '“Just circling back…”',
-                                body: 'The follow-up you hate writing — because it means the first ask already failed, and now you\'re the awkward reminder.',
+                                body: 'The follow-up you hate writing - because it means the first ask already failed, and now you\'re the awkward reminder.',
                             },
                             {
                                 sting: 'Thread archaeology',
@@ -399,7 +399,7 @@ const LandingPage = () => {
                             },
                             {
                                 sting: 'The team-wide ghost',
-                                body: 'You asked thirty people. A few replied. Everyone else is a question mark you have to chase yourself — after hours, again.',
+                                body: 'You asked thirty people. A few replied. Everyone else is a question mark you have to chase yourself - after hours, again.',
                             },
                         ].map((item, i) => (
                             <motion.div
@@ -432,11 +432,11 @@ const LandingPage = () => {
                         What changes when the ask can&apos;t disappear
                     </h2>
                     <p className="text-white/55 mb-10 max-w-xl leading-relaxed">
-                        You assign it. They accept it. You see who actually did it — without becoming the human reminder system.
+                        You assign it. They accept it. You see who actually did it - without becoming the human reminder system.
                     </p>
                     <div className="grid md:grid-cols-3 gap-10 md:gap-8">
                         {[
-                            { t: 'Work you assign does not disappear', d: 'Every ask gets an owner and a time. If they do not accept, you see it — you do not hunt through chat.' },
+                            { t: 'Work you assign does not disappear', d: 'Every ask gets an owner and a time. If they do not accept, you see it - you do not hunt through chat.' },
                             { t: 'They get a direct instruction', d: 'You can talk like a manager. They receive a clear “please do this by Monday,” not a pasted command.' },
                             { t: 'Follow-up is automatic', d: 'Two ignored pings, and Jarvis opens a Slack thread. They reply like a person. The task updates from whatever they say.' },
                         ].map((item) => (

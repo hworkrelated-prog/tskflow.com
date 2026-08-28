@@ -11,7 +11,7 @@ import { Download, ScrollText, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { getErrorMessage } from '@/lib/utils';
 
-/** Embeddable activity/data log — used as an Analytics tab. */
+/** Embeddable activity/data log - used as an Analytics tab. */
 export const ActivityLogTab = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -66,7 +66,7 @@ export const ActivityLogTab = () => {
     };
 
     const fmt = (iso) => {
-        if (!iso) return '—';
+        if (!iso) return ' - ';
         try { return format(new Date(iso), 'MMM d, yyyy h:mm a'); } catch { return iso; }
     };
 
@@ -80,7 +80,7 @@ export const ActivityLogTab = () => {
                             Activity & data log
                         </CardTitle>
                         <CardDescription className="mt-1">
-                            Assigner, assignee, times, reminders, chatter — viewable and exportable
+                            Assigner, assignee, times, reminders, chatter - viewable and exportable
                             {user?.company_domain ? ` · ${user.company_domain}` : ''}
                         </CardDescription>
                     </div>
@@ -138,12 +138,12 @@ export const ActivityLogTab = () => {
                                                 </button>
                                                 {r.priority && <Badge variant="outline" className="mt-1 text-[10px]">{r.priority}</Badge>}
                                             </td>
-                                            <td className="px-3 py-2 whitespace-nowrap">{r.assigner_name || '—'}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap">{r.assigner_name || ' - '}</td>
                                             <td className="px-3 py-2">
-                                                <div className="truncate max-w-[140px]">{r.assignee_name || '—'}</div>
+                                                <div className="truncate max-w-[140px]">{r.assignee_name || ' - '}</div>
                                                 <div className="text-xs text-muted-foreground truncate max-w-[140px]">{r.assignee_email}</div>
                                             </td>
-                                            <td className="px-3 py-2 whitespace-nowrap">{r.status || '—'}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap">{r.status || ' - '}</td>
                                             <td className="px-3 py-2 whitespace-nowrap text-xs">{fmt(r.created_at)}</td>
                                             <td className="px-3 py-2 whitespace-nowrap text-xs">{fmt(r.completed_at)}</td>
                                             <td className="px-3 py-2">{r.reminders_sent_count || 0}</td>
@@ -185,7 +185,7 @@ export const ActivityLogTab = () => {
     );
 };
 
-/** Legacy route — redirect into Analytics Activity Log tab. */
+/** Legacy route - redirect into Analytics Activity Log tab. */
 const ActivityLogPage = () => <Navigate to="/analytics?section=activity" replace />;
 
 export default ActivityLogPage;

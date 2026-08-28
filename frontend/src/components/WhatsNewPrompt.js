@@ -73,7 +73,7 @@ const WhatsNewPrompt = () => {
                 </DialogHeader>
                 <ul className="space-y-2.5 text-sm text-slate-700">
                     {(highlights.length ? highlights : [
-                        { area: 'AI Prompt', change: 'Bottom command bar — type, paste a screenshot, or record, then send.' },
+                        { area: 'AI Prompt', change: 'Bottom command bar - type, paste a screenshot, or record, then send.' },
                         { area: 'Screen Recording', change: 'Controls stay bottom-left and draggable; capture no longer freezes when you switch tabs.' },
                         { area: 'Teams', change: '“My team” understands direct vs everyone under you.' },
                     ]).map((h, i) => (

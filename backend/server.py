@@ -9,6 +9,7 @@ import json
 import logging
 import asyncio
 import re
+import secrets
 import httpx
 from pathlib import Path
 from urllib.parse import quote
@@ -31,6 +32,8 @@ load_dotenv(ROOT_DIR / '.env')
 from phase_helpers import priority_followup_config, generate_ai_work_review
 from team_invite_progress import build_invite_progress_rows
 from text_clean import clean_display_text, clean_tree
+from no_ai_dash import strip_ai_dashes
+from sense_human import sense_human_text
 from eod_report import (
     aggregate_leaderboard,
     eod_sends_on_weekday,
@@ -593,6 +596,19 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
         {"email": email_norm},
         {"$set": {"status": "registered", "registered_at": get_pst_now().isoformat(), "user_id": user_id}},
     )
+    await db.team_claims.update_many(
+        {"target_email": email_norm, "target_user_id": None},
+        {"$set": {"target_user_id": user_id}},
+    )
+    accepted = await db.team_claims.find_one(
+        {"target_email": email_norm, "claim_type": "direct_report", "status": "accepted"},
+        {"_id": 0, "claimer_id": 1},
+    )
+    if accepted and accepted.get("claimer_id"):
+        await db.users.update_one(
+            {"id": user_id, "reports_to": {"$in": [None, ""]}},
+            {"$set": {"reports_to": accepted["claimer_id"]}},
+        )
     
     # Link any tasks that were assigned to this email before they registered
     # Use case-insensitive matching for email placeholder
@@ -1059,9 +1075,9 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                     <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                 </div>
                 <div style="padding: 40px 30px; background: white;">
-                    <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                    <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
                     <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                        You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below and take appropriate action.
+                        {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready. Either way, you are respected.
                     </p>
                     <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                         <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
@@ -1081,7 +1097,7 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
                         </a>
                     </div>
                     <p style="font-size: 13px; color: #9CA3AF; margin-top: 25px; text-align: center;">
-                        You can accept, decline, or propose a new deadline directly from Tskflow.
+                        You can confirm, ask for a different time, or say no from Tskflow.
                     </p>
                 </div>
                 <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
@@ -1206,9 +1222,9 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
                             <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                         </div>
                         <div style="padding: 40px 30px; background: white;">
-                            <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                            <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
                             <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                                You have been assigned a new task by <strong>{current_user['name']}</strong>. Please review the details below.
+                                {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready.
                             </p>
                             <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                                 <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
@@ -1970,9 +1986,9 @@ async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, c
                     <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
                 </div>
                 <div style="padding: 40px 30px; background: white;">
-                    <p style="font-size: 16px; color: #374151;">Hi {recipient_name},</p>
+                    <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
                     <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                        You have been assigned a new task by <strong>{current_user['name']}</strong>.
+                        {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready.
                     </p>
                     <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
                         <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{draft['title']}</h2>
@@ -2026,7 +2042,7 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
         "id": str(uuid.uuid4()),
         "user_id": current_user["id"],
         "user_name": current_user["name"],
-        "content": clean_display_text(comment.content),
+        "content": (await sense_human_text(comment.content, "comment")).get("text") or clean_display_text(comment.content),
         "mentions": comment.mentions or [],
         "created_at": get_pst_now().isoformat()
     }
@@ -2072,14 +2088,14 @@ async def add_task_comment(task_id: str, comment: TaskComment, background_tasks:
                     user_id=mentioned_user["id"],
                     n_type="mention",
                     title=f"{current_user['name']} mentioned you",
-                    body=f"In: {task['title']} — {comment.content[:120]}",
+                    body=f"In: {task['title']}: {comment_doc['content'][:120]}",
                     task_id=task_id,
                     actor_name=current_user["name"],
                 )
                 inner_html = f"""
                 <h2 style="margin:0 0 8px;font-size:20px;">You were mentioned</h2>
                 <p><strong>{current_user['name']}</strong> mentioned you in <strong>{task['title']}</strong>:</p>
-                <blockquote style="border-left:4px solid #0d9488;padding:12px 16px;background:#f3f6f5;border-radius:8px;color:#374151;margin:14px 0;">{comment.content}</blockquote>
+                <blockquote style="border-left:4px solid #0d9488;padding:12px 16px;background:#f3f6f5;border-radius:8px;color:#374151;margin:14px 0;">{comment_doc['content']}</blockquote>
                 """
                 email_html = _jarvis_email_shell(inner_html, cta_url=f"{app_url}/task/{task_id}", cta_label="View task")
                 background_tasks.add_task(send_email_notification, mentioned_user["email"], f"Mentioned in: {task['title']}", email_html)
@@ -4864,12 +4880,85 @@ async def update_my_hierarchy(request: HierarchyUpdateRequest, current_user: dic
         current_user = {**current_user, **updates}
     return await _hierarchy_payload(current_user)
 
+def _map_claim_action(action: Optional[str]) -> str:
+    a = (action or "").strip().lower()
+    if a in ("yes", "accept"):
+        return "accept"
+    if a in ("no", "ignore"):
+        return "ignore"
+    if a == "dispute":
+        return "dispute"
+    return ""
+
+
+async def _apply_team_claim(
+    claim: dict,
+    action: str,
+    *,
+    actor: Optional[dict] = None,
+    note: Optional[str] = None,
+    via: str = "app",
+) -> str:
+    now = datetime.now(timezone.utc).isoformat()
+    status = "accepted" if action == "accept" else ("disputed" if action == "dispute" else "ignored")
+    actor_id = (actor or {}).get("id")
+    set_fields = {
+        "status": status,
+        "note": note,
+        "responded_at": now,
+        "responded_via": via,
+    }
+    if actor_id:
+        set_fields["target_user_id"] = actor_id
+    await db.team_claims.update_one({"id": claim["id"]}, {"$set": set_fields})
+
+    target_user = actor
+    if action == "accept" and claim.get("claim_type") == "direct_report":
+        if not target_user:
+            if claim.get("target_user_id"):
+                target_user = await db.users.find_one({"id": claim["target_user_id"]}, {"_id": 0})
+            elif claim.get("target_email"):
+                target_user = await db.users.find_one(
+                    {"email": (claim.get("target_email") or "").lower()},
+                    {"_id": 0},
+                )
+        if target_user:
+            claimer_id = claim["claimer_id"]
+            if target_user.get("reports_to") != claimer_id:
+                claimer = await db.users.find_one({"id": claimer_id}, {"_id": 0, "reports_to": 1})
+                if claimer and claimer.get("reports_to") != target_user["id"]:
+                    await db.users.update_one(
+                        {"id": target_user["id"]},
+                        {"$set": {"reports_to": claimer_id}},
+                    )
+
+    fn = first_name((actor or {}).get("name") or claim.get("target_name")) or "They"
+    if action == "accept":
+        title = f"{fn} said yes"
+        body = f"{fn} confirmed they report to you."
+    elif action == "dispute":
+        title = f"{fn} had a different take"
+        body = f"{fn} let you know this did not look right." + (f" {note}" if note else "")
+    else:
+        title = f"{fn} said no"
+        body = f"{fn} let you know this was not the right fit. Completely fine."
+    await create_notification(
+        user_id=claim["claimer_id"],
+        n_type="team_claim_response",
+        title=title,
+        body=body,
+        task_id=None,
+        meta={"claim_id": claim["id"], "action": action},
+        send_email=False,
+    )
+    return status
+
+
 async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict], target_email: Optional[str]):
     """Create a pending claim + notify the target (in-app + email when possible)."""
     email = (target_email or (target_user or {}).get("email") or "").strip().lower()
     if not email and not target_user:
         return None
-    # Deduplicate pending
     q = {"claimer_id": claimer["id"], "claim_type": "direct_report", "status": "pending"}
     if target_user:
         q["target_user_id"] = target_user["id"]
@@ -4879,6 +4968,7 @@ async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict]
     if existing:
         return existing
 
+    respond_token = secrets.token_urlsafe(32)
     claim = {
         "id": str(uuid.uuid4()),
         "claimer_id": claimer["id"],
@@ -4886,20 +4976,28 @@ async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict]
         "claimer_email": claimer.get("email"),
         "target_user_id": (target_user or {}).get("id"),
         "target_email": email,
-        "target_name": (target_user or {}).get("name") or email.split("@")[0],
+        "target_name": (target_user or {}).get("name") or (email.split("@")[0] if email else ""),
         "claim_type": "direct_report",
         "status": "pending",
         "note": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "responded_at": None,
+        "respond_token": respond_token,
         "company_domain": claimer.get("company_domain"),
     }
     await db.team_claims.insert_one(claim)
 
-    title = f"{claimer.get('name') or 'Someone'} listed you on their team"
+    cfn = first_name(claimer.get("name") or "") or "A teammate"
+    tfn = first_name((target_user or {}).get("name") or claim["target_name"]) or "there"
+    title = f"{cfn} listed you as their manager"
     body = (
-        f"{claimer.get('name') or claimer.get('email')} says you report to them in Tskflow. "
-        "Accept if that’s right, Ignore to dismiss, or Dispute if it’s a mistake."
+        f"{cfn} listed you as their manager. If that is right, tap Yes. "
+        "If not, tap No. Either answer is respected."
+    )
+    mail_url = f"{APP_BASE_URL}/mail/claim?id={claim['id']}&token={respond_token}"
+    email_html = _jarvis_email_shell(
+        f"<p>Hi {tfn},</p><p>{body}</p>",
+        extra_buttons=[("Yes", mail_url, True), ("No", mail_url, False)],
     )
     if target_user:
         await create_notification(
@@ -4912,25 +5010,11 @@ async def _create_direct_report_claim(claimer: dict, target_user: Optional[dict]
             send_email=True,
             email_to=target_user.get("email"),
             email_subject=title,
-            email_html=_jarvis_email_shell(
-                f"<p>Hi {target_user.get('name') or ''},</p><p>{body}</p>",
-                cta_url=f"{APP_BASE_URL}/team?claims=1",
-                cta_label="Review team claim",
-            ),
+            email_html=email_html,
         )
     elif email:
         try:
-            inv = await _issue_team_invitation(claimer, email)
-            join_url = _team_join_url(inv["token"], email)
-            await send_email_notification(
-                email,
-                title,
-                _jarvis_email_shell(
-                    f"<p>{body}</p><p>If you don’t have Tskflow yet, create an account with this email to respond.</p>",
-                    cta_url=join_url,
-                    cta_label="Open Tskflow",
-                ),
-            )
+            await send_email_notification(email, title, email_html)
         except Exception:
             pass
     return {k: v for k, v in claim.items() if k != "_id"}
@@ -5009,20 +5093,20 @@ async def list_team_claims(current_user: dict = Depends(get_current_user), inbox
                 {"target_user_id": current_user["id"]},
                 {"target_email": (current_user.get("email") or "").lower()},
             ],
-        }, {"_id": 0}).sort("created_at", -1).to_list(100)
+        }, {"_id": 0, "respond_token": 0}).sort("created_at", -1).to_list(100)
     else:
         docs = await db.team_claims.find(
             {"claimer_id": current_user["id"]},
-            {"_id": 0},
+            {"_id": 0, "respond_token": 0},
         ).sort("created_at", -1).to_list(100)
     return {"claims": docs}
 
 
 @api_router.post("/team/claims/{claim_id}/respond")
 async def respond_team_claim(claim_id: str, request: RespondTeamClaimRequest, current_user: dict = Depends(get_current_user)):
-    action = (request.action or "").strip().lower()
+    action = _map_claim_action(request.action)
     if action not in ("accept", "ignore", "dispute"):
-        raise HTTPException(status_code=400, detail="action must be accept, ignore, or dispute")
+        raise HTTPException(status_code=400, detail="Choose yes or no")
 
     claim = await db.team_claims.find_one({"id": claim_id}, {"_id": 0})
     if not claim or claim.get("status") != "pending":
@@ -5033,44 +5117,30 @@ async def respond_team_claim(claim_id: str, request: RespondTeamClaimRequest, cu
     if not is_target:
         raise HTTPException(status_code=403, detail="Not your claim to respond to")
 
-    now = datetime.now(timezone.utc).isoformat()
-    await db.team_claims.update_one(
-        {"id": claim_id},
-        {"$set": {
-            "status": "accepted" if action == "accept" else ("disputed" if action == "dispute" else "ignored"),
-            "note": (request.note or None),
-            "responded_at": now,
-            "target_user_id": current_user["id"],
-        }},
+    status = await _apply_team_claim(
+        claim, action, actor=current_user, note=(request.note or None), via="app",
     )
+    return {"message": f"Claim {status}", "action": action, "status": status}
 
-    if action == "accept" and claim.get("claim_type") == "direct_report":
-        claimer_id = claim["claimer_id"]
-        if current_user.get("reports_to") != claimer_id:
-            # block circular
-            claimer = await db.users.find_one({"id": claimer_id}, {"_id": 0, "reports_to": 1, "name": 1})
-            if claimer and claimer.get("reports_to") != current_user["id"]:
-                await db.users.update_one(
-                    {"id": current_user["id"]},
-                    {"$set": {"reports_to": claimer_id}},
-                )
 
-    # Notify claimer of the outcome
-    outcome = {"accept": "accepted", "ignore": "ignored", "dispute": "disputed"}[action]
-    await create_notification(
-        user_id=claim["claimer_id"],
-        n_type="team_claim_response",
-        title=f"{current_user.get('name') or 'Someone'} {outcome} your team request",
-        body=(
-            f"{current_user.get('name') or current_user.get('email')} {outcome} being listed as reporting to you."
-            + (f" Note: {request.note}" if request.note else "")
-        ),
-        task_id=None,
-        meta={"claim_id": claim_id, "action": action},
-        send_email=False,
-    )
-
-    return {"message": f"Claim {outcome}", "action": action}
+@api_router.post("/mail/claim")
+async def mail_claim_respond(payload: dict):
+    """Public Yes/No for team-claim emails. GET must never mutate."""
+    cid = str(payload.get("id") or "").strip()
+    token = str(payload.get("token") or "").strip()
+    action = _map_claim_action(payload.get("action"))
+    if action not in ("accept", "ignore"):
+        raise HTTPException(status_code=400, detail="Choose yes or no")
+    claim = await db.team_claims.find_one({"id": cid}, {"_id": 0})
+    if not claim or (claim.get("respond_token") or "") != token:
+        raise HTTPException(status_code=404, detail="This link is no longer valid")
+    if claim.get("status") != "pending":
+        return {"ok": True, "already": True, "status": claim.get("status")}
+    actor = None
+    if claim.get("target_user_id"):
+        actor = await db.users.find_one({"id": claim["target_user_id"]}, {"_id": 0})
+    status = await _apply_team_claim(claim, action, actor=actor, note=None, via="email")
+    return {"ok": True, "status": status, "action": "yes" if action == "accept" else "no"}
 
 
 @api_router.post("/team/add-direct-report")
@@ -6824,6 +6894,7 @@ Rules:
 - navigate: params {"target": "dashboard|analytics|team|settings|leads"}.
 - none: when unclear; ask for clarification in reply.
 Keep replies warm, brief and natural, like a helpful teammate."""
+VOICE_SYSTEM_PROMPT = strip_ai_dashes(VOICE_SYSTEM_PROMPT)
 
 def _jarvis_local_intent(transcript: str):
     """Deterministic replies/actions that never need the LLM (keeps Cloudflare happy)."""
@@ -6833,7 +6904,7 @@ def _jarvis_local_intent(transcript: str):
     if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
         return {
             "reply": (
-                "I'm Jarvis — your AI manager in TskFlow. I can create and assign tasks from plain English, "
+                "I'm Jarvis, your AI manager in TskFlow. I can create and assign tasks from plain English, "
                 "list what's still open, update status, open pages like analytics or settings, "
                 "and walk you through how things work. What do you want to tackle?"
             ),
@@ -6841,7 +6912,7 @@ def _jarvis_local_intent(transcript: str):
         }
     if re.search(r"\b(guide me|show yourself|show me|come (out|here)|appear|walk me through|show up)\b", low) and len(low) < 80:
         return {
-            "reply": "Sure. Tell me what you're stuck on — a task, an assignee, a due date — and I'll walk you through it.",
+            "reply": "Sure. Tell me what you're stuck on: a task, an assignee, a due date, and I'll walk you through it.",
             "action": {"type": "assistant_answer", "params": {}},
         }
     nav = None
@@ -7732,10 +7803,32 @@ async def create_notification(
     return doc
 
 
-def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_label: Optional[str] = None) -> str:
+def _jarvis_email_shell(
+    inner_html: str,
+    cta_url: Optional[str] = None,
+    cta_label: Optional[str] = None,
+    extra_buttons: Optional[List] = None,
+) -> str:
     """Wrap content in the TskFlow branded HTML shell (teal TF mark)."""
+    inner_html = strip_ai_dashes(inner_html or "")
+    if cta_label:
+        cta_label = strip_ai_dashes(cta_label)
     cta = ""
-    if cta_url and cta_label:
+    if extra_buttons:
+        parts = []
+        for item in extra_buttons:
+            label, url, filled = item[0], item[1], (item[2] if len(item) > 2 else True)
+            label = strip_ai_dashes(str(label))
+            if filled:
+                parts.append(
+                    f'<a href="{url}" style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;margin:0 6px;">{label}</a>'
+                )
+            else:
+                parts.append(
+                    f'<a href="{url}" style="background:#ffffff;color:#0f766e;border:1px solid #0d9488;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;margin:0 6px;">{label}</a>'
+                )
+        cta = f'<div style="text-align:center;margin:32px 0 8px;">{"".join(parts)}</div>'
+    elif cta_url and cta_label:
         cta = f"""<div style="text-align:center;margin:32px 0 8px;"><a href="{cta_url}" style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 28px;border-radius:999px;font-weight:600;font-size:14px;display:inline-block;">{cta_label}</a></div>"""
     return f"""
 <html>
@@ -7761,7 +7854,7 @@ def _jarvis_email_shell(inner_html: str, cta_url: Optional[str] = None, cta_labe
           {cta}
         </td></tr>
         <tr><td style="background:#f8faf9;padding:20px 32px;color:#6b7280;font-size:12px;border-top:1px solid #e8eeec;">
-          <div>— <strong>TskFlow</strong></div>
+          <div><strong>TskFlow</strong></div>
           <div style="margin-top:6px;">You're receiving this because it was flagged as an important task update. <a href="{APP_BASE_URL}/settings" style="color:#0d9488;text-decoration:none;">Manage notifications</a></div>
         </td></tr>
       </table>
@@ -9575,6 +9668,7 @@ quota, ARR/MRR, closed-won, POC, RFP, negotiation, pricing for a customer/client
 Also set category="Sales" in those cases.
 requires_screen_recording=true when the request explicitly asks for a walkthrough, demo recording, tutorial, or "record" something.
 """
+SMART_PARSE_SYSTEM = strip_ai_dashes(SMART_PARSE_SYSTEM)
 
 
 _SALES_TASK_RE = re.compile(
@@ -11412,6 +11506,18 @@ async def _llm_parse(
         return None
 
 
+class SenseInputRequest(BaseModel):
+    text: str
+    kind: Optional[str] = "prose"
+
+
+@api_router.post("/ai/sense-input")
+async def ai_sense_input(payload: SenseInputRequest, current_user: dict = Depends(get_current_user)):
+    """Tidy messy human paste (emails, comments, prose) before it is used."""
+    _ = current_user
+    return await sense_human_text(payload.text or "", payload.kind or "prose")
+
+
 @api_router.post("/ai/parse-task")
 async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(get_current_user)):
     text = (req.text or "").strip()
@@ -11697,6 +11803,7 @@ BEST PRACTICES
 - Turn important routines into Recurring series so nothing slips.
 - Enable Smart Reminders for High/Urgent priorities so no important task goes cold.
 """
+TSKFLOW_KB = strip_ai_dashes(TSKFLOW_KB)
 
 
 VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
@@ -11727,6 +11834,7 @@ Rules:
 
 KNOWLEDGE BASE:
 """ + TSKFLOW_KB
+VOICE_ASSISTANT_SYSTEM = strip_ai_dashes(VOICE_ASSISTANT_SYSTEM)
 
 
 # Replace existing VOICE_SYSTEM_PROMPT usage. (We keep the old one for backward compat but the endpoint now uses this.)
@@ -12150,7 +12258,7 @@ async def _check_smart_reminders():
                         recipient_email=user.get("email"),
                         company_domain=user.get("company_domain") or t.get("company_domain"),
                         title=wording.get("title") or "Reminder",
-                        body=f"{t.get('title')} — {_reminder_kind_label(fired_kind)}",
+                        body=f"{t.get('title')} - {_reminder_kind_label(fired_kind)}",
                         meta={
                             "fired_kind": fired_kind,
                             "priority": t.get("priority"),
@@ -12341,17 +12449,17 @@ def _humanize_reminder_body(body: str, kind: Optional[str] = None) -> str:
     s = str(body or "").strip()
     key_alt = r"before_due|3h|2h|30min|overdue|no_response|no_progress"
     s = re.sub(
-        rf"\s*[—\-]\s*({key_alt})\s*$",
-        lambda m: f" — {_reminder_kind_label(m.group(1).lower())}",
+        rf"\s*[\u2014\u2013-]\s*({key_alt})\s*$",
+        lambda m: f" - {_reminder_kind_label(m.group(1).lower())}",
         s,
         flags=re.I,
     )
     k = str(kind or "").strip().lower()
-    if k and re.fullmatch(key_alt, k) and re.search(rf"(?i)(?:^|[—\-]\s*){re.escape(k)}\s*$", s):
-        s = re.sub(rf"(?i)(?:\s*[—\-]\s*)?{re.escape(k)}\s*$", "", s).rstrip(" —-")
+    if k and re.fullmatch(key_alt, k) and re.search(rf"(?i)(?:^|[\u2014\u2013-]\s*){re.escape(k)}\s*$", s):
+        s = re.sub(rf"(?i)(?:\s*[\u2014\u2013-]\s*)?{re.escape(k)}\s*$", "", s).rstrip(" \u2014\u2013-")
         label = _reminder_kind_label(k)
-        s = f"{s} — {label}" if s else label
-    return s
+        s = f"{s} - {label}" if s else label
+    return strip_ai_dashes(s)
 
 
 def _reminder_wording(kind: str, task: dict) -> dict:

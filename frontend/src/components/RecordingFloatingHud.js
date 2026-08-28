@@ -174,7 +174,7 @@ export const RecordingFloatingHud = ({
                             onClick={onStartTask}
                             className="ml-0.5 h-7 px-2.5 rounded-full bg-teal-600/90 hover:bg-teal-500 text-white text-[11px] font-semibold inline-flex items-center gap-1"
                             data-testid="recording-start-task-btn"
-                            title="Open the AI task bar — recording attaches when you stop"
+                            title="Open the AI task bar - recording attaches when you stop"
                         >
                             <Plus className="w-3 h-3" /> Task
                         </button>

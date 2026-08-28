@@ -197,7 +197,7 @@ const AnalyticsPage = () => {
                         <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
                     </div>
 
-                    {/* Section tabs — Overall Analytics + Activity Log + Leaderboards */}
+                    {/* Section tabs - Overall Analytics + Activity Log + Leaderboards */}
                     <div className="flex flex-wrap gap-2 justify-center">
                         {[
                             { key: 'analytics', label: 'Overall Analytics' },
@@ -487,7 +487,7 @@ const AnalyticsPage = () => {
                                                                                 {formatAvgResponse(assignee.avg_response_hours)}
                                                                             </span>
                                                                         ) : (
-                                                                            <span className="text-sm text-muted-foreground">—</span>
+                                                                            <span className="text-sm text-muted-foreground"> - </span>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -554,7 +554,7 @@ const AnalyticsPage = () => {
                                                                 </div>
                                                                 <div className="flex items-center justify-between text-xs pt-0.5">
                                                                     <span className="text-muted-foreground">Avg response</span>
-                                                                    <span className="font-semibold">{avg || '—'}</span>
+                                                                    <span className="font-semibold">{avg || ' - '}</span>
                                                                 </div>
                                                             </div>
                                                         </CardContent>
@@ -566,7 +566,7 @@ const AnalyticsPage = () => {
                                 </Card>
                             )}
 
-                            {/* Empty State — team onboarding */}
+                            {/* Empty State - team onboarding */}
                             {(!analytics.assignee_breakdown || analytics.assignee_breakdown.length === 0) && analytics.assigned_to_others_count === 0 && (
                                 <Card className="border-2 shadow-soft rounded-2xl" data-testid="analytics-team-onboarding">
                                     <CardContent className="p-12 text-center">
@@ -575,7 +575,7 @@ const AnalyticsPage = () => {
                                             <>
                                                 <h3 className="text-lg font-semibold mb-2">Set up your team to unlock analytics</h3>
                                                 <p className="text-muted-foreground mb-5 max-w-md mx-auto">
-                                                    Add direct reports and assign them tasks — then you&apos;ll see completion rates, leaderboards, and hierarchy performance here.
+                                                    Add direct reports and assign them tasks - then you&apos;ll see completion rates, leaderboards, and hierarchy performance here.
                                                 </p>
                                                 <Button onClick={() => navigate('/team')} className="rounded-full" data-testid="analytics-setup-team-button">
                                                     <Users className="w-4 h-4 mr-2" /> Set up your team
@@ -628,7 +628,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
 
     // Human-friendly hour formatting
     const fmtHours = (h) => {
-        if (h == null || isNaN(h)) return '—';
+        if (h == null || isNaN(h)) return ' - ';
         const mins = Math.round(Number(h) * 60);
         if (mins < 1) return '<1 min';
         if (mins < 60) return `${mins} min`;
@@ -722,7 +722,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
                                         <td className="px-3 py-2 font-semibold">{r.completed}</td>
                                         <td className="px-3 py-2">{fmtHours(r.avg_completion_hours)}</td>
                                         <td className="px-3 py-2">{fmtHours(r.avg_response_hours)}</td>
-                                        <td className="px-3 py-2">{r.streak > 0 ? <span className="inline-flex items-center gap-1 text-orange-600">🔥 {r.streak}</span> : '—'}</td>
+                                        <td className="px-3 py-2">{r.streak > 0 ? <span className="inline-flex items-center gap-1 text-orange-600">🔥 {r.streak}</span> : ' - '}</td>
                                         <td className="px-3 py-2">
                                             <div className="flex flex-wrap gap-1">
                                                 {r.badges.map((b, i) => (
@@ -783,13 +783,13 @@ const BestWorstAnalysis = ({ breakdown }) => {
     void median(scored.map((s) => s.completion_rate || 0));
     void median(scored.map((s) => (s.avg_response_hours == null ? 0 : s.avg_response_hours)));
 
-    const fmtHrs = (h) => (h == null ? '—' : h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${h}h` : `${(h / 24).toFixed(1)}d`);
+    const fmtHrs = (h) => (h == null ? ' - ' : h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${h}h` : `${(h / 24).toFixed(1)}d`);
     // Note: removed the full "Why" bullet lists per user feedback that best/worst was too prominent.
 
     return (
         <Card className="border shadow-soft rounded-2xl bg-gradient-to-br from-white to-gray-50" data-testid="best-worst-analysis-card">
             <CardContent className="py-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Best — compact */}
+                {/* Best - compact */}
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100" data-testid="best-performer-card">
                     <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
                         <Trophy className="w-4 h-4" />
@@ -803,7 +803,7 @@ const BestWorstAnalysis = ({ breakdown }) => {
                     </div>
                 </div>
 
-                {/* Worst — compact */}
+                {/* Worst - compact */}
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50/60 border border-red-100" data-testid="worst-performer-card">
                     <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
                         <AlertTriangle className="w-4 h-4" />

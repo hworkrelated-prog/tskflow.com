@@ -106,7 +106,7 @@ const RecurringPage = () => {
                         <h1 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Outfit' }}>
                             <Repeat className="w-6 h-6 text-teal-600" /> Recurring Series
                         </h1>
-                        <p className="text-xs text-muted-foreground">Automate recurring commitments — daily standups, weekly reports, monthly reviews.</p>
+                        <p className="text-xs text-muted-foreground">Automate recurring commitments - daily standups, weekly reports, monthly reviews.</p>
                     </div>
                 </div>
             </header>
@@ -170,7 +170,7 @@ const RecurringPage = () => {
                                                 </div>
                                             ))}
                                             {(occurrences[s.id] || []).filter(o => o.status !== 'Completed').length === 0 && (
-                                                <p className="text-sm text-muted-foreground text-center py-4">No upcoming occurrences — they’ll be generated automatically.</p>
+                                                <p className="text-sm text-muted-foreground text-center py-4">No upcoming occurrences - they’ll be generated automatically.</p>
                                             )}
                                         </div>
                                         <div className="text-xs uppercase text-muted-foreground mt-4 mb-2">Completed history</div>

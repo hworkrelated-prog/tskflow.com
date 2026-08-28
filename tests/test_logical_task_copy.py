@@ -23,7 +23,13 @@ def test_title_from_reminder_prompt_is_the_work():
     start = src.index("_DIRECT_HINTS = ")
     end = src.index("async def _llm_vet_title")
     ns = {}
-    exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
+    exec(
+        "import re\nfrom typing import Optional, List\n"
+        "def first_name(name, fallback=''):\n"
+        "    p = (name or '').strip().split()\n"
+        "    return p[0] if p else fallback\n" + src[start:end],
+        ns,
+    )
     title = ns["_title_from_work_text"]("This is a reminder for myself to review all deals")
     assert "reminder" not in title.lower()
     assert "complete this" not in title.lower()
@@ -41,7 +47,13 @@ def test_confirm_card_verbiage_is_second_person_and_complete():
     start = src.index("_DIRECT_HINTS = ")
     end = src.index("async def _llm_vet_title")
     ns = {}
-    exec("import re\nfrom typing import Optional, List\n" + src[start:end], ns)
+    exec(
+        "import re\nfrom typing import Optional, List\n"
+        "def first_name(name, fallback=''):\n"
+        "    p = (name or '').strip().split()\n"
+        "    return p[0] if p else fallback\n" + src[start:end],
+        ns,
+    )
     title = ns["_title_from_work_text"](
         "update their 1:1s and DKOs/DDBs and let Henrik Morgan know once this is completed"
     )

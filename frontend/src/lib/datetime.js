@@ -1,4 +1,4 @@
-/** All reminder / notification clocks are America/Los_Angeles — same as get_pst_now(). */
+/** All reminder / notification clocks are America/Los_Angeles - same as get_pst_now(). */
 export const APP_TIMEZONE = 'America/Los_Angeles';
 
 const hasZone = (s) => /[zZ]|[+-]\d{2}:?\d{2}$/.test(s);

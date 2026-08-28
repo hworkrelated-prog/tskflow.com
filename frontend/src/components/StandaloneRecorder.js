@@ -81,7 +81,7 @@ export const StandaloneRecorder = () => {
                         toast.error(err?.response?.data?.detail || 'Failed to save recording');
                     }
                 } else {
-                    toast.error('Recording was empty — nothing to save');
+                    toast.error('Recording was empty - nothing to save');
                 }
 
                 if (streamRef.current) {
@@ -104,11 +104,11 @@ export const StandaloneRecorder = () => {
             // Helpful hint based on the picked surface
             const surf = stream.getVideoTracks()[0]?.getSettings?.().displaySurface;
             if (surf === 'monitor') {
-                toast.info('Recording your whole screen — floating controls will be visible.');
+                toast.info('Recording your whole screen - floating controls will be visible.');
             } else if (surf === 'browser') {
-                toast.info('Recording this tab — the on-screen Stop button will be visible.');
+                toast.info('Recording this tab - the on-screen Stop button will be visible.');
             } else if (surf === 'window') {
-                toast.info('Recording a window — use browser\'s "Stop sharing" bar to end.');
+                toast.info('Recording a window - use browser\'s "Stop sharing" bar to end.');
             }
         } catch (e) {
             if (e?.name !== 'NotAllowedError') {
@@ -153,7 +153,7 @@ export const StandaloneRecorder = () => {
                 </Button>
             )}
 
-            {/* Floating controls — visible on the recorded surface when the user records the current tab or full screen */}
+            {/* Floating controls - visible on the recorded surface when the user records the current tab or full screen */}
             {recording && (
                 <div className="fixed bottom-6 right-6 z-[9999] bg-red-600 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 select-none">
                     <div className="w-3 h-3 bg-white rounded-full animate-pulse" />

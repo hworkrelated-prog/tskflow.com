@@ -14,7 +14,7 @@ import { canCaptureDisplay, pickRecorderMime } from '@/lib/recordingCapabilities
  * Loom-style screen recorder:
  *  - Mic + camera first, then free screen/window/tab picker
  *  - Pause / restart / stop with a movable HUD (camera + controls together)
- *  - Dual-screen uses Document PiP custom HUD — not a Chrome popup tab
+ *  - Dual-screen uses Document PiP custom HUD - not a Chrome popup tab
  *  - Saves blob to IndexedDB and opens the preview/save editor
  */
 export const ScreenRecorder = ({ onSaved }) => {
@@ -132,11 +132,11 @@ export const ScreenRecorder = ({ onSaved }) => {
         try { sessionStorage.setItem('tsk_last_recording_type', blob.type); } catch { /* noop */ }
         try { sessionStorage.setItem('tsk_last_recording_size', String(blob.size)); } catch { /* noop */ }
         if (onSaved) onSaved(blob, localUrl);
-        toast.success('Recording ready — opening preview...');
+        toast.success('Recording ready - opening preview...');
         let editorWin = null;
         try { editorWin = window.open('/recording/edit?pending=1', '_blank'); } catch { /* noop */ }
         if (!editorWin) {
-            toast.info('Popup blocked — opening editor in this tab');
+            toast.info('Popup blocked - opening editor in this tab');
             window.location.href = '/recording/edit?pending=1';
         }
     };
@@ -193,7 +193,7 @@ export const ScreenRecorder = ({ onSaved }) => {
             if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
                 toast.success('Drag the recording controls onto the screen you are capturing.');
             } else if (hud.mode === 'none' && needed) {
-                toast.info('Using the in-tab toolbar — Chrome can also show a Stop sharing bar.');
+                toast.info('Using the in-tab toolbar - Chrome can also show a Stop sharing bar.');
             }
 
             // Loom-style 3-2-1 after the user picks a surface
@@ -206,7 +206,7 @@ export const ScreenRecorder = ({ onSaved }) => {
 
             // Always record the raw display track. Baking webcam via canvas+rAF freezes when
             // the user switches tabs (browsers pause rAF; audio keeps going). Webcam is shown
-            // as a live floating bubble during the session instead — Loom-style for the web.
+            // as a live floating bubble during the session instead - Loom-style for the web.
             const audioTracks = mixAudioTracks(display, micStreamRef.current, micOn);
             const videoTracks = display.getVideoTracks();
             const mixed = new MediaStream([...videoTracks, ...audioTracks]);
@@ -254,14 +254,14 @@ export const ScreenRecorder = ({ onSaved }) => {
             timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
 
             const surf = settings.displaySurface;
-            if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab — prefer Entire Screen.');
+            if (surf === 'browser') toast.warning('Tab capture can freeze if you leave that tab - prefer Entire Screen.');
 
-            if (camErr) toast.warning('Webcam not available — continuing without it.');
-            if (micErr) toast.warning('Mic not available — continuing without audio commentary.');
+            if (camErr) toast.warning('Webcam not available - continuing without it.');
+            if (micErr) toast.warning('Mic not available - continuing without audio commentary.');
 
             const onVis = () => {
                 if (document.visibilityState === 'hidden' && surf === 'browser') {
-                    toast.warning('This tab is in the background — video may freeze. Switch back or record Entire Screen.');
+                    toast.warning('This tab is in the background - video may freeze. Switch back or record Entire Screen.');
                 }
             };
             document.addEventListener('visibilitychange', onVis);
@@ -353,9 +353,9 @@ export const ScreenRecorder = ({ onSaved }) => {
                 detail: { attachments: [ref] },
             }));
             window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
-            toast.success('Recording attached — finish the task in the bar below');
+            toast.success('Recording attached - finish the task in the bar below');
         } catch (e) {
-            toast.error('Could not attach recording — try again from the library');
+            toast.error('Could not attach recording - try again from the library');
             await finalizeAndOpenEditor(blob);
         }
     };
@@ -444,7 +444,7 @@ export const ScreenRecorder = ({ onSaved }) => {
                 <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 2147483645 }}
                     className="max-w-sm bg-slate-900/90 text-white shadow-xl rounded-2xl px-3.5 py-2 text-xs flex items-start gap-2 pointer-events-none"
                     data-testid="recording-pip-hint">
-                    <span>Recording controls are in the floating window — drag it onto the screen you are capturing.</span>
+                    <span>Recording controls are in the floating window - drag it onto the screen you are capturing.</span>
                 </div>
             )}
             <IosScreenRecordGuide

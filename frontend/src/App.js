@@ -42,6 +42,7 @@ import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
+import MailClaimPage from '@/pages/MailClaimPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
@@ -98,7 +99,7 @@ const AuthProvider = ({ children }) => {
         }
     }, [user]);
 
-    // Keep a web-push subscription for the whole session — including when the tab is closed.
+    // Keep a web-push subscription for the whole session - including when the tab is closed.
     useEffect(() => {
         if (!user || !token) return undefined;
         registerPush();
@@ -106,8 +107,8 @@ const AuthProvider = ({ children }) => {
     }, [user, token]);
 
     // Smart catch-up on login (replaces spammy per-task Chrome popups for backlog).
-    // In-app sheet only — never fire an OS toast when the user just opened the app.
-    // Also poll only for *very recent* live events (mentions/nudges) — never reminders.
+    // In-app sheet only - never fire an OS toast when the user just opened the app.
+    // Also poll only for *very recent* live events (mentions/nudges) - never reminders.
     useEffect(() => {
         if (!user) return;
         let cancelled = false;
@@ -135,7 +136,7 @@ const AuthProvider = ({ children }) => {
                 const data = res.data;
                 if (!data?.has_items || !catchUpIsMeaningful(data)) return;
 
-                // Open the in-app review once per browser session — no OS banner.
+                // Open the in-app review once per browser session - no OS banner.
                 // (OS toasts on open felt like spam: user is already looking at the app.)
                 if (!sessionStorage.getItem(sessionKey)) {
                     sessionStorage.setItem(sessionKey, '1');
@@ -146,7 +147,7 @@ const AuthProvider = ({ children }) => {
 
         const pollLive = async () => {
             if (cancelled) return;
-            // Never OS-toast while the user is actively looking at the app after a return —
+            // Never OS-toast while the user is actively looking at the app after a return  - 
             // catch-up / the bell cover backlog. Live toasts are for events that arrive
             // while already focused (WebSocket path) or the rare pending poll hit.
             if (document.visibilityState !== 'visible') return;
@@ -155,7 +156,7 @@ const AuthProvider = ({ children }) => {
                 const items = (res.data && res.data.notifications) || [];
                 if (!items.length) return;
                 if (!('Notification' in window) || Notification.permission !== 'granted') return;
-                // Cap live OS toasts hard — never dump a backlog
+                // Cap live OS toasts hard - never dump a backlog
                 items.slice(0, 3).forEach((n) => {
                     try {
                         const notif = new Notification(sanitize(n.title) || 'TskFlow', {
@@ -175,7 +176,7 @@ const AuthProvider = ({ children }) => {
 
         runCatchUp();
         // Live poll is infrequent and only for brand-new non-reminder events.
-        // Do NOT poll immediately on tab-focus — that re-toasts backlog the moment
+        // Do NOT poll immediately on tab-focus - that re-toasts backlog the moment
         // you open the app after being away. Interval-only is enough.
         let interval = null;
         const startPoll = () => {
@@ -232,7 +233,7 @@ const AuthProvider = ({ children }) => {
                         const data = cleanJsonTree(JSON.parse(ev.data));
                         if (data.event === 'notification') {
                             window.dispatchEvent(new CustomEvent('tskflow:notification', { detail: data.notification }));
-                            // Realtime OS toast for live events only — never for reminder backlog types
+                            // Realtime OS toast for live events only - never for reminder backlog types
                             const nType = data.notification?.type;
                             const allowOs = nType && nType !== 'reminder';
                             if (allowOs && 'Notification' in window && Notification.permission === 'granted' && data.notification) {
@@ -291,7 +292,7 @@ const AuthProvider = ({ children }) => {
             setUser(response.data);
         } catch (error) {
             console.error('Failed to fetch user', error);
-            // Only clear the session on real auth failure — network blips
+            // Only clear the session on real auth failure - network blips
             // while offline / waking the PWA must not force a re-login.
             const status = error?.response?.status;
             if (status === 401 || status === 403) {
@@ -476,6 +477,7 @@ function App() {
                     } />
                     <Route path="/register" element={<RegistrationPage />} />
                     <Route path="/join/:token" element={<JoinInvitePage />} />
+                    <Route path="/mail/claim" element={<MailClaimPage />} />
                     <Route path="/verify-email" element={<VerifyEmailPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />

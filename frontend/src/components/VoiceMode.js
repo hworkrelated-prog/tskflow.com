@@ -63,13 +63,13 @@ const localJarvisReply = (text) => {
     if (/\b(what can you (do|help with)|who are you|what do you do|help me get started)\b/i.test(t)) {
         return {
             reply:
-                "I'm Jarvis — think of me as your ops lead in the app. I can create and assign tasks from plain English, list what's still open, nudge status updates, and jump you to pages like analytics or settings. What do you want to tackle?",
+                "I'm Jarvis - think of me as your ops lead in the app. I can create and assign tasks from plain English, list what's still open, nudge status updates, and jump you to pages like analytics or settings. What do you want to tackle?",
             action: { type: 'assistant_answer' },
         };
     }
     if (/\b(guide me|show yourself|show me|help me|walk me through)\b/i.test(t) && t.length < 80) {
         return {
-            reply: "Sure. Tell me what you're stuck on — a task, an assignee, a due date — and I'll walk you through it.",
+            reply: "Sure. Tell me what you're stuck on - a task, an assignee, a due date - and I'll walk you through it.",
             action: { type: 'assistant_answer' },
         };
     }
@@ -221,11 +221,11 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                 const preview = screenContext.ai_preview_title;
                 const composer = screenContext.ai_composer;
                 const err0 = (screenContext.errors || [])[0];
-                let offlineHelp = "I can see your screen snapshot locally. Fill assignee and due date in the AI bar, then send — or tell me the field you're stuck on.";
+                let offlineHelp = "I can see your screen snapshot locally. Fill assignee and due date in the AI bar, then send - or tell me the field you're stuck on.";
                 if (clarify) offlineHelp = `Looks like you're stuck on: “${String(clarify).slice(0, 160)}”. Answer that in the AI bar, then continue.`;
                 else if (err0) offlineHelp = `I see an error: “${String(err0).slice(0, 140)}”. Fix that first, then try again.`;
                 else if (preview) offlineHelp = `You've got a draft titled “${String(preview).slice(0, 80)}”. Check assignee and due date, then hit Send task.`;
-                else if (composer) offlineHelp = `You've typed “${String(composer).slice(0, 100)}” — add @assignee and a due date, then create the task.`;
+                else if (composer) offlineHelp = `You've typed “${String(composer).slice(0, 100)}” - add @assignee and a due date, then create the task.`;
                 applyReply(offlineHelp, { type: 'assistant_answer' }, { type: 'assistant_answer', offline: true, screen_help: true });
                 return;
             }
@@ -242,7 +242,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             const looksLikeProxy = !status || status >= 502 || /cloudflare|origin web server|bad gateway|gateway time|<!doctype|<html/i.test(asText || '');
             const msg = looksLikeProxy
                 ? "The server didn't finish that one. Try “what's outstanding”, or type a task in the bar below."
-                : (asText || 'Sorry — I had trouble with that. Try again?').slice(0, 280);
+                : (asText || 'Sorry - I had trouble with that. Try again?').slice(0, 280);
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: msg }]);
             setPhase('idle');
         }
@@ -264,7 +264,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     const startListening = useCallback(() => {
         if (!supported) {
-            toast.error('Voice not supported here — type instead.');
+            toast.error('Voice not supported here - type instead.');
             inputRef.current?.focus();
             return;
         }
@@ -566,7 +566,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         ? 'h-11 w-11 shadow-[0_8px_22px_rgba(13,148,136,0.28)]'
                         : 'h-14 w-14 shadow-[0_12px_32px_rgba(13,148,136,0.35)]'
                 }`}
-                title="Jarvis — AI manager"
+                title="Jarvis - AI manager"
                 aria-label="Open Jarvis"
             >
                 <JarvisIcon

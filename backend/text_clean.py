@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Optional
+from no_ai_dash import strip_ai_dashes
 
 _SKIP_KEYS = {
     "password",
@@ -32,10 +33,6 @@ _PUNCT = {
     "\u201c": '"',
     "\u201d": '"',
     "\u201e": '"',
-    "\u2013": "-",
-    "\u2014": "-",
-    "\u2212": "-",
-    "\u2551": "-",
     "\u2026": "...",
     "\u00a0": " ",
     "\u2022": "*",
@@ -71,7 +68,7 @@ def clean_display_text(s: Optional[str]) -> str:
     t = re.sub(r"[\u0080-\u009f]", "", t)
     t = _LEFTOVER.sub(_leftover_punct, t)
     t = re.sub(r" {2,}", " ", t)
-    return t
+    return strip_ai_dashes(t)
 
 
 _LEFTOVER = re.compile(

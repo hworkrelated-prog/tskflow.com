@@ -73,7 +73,7 @@ const renderHudHtml = ({ showCamera }) => `<!DOCTYPE html>
       </div>
     </div>
   </div>
-  <div class="warn" id="warn">Lost connection — use the browser Stop sharing bar.</div>
+  <div class="warn" id="warn">Lost connection - use the browser Stop sharing bar.</div>
   <script>
     const fmt = (s) => {
       const n = Math.max(0, Math.floor(s || 0));
@@ -143,7 +143,7 @@ const wireHudDocument = (doc, { showCamera }) => {
 /**
  * Open a single movable HUD (camera + controls) via Document Picture-in-Picture.
  * Call prepareRecordingHudOverlay() synchronously from a click handler so Chrome
- * still has a user gesture — getDisplayMedia alone consumes activation and PiP
+ * still has a user gesture - getDisplayMedia alone consumes activation and PiP
  * then fails, leaving controls stuck on the wrong surface.
  * @returns {{ mode: 'pip'|'none', win: Window|null, placedOnOtherDisplay: boolean, reason?: string }}
  */
@@ -205,7 +205,7 @@ export async function openRecordingHudOverlay({
         console.warn('Document PiP recording HUD unavailable', e);
     }
 
-    // Do not fall back to window.open — Chrome draws that as a shortened tab.
+    // Do not fall back to window.open - Chrome draws that as a shortened tab.
     return { mode: 'none', win: null, placedOnOtherDisplay, reason };
 }
 

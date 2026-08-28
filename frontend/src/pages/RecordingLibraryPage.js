@@ -75,7 +75,7 @@ const RecordingLibraryPage = () => {
                         <h1 className="text-xl font-semibold flex items-center gap-2">
                             <Video className="w-5 h-5 text-teal-600" /> Recordings
                         </h1>
-                        <p className="text-xs text-muted-foreground">All your screen recordings — start a new one or browse past recordings.</p>
+                        <p className="text-xs text-muted-foreground">All your screen recordings - start a new one or browse past recordings.</p>
                     </div>
                     <ScreenRecorder />
                     <span className="text-xs text-muted-foreground hidden md:inline">{recordings.length} recording{recordings.length === 1 ? '' : 's'}</span>

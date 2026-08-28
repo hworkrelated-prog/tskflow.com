@@ -1,6 +1,6 @@
 /**
  * Always-on-top recording controls for when the user is presenting another tab/window.
- * Prefers Document Picture-in-Picture (Chrome). Avoids a tiny popup window —
+ * Prefers Document Picture-in-Picture (Chrome). Avoids a tiny popup window  - 
  * those look like a shortened Chrome tab because the browser draws tab chrome.
  *
  * Delegates to the unified HUD (camera + controls in one movable surface).

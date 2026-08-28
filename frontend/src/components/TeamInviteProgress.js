@@ -59,7 +59,7 @@ const TeamInviteProgress = ({ compact = false }) => {
                             data-testid="invite-progress-row"
                         >
                             <span className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-semibold shrink-0">
-                                {row.waiting ? '–' : row.rank}
+                                {row.waiting ? '' : row.rank}
                             </span>
                             <div className="min-w-0 flex-1">
                                 <p className="text-sm font-medium truncate">{row.name}</p>

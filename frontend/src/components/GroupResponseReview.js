@@ -86,7 +86,7 @@ const GroupResponseReview = ({ parentId, initialReview, isCreator, hasCriteria, 
                     {!hasExpectations && (
                         <p className="text-xs text-slate-500 flex items-start gap-1.5">
                             <MessageSquare className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                            No written expectation was set, so this is a summary — not a grade. Add “Done well looks like” next time to check fit.
+                            No written expectation was set, so this is a summary - not a grade. Add “Done well looks like” next time to check fit.
                         </p>
                     )}
 
@@ -107,7 +107,7 @@ const GroupResponseReview = ({ parentId, initialReview, isCreator, hasCriteria, 
                                 {review.aligned.map((p, i) => (
                                     <li key={i} className="text-sm text-slate-700">
                                         <span className="font-medium">{p.name}</span>
-                                        {p.why ? <span className="text-slate-500"> — {p.why}</span> : null}
+                                        {p.why ? <span className="text-slate-500"> - {p.why}</span> : null}
                                     </li>
                                 ))}
                             </ul>
@@ -123,7 +123,7 @@ const GroupResponseReview = ({ parentId, initialReview, isCreator, hasCriteria, 
                                 {review.needs_attention.map((p, i) => (
                                     <li key={i} className="text-sm text-slate-700">
                                         <span className="font-medium">{p.name}</span>
-                                        {p.why ? <span className="text-slate-500"> — {p.why}</span> : null}
+                                        {p.why ? <span className="text-slate-500"> - {p.why}</span> : null}
                                     </li>
                                 ))}
                             </ul>
@@ -144,7 +144,7 @@ const GroupResponseReview = ({ parentId, initialReview, isCreator, hasCriteria, 
                                 {review.read_first.map((p, i) => (
                                     <li key={i} className="text-sm text-slate-700">
                                         <span className="font-medium">{p.name}</span>
-                                        {p.reason ? <span className="text-slate-500"> — {p.reason}</span> : null}
+                                        {p.reason ? <span className="text-slate-500"> - {p.reason}</span> : null}
                                     </li>
                                 ))}
                             </ul>

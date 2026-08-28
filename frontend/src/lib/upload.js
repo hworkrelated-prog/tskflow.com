@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { API } from '@/App';
 
-const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB — safely under proxy limits
+const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB - safely under proxy limits
 // Prefer single-shot upload under this size (avoids /tmp session loss across workers).
 const DIRECT_MAX = 180 * 1024 * 1024;
 
@@ -11,7 +11,7 @@ const authHeaders = () => {
 };
 
 /**
- * Single-request upload — durable; no multi-step /tmp session.
+ * Single-request upload - durable; no multi-step /tmp session.
  */
 const uploadDirect = async (blob, filename, contentType, onProgress) => {
     const { data } = await axios.post(`${API}/uploads/direct`, blob, {
@@ -81,7 +81,7 @@ const uploadChunked = async (blob, filename, contentType, onProgress) => {
  */
 export const uploadBlob = async (blob, filename, contentType, onProgress) => {
     if (!blob || !blob.size) {
-        throw new Error('Nothing to upload — recording data is empty');
+        throw new Error('Nothing to upload - recording data is empty');
     }
 
     // Always prefer direct upload within size budget.

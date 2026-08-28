@@ -40,7 +40,7 @@ export function layoutTaskDescription(raw) {
     s = s.replace(/\s*\.?\s*Additional info:\s*[\s\S]*?(?=(?:\n\n(?:Next\s+)?steps?:)|$)/i, '');
     s = s.replace(/\s*\.?\s*Assign to\s+(?:ASAP|EOD|EOM|today|tomorrow|urgent|now)\.?/gi, '');
     s = s.replace(/\s*When should this be done by\?\s*:\s*[^\n.]+/gi, '');
-    // Speak TO the assignee — never "with their understanding"
+    // Speak TO the assignee - never "with their understanding"
     s = s.replace(
         /\b(?:respond|reply)\s+with\s+a\s+screen\s+recording\s+with\s+their\s+understanding\s+of\s+the\s+work\s+that(?:'s| has)\s+been\s+assigned\b/gi,
         'reply with a screen recording that shows your understanding of the assigned work',
@@ -127,7 +127,7 @@ const TITLE_DANGLING = new Set([
     'let', 'know', 'tell', 'give', 'by', 'once', 'please',
 ]);
 
-/** Titles like "Complete This is a reminder…" — drop the glued command. */
+/** Titles like "Complete This is a reminder…" - drop the glued command. */
 export function displayTaskTitle(raw) {
     let s = cleanDisplayText(raw).replace(/\s+/g, ' ').trim();
     s = s.replace(/^Complete\s+(?=(this|that|these|those|i\b|my\b))/i, '');
@@ -150,7 +150,7 @@ export function displayTaskTitle(raw) {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Last-resort title when the model returns junk — don't prefix sentences with "Complete". */
+/** Last-resort title when the model returns junk - don't prefix sentences with "Complete". */
 export function fallbackTaskTitle(seed) {
     const cleaned = String(seed || '')
         .replace(/^(an?|the)\s+/i, '')
@@ -212,10 +212,10 @@ export function sentTaskFollowupMessage({
     }
     const who = (names || '').trim() || 'your team';
     if (slackConnected) {
-        return `Sent to ${who}. I’ll follow up if they go quiet — and if they ignore two pings, I’ll Slack them with you in the loop.`;
+        return `Sent to ${who}. I’ll follow up if they go quiet - and if they ignore two pings, I’ll Slack them with you in the loop.`;
     }
     if (canManageSlack) {
         return `Sent to ${who}. I’ll follow up here if they go quiet. Connect Slack in Settings (admins only) to also ping them there after two ignored reminders.`;
     }
-    return `Sent to ${who}. I’ll follow up here if they go quiet. Your admin can connect Slack in Settings — once they do, those follow-ups can go to Slack too.`;
+    return `Sent to ${who}. I’ll follow up here if they go quiet. Your admin can connect Slack in Settings - once they do, those follow-ups can go to Slack too.`;
 }

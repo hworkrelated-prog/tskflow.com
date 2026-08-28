@@ -36,8 +36,8 @@ export function humanizeReminderBody(body) {
     if (!body) return body;
     const raw = String(body);
     return raw.replace(
-        /\s*[—\-]\s*(before_due|3h|2h|30min|overdue|no_response|no_progress)\s*$/i,
-        (_, key) => ` — ${REMINDER_KIND_LABELS[key.toLowerCase()] || key.replace(/_/g, ' ')}`,
+        /\s*[\u2014\u2013-]\s*(before_due|3h|2h|30min|overdue|no_response|no_progress)\s*$/i,
+        (_, key) => ` - ${REMINDER_KIND_LABELS[key.toLowerCase()] || key.replace(/_/g, ' ')}`,
     );
 }
 
@@ -77,7 +77,7 @@ export function reminderEmailCount(activities, { slackConnected = false } = {}) 
     ), 0);
 }
 
-/** Semantic tone class — readable in light and dark (see App.css .reminder-tone-*). */
+/** Semantic tone class - readable in light and dark (see App.css .reminder-tone-*). */
 export function reminderActivityTone(a, { slackConnected = false } = {}) {
     const meta = a?.meta || {};
     const kind = String(meta.fired_kind || meta.bucket || '').toLowerCase();
@@ -160,7 +160,7 @@ const TaskDetail = () => {
     }, [taskId, token]);
 
     // Prefetch reminders on open so the tab count is real and the list is ready
-    // (previously lazy-loaded only after clicking Reminders — looked empty until then).
+    // (previously lazy-loaded only after clicking Reminders - looked empty until then).
     useEffect(() => {
         if (task?.id || taskId) fetchReminderActivity();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,7 +170,7 @@ const TaskDetail = () => {
         if (searchParams.get('tab') === 'reminders') setSideTab('reminders');
     }, [searchParams]);
 
-    // Real-time chatter — refresh when server pushes a new_comment for this task
+    // Real-time chatter - refresh when server pushes a new_comment for this task
     useEffect(() => {
         const handler = (e) => {
             if (e.detail?.task_id === (task?.id || taskId)) {
@@ -314,7 +314,7 @@ const TaskDetail = () => {
                     setGroupRollup(r.data?.accountability || r.data || null);
                 }).catch(() => setGroupRollup(null));
             } else if (response.data.parent_id) {
-                // Subtask — load the parent's leaderboard so the receiver can see how their peers are doing
+                // Subtask - load the parent's leaderboard so the receiver can see how their peers are doing
                 const pid = response.data.parent_id;
                 axios.get(`${API}/tasks/parents/${pid}/subtasks`).then((r) => {
                     setSubtasks(Array.isArray(r.data) ? r.data : (r.data?.subtasks || []));
@@ -984,7 +984,7 @@ const TaskDetail = () => {
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-6 p-4 pt-0 sm:p-6 sm:pt-0">
-                            {/* Screen recording requirement — shown prominently so the assignee sees it. */}
+                            {/* Screen recording requirement - shown prominently so the assignee sees it. */}
                             {task.requires_screen_recording && (
                                 <div className="border-2 border-teal-200 bg-gradient-to-r from-teal-50 to-teal-50 rounded-2xl p-4 flex items-start gap-3" data-testid="requires-recording-banner">
                                     <div className="w-9 h-9 rounded-full bg-teal-700 text-white flex items-center justify-center shrink-0">
@@ -1024,7 +1024,7 @@ const TaskDetail = () => {
                                         <p className="font-semibold text-base sm:text-lg">{task.category}</p>
                                     </div>
                                 )}
-                                {/* NOTE: The "Assigned to" info is rendered only ONCE — in the "Assignees" card beneath the Comments/Chatter panel. */}
+                                {/* NOTE: The "Assigned to" info is rendered only ONCE - in the "Assignees" card beneath the Comments/Chatter panel. */}
                             </div>
 
                             <div className="min-w-0">
@@ -1115,7 +1115,7 @@ const TaskDetail = () => {
                                 </div>
                             )}
                             {/* Note: Comments live in the right-side "Comments" panel (or on mobile, at the bottom of this card). */}
-                            {/* Removed the redundant inline Comments/Chatter section — Comments and Chatter are the same thing. */}
+                            {/* Removed the redundant inline Comments/Chatter section - Comments and Chatter are the same thing. */}
 
                             {task.reason_for_decline && (
                                 <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -1129,7 +1129,7 @@ const TaskDetail = () => {
                                     <Label className="text-blue-700">Counter Proposal</Label>
                                     <p className="mt-1 text-blue-900">{task.counter_proposal_message}</p>
                                     <p className="mt-2 text-sm text-blue-700">
-                                        Proposed Date: {task.proposed_due_date && !isNaN(new Date(task.proposed_due_date).getTime()) ? format(new Date(task.proposed_due_date), 'MMM dd, yyyy h:mm a') : '—'}
+                                        Proposed Date: {task.proposed_due_date && !isNaN(new Date(task.proposed_due_date).getTime()) ? format(new Date(task.proposed_due_date), 'MMM dd, yyyy h:mm a') : ' - '}
                                     </p>
                                     {user?.id === task.created_by && task.status === 'Counter-Proposed' && (
                                         <div className="flex gap-2 mt-3">
@@ -1638,7 +1638,7 @@ const TaskDetail = () => {
                         <SlackFollowupCard thread={slackFollowup} />
                     )}
 
-                    {/* Assignees panel — lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
+                    {/* Assignees panel - lives directly under Comments. Single source of truth for who's assigned + review/nudge actions. */}
                     {isParentTask && user?.id === task.created_by && (
                         <GroupResponseReview
                             parentId={task.id}
@@ -1694,7 +1694,7 @@ const TaskDetail = () => {
                                         </CardContent>
                                     </Card>
 
-                                    {/* Peer leaderboard — visible to subtask receivers so they can see how their teammates are progressing. */}
+                                    {/* Peer leaderboard - visible to subtask receivers so they can see how their teammates are progressing. */}
                                     {task.parent_id && subtasks.length > 1 && (
                                         <Card className="border-2 rounded-2xl mt-4 overflow-hidden" data-testid="peer-leaderboard-card">
                                             <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b flex items-center gap-2">
@@ -1758,7 +1758,7 @@ const TaskDetail = () => {
                             </div>
                         )}
                         <Input
-                            placeholder="Type email and press Enter — or pick from teammates below"
+                            placeholder="Type email and press Enter - or pick from teammates below"
                             value={addAssigneesEmailInput}
                             onChange={(e) => setAddAssigneesEmailInput(e.target.value)}
                             onKeyDown={(e) => {
@@ -1818,11 +1818,11 @@ const TaskDetail = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* Subtask review modal — for parent/group tasks, review each assignee's submission individually */}
+            {/* Subtask review modal - for parent/group tasks, review each assignee's submission individually */}
             <Dialog open={Boolean(subtaskReviewFor)} onOpenChange={(o) => { if (!o) { setSubtaskReviewFor(null); setSubtaskReviewFeedback(''); } }}>
                 <DialogContent className="rounded-2xl max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Review submission — {subtaskReviewFor?.name}</DialogTitle>
+                        <DialogTitle>Review submission - {subtaskReviewFor?.name}</DialogTitle>
                         <DialogDescription>Approve their work or send it back with feedback.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3">
@@ -2024,7 +2024,7 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                                             )}
                                         </div>
                                     </div>
-                                    <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? '—' : r.status)}</div>
+                                    <div className="text-xs text-gray-500 shrink-0">{r.completion_hours != null ? `${r.completion_hours}h` : (r.completed ? ' - ' : r.status)}</div>
                                 </button>
                                 {isCreator && r.status === 'Review Pending' && r.subtaskId && onReviewSubtask && (
                                     <Button
@@ -2103,7 +2103,7 @@ const SlackFollowupCard = ({ thread }) => {
                     </div>
                 ))}
                 <p className="text-xs text-muted-foreground">
-                    Replies on Slack update this task — accepted, blocked, declined, or done.
+                    Replies on Slack update this task - accepted, blocked, declined, or done.
                 </p>
             </CardContent>
         </Card>

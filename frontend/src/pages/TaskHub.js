@@ -237,7 +237,7 @@ const TaskHub = () => {
         return detach;
     }, []);
 
-    // Voice-executed side effects (create/update task) — refresh
+    // Voice-executed side effects (create/update task) - refresh
     useEffect(() => {
         const handler = () => { fetchDashboard(); fetchParentGroups(); fetchDrafts(); };
         window.addEventListener('tskflow:voice-executed', handler);
@@ -293,7 +293,7 @@ const TaskHub = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [taskForm, selectedAssignees, attachments, showCreateModal]);
 
-    // Smart Task Creation — infer fields from description on debounce (only if title empty)
+    // Smart Task Creation - infer fields from description on debounce (only if title empty)
     useEffect(() => {
         if (!showCreateModal) return;
         const desc = (taskForm.description || '').replace(/<[^>]+>/g, '').trim();
@@ -346,7 +346,7 @@ const TaskHub = () => {
         }
     };
 
-    // Resume a draft — open modal and populate
+    // Resume a draft - open modal and populate
     const resumeDraft = async (draft) => {
         window.dispatchEvent(new CustomEvent('tskflow:resume-ai-draft', { detail: draft }));
         window.dispatchEvent(new CustomEvent('tskflow:open-ai-create'));
@@ -387,7 +387,7 @@ const TaskHub = () => {
             return true;
         } catch (error) {
             // Wake/background reloads often fail once while the laptop/network is still coming back.
-            // Don't spam "Failed to load dashboard" — retry quietly instead.
+            // Don't spam "Failed to load dashboard" - retry quietly instead.
             if (!quiet) {
                 toast.error('Failed to load dashboard', { id: 'dashboard-load' });
             }
@@ -470,7 +470,7 @@ const TaskHub = () => {
             }
         };
 
-        // One coalesced refresh when the tab/network wakes — sleep often fires
+        // One coalesced refresh when the tab/network wakes - sleep often fires
         // visibilitychange + online + tskflow:app-wake together, and the first
         // request can fail before the NIC is back.
         let interval = null;
@@ -811,7 +811,7 @@ const TaskHub = () => {
 
             const taskData = { ...taskForm, attachments };
 
-            // Recurring series path — one series per assignee
+            // Recurring series path - one series per assignee
             if (recurrence.enabled) {
                 const rule = {
                     frequency: recurrence.frequency,
@@ -1125,7 +1125,7 @@ const TaskHub = () => {
                                 <LogOut className="w-5 h-5" />
                             </Button>
                         </div>
-                        {/* Mobile overflow menu — keeps the header one-handed */}
+                        {/* Mobile overflow menu - keeps the header one-handed */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="icon" className="md:hidden rounded-full border-gray-300 text-gray-600" data-testid="mobile-nav-menu" aria-label="More">
@@ -1270,7 +1270,7 @@ const TaskHub = () => {
                             </>
                         ) : (
                             <>
-                                {/* Single "Recordings" button — merges Record + Library. Takes user to the library where they can start a new recording or browse past ones. */}
+                                {/* Single "Recordings" button - merges Record + Library. Takes user to the library where they can start a new recording or browse past ones. */}
                                 <Button variant="outline" onClick={() => navigate('/recordings')} className="hidden sm:inline-flex rounded-full gap-2" data-testid="recording-library-button" title="Screen recordings">
                                     <Library className="w-4 h-4" />
                                     Recordings
@@ -1290,7 +1290,7 @@ const TaskHub = () => {
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {draftInModal.status === 'saving' && <span className="text-[11px] text-amber-600 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Saving…</span>}
                                                     {draftInModal.status === 'saved' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
-                                                    {draftInModal.status === 'error' && <span className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Save failed — will retry</span>}
+                                                    {draftInModal.status === 'error' && <span className="text-[11px] text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Save failed - will retry</span>}
                                                     {smartParsing && <span className="text-[11px] text-teal-600 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Analyzing…</span>}
                                                 </div>
                                             </div>
@@ -1435,7 +1435,7 @@ const TaskHub = () => {
                                                 <span>This is a Sales Task <span className="text-xs text-muted-foreground">(involves a customer or prospect)</span></span>
                                             </label>
 
-                                            {/* Advanced options — collapsed by default so the form stays short */}
+                                            {/* Advanced options - collapsed by default so the form stays short */}
                                             <details className="rounded-xl border bg-muted/40 group" data-testid="advanced-options">
                                                 <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-medium flex items-center justify-between hover:bg-muted/60 rounded-xl">
                                                     <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-teal-600" /> Advanced options</span>
@@ -1504,7 +1504,7 @@ const TaskHub = () => {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🤖</span>
-                                    <h3 className="font-semibold text-purple-900">Jarvis Summary — {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
+                                    <h3 className="font-semibold text-purple-900">Jarvis Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
                                 </div>
                                 {aiSummaryStats && (
                                     <div className="flex flex-wrap gap-2 mb-3">
@@ -1557,7 +1557,7 @@ const TaskHub = () => {
                                 type="button"
                                 data-testid="toggle-sales-only"
                                 onClick={() => setSalesOnly((v) => !v)}
-                                title={salesOnly ? 'Showing only sales tasks — click to disable' : 'Show only sales tasks'}
+                                title={salesOnly ? 'Showing only sales tasks - click to disable' : 'Show only sales tasks'}
                                 className={`group shrink-0 ml-0.5 flex items-center gap-1.5 h-9 px-2.5 rounded-full text-sm font-medium transition-all ${salesOnly ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white hover:text-emerald-600'}`}
                             >
                                 <DollarSign className="w-4 h-4" />
@@ -1568,7 +1568,7 @@ const TaskHub = () => {
                         </div>
 
                         <div className="flex items-center gap-2 flex-1 min-w-0 sm:justify-end">
-                            {/* Compact search bar — desktop */}
+                            {/* Compact search bar - desktop */}
                             <div className="relative min-w-[180px] max-w-[240px] hidden sm:block">
                                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                                 <Input

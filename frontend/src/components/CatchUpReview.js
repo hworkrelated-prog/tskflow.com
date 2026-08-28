@@ -55,7 +55,7 @@ const Row = ({ title, meta, onClick, testId }) => (
 );
 
 /**
- * Smart catch-up panel — one calm review instead of a storm of Chrome popups.
+ * Smart catch-up panel - one calm review instead of a storm of Chrome popups.
  * Opens from `tskflow:catch-up` (login) or via openCatchUp() / bell action.
  */
 export const CatchUpReview = () => {

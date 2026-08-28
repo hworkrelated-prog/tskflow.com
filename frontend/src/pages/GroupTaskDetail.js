@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Trophy, MessageSquare, Send, TrendingUp, TrendingDown, Mail, Zap, AlertCircle, Sparkles, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 
-// Fuzzy score — lower is better. Rewards exact prefix + substring hits.
+// Fuzzy score - lower is better. Rewards exact prefix + substring hits.
 const fuzzyScore = (haystack, needle) => {
     const h = (haystack || '').toLowerCase();
     const n = (needle || '').toLowerCase().trim();
@@ -34,7 +34,7 @@ const fuzzyScore = (haystack, needle) => {
 const PRESETS = [
     { key: 'gentle_nudge', label: '💬 Gentle nudge', hint: 'A friendly reminder to please close the loop' },
     { key: 'urgent_reminder', label: '⚡ Urgent reminder', hint: 'This is well past due and needs immediate attention' },
-    { key: 'final_notice', label: '🚨 Final notice', hint: `Last call — escalation next if it's not done today` },
+    { key: 'final_notice', label: '🚨 Final notice', hint: `Last call - escalation next if it's not done today` },
     { key: 'custom', label: '✍️ Custom message', hint: 'Write your own note' },
 ];
 
@@ -441,7 +441,7 @@ const GroupTaskDetail = () => {
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
                                     <Trophy className="w-5 h-5 text-amber-500" />
-                                    <h2 className="text-xl font-semibold">Leaderboard — {all.length} assignees</h2>
+                                    <h2 className="text-xl font-semibold">Leaderboard - {all.length} assignees</h2>
                                 </div>
                                 {isCreator && activeOnly.length > 0 && (
                                     <Button
@@ -542,7 +542,7 @@ const GroupTaskDetail = () => {
                     </CardContent>
                 </Card>
 
-                {/* Top 5 / Bottom 5 — visible when the group is big enough */}
+                {/* Top 5 / Bottom 5 - visible when the group is big enough */}
                 {showTopBottomSplit && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Card className="border-2 border-emerald-200">

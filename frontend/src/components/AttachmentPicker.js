@@ -255,7 +255,7 @@ export const AttachmentPicker = forwardRef(({
                     setShowPreview(true);
                     try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
                 } else {
-                    toast.error('Recording was empty — try again');
+                    toast.error('Recording was empty - try again');
                 }
             };
             rec.start(1000);
@@ -283,7 +283,7 @@ export const AttachmentPicker = forwardRef(({
             return;
         }
         setStarting(true);
-        // Open PiP while the click gesture is still valid — after getDisplayMedia it is gone.
+        // Open PiP while the click gesture is still valid - after getDisplayMedia it is gone.
         const hudPrep = prepareRecordingHudOverlay({ showCamera: opts.camera });
         try {
             const { mic: micStream, camera: cameraStream } = await requestMediaPermissions();
@@ -301,7 +301,7 @@ export const AttachmentPicker = forwardRef(({
             const screens = await listScreens();
             const matched = matchScreenToCapture(settings, screens);
 
-            // Always use the raw display track — canvas+rAF freezes when the tab is
+            // Always use the raw display track - canvas+rAF freezes when the tab is
             // backgrounded (audio would keep going). Camera is optional preview only.
             const videoTrackForRecording = screenStream.getVideoTracks()[0];
             let audioTrack = null;
@@ -355,11 +355,11 @@ export const AttachmentPicker = forwardRef(({
                     setShowPreview(true);
                     try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
                 } else {
-                    toast.error('Recording was empty — try again');
+                    toast.error('Recording was empty - try again');
                 }
             };
             rec.onerror = () => {
-                toast.error('Recording error — please try again');
+                toast.error('Recording error - please try again');
                 cleanupStreams();
                 setRecording(false);
                 setSeconds(0);
@@ -387,7 +387,7 @@ export const AttachmentPicker = forwardRef(({
             if (hud.placedOnOtherDisplay || (hud.mode === 'pip' && screens.length > 1)) {
                 toast.success('Drag the recording controls onto the screen you are capturing.');
             } else if (hud.mode === 'none' && needed) {
-                toast.info('Using the in-tab toolbar — Chrome can also show a Stop sharing bar.');
+                toast.info('Using the in-tab toolbar - Chrome can also show a Stop sharing bar.');
             }
         } catch (e) {
             closeRecordingHudOverlay();
@@ -545,7 +545,7 @@ export const AttachmentPicker = forwardRef(({
                             <>
                                 {allAllowed && !showAdvancedOpts ? (
                                     <p className="text-xs text-muted-foreground">
-                                        Mic &amp; camera already allowed — start when ready.
+                                        Mic &amp; camera already allowed - start when ready.
                                         {' '}
                                         <button
                                             type="button"
@@ -631,7 +631,7 @@ export const AttachmentPicker = forwardRef(({
                 />
             )}
 
-            {/* Preview Dialog — closes automatically after Save */}
+            {/* Preview Dialog - closes automatically after Save */}
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
                 <DialogContent className="max-w-2xl sm:max-w-3xl p-0 overflow-hidden gap-0">
                     <DialogHeader className="px-5 pt-5 pb-3">

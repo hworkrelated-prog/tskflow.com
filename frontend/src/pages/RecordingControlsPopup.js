@@ -3,7 +3,7 @@ import { Square, Pause, Play, Mic, MicOff, Camera, CameraOff, RotateCcw } from '
 
 /*
  * Fallback route if a controls window is opened. Styled as a full-bleed
- * toolbar — not a pill sitting inside a tiny Chrome tab.
+ * toolbar - not a pill sitting inside a tiny Chrome tab.
  */
 const RecordingControlsPopup = () => {
     const [seconds, setSeconds] = useState(0);
@@ -119,7 +119,7 @@ const RecordingControlsPopup = () => {
             </div>
             {detached && (
                 <p className="absolute bottom-1 left-2 right-2 text-[10px] text-amber-300">
-                    Lost connection — stop from the main tab.
+                    Lost connection - stop from the main tab.
                 </p>
             )}
         </div>

@@ -95,7 +95,7 @@
     max-width: 320px;
 }
 
-/* Dark Theme — surfaces follow tokens; do not force font-weight colors
+/* Dark Theme - surfaces follow tokens; do not force font-weight colors
    (that painted light text onto leftover light cards). */
 [data-theme="dark"] body:not(.landing-active),
 [data-theme="dark"] .min-h-screen:not(.landing-page) {
@@ -246,12 +246,12 @@
 [data-theme="dark"] button.bg-white:hover,
 [data-theme="dark"] .bg-white.border:hover {
     background: hsl(var(--muted)) !important;
-    /* Neutral hover border — --ring is brand teal and reads as a color glitch
+    /* Neutral hover border - --ring is brand teal and reads as a color glitch
        on large surfaces (Catch up panel) and list rows. */
     border-color: hsl(var(--border)) !important;
 }
 
-/* hover:bg-white is a different class than bg-white — without this, dark-mode
+/* hover:bg-white is a different class than bg-white - without this, dark-mode
    chips (Catch up rows, AI confirm due/title) flash a white pill over light text. */
 [data-theme="dark"] .hover\:bg-white:hover {
     background: hsl(var(--muted)) !important;
@@ -271,7 +271,7 @@
     color: transparent !important;
 }
 
-/* iOS-style switches: gray off, green on — not overridden by dark .bg-gray-200 */
+/* iOS-style switches: gray off, green on - not overridden by dark .bg-gray-200 */
 .ios-switch {
     width: 51px;
     height: 31px;
@@ -405,7 +405,7 @@
     color: hsl(var(--foreground)) !important;
 }
 
-/* Gradients — flatten to a single dark tone so text stays readable */
+/* Gradients - flatten to a single dark tone so text stays readable */
 [data-theme="dark"] .bg-gradient-to-r:not(.bg-clip-text),
 [data-theme="dark"] .bg-gradient-to-l:not(.bg-clip-text),
 [data-theme="dark"] .bg-gradient-to-tr:not(.bg-clip-text),
@@ -423,7 +423,7 @@
 [data-theme="dark"] .text-emerald-700,
 [data-theme="dark"] .text-emerald-800,
 [data-theme="dark"] .text-emerald-900 { color: #6ee7b7 !important; }
-/* Option row icons in Create Task — keep sales / recording / repeat color-coded on dark fills */
+/* Option row icons in Create Task - keep sales / recording / repeat color-coded on dark fills */
 [data-theme="dark"] .text-emerald-600 { color: #34d399 !important; }
 [data-theme="dark"] .text-violet-600 { color: #c4b5fd !important; }
 [data-theme="dark"] .text-indigo-600 { color: #a5b4fc !important; }
@@ -439,7 +439,7 @@
     color: hsl(var(--foreground)) !important;
 }
 
-/* Borders — subtle */
+/* Borders - subtle */
 [data-theme="dark"] .border-gray-100,
 [data-theme="dark"] .border-gray-200,
 [data-theme="dark"] .border-slate-200,
@@ -483,7 +483,7 @@
     border-color: #2dd4bf !important;
 }
 
-/* Overdue chip: match solid status/sales pills — not a washed-out red outline. */
+/* Overdue chip: match solid status/sales pills - not a washed-out red outline. */
 .overdue-badge {
     display: inline-flex;
     align-items: center;
@@ -574,7 +574,7 @@
     background-clip: content-box;
 }
 
-/* Marketing landing is always brand-dark — app light/minimal must not bleach it. */
+/* Marketing landing is always brand-dark - app light/minimal must not bleach it. */
 body.landing-active {
     background: #050807 !important;
     color: #ffffff !important;
@@ -669,7 +669,7 @@ body.landing-active {
     color: #334155 !important;
 }
 
-/* Dark theme — same readable slate cards, quiet left accent only */
+/* Dark theme - same readable slate cards, quiet left accent only */
 [data-theme="dark"] .reminder-card,
 [data-theme="dark"] .reminder-tone-overdue,
 [data-theme="dark"] .reminder-tone-soon,

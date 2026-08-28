@@ -21,7 +21,7 @@ def test_composer_has_voice_mic_that_auto_sends():
     assert "createSilenceWatch" in src
     assert "VOICE_SILENCE_MS" in src
     assert "continuous = true" in src
-    assert "Speak — stays on through pauses" in src
+    assert "Speak - stays on through pauses" in src
     assert "is-listening" in src
     # Toolbar is a real row, not an overlay sitting on the field.
     assert "absolute bottom-2 left-2 right-2" not in src

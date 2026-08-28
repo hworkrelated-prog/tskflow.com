@@ -65,7 +65,7 @@ export function screenSizeScore(screen, width, height) {
  * Pick the physical display that matches a getDisplayMedia video track.
  *
  * Dual-monitor heuristic: when recording an entire screen and two displays
- * score similarly, prefer the display that is NOT hosting TskFlow — that is
+ * score similarly, prefer the display that is NOT hosting TskFlow - that is
  * almost always the one the user just selected.
  */
 export function matchScreenToCapture(trackSettings = {}, screens = []) {

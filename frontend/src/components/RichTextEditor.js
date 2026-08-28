@@ -16,7 +16,7 @@ function htmlToPlainText(html) {
 }
 
 /**
- * Description editor — plain textarea (no react-quill dependency).
+ * Description editor - plain textarea (no react-quill dependency).
  * Keeps the same value/onChange API used across TaskHub, TaskDetail, etc.
  */
 const RichTextEditor = ({ value, onChange, placeholder = 'Enter description...', className = '' }) => {
