@@ -353,6 +353,25 @@
 [data-theme="dark"] .bg-red-100 { background: #331616 !important; color: #fecaca !important; }
 [data-theme="dark"] .bg-gray-100 { background: #1a1a1a !important; color: #d0d0d0 !important; }
 [data-theme="dark"] .bg-gray-200 { background: #262626 !important; color: #e0e0e0 !important; }
+/* slate-100 was left as a pale fill while .text-slate-700 remaps to near-white
+   (team email chips, AI assignee pills). Darken the fill; leave color to text classes. */
+[data-theme="dark"] .bg-slate-100 {
+    background: #262626 !important;
+}
+[data-theme="dark"] .hover\:bg-slate-100:hover {
+    background: #2e2e2e !important;
+}
+
+.team-email-chip {
+    background: #e2e8f0;
+    color: #0f172a;
+    -webkit-text-fill-color: #0f172a;
+}
+[data-theme="dark"] .team-email-chip {
+    background: #2a2a2a !important;
+    color: #f4f4f5 !important;
+    -webkit-text-fill-color: #f4f4f5 !important;
+}
 
 /* Notification dropdown: unread teal-50/40 stayed light while titles went white. */
 .notif-unread {

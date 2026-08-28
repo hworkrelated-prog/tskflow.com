@@ -119,14 +119,20 @@ const TeamPeoplePicker = ({
             </div>
 
             {selectedEmails.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5" data-testid="team-email-chips">
                     {selectedEmails.map((email) => (
                         <span
                             key={email}
-                            className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-700 rounded-full pl-2.5 pr-1 py-1"
+                            className="team-email-chip inline-flex items-center gap-1 max-w-full text-xs font-medium rounded-full pl-2.5 pr-1 py-1"
+                            data-testid="team-email-chip"
                         >
-                            {email}
-                            <button type="button" onClick={() => removeEmail(email)} className="p-0.5 rounded-full hover:bg-slate-200" aria-label="Remove">
+                            <span className="min-w-0 truncate">{email}</span>
+                            <button
+                                type="button"
+                                onClick={() => removeEmail(email)}
+                                className="shrink-0 p-0.5 rounded-full opacity-70 hover:opacity-100"
+                                aria-label={`Remove ${email}`}
+                            >
                                 <X className="w-3 h-3" />
                             </button>
                         </span>
