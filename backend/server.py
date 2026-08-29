@@ -497,6 +497,37 @@ async def send_emails_concurrent(messages: list):
     await asyncio.gather(*[send_email_notification(m[0], m[1], m[2]) for m in messages], return_exceptions=True)
 
 
+def _assignment_email_due(due_date: Optional[str]) -> str:
+    """Compact due label: 2026-08-29 at 17:00."""
+    if not due_date:
+        return ""
+    raw = str(due_date).replace("T", " ").split(".")[0].strip()
+    if len(raw) >= 16 and raw[10] in " T":
+        return f"{raw[:10]} at {raw[11:16]}"
+    return raw.replace("T", " at ")
+
+
+def _assignment_email_detail(title: str, description: Optional[str]) -> str:
+    """Keep a description only when it adds something the title does not already say."""
+    title_s = (title or "").strip()
+    desc_s = (description or "").strip()
+    if not desc_s:
+        return ""
+    t = title_s.rstrip(".").lower()
+    d = desc_s.rstrip(".").lower()
+    if not t or d == t:
+        return ""
+    if t in d:
+        rest = d.replace(t, " ", 1)
+        rest = re.sub(r"\b(tell|ask|have|please|can you|could you)\b.*?\bto\b", " ", rest)
+        rest = re.sub(r"[^a-z0-9]+", " ", rest).strip()
+        if not rest:
+            return ""
+    if len(desc_s) > 160:
+        return desc_s[:157].rstrip() + "..."
+    return desc_s
+
+
 def _assignment_email_html(
     *,
     recipient_name: str,
@@ -511,12 +542,8 @@ def _assignment_email_html(
     hello = first_name(recipient_name) or "there"
     who = first_name(assigner_name) or "A teammate"
     title_s = (title or "").strip() or "Untitled"
-    desc_s = (description or "").strip()
-    if desc_s.rstrip(".").lower() == title_s.rstrip(".").lower():
-        desc_s = ""
-    if len(desc_s) > 160:
-        desc_s = desc_s[:157].rstrip() + "..."
-    due_s = str(due_date).replace("T", " at ").split(".")[0] if due_date else ""
+    desc_s = _assignment_email_detail(title_s, description)
+    due_s = _assignment_email_due(due_date)
     pri = (priority or "").strip()
     desc_html = (
         f'<p style="color:#6B7280;margin:0 0 12px 0;font-size:14px;line-height:1.45;">{html.escape(desc_s)}</p>'
