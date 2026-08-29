@@ -56,7 +56,7 @@ def test_landing_opens_straight_into_a_launch():
     assert "They get the ask" in src
     assert "The robot delivers" not in src
     assert "/demo/launch" in src
-    assert 'data-testid="landing-voice"' in src
+    assert 'data-testid="landing-voice"' in (FRONT / "components" / "LandingVoiceGuide.js").read_text(encoding="utf-8")
     assert "LandingVoiceGuide" in src
     assert "landing-step-ask" in src
     assert "landing-step-who" in src
@@ -89,7 +89,7 @@ def test_landing_examples_are_short_manager_asks():
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert "LANDING_EXAMPLES" in demo
-    assert "landing-example-${ex.id}" in landing
+    assert "landing-example-${idea.id}" in landing
     assert "setInterval" in landing
     assert "Use this idea" in landing
     assert "Try one" not in landing
