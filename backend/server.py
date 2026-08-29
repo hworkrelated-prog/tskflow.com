@@ -44,6 +44,7 @@ from eod_report import (
 )
 from response_review import generate_group_response_review
 from activity_helpers import log_task_activity, tasks_to_csv_rows, rows_to_csv, serialize_app_ts, app_now_iso
+from accountability import score_assignee_tasks
 from slack_followup import (
     group_accountability,
     is_live_slack_thread,
@@ -404,6 +405,10 @@ class AssigneeBreakdown(BaseModel):
     avg_completion_days: Optional[float] = None
     response_rate: float = 0.0
     avg_response_hours: Optional[float] = None
+    accountability_score: Optional[int] = None
+    accountability_label: Optional[str] = None
+    tasks_silent: int = 0
+    tasks_overdue_open: int = 0
 
 class AnalyticsResponse(BaseModel):
     assigned_to_others_count: int
@@ -4155,6 +4160,8 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
                         pass
             if response_times:
                 avg_response_hours = round(sum(response_times) / len(response_times), 1)
+
+            scored = score_assignee_tasks(assignee_tasks, now=get_pst_now())
             
             assignee_details.append(AssigneeBreakdown(
                 name=assignee_data["name"],
@@ -4165,7 +4172,11 @@ async def get_analytics(query: AnalyticsQuery, current_user: dict = Depends(get_
                 completion_rate=completion_rate,
                 avg_completion_days=avg_days,
                 response_rate=response_rate,
-                avg_response_hours=avg_response_hours
+                avg_response_hours=avg_response_hours,
+                accountability_score=scored.get("accountability_score"),
+                accountability_label=scored.get("accountability_label"),
+                tasks_silent=scored.get("tasks_silent") or 0,
+                tasks_overdue_open=scored.get("tasks_overdue_open") or 0,
             ))
     
     # Sort by tasks assigned (descending)
@@ -4221,6 +4232,7 @@ async def get_team_performance(current_user: dict = Depends(get_current_user)):
                 avg_completion_time = round(sum(completion_times) / len(completion_times), 1)
         
         completion_rate = round((len(completed_tasks) / len(tasks) * 100), 1) if tasks else 0
+        scored = score_assignee_tasks(tasks, now=get_pst_now())
         
         performance_data.append({
             "user_id": report["id"],
@@ -4229,13 +4241,21 @@ async def get_team_performance(current_user: dict = Depends(get_current_user)):
             "tasks_assigned": len(tasks),
             "tasks_completed": len(completed_tasks),
             "completion_rate": completion_rate,
-            "avg_completion_time": avg_completion_time
+            "avg_completion_time": avg_completion_time,
+            "accountability_score": scored.get("accountability_score"),
+            "accountability_label": scored.get("accountability_label"),
+            "response_rate": scored.get("response_rate") or 0,
+            "tasks_silent": scored.get("tasks_silent") or 0,
         })
     
-    # Sort by fastest avg completion time for leaderboard (None values go last)
+    # Sort by accountability, then completion rate
     leaderboard = sorted(
-        performance_data, 
-        key=lambda x: (x["avg_completion_time"] is None, x["avg_completion_time"] if x["avg_completion_time"] is not None else float('inf'))
+        performance_data,
+        key=lambda x: (
+            x["accountability_score"] is None,
+            -(x["accountability_score"] if x["accountability_score"] is not None else -1),
+            -x["completion_rate"],
+        ),
     )
     
     return {
@@ -8744,7 +8764,7 @@ async def org_leaderboard(
     if user_id:
         domain_uids = domain_uids.intersection({user_id})
 
-    query: dict = {"assigned_to": {"$in": list(domain_uids)}, "status": "Completed", "deleted": {"$ne": True}}
+    query: dict = {"assigned_to": {"$in": list(domain_uids)}, "deleted": {"$ne": True}}
     if start_date:
         query["created_at"] = {"$gte": start_date}
     if end_date:
@@ -8763,8 +8783,17 @@ async def org_leaderboard(
                 response_hrs = max(0, (a - c).total_seconds() / 3600)
         except Exception:
             pass
-        entry = by_user.setdefault(uid, {"completed": 0, "sum_completion_hrs": 0.0, "sum_response_hrs": 0.0, "n_response": 0, "n_hrs": 0})
-        entry["completed"] += 1
+        entry = by_user.setdefault(uid, {
+            "completed": 0,
+            "sum_completion_hrs": 0.0,
+            "sum_response_hrs": 0.0,
+            "n_response": 0,
+            "n_hrs": 0,
+            "tasks": [],
+        })
+        entry["tasks"].append(t)
+        if t.get("status") == "Completed":
+            entry["completed"] += 1
         if hrs is not None:
             entry["sum_completion_hrs"] += hrs
             entry["n_hrs"] += 1
@@ -8773,18 +8802,22 @@ async def org_leaderboard(
             entry["n_response"] += 1
 
     user_map = {u["id"]: u for u in users}
+    now = get_pst_now()
     rows = []
     for uid, e in by_user.items():
         u = user_map.get(uid, {})
         avg_c = round(e["sum_completion_hrs"] / e["n_hrs"], 2) if e["n_hrs"] else None
         avg_r = round(e["sum_response_hrs"] / e["n_response"], 2) if e["n_response"] else None
-        # Simple composite performance score
-        perf = 0
-        if avg_c is not None:
-            perf += max(0, 100 - min(100, avg_c))
-        if avg_r is not None:
-            perf += max(0, 50 - min(50, avg_r))
-        perf += e["completed"] * 2
+        scored = score_assignee_tasks(e["tasks"], now=now)
+        # Keep the legacy speed+volume number for older clients
+        perf = scored.get("accountability_score")
+        if perf is None:
+            perf = 0
+            if avg_c is not None:
+                perf += max(0, 100 - min(100, avg_c))
+            if avg_r is not None:
+                perf += max(0, 50 - min(50, avg_r))
+            perf += e["completed"] * 2
         rows.append({
             "user_id": uid,
             "name": u.get("name", "Unknown"),
@@ -8792,10 +8825,17 @@ async def org_leaderboard(
             "completed": e["completed"],
             "avg_completion_hours": avg_c,
             "avg_response_hours": avg_r,
-            "performance_score": round(perf, 1),
+            "performance_score": round(float(perf), 1),
+            "accountability_score": scored.get("accountability_score"),
+            "accountability_label": scored.get("accountability_label"),
+            "response_rate": scored.get("response_rate") or 0,
+            "completion_rate": scored.get("completion_rate") or 0,
         })
 
-    rows.sort(key=lambda r: -r["performance_score"])
+    rows.sort(key=lambda r: (
+        r["accountability_score"] is None,
+        -(r["accountability_score"] if r["accountability_score"] is not None else -1),
+    ))
     for idx, r in enumerate(rows, start=1):
         r["rank"] = idx
     return {"leaderboard": rows, "scope": {"domain": domain, "user_id": user_id, "team_id": team_id}}
@@ -8858,6 +8898,17 @@ async def personal_analytics(
             "completed": e["completed"],
             "avg_completion_hours": round(e["sum_hrs"] / e["n_hrs"], 2) if e["n_hrs"] else None,
         })
+    now = get_pst_now()
+    tasks_by_assignee: Dict[str, list] = {}
+    for t in tasks:
+        aid = t.get("assigned_to")
+        if aid:
+            tasks_by_assignee.setdefault(aid, []).append(t)
+    for row in breakdown:
+        scored = score_assignee_tasks(tasks_by_assignee.get(row["user_id"], []), now=now)
+        row["accountability_score"] = scored.get("accountability_score")
+        row["accountability_label"] = scored.get("accountability_label")
+        row["response_rate"] = scored.get("response_rate") or 0
     breakdown.sort(key=lambda x: -x["completed"])
     return {
         "total": total,
@@ -8866,6 +8917,22 @@ async def personal_analytics(
         "overdue": overdue,
         "completion_rate": round(len(completed) / total * 100, 1) if total else 0,
         "assignee_breakdown": breakdown,
+    }
+
+
+@api_router.get("/accountability/me")
+async def my_accountability(current_user: dict = Depends(get_current_user)):
+    """The signed-in user's score from work assigned to them."""
+    tasks = await db.tasks.find(
+        {"assigned_to": current_user["id"], "deleted": {"$ne": True}},
+        {"_id": 0},
+    ).to_list(4000)
+    scored = score_assignee_tasks(tasks, now=get_pst_now())
+    return {
+        "user_id": current_user["id"],
+        "name": current_user.get("name"),
+        "email": current_user.get("email"),
+        **scored,
     }
 
 

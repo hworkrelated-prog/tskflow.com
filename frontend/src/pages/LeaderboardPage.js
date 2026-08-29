@@ -5,6 +5,7 @@ import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Trophy, Users } from 'lucide-react';
+import AccountabilityScore from '@/components/AccountabilityScore';
 
 // YYYY-MM-DD in local time (no TZ drift)
 const toDateStr = (d) => {
@@ -75,7 +76,7 @@ const LeaderboardTable = ({ rows, orgMode }) => (
                     <th className="text-left px-3 py-2 font-medium">Completed</th>
                     <th className="text-left px-3 py-2 font-medium">Avg completion</th>
                     <th className="text-left px-3 py-2 font-medium">Avg response</th>
-                    {orgMode && <th className="text-left px-3 py-2 font-medium">Performance</th>}
+                    {orgMode && <th className="text-left px-3 py-2 font-medium">Accountability</th>}
                 </tr>
             </thead>
             <tbody>
@@ -90,7 +91,15 @@ const LeaderboardTable = ({ rows, orgMode }) => (
                         <td className="px-3 py-2">{r.completed}</td>
                         <td className="px-3 py-2">{r.avg_completion_hours != null ? `${r.avg_completion_hours}h` : '\u2014'}</td>
                         <td className="px-3 py-2">{r.avg_response_hours != null ? `${r.avg_response_hours}h` : '\u2014'}</td>
-                        {orgMode && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
+                        {orgMode && (
+                            <td className="px-3 py-2">
+                                <AccountabilityScore
+                                    score={r.accountability_score ?? r.performance_score}
+                                    label={r.accountability_label}
+                                    size="sm"
+                                />
+                            </td>
+                        )}
                     </tr>
                 ))}
             </tbody>
@@ -157,7 +166,7 @@ const LeaderboardPage = () => {
                             </>
                         ) : (
                             <>
-                                <p className="text-sm text-muted-foreground mb-3">Everyone in your organization, ranked by an overall performance score.</p>
+                                <p className="text-sm text-muted-foreground mb-3">Everyone in your organization, ranked by accountability — how they respond, finish, and do not leave work sitting.</p>
                                 <LeaderboardTable rows={org} orgMode={true} />
                             </>
                         )}

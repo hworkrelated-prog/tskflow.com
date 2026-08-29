@@ -13,6 +13,7 @@ import { ArrowLeft, Calendar, BarChart2, Users, CheckCircle2, Clock, TrendingUp,
 import { motion } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
 import { ActivityLogTab } from '@/pages/ActivityLogPage';
+import AccountabilityScore from '@/components/AccountabilityScore';
 
 // Return YYYY-MM-DD in local time (no TZ drift from toISOString)
 const formatAvgResponse = (hours) => {
@@ -118,15 +119,19 @@ const AnalyticsPage = () => {
     const downloadAnalyticsCSV = () => {
         if (!analytics) return;
         const rows = [
-            ['Name', 'Email', 'Tasks Assigned', 'Tasks Completed', 'Tasks Pending', 'Completion Rate (%)', 'Response Rate (%)', 'Avg Response (hours)', 'Avg Completion (days)']
+            ['Name', 'Email', 'Accountability', 'Label', 'Tasks Assigned', 'Tasks Completed', 'Tasks Pending', 'Silent', 'Overdue open', 'Completion Rate (%)', 'Response Rate (%)', 'Avg Response (hours)', 'Avg Completion (days)']
         ];
         (analytics.assignee_breakdown || []).forEach((a) => {
             rows.push([
                 a.name,
                 a.email,
+                a.accountability_score ?? '',
+                a.accountability_label ?? '',
                 a.tasks_assigned,
                 a.tasks_completed,
                 a.tasks_pending,
+                a.tasks_silent ?? '',
+                a.tasks_overdue_open ?? '',
                 a.completion_rate,
                 a.response_rate ?? 0,
                 a.avg_response_hours ?? '',
@@ -407,6 +412,13 @@ const AnalyticsPage = () => {
                                                                         <div className="min-w-0">
                                                                             <p className="font-semibold truncate">{assignee.name}</p>
                                                                             <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
+                                                                            <AccountabilityScore
+                                                                                className="mt-1"
+                                                                                size="sm"
+                                                                                score={assignee.accountability_score}
+                                                                                label={assignee.accountability_label}
+                                                                                testId={`accountability-score-${assignee.email}`}
+                                                                            />
                                                                         </div>
                                                                     </div>
 
@@ -500,6 +512,13 @@ const AnalyticsPage = () => {
                                                                 <div className="min-w-0">
                                                                     <p className="font-semibold truncate">{assignee.name}</p>
                                                                     <p className="text-xs text-muted-foreground truncate">{assignee.email}</p>
+                                                                    <AccountabilityScore
+                                                                        className="mt-1"
+                                                                        size="sm"
+                                                                        score={assignee.accountability_score}
+                                                                        label={assignee.accountability_label}
+                                                                        testId={`accountability-score-mobile-${assignee.email}`}
+                                                                    />
                                                                 </div>
                                                             </div>
                                                             <div className="grid grid-cols-3 gap-2">
@@ -649,7 +668,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
             if (k === 'completed') return r.completed || 0;
             if (k === 'avg_completion_hours') return r.avg_completion_hours ?? 9999;
             if (k === 'avg_response_hours') return r.avg_response_hours ?? 9999;
-            if (k === 'performance_score') return r.performance_score || 0;
+            if (k === 'performance_score') return r.accountability_score ?? r.performance_score || 0;
             if (k === 'streak') return r.streak || 0;
             return 0;
         };
@@ -697,7 +716,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
                                     <Th label="Avg response" k="avg_response_hours" />
                                     <Th label="Streak" k="streak" />
                                     <th className="text-left px-3 py-2 font-medium">Badges</th>
-                                    {section === 'org_lb' && <Th label="Performance" k="performance_score" />}
+                                    {section === 'org_lb' && <Th label="Accountability" k="performance_score" />}
                                 </tr>
                             </thead>
                             <tbody>
@@ -717,7 +736,15 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
                                                 ))}
                                             </div>
                                         </td>
-                                        {section === 'org_lb' && <td className="px-3 py-2 font-semibold text-teal-700">{r.performance_score}</td>}
+                                        {section === 'org_lb' && (
+                                            <td className="px-3 py-2">
+                                                <AccountabilityScore
+                                                    score={r.accountability_score ?? r.performance_score}
+                                                    label={r.accountability_label}
+                                                    size="sm"
+                                                />
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>
@@ -748,11 +775,13 @@ const BestWorstAnalysis = ({ breakdown }) => {
     const scored = rows.map((a) => ({
         ...a,
         _speed: speedScore(a.avg_response_hours),
-        _score: Math.round(
-            0.55 * (a.completion_rate || 0) +
-            0.25 * (a.response_rate || 0) +
-            0.20 * speedScore(a.avg_response_hours)
-        ),
+        _score: a.accountability_score != null
+            ? a.accountability_score
+            : Math.round(
+                0.55 * (a.completion_rate || 0) +
+                0.25 * (a.response_rate || 0) +
+                0.20 * speedScore(a.avg_response_hours)
+            ),
     })).sort((a, b) => b._score - a._score);
 
     const best = scored[0];

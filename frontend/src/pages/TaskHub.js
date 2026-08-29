@@ -33,6 +33,7 @@ import GroupsManager from '@/components/GroupsManager';
 import { registerPush } from '@/lib/push';
 import { attachOnlineFlusher, enqueue } from '@/lib/draftStore';
 import { columnWithSoonestDue, DASHBOARD_MOBILE_MQ, DASHBOARD_COLUMNS } from '@/lib/dashboardColumns';
+import AccountabilityScore from '@/components/AccountabilityScore';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, isBefore, parseISO } from 'date-fns';
 
 const DashboardColumnCard = ({ title, dotClass, testId, columnId, children }) => (
@@ -53,6 +54,7 @@ const TaskHub = () => {
     const { user, logout, refreshUser } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const [dashboard, setDashboard] = useState(null);
+    const [accountability, setAccountability] = useState(null);
     const [loading, setLoading] = useState(true);
     const [drafts, setDrafts] = useState([]);
     const [transcriptSessions, setTranscriptSessions] = useState([]);
@@ -208,6 +210,9 @@ const TaskHub = () => {
         fetchGroups();
         fetchParentGroups();
         fetchDrafts();
+        axios.get(`${API}/accountability/me`)
+            .then((res) => setAccountability(res.data))
+            .catch(() => setAccountability(null));
     }, [viewMode, dateFilter, customDateRange]);
 
     // Register background push notifications once on mount
@@ -1323,6 +1328,18 @@ const TaskHub = () => {
                         <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
                             Welcome, {user?.name}
                         </h2>
+                        {accountability && (
+                            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="hub-accountability">
+                                <AccountabilityScore
+                                    score={accountability.accountability_score}
+                                    label={accountability.accountability_label}
+                                    testId="hub-accountability-score"
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                    How you respond and follow through
+                                </span>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                         {(drafts.length > 0 || transcriptSessions.length > 0) && (
