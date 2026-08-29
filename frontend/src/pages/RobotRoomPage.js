@@ -44,7 +44,7 @@ const dueLabel = (raw) => {
 const RobotRoomPage = () => {
     const { taskId } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [room, setRoom] = useState(null);
     const [loading, setLoading] = useState(true);
     const [connectingSlack, setConnectingSlack] = useState(false);
@@ -104,6 +104,11 @@ const RobotRoomPage = () => {
         navigate(`/register?${params.toString()}`);
     };
 
+    const startOver = () => {
+        logout();
+        navigate('/', { replace: true });
+    };
+
     if (loading) {
         return (
             <div className="landing-page min-h-screen text-white flex items-center justify-center" style={{ background: '#050807' }}>
@@ -123,15 +128,39 @@ const RobotRoomPage = () => {
                 <div className="absolute -top-40 right-[-20%] w-[620px] h-[620px] rounded-full bg-teal-500/15 blur-[120px]" />
             </div>
 
-            <nav className="relative z-10 max-w-4xl mx-auto px-5 h-16 flex items-center justify-between">
-                <span className="text-lg font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>TskFlow</span>
+            <nav className="relative z-10 max-w-4xl mx-auto px-5 min-h-16 py-3 flex flex-wrap items-center justify-between gap-2">
+                <button
+                    type="button"
+                    className="text-lg font-semibold tracking-tight"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    onClick={startOver}
+                    data-testid="env-brand-home"
+                >
+                    TskFlow
+                </button>
                 <div className="flex items-center gap-2">
                     {isGuest ? (
                         <>
+                            <Button
+                                variant="ghost"
+                                className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
+                                onClick={() => navigate('/login')}
+                                data-testid="env-sign-in"
+                            >
+                                Sign in
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
+                                onClick={startOver}
+                                data-testid="env-new-ask"
+                            >
+                                New ask
+                            </Button>
                             <GoogleSignInButton
                                 label="Keep this with Google"
                                 next={`/env/${taskId}`}
-                                className="border-white/20 bg-transparent text-white hover:bg-white/10 h-10"
+                                className="border-white/20 bg-transparent text-white hover:bg-white/10 h-10 hidden sm:inline-flex"
                                 testId="env-google-signin"
                             />
                             <Button
