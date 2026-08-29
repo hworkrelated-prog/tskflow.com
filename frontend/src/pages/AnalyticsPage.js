@@ -668,7 +668,7 @@ const LeaderboardTab = ({ section, startDate, endDate }) => {
             if (k === 'completed') return r.completed || 0;
             if (k === 'avg_completion_hours') return r.avg_completion_hours ?? 9999;
             if (k === 'avg_response_hours') return r.avg_response_hours ?? 9999;
-            if (k === 'performance_score') return r.accountability_score ?? r.performance_score || 0;
+            if (k === 'performance_score') return r.accountability_score ?? r.performance_score ?? 0;
             if (k === 'streak') return r.streak || 0;
             return 0;
         };
