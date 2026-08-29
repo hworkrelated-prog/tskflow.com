@@ -4,6 +4,13 @@ export function canCaptureDisplay() {
     return typeof navigator.mediaDevices?.getDisplayMedia === 'function';
 }
 
+/** True when the page can record the device camera/mic in-browser (phones included). */
+export function canRecordWithCamera() {
+    if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
+    return typeof navigator.mediaDevices?.getUserMedia === 'function'
+        && typeof window.MediaRecorder === 'function';
+}
+
 export function isAppleMobile() {
     if (typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent || '';

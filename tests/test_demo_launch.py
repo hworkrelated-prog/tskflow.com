@@ -352,11 +352,23 @@ def test_env_room_is_a_protected_route_with_robot_copy():
 def test_screen_recorder_is_on_the_landing_composer():
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     recorder = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
+    sheet = (FRONT / "components" / "LandingPhoneRecordSheet.js").read_text(encoding="utf-8")
     assert "LandingScreenRecorder" in landing
     assert 'data-testid="landing-record-screen"' in recorder
     assert "getDisplayMedia" in recorder
     assert "saveRecordingBlob" in recorder  # works with no account, blob stays local
     assert "trackRecordingStart" in recorder
+    # phones without getDisplayMedia get a camera / Photos path, not a desktop-only toast
+    assert "desktop browser" not in recorder
+    assert "LandingPhoneRecordSheet" in recorder
+    assert "needsIosScreenRecordFlow" in recorder
+    assert "canRecordWithCamera" in recorder
+    assert "getUserMedia" in recorder
+    assert 'data-testid="landing-phone-record-sheet"' in sheet
+    assert 'data-testid="landing-phone-record-camera"' in sheet
+    assert 'data-testid="landing-phone-record-photos"' in sheet
+    assert 'data-testid="landing-phone-record-capture"' in sheet
+    assert "Control Center" in sheet
     # the blob is attached to the task after the guest launch
     assert "recordings/standalone" in landing
     assert "task_id: taskId" in landing
