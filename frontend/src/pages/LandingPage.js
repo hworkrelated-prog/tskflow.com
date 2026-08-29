@@ -9,26 +9,26 @@ import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
-import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
 import { trackLandingView, trackLandingInteract, sessionId } from '@/lib/productAnalytics';
 import {
     DEMO_PROMPT,
+    LANDING_EXAMPLES,
     PROMPT_SEGMENT_CLASS,
     colorizeAssignPrompt,
 } from '@/lib/landingAssignDemo';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
 
-const ColorCodedPrompt = ({ text, className = '', testId }) => (
-    <p className={className} data-testid={testId}>
+const ColorCodedPrompt = ({ text, className = '', testId, as: Tag = 'p' }) => (
+    <Tag className={className} data-testid={testId}>
         {colorizeAssignPrompt(text).map((part, i) => (
             <span key={`${part.kind}-${i}`} className={PROMPT_SEGMENT_CLASS[part.kind] || PROMPT_SEGMENT_CLASS.plain}>
                 {part.text}
             </span>
         ))}
-    </p>
+    </Tag>
 );
 
 const LaunchPad = ({ recordingBlob, inputRef }) => {
@@ -39,8 +39,14 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
     const [channel, setChannel] = useState('email');
     const [sending, setSending] = useState(false);
 
-    const displayText = value || DEMO_PROMPT;
-    const preview = distillLandingPrompt(value.trim() ? value : DEMO_PROMPT);
+    const filled = Boolean(value.trim());
+    const preview = distillLandingPrompt(filled ? value : DEMO_PROMPT);
+
+    const pickExample = (text) => {
+        setValue(text);
+        trackLandingInteract('sample');
+        inputRef?.current?.focus();
+    };
 
     const attachRecording = async (taskId) => {
         if (!recordingBlob) return;
@@ -88,7 +94,7 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                 No account. No password. Enter sends it.
             </p>
 
-            <div className="relative min-h-[220px] sm:min-h-[320px] flex-1 border-l-2 border-teal-400/50 pl-5">
+            <div className={`relative flex-1 border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[180px] sm:min-h-[260px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}>
                 <textarea
                     ref={inputRef}
                     value={value}
@@ -102,19 +108,40 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                             sendIt();
                         }
                     }}
-                    rows={8}
-                    className="relative w-full h-full min-h-[220px] sm:min-h-[320px] resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white placeholder:text-white/25 selection:bg-teal-400/30"
-                    placeholder="What needs to get done"
+                    rows={filled ? 8 : 4}
+                    className={`relative w-full h-full resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white placeholder:text-white/25 selection:bg-teal-400/30 ${filled ? 'min-h-[180px] sm:min-h-[260px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}
+                    placeholder="Or type your own"
                     data-testid="landing-tryit-input"
                     aria-label="What needs to get done"
                     autoFocus
                 />
             </div>
-            <ColorCodedPrompt
-                text={displayText}
-                className="mt-4 text-sm leading-relaxed"
-                testId="landing-tryit-colorized"
-            />
+            {filled ? (
+                <ColorCodedPrompt
+                    text={value}
+                    className="mt-4 text-sm leading-relaxed"
+                    testId="landing-tryit-colorized"
+                />
+            ) : (
+                <div className="mt-6" data-testid="landing-examples">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-white/40 mb-3">Try one</p>
+                    <ol className="space-y-2.5">
+                        {LANDING_EXAMPLES.map((ex, i) => (
+                            <li key={ex.id}>
+                                <button
+                                    type="button"
+                                    onClick={() => pickExample(ex.text)}
+                                    className="landing-example w-full text-left text-[15px] sm:text-base leading-snug hover:text-white"
+                                    data-testid={`landing-example-${ex.id}`}
+                                >
+                                    <span className="text-white/25 tabular-nums mr-2">{i + 1}.</span>
+                                    <ColorCodedPrompt text={ex.text} as="span" />
+                                </button>
+                            </li>
+                        ))}
+                    </ol>
+                </div>
+            )}
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-end">
                 <div className="flex-1">
@@ -153,15 +180,19 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                 <div data-testid="landing-tryit-result" className="min-w-0">
                     {preview && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35 mb-1">They receive</p>
-                            <p className="text-sm text-white/80 leading-relaxed truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                {preview.title}
-                                <span className="text-white/40"> · {assignee.trim() || preview.who} · {preview.when}</span>
-                            </p>
-                            <p className="text-xs text-white/40 mt-1" data-testid="landing-robot-promise">
+                            {filled && (
+                                <>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/35 mb-1">They receive</p>
+                                    <p className="text-sm text-white/80 leading-relaxed truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        {preview.title}
+                                        <span className="text-white/40"> · {assignee.trim() || preview.who} · {preview.when}</span>
+                                    </p>
+                                </>
+                            )}
+                            <p className={`text-xs text-white/40 ${filled ? 'mt-1' : ''}`} data-testid="landing-robot-promise">
                                 {channel === 'slack'
                                     ? 'First ask goes by email. Connect Slack in the room for the chase.'
-                                    : 'The robot delivers, waits, pings politely, and reports back.'}
+                                    : 'The robot delivers it, puts it on their calendar, chases them, and reports back.'}
                             </p>
                         </motion.div>
                     )}
@@ -177,19 +208,6 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                     {sending ? 'Opening…' : 'Send it'}
                 </Button>
             </div>
-
-            <button
-                type="button"
-                className="mt-5 self-start text-[11px] text-white/30 hover:text-white/60"
-                onClick={() => {
-                    setValue(DEMO_PROMPT);
-                    trackLandingInteract('sample');
-                    inputRef?.current?.focus();
-                }}
-                data-testid="landing-use-sample"
-            >
-                Use a sample
-            </button>
         </div>
     );
 };
@@ -231,16 +249,11 @@ const LandingPage = () => {
                         TskFlow
                     </span>
                     <div className="ml-auto flex items-center gap-2">
-                        <GoogleSignInButton
-                            label="Google"
-                            next="/dashboard"
-                            className="border-white/15 bg-transparent text-white hover:bg-white/10 h-10"
-                            testId="landing-google-signin"
-                        />
                         <Button
                             variant="ghost"
                             className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
                             onClick={() => navigate('/login')}
+                            data-testid="landing-sign-in"
                         >
                             Sign in
                         </Button>

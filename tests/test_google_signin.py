@@ -172,17 +172,20 @@ def test_signin_callback_finds_or_creates_the_user_and_folds_in_the_guest():
         _restore(previous)
 
 
-def test_google_buttons_exist_on_landing_login_and_register():
+def test_google_buttons_exist_on_login_and_register_not_landing():
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     login = (FRONT / "pages" / "LoginPage.js").read_text(encoding="utf-8")
     register = (FRONT / "pages" / "RegistrationPage.js").read_text(encoding="utf-8")
     button = (FRONT / "components" / "GoogleSignInButton.js").read_text(encoding="utf-8")
     app = (FRONT / "App.js").read_text(encoding="utf-8")
 
-    assert 'testId="landing-google-signin"' in landing
+    assert "GoogleSignInButton" not in landing
+    assert 'testId="landing-google-signin"' not in landing
+    assert 'data-testid="landing-sign-in"' in landing
+    assert "navigate('/login')" in landing
     assert 'testId="login-google-signin"' in login
     assert 'testId="register-google-signin"' in register
-    assert "GoogleSignInButton" in landing and "GoogleSignInButton" in login and "GoogleSignInButton" in register
+    assert "GoogleSignInButton" in login and "GoogleSignInButton" in register
     assert "data-testid={testId}" in button
     assert "auth/google/login" in button
     assert "guest_user_id" in button  # the demo room survives the upgrade

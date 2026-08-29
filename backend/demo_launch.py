@@ -21,7 +21,8 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
 _LEAD_VERBS = re.compile(
     r"^(?:please\s+|kindly\s+)?(?:can\s+you\s+)?"
     r"(?:ask|tell|have|get|remind|inform|assign|nudge)\s+"
-    r"(?:(?:my|the|our)\s+)?(?:team|direct reports|reports|everyone|him|her|them)\s+"
+    r"(?:(?:my|the|our)\s+)?"
+    r"(?:team|direct reports|reports|everyone|him|her|them|manager|org|entire org|sales|engineering)\s+"
     r"(?:to|that)\s+",
     re.IGNORECASE,
 )
