@@ -100,6 +100,40 @@ from engagement import (
     week_id,
 )
 from billing_nudge import show_billing_nudge
+from demo_launch import (
+    GUEST_EMAIL_DOMAIN,
+    LAUNCHES_PER_HOUR,
+    SAMPLE_ASSIGNEE,
+    assignee_display_name,
+    demo_channel,
+    eod_due_date,
+    guest_email,
+    guest_user_doc,
+    is_valid_assignee_email,
+    launch_rate_limited,
+    normalize_assignee_email,
+    robot_room_beats,
+    room_copy,
+    split_task_text,
+)
+from product_analytics import (
+    DAILY_SEND_HOUR_PST,
+    DIGEST_COLLECTION,
+    EVENTS_COLLECTION,
+    analytics_blurb,
+    clean_meta,
+    clean_session_id,
+    daily_subject,
+    day_id,
+    empty_day,
+    event_doc,
+    funnel_stages,
+    hash_ip,
+    normalize_event,
+    render_daily_analytics_html,
+    should_send_daily,
+    snapshot_for_email,
+)
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -153,6 +187,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
+    guest_user_id: Optional[str] = None  # landing demo session to fold into the new account
     
     @validator('password')
     def validate_password(cls, v):
@@ -253,6 +288,20 @@ class RecordingCreateRequest(BaseModel):
     duration_seconds: Optional[float] = None
     size_bytes: Optional[int] = None
     mime_type: Optional[str] = None
+    task_id: Optional[str] = None  # attach the recording to a task the caller owns
+
+
+class DemoLaunchRequest(BaseModel):
+    task: str
+    assignee_email: Optional[str] = None
+    channel: Optional[str] = "email"
+    session_id: Optional[str] = None
+
+
+class AnalyticsEventRequest(BaseModel):
+    event: str
+    meta: Optional[dict] = None
+    session_id: Optional[str] = None
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -532,6 +581,71 @@ def normalize_verification_code(code: Optional[str]) -> str:
     return re.sub(r"\D", "", str(code or "")).strip()
 
 
+def _request_ip_hash(http_request: Optional[HTTPRequest]) -> Optional[str]:
+    """Salted one-way fingerprint of the caller IP — used for rate limits only."""
+    if http_request is None:
+        return None
+    return hash_ip(_get_client_ip(http_request), SECRET_KEY)
+
+
+async def record_product_event(
+    event: str,
+    *,
+    session_id: Optional[str] = None,
+    ip_hash: Optional[str] = None,
+    user_id: Optional[str] = None,
+    meta: Optional[dict] = None,
+    source: str = "server",
+    now: Optional[datetime] = None,
+) -> Optional[dict]:
+    """Store one anonymous funnel event. Never raises into the caller's request."""
+    name = normalize_event(event)
+    if not name:
+        return None
+    doc = event_doc(
+        name,
+        now=now or get_pst_now(),
+        session_id=session_id,
+        ip_hash=ip_hash,
+        user_id=user_id,
+        meta=meta,
+        source=source,
+    )
+    try:
+        await db[EVENTS_COLLECTION].insert_one(dict(doc))
+    except Exception as e:
+        logging.warning(f"product event {name} not stored: {e}")
+        return None
+    return doc
+
+
+async def merge_guest_into_user(guest_user_id: Optional[str], user: dict) -> dict:
+    """Fold a landing-demo guest's work into a real account so the demo task survives."""
+    guest_id = str(guest_user_id or "").strip()
+    if not guest_id or not user or guest_id == user.get("id"):
+        return {"merged": False, "reason": "no_guest"}
+    guest = await db.users.find_one({"id": guest_id, "is_guest": True}, {"_id": 0})
+    if not guest:
+        return {"merged": False, "reason": "guest_not_found"}
+    if guest.get("merged_into"):
+        return {"merged": False, "reason": "already_merged"}
+
+    now = get_pst_now().isoformat()
+    tasks = await db.tasks.update_many(
+        {"created_by": guest_id},
+        {"$set": {"created_by": user["id"], "company_domain": user.get("company_domain")}},
+    )
+    await db.recordings.update_many({"created_by": guest_id}, {"$set": {"created_by": user["id"]}})
+    await db.task_activity.update_many({"actor_id": guest_id}, {"$set": {"actor_id": user["id"]}})
+    await db.users.update_one(
+        {"id": guest_id},
+        {"$set": {"merged_into": user["id"], "merged_at": now, "guest_expires_at": now}},
+    )
+    moved = getattr(tasks, "modified_count", 0) or 0
+    logging.info(f"Merged guest {guest_id} into {user['id']} ({moved} tasks)")
+    return {"merged": True, "tasks_moved": moved, "guest_user_id": guest_id}
+
+
 # Auth Routes
 @api_router.post("/auth/register", response_model=dict)
 async def register(user: UserCreate, background_tasks: BackgroundTasks):
@@ -667,8 +781,16 @@ async def register(user: UserCreate, background_tasks: BackgroundTasks):
     </html>
     """
     background_tasks.add_task(send_email_notification, email_norm, "Verify your Tskflow account", email_content)
-    
-    return {"message": "Registration successful. Verification code sent to your email.", "verification_code": None, "user_id": user_id}
+
+    merge = await merge_guest_into_user(user.guest_user_id, user_doc)
+    await record_product_event("register", user_id=user_id, meta={"method": "email", "merged_guest": bool(merge.get("merged"))})
+
+    return {
+        "message": "Registration successful. Verification code sent to your email.",
+        "verification_code": None,
+        "user_id": user_id,
+        "merged_guest_tasks": merge.get("tasks_moved", 0),
+    }
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)
 async def verify_email(request: EmailVerifyRequest):
@@ -817,6 +939,7 @@ async def login(user: UserLogin):
         {"email": str(db_user.get("email") or "").strip().lower()},
         {"$set": {"status": "joined", "logged_in_at": now}},
     )
+    await record_product_event("login", user_id=db_user["id"], meta={"method": "email"})
     access_token = create_access_token(data={"sub": db_user["id"]})
     
     return TokenResponse(
@@ -2489,6 +2612,19 @@ async def notifications_catch_up(current_user: dict = Depends(get_current_user))
     now = get_pst_now()
     uid = current_user["id"]
 
+    # Landing-demo guests see the robot room only — no catch-up sheet on arrival.
+    if current_user.get("is_guest"):
+        return {
+            "has_items": False,
+            "summary": {},
+            "overdue": [],
+            "due_soon": [],
+            "reminders": [],
+            "mentions": [],
+            "nudges": [],
+            "other": [],
+        }
+
     # Drain undelivered so legacy poll never dumps a backlog
     await db.notifications.update_many(
         {"user_id": uid, "delivered": {"$ne": True}},
@@ -2723,6 +2859,7 @@ async def create_standalone_recording(
     duration_seconds = None
     size_bytes = None
     mime_type = None
+    task_id = None
     if body is not None:
         rec_url = body.recording_url
         title = body.title
@@ -2730,6 +2867,7 @@ async def create_standalone_recording(
         duration_seconds = body.duration_seconds
         size_bytes = body.size_bytes
         mime_type = body.mime_type
+        task_id = body.task_id
     if not rec_url and recording_url:
         rec_url = recording_url
 
@@ -2737,6 +2875,7 @@ async def create_standalone_recording(
     recording_doc = {
         "id": recording_id,
         "created_by": current_user["id"],
+        "task_id": task_id or None,
         "recording_url": rec_url,
         "title": title or f"Recording {get_pst_now().strftime('%b %d, %Y %I:%M %p')}",
         "description": description,
@@ -2748,7 +2887,33 @@ async def create_standalone_recording(
         "auto_delete_at": None  # Set when associated task is completed
     }
     await db.recordings.insert_one(recording_doc)
-    
+
+    attached = False
+    if task_id and rec_url:
+        task = await db.tasks.find_one({"id": task_id, "created_by": current_user["id"]}, {"_id": 0, "id": 1})
+        if task:
+            attachment = {
+                "id": recording_id,
+                "storage_path": rec_url,
+                "original_filename": f"{recording_doc['title']}.webm",
+                "content_type": mime_type or "video/webm",
+                "size": size_bytes or 0,
+                "kind": "video",
+            }
+            await db.tasks.update_one({"id": task_id}, {"$push": {"attachments": attachment}})
+            await log_task_activity(
+                db,
+                task_id=task_id,
+                event_type="robot_note",
+                channel="in_app",
+                actor_id="jarvis",
+                actor_name="Jarvis",
+                title="Walkthrough attached",
+                body="Your screen recording is on the task, so they can see exactly what you mean.",
+                meta={"channels": ["in_app"], "recording_id": recording_id},
+            )
+            attached = True
+
     app_url = APP_BASE_URL
     shareable_link = f"{app_url}/recording/{recording_doc['shareable_token']}"
     
@@ -2757,6 +2922,7 @@ async def create_standalone_recording(
         "shareable_link": shareable_link,
         "shareable_token": recording_doc['shareable_token'],
         "title": recording_doc["title"],
+        "attached_to_task": attached,
     }
 
 
@@ -5423,121 +5589,344 @@ async def request_trial_extension(current_user: dict = Depends(get_current_user)
     
     return {"message": "Extension request submitted"}
 
+# ==========================================================================
+# LANDING DEMO — guest session + a real robot room in one click
+# ==========================================================================
+
+@api_router.post("/analytics/event")
+async def ingest_product_event(
+    body: AnalyticsEventRequest,
+    http_request: HTTPRequest,
+):
+    """Public funnel event ingest. No auth, no raw PII, rate limited per IP."""
+    name = normalize_event(body.event)
+    if not name:
+        return {"stored": False, "reason": "unknown_event"}
+    ip_hash = _request_ip_hash(http_request)
+    if ip_hash:
+        minute_ago = (get_pst_now() - timedelta(minutes=1)).isoformat()
+        recent = await db[EVENTS_COLLECTION].count_documents(
+            {"ip_hash": ip_hash, "at": {"$gte": minute_ago}}
+        )
+        if recent >= 60:
+            raise HTTPException(status_code=429, detail="Too many events, slow down")
+    doc = await record_product_event(
+        name,
+        session_id=body.session_id,
+        ip_hash=ip_hash,
+        meta=body.meta,
+        source="client",
+    )
+    return {"stored": bool(doc), "event": name}
+
+
+async def _seed_robot_room(task: dict, guest: dict, assignee_name: str, channel: str, delivered: bool):
+    """Polite robot beats so the room reads like work in motion, never an empty page."""
+    beats = robot_room_beats(
+        task_title=task.get("title") or "",
+        assignee_name=assignee_name,
+        manager_name="you",
+        channel=channel,
+        delivered=delivered,
+    )
+    base = get_pst_now()
+    for index, beat in enumerate(beats):
+        await log_task_activity(
+            db,
+            task_id=task["id"],
+            event_type=beat["event_type"],
+            channel=beat["channel"],
+            actor_id="jarvis",
+            actor_name="Jarvis",
+            recipient_id=task.get("assigned_to"),
+            recipient_name=assignee_name,
+            recipient_email=task.get("assigned_to_email"),
+            company_domain=guest.get("company_domain"),
+            title=beat["title"],
+            body=beat["body"],
+            meta={"channels": [beat["channel"]], "demo_seed": True, "beat": index},
+            created_at=(base + timedelta(seconds=index)).isoformat(),
+        )
+
+
+@api_router.post("/demo/launch")
+async def demo_launch(
+    body: DemoLaunchRequest,
+    http_request: HTTPRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Turn a landing-page sentence into a guest session plus one real task.
+
+    No password, no verify-email wall: the visitor lands straight in the robot room.
+    """
+    text = clean_display_text(str(body.task or "")).strip()
+    if len(text) < 4:
+        raise HTTPException(status_code=400, detail="Type what needs to get done")
+    if len(text) > 1000:
+        text = text[:1000]
+
+    ip_hash = _request_ip_hash(http_request)
+    now = get_pst_now()
+    if ip_hash:
+        hour_ago = (now - timedelta(hours=1)).isoformat()
+        recent = await db.users.count_documents(
+            {"is_guest": True, "guest_ip_hash": ip_hash, "created_at": {"$gte": hour_ago}}
+        )
+        if launch_rate_limited(recent, LAUNCHES_PER_HOUR):
+            raise HTTPException(
+                status_code=429,
+                detail="That is a lot of demo sends. Create an account to keep going.",
+            )
+
+    raw_assignee = normalize_assignee_email(body.assignee_email)
+    if raw_assignee and not is_valid_assignee_email(raw_assignee):
+        raise HTTPException(status_code=400, detail="Enter a real email for the person doing this")
+    deliver_for_real = bool(raw_assignee)
+    assignee_email = raw_assignee or SAMPLE_ASSIGNEE["email"]
+    assignee_name = assignee_display_name(assignee_email) if deliver_for_real else SAMPLE_ASSIGNEE["name"]
+    channel = demo_channel(body.channel)
+
+    guest_id = str(uuid.uuid4())
+    guest = guest_user_doc(
+        guest_id=guest_id,
+        now=now,
+        ip_hash=ip_hash,
+        email=guest_email(guest_id),
+    )
+    guest["password_hash"] = get_password_hash(secrets.token_urlsafe(24))
+    await db.users.insert_one(dict(guest))
+
+    title, description = split_task_text(text)
+    payload = TaskCreate(
+        title=title,
+        description=description,
+        assigned_to=assignee_email,
+        due_date=eod_due_date(now),
+        priority="Medium",
+        category="General",
+    )
+    # Real delivery uses the request's background tasks. A sample send gets a throwaway
+    # queue instead, so nothing is mailed to the canned assignee.
+    delivery_tasks = background_tasks if deliver_for_real else BackgroundTasks()
+    created = await create_task(payload, delivery_tasks, current_user=guest)
+    task = await db.tasks.find_one({"id": created.id}, {"_id": 0})
+    await db.tasks.update_one(
+        {"id": created.id},
+        {"$set": {
+            "source": "landing_demo",
+            "company_domain": guest.get("company_domain"),
+            "demo_channel": channel,
+            "demo_delivered": deliver_for_real,
+        }},
+    )
+    await _seed_robot_room(task or {"id": created.id, "title": title}, guest, assignee_name, channel, deliver_for_real)
+
+    resend_ready = bool(os.getenv("RESEND_API_KEY"))
+    delivery = "sent" if (deliver_for_real and resend_ready) else ("queued" if deliver_for_real else "demo")
+
+    await record_product_event(
+        "demo_launch",
+        session_id=body.session_id,
+        ip_hash=ip_hash,
+        user_id=guest_id,
+        meta={"channel": channel, "delivery": delivery, "sample_assignee": not deliver_for_real},
+    )
+    if deliver_for_real:
+        await record_product_event(
+            "demo_send",
+            session_id=body.session_id,
+            ip_hash=ip_hash,
+            user_id=guest_id,
+            meta={"channel": channel, "delivery": delivery},
+        )
+
+    access_token = create_access_token(data={"sub": guest_id})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": guest_id,
+            "name": guest["name"],
+            "email": guest["email"],
+            "subscription_tier": "free",
+            "email_verified": True,
+            "is_guest": True,
+        },
+        "task_id": created.id,
+        "environment_url": f"/env/{created.id}",
+        "assignee": {"email": assignee_email, "name": assignee_name, "sample": not deliver_for_real},
+        "channel": channel,
+        "delivery": delivery,
+        "due_date": payload.due_date,
+        "copy": room_copy(assignee_name=assignee_name, delivered=deliver_for_real),
+    }
+
+
+@api_router.get("/demo/room/{task_id}")
+async def demo_room(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Everything the robot room needs: the ask, who it went to, and the robot beats."""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.get("created_by") != current_user["id"] and task.get("assigned_to") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    rows = await db.task_activity.find({"task_id": task_id}, {"_id": 0}).sort("created_at", 1).to_list(100)
+    for row in rows:
+        stamp = serialize_app_ts(row.get("created_at"))
+        if stamp:
+            row["created_at"] = stamp
+    assignee_email = task.get("assigned_to_email") or ""
+    delivered = bool(task.get("demo_delivered", True))
+    assignee_name = task.get("assigned_to_name") or assignee_display_name(assignee_email)
+    return {
+        "task": {
+            "id": task["id"],
+            "title": task.get("title"),
+            "description": task.get("description"),
+            "status": task.get("status"),
+            "due_date": task.get("due_date"),
+            "created_at": task.get("created_at"),
+            "assigned_to_email": assignee_email,
+            "assigned_to_name": assignee_name,
+        },
+        "channel": task.get("demo_channel") or "email",
+        "delivered": delivered,
+        "is_guest": bool(current_user.get("is_guest")),
+        "activity": rows,
+        "copy": room_copy(assignee_name=assignee_name, delivered=delivered),
+        "slack_connected": bool(slack_bot_token()),
+    }
+
+
 # Daily Analytics Job
-async def send_daily_analytics():
-    """Send daily product analytics email"""
-    admin_email = os.getenv("ANALYTICS_EMAIL", "connect@hashimmahmood.com")
-    today = datetime.now(timezone.utc).date()
-    yesterday = today - timedelta(days=1)
-    
-    # Get metrics
-    total_users = await db.users.count_documents({})
-    new_signups_today = await db.users.count_documents({
-        "created_at": {"$gte": yesterday.isoformat(), "$lt": today.isoformat()}
-    })
-    
-    # Active users (logged in within 24h)
+async def _daily_event_counts(date: str) -> dict:
+    """Funnel counts for one Pacific calendar day, straight from product_events."""
+    day = empty_day(date)
+    coll = db[EVENTS_COLLECTION]
+    next_date = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    rows = await coll.aggregate([
+        {"$match": {"date": date}},
+        {"$group": {"_id": {"event": "$event", "method": "$meta.method"}, "n": {"$sum": 1}}},
+    ]).to_list(200)
+    totals: Dict[str, int] = {}
+    for row in rows:
+        key = row.get("_id") or {}
+        event = key.get("event")
+        method = str(key.get("method") or "").lower()
+        count = int(row.get("n") or 0)
+        if not event:
+            continue
+        totals[event] = totals.get(event, 0) + count
+        if event == "login":
+            if method == "google":
+                day["logins_google"] += count
+            else:
+                day["logins_email"] += count
+
+    sessions = await coll.distinct(
+        "session_id", {"date": date, "event": "landing_view", "session_id": {"$ne": None}}
+    )
+    anon_views = await coll.count_documents({"date": date, "event": "landing_view", "session_id": None})
+    day["landing_views"] = len(sessions) + anon_views
+    day["interactions"] = totals.get("landing_interact", 0)
+    day["demo_launches"] = totals.get("demo_launch", 0)
+    day["demo_sends"] = totals.get("demo_send", 0)
+    day["recording_starts"] = totals.get("recording_start", 0)
+    day["env_views"] = totals.get("env_view", 0)
+    day["logins"] = totals.get("login", 0)
+    day["google_signups"] = totals.get("google_signup", 0)
+
+    login_users = await coll.distinct(
+        "user_id", {"date": date, "event": "login", "user_id": {"$ne": None}}
+    )
+    day["login_users"] = len(login_users)
+
+    day_range = {"$gte": date, "$lt": next_date}
+    day["signups"] = await db.users.count_documents({"is_guest": {"$ne": True}, "created_at": day_range})
+    day["guest_sessions"] = await db.users.count_documents({"is_guest": True, "created_at": day_range})
+    day["tasks_created"] = await db.tasks.count_documents({**_LIVE_TASK, "created_at": day_range})
+    day["tasks_completed"] = await db.tasks.count_documents({**_LIVE_TASK, "completed_at": day_range})
+    return day
+
+
+async def _build_daily_product_snapshot(now: Optional[datetime] = None) -> dict:
+    """Yesterday + today funnel, plus the product totals the owner already reads."""
+    now = now or get_pst_now()
+    today_key = day_id(now)
+    prev_key = day_id(now - timedelta(days=1))
+    today = await _daily_event_counts(today_key)
+    prev = await _daily_event_counts(prev_key)
+
+    real_user = {"is_guest": {"$ne": True}}
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    total_users = await db.users.count_documents(real_user)
+    verified_users = await db.users.count_documents({**real_user, "email_verified": True})
     dau = await db.users.count_documents({
-        "last_login": {"$gte": yesterday.isoformat()}
+        **real_user,
+        "$or": [{"last_active": {"$gte": today_start}}, {"last_login": {"$gte": today_start}}],
     })
-    
-    # Tasks created today
-    tasks_today = await db.tasks.count_documents({
-        "created_at": {"$gte": yesterday.isoformat()}
+    creators = await db.tasks.distinct("created_by", _LIVE_TASK)
+    never_created_a_task = await db.users.count_documents({
+        **real_user,
+        "email_verified": True,
+        "id": {"$nin": creators or ["__none__"]},
     })
-    
-    # Tasks completed today
-    completed_today = await db.tasks.count_documents({
-        "completed_at": {"$gte": yesterday.isoformat()}
-    })
-    
-    # Domain breakdown
-    domain_pipeline = [
+    abandonment_rate = round(100 * never_created_a_task / verified_users, 1) if verified_users else 0.0
+    guest_sessions_total = await db.users.count_documents({"is_guest": True})
+    domains = await db.users.aggregate([
+        {"$match": real_user},
         {"$group": {"_id": "$company_domain", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
-        {"$limit": 10}
-    ]
-    domains = await db.users.aggregate(domain_pipeline).to_list(10)
-    
-    # Trial users expiring soon
-    week_from_now = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-    expiring_trials = await db.users.count_documents({
-        "is_trial": True,
-        "trial_ends": {"$lte": week_from_now}
-    })
-    
-    # Conversion rate
-    verified_users = await db.users.count_documents({"email_verified": True})
-    conversion_rate = (verified_users / total_users * 100) if total_users > 0 else 0
-    
-    # First session abandonment (signed up but never created a task)
-    users_no_tasks = await db.users.count_documents({
-        "email_verified": True,
-        "id": {"$nin": await db.tasks.distinct("created_by")}
-    })
-    abandonment_rate = (users_no_tasks / verified_users * 100) if verified_users > 0 else 0
-    
-    domain_html = "".join([f"<tr><td>{d['_id'] or 'No domain'}</td><td>{d['count']}</td></tr>" for d in domains])
-    
-    email_content = f"""
-    <html>
-        <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;">
-            <h1 style="color: #0d9488;">Tskflow Daily Analytics</h1>
-            <p style="color: #6B7280;">{today.strftime('%B %d, %Y')}</p>
-            
-            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px;">Core Metrics</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Total Users</strong></td><td>{total_users}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>New Signups (24h)</strong></td><td>{new_signups_today}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Daily Active Users</strong></td><td>{dau}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Created (24h)</strong></td><td>{tasks_today}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Tasks Completed (24h)</strong></td><td>{completed_today}</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Signup → Verified Rate</strong></td><td>{conversion_rate:.1f}%</td></tr>
-            </table>
-            
-            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Domain Intelligence</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr style="background: #F3F4F6;"><th style="padding: 8px; text-align: left;">Domain</th><th style="padding: 8px; text-align: left;">Users</th></tr>
-                {domain_html}
-            </table>
-            
-            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Engagement & Activation</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>First-Session Abandonment</strong></td><td>{abandonment_rate:.1f}%</td></tr>
-                <tr><td style="padding: 8px; border-bottom: 1px solid #E5E7EB;"><strong>Trials Expiring (7d)</strong></td><td>{expiring_trials}</td></tr>
-            </table>
-            
-            <h2 style="border-bottom: 2px solid #E5E7EB; padding-bottom: 10px; margin-top: 30px;">Insights</h2>
-            <div style="background: #F0FDF4; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                <strong style="color: #166534;">What's Working:</strong>
-                <p style="margin: 5px 0; color: #166534;">{"Task creation active" if tasks_today > 0 else "Need more task engagement"}</p>
-            </div>
-            <div style="background: #FEF2F2; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                <strong style="color: #991B1B;">What's Not:</strong>
-                <p style="margin: 5px 0; color: #991B1B;">{"High abandonment - users signing up but not creating tasks" if abandonment_rate > 50 else "Activation funnel needs monitoring"}</p>
-            </div>
-            <div style="background: #EFF6FF; padding: 15px; border-radius: 8px;">
-                <strong style="color: #1E40AF;">Double Down On:</strong>
-                <p style="margin: 5px 0; color: #1E40AF;">{"Domain-based team adoption" if len(domains) > 0 else "First user acquisition"}</p>
-            </div>
-            
-            <p style="color: #9CA3AF; font-size: 12px; margin-top: 30px; text-align: center;">
-                Tskflow Analytics • {today.strftime('%Y')}
-            </p>
-        </body>
-    </html>
-    """
-    
-    try:
-        resend.emails.send({
-            "from": f"TskFlow Analytics <{EMAIL_FROM_ADDR}>",
-            "to": [admin_email],
-            "subject": f"Tskflow Daily Analytics - {today.strftime('%b %d')}",
-            "html": email_content
-        })
-        logger.info(f"Daily analytics sent to {admin_email}")
-    except Exception as e:
-        logger.error(f"Failed to send analytics: {e}")
+        {"$limit": 8},
+    ]).to_list(8)
+
+    totals = {
+        "total_users": total_users,
+        "verified_users": verified_users,
+        "dau": dau,
+        "never_created_a_task": never_created_a_task,
+        "abandonment_rate": abandonment_rate,
+        "guest_sessions_total": guest_sessions_total,
+        "top_domains": [{"domain": d.get("_id") or "none", "users": d.get("count", 0)} for d in domains],
+    }
+    return snapshot_for_email(today, prev, totals, now)
+
+
+async def send_daily_analytics(now: Optional[datetime] = None, force: bool = False) -> dict:
+    """Email the owner today's funnel. Runs from the scheduler once per Pacific day."""
+    now = now or get_pst_now()
+    if not force and not should_send_daily(now):
+        return {"sent": False, "reason": "not_8am_pt"}
+
+    key = f"daily-{day_id(now)}"
+    if not force:
+        existing = await db[DIGEST_COLLECTION].find_one({"id": key})
+        if existing:
+            return {"sent": False, "reason": "already_sent", "date": day_id(now)}
+
+    snap = await _build_daily_product_snapshot(now)
+    inner = render_daily_analytics_html(snap, now)
+    html = _jarvis_email_shell(inner, cta_url=f"{APP_BASE_URL}/admin", cta_label="Open the funnel")
+    to_email = _analytics_inbox()
+    await send_email_notification(to_email, daily_subject(now), html)
+
+    doc_id = key if not force else f"manual-{now.strftime('%Y%m%dT%H%M%S')}"
+    await db[DIGEST_COLLECTION].update_one(
+        {"id": doc_id},
+        {"$set": {
+            "id": doc_id,
+            "date": day_id(now),
+            "sent_at": now.isoformat(),
+            "forced": force,
+            "to": to_email,
+            "snapshot": snap,
+        }},
+        upsert=True,
+    )
+    logging.info(f"Daily analytics sent to {to_email}")
+    return {"sent": True, "to": to_email, "date": day_id(now), "snapshot": snap}
 
 # Trial reminder job
 async def send_trial_reminders():
@@ -5603,11 +5992,11 @@ async def send_trial_reminders():
             except:
                 pass
 
-# Manual trigger for analytics (for testing)
+# Force-send today's numbers (the scheduler still owns the 8 AM Pacific send)
 @api_router.post("/admin/send-analytics")
 async def trigger_analytics(background_tasks: BackgroundTasks):
-    background_tasks.add_task(send_daily_analytics)
-    return {"message": "Analytics email queued"}
+    background_tasks.add_task(send_daily_analytics, None, True)
+    return {"message": "Analytics email queued", "to": _analytics_inbox()}
 
 
 _LIVE_TASK = {
@@ -5815,6 +6204,21 @@ async def send_admin_engagement_now(admin: bool = Depends(verify_admin)):
     result = await send_weekly_engagement_digest(force=True)
     return result
 
+@api_router.get("/admin/analytics/daily")
+async def get_admin_daily_analytics(admin: bool = Depends(verify_admin)):
+    """Live landing → robot-room funnel for the owner admin panel."""
+    snap = await _build_daily_product_snapshot()
+    return {
+        **snap,
+        "email_to": _analytics_inbox(),
+        "schedule": f"Every day at {DAILY_SEND_HOUR_PST}:00 AM Pacific",
+    }
+
+@api_router.post("/admin/analytics/send")
+async def send_admin_daily_analytics_now(admin: bool = Depends(verify_admin)):
+    """Email today's funnel immediately (does not wait for 8 AM Pacific)."""
+    return await send_daily_analytics(force=True)
+
 @api_router.get("/admin/access-grants")
 async def get_access_grants(admin: bool = Depends(verify_admin)):
     """Get all email and domain access grants"""
@@ -5969,6 +6373,7 @@ async def google_calendar_connect(http_request: HTTPRequest, current_user: dict 
     # Store state with user_id for callback
     await db.oauth_states.insert_one({
         "state": state,
+        "purpose": "google_calendar",
         "user_id": current_user["id"],
         "next": next_path,
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -5979,9 +6384,9 @@ async def google_calendar_connect(http_request: HTTPRequest, current_user: dict 
 @api_router.get("/auth/google/callback")
 async def google_calendar_callback(code: str, state: str, http_request: HTTPRequest):
     """Handle Google OAuth callback"""
-    # Verify state
+    # Verify state — sign-in states are a different purpose and must not land here
     state_doc = await db.oauth_states.find_one({"state": state})
-    if not state_doc:
+    if not state_doc or state_doc.get("purpose") == GOOGLE_SIGNIN_PURPOSE:
         return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
     
     user_id = state_doc["user_id"]
@@ -6023,6 +6428,203 @@ async def google_calendar_disconnect(current_user: dict = Depends(get_current_us
         {"$set": {"google_calendar_connected": False}, "$unset": {"google_credentials": ""}}
     )
     return {"message": "Google Calendar disconnected"}
+
+
+# ==========================================================================
+# LOGIN WITH GOOGLE — identity only. Separate from the Calendar/Sheets grants.
+# ==========================================================================
+
+GOOGLE_SIGNIN_SCOPE = "openid email profile"
+GOOGLE_SIGNIN_PURPOSE = "google_signin"
+
+
+def google_signin_configured() -> bool:
+    return bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+
+
+def _google_signin_redirect_uri() -> str:
+    return f"{APP_BASE_URL}/api/auth/google/login/callback"
+
+
+def _safe_signin_next(raw) -> str:
+    """Allow only in-app destinations after sign-in. Guest rooms included."""
+    path = str(raw or "").strip() or "/dashboard"
+    path = path.split("?")[0].split("#")[0]
+    if not path.startswith("/") or path.startswith("//") or "://" in path or "\\" in path:
+        return "/dashboard"
+    if path in ("/dashboard", "/settings", "/recordings"):
+        return path
+    if re.match(r"^/env/[A-Za-z0-9._-]{6,64}$", path):
+        return path
+    return "/dashboard"
+
+
+async def _tier_for_new_google_user(email_norm: str, company_domain: str) -> dict:
+    """Same tier rules as email signup: team domain first, then admin grants."""
+    team_owner = await db.users.find_one({
+        "company_domain": company_domain,
+        "subscription_tier": "teams",
+        "is_team_owner": True,
+    }, {"_id": 0})
+    if team_owner:
+        return {"subscription_tier": "teams", "team_owner_email": team_owner["email"], "granted_access": False}
+    grant = await db.access_grants.find_one({"type": "email", "value": email_norm}, {"_id": 0})
+    if not grant:
+        grant = await db.access_grants.find_one({"type": "domain", "value": "@" + company_domain}, {"_id": 0})
+    if grant:
+        return {"subscription_tier": grant["plan"], "team_owner_email": None, "granted_access": True}
+    return {"subscription_tier": "free", "team_owner_email": None, "granted_access": False}
+
+
+@api_router.get("/auth/google/login")
+async def google_signin_start(
+    http_request: HTTPRequest,
+    next: Optional[str] = None,
+    guest_user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """Send the visitor to Google for sign-in (not Calendar). Redirects straight out."""
+    next_path = _safe_signin_next(next)
+    if not google_signin_configured():
+        return RedirectResponse(url=f"{APP_BASE_URL}/login?error=google_not_configured")
+
+    state = secrets.token_urlsafe(24)
+    await db.oauth_states.insert_one({
+        "state": state,
+        "purpose": GOOGLE_SIGNIN_PURPOSE,
+        "user_id": None,
+        "next": next_path,
+        "guest_user_id": (str(guest_user_id).strip() or None) if guest_user_id else None,
+        "session_id": clean_session_id(session_id),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    params = urlencode({
+        "client_id": os.getenv("GOOGLE_CLIENT_ID").strip(),
+        "redirect_uri": _google_signin_redirect_uri(),
+        "response_type": "code",
+        "scope": GOOGLE_SIGNIN_SCOPE,
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+        "include_granted_scopes": "false",
+    })
+    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+async def _google_signin_identity(code: str) -> dict:
+    """Exchange the code for an access token and read the Google profile."""
+    async with httpx.AsyncClient(timeout=15) as http_client:
+        token_res = await http_client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": os.getenv("GOOGLE_CLIENT_ID").strip(),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET").strip(),
+                "redirect_uri": _google_signin_redirect_uri(),
+                "grant_type": "authorization_code",
+            },
+        )
+        token_res.raise_for_status()
+        access_token = (token_res.json() or {}).get("access_token")
+        if not access_token:
+            raise ValueError("Google did not return an access token")
+        info_res = await http_client.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        info_res.raise_for_status()
+    info = info_res.json() or {}
+    email = str(info.get("email") or "").strip().lower()
+    if not email:
+        raise ValueError("Google account has no email")
+    return {"email": email, "name": str(info.get("name") or "").strip(), "google_id": info.get("sub")}
+
+
+@api_router.get("/auth/google/login/callback")
+async def google_signin_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Find-or-create the user behind a Google account and hand the SPA a token."""
+    fail = f"{APP_BASE_URL}/login?error=google_signin_failed"
+    if error or not code or not state:
+        return RedirectResponse(url=fail)
+
+    state_doc = await db.oauth_states.find_one({"state": state, "purpose": GOOGLE_SIGNIN_PURPOSE})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/login?error=invalid_state")
+    await db.oauth_states.delete_one({"state": state})
+    next_path = _safe_signin_next(state_doc.get("next"))
+
+    try:
+        identity = await _google_signin_identity(code)
+    except Exception as e:
+        logging.error(f"Google sign-in failed: {e}")
+        return RedirectResponse(url=fail)
+
+    email_norm = identity["email"]
+    company_domain = email_norm.split("@")[-1]
+    now = get_pst_now().isoformat()
+    user = await find_user_by_email(email_norm)
+    is_new = user is None
+
+    if is_new:
+        tier = await _tier_for_new_google_user(email_norm, company_domain)
+        user = {
+            "id": str(uuid.uuid4()),
+            "name": identity.get("name") or email_norm.split("@")[0].title(),
+            "email": email_norm,
+            "password_hash": get_password_hash(secrets.token_urlsafe(24)),
+            "company_domain": company_domain,
+            "email_verified": True,
+            "verified_at": now,
+            "auth_provider": "google",
+            "google_id": identity.get("google_id"),
+            "is_team_owner": False,
+            "created_at": now,
+            "last_active": now,
+            "last_login": now,
+            **tier,
+        }
+        await db.users.insert_one(dict(user))
+        placeholder = f"email_{email_norm}"
+        await db.tasks.update_many(
+            {"$or": [
+                {"assigned_to": placeholder},
+                {"assigned_to": {"$regex": f"^email_{re.escape(email_norm)}$", "$options": "i"}},
+            ]},
+            {"$set": {"assigned_to": user["id"], "assigned_to_name": user["name"]}},
+        )
+        await db.team_invitations.update_many(
+            {"email": email_norm},
+            {"$set": {"status": "registered", "registered_at": now, "user_id": user["id"]}},
+        )
+    else:
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "email_verified": True,
+                "google_id": identity.get("google_id"),
+                "last_login": now,
+                "last_active": now,
+            }},
+        )
+
+    merge = await merge_guest_into_user(state_doc.get("guest_user_id"), user)
+    session_id = state_doc.get("session_id")
+    if is_new:
+        await record_product_event("google_signup", user_id=user["id"], session_id=session_id, meta={"method": "google"})
+    await record_product_event(
+        "login",
+        user_id=user["id"],
+        session_id=session_id,
+        meta={"method": "google", "new_user": is_new, "merged_guest": bool(merge.get("merged"))},
+    )
+
+    token = create_access_token(data={"sub": user["id"]})
+    params = urlencode({"token": token, "next": next_path})
+    return RedirectResponse(url=f"{APP_BASE_URL}/auth/google/finish?{params}")
 
 
 def get_google_sheets_flow(redirect_uri: str):
@@ -6925,6 +7527,10 @@ async def push_unsubscribe(sub: PushSubscription, current_user: dict = Depends(g
 async def send_web_push(user_id: str, title: str, body: str, url: str = "/dashboard"):
     """Send a background web-push notification to all of a user's subscriptions."""
     if not (VAPID_PRIVATE_KEY and user_id):
+        return
+    # Landing-demo guests never get push — the room is the whole experience.
+    guest = await db.users.find_one({"id": user_id, "is_guest": True}, {"_id": 0, "id": 1})
+    if guest:
         return
     subs = await db.push_subscriptions.find({"user_id": user_id}, {"_id": 0}).to_list(50)
     if not subs:
@@ -8509,7 +9115,7 @@ async def send_due_eod_reports():
     """
     now = get_pst_now()
     today = now.strftime("%Y-%m-%d")
-    users = await db.users.find({}, {
+    users = await db.users.find({"is_guest": {"$ne": True}}, {
         "_id": 0, "id": 1, "name": 1, "email": 1, "preferences": 1,
         "subscription_tier": 1, "is_team_owner": 1, "team_owner_email": 1, "company_domain": 1,
     }).to_list(10000)
@@ -13258,6 +13864,7 @@ async def _scheduler_loop():
             await _sync_all_sheet_configs()
             await send_due_eod_reports()
             await send_weekly_engagement_digest()
+            await send_daily_analytics()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
         await asyncio.sleep(300)  # every 5 min
@@ -13284,6 +13891,10 @@ async def _ensure_indexes():
         await db.slack_threads.create_index("assignee_id")
         await db.slack_threads.create_index("slack_channel_id")
         await db.engagement_digests.create_index("id", unique=True)
+        await db[DIGEST_COLLECTION].create_index("id", unique=True)
+        await db[EVENTS_COLLECTION].create_index([("date", 1), ("event", 1)])
+        await db[EVENTS_COLLECTION].create_index([("ip_hash", 1), ("at", -1)])
+        await db.users.create_index([("is_guest", 1), ("guest_ip_hash", 1), ("created_at", -1)])
         await db.email_followup_tokens.create_index("id", unique=True)
         await db.email_followup_tokens.create_index("task_id")
         await db.tasks.create_index("email_reply_token")
