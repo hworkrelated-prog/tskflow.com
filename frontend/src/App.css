@@ -597,6 +597,24 @@ body.landing-active {
     background-size: 56px 56px;
     background-position: center top;
 }
+.landing-page textarea,
+.landing-page input {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+.landing-page textarea {
+    border-color: transparent !important;
+}
+.landing-page textarea::placeholder,
+.landing-page input::placeholder {
+    color: rgba(255, 255, 255, 0.28) !important;
+}
+.landing-page [data-testid="landing-tryit-colorized"] .text-teal-300 { color: #5eead4 !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-sky-200 { color: #bae6fd !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-amber-300 { color: #fcd34d !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
 
 /* --- Reminder activity cards: calm, readable (light + dark) --- */
 .reminder-card {

@@ -36,6 +36,7 @@ def test_landing_opens_straight_into_a_launch():
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
     assert "autoFocus" in src
+    assert "What needs to get done" in src
     assert "/demo/launch" in src
     assert 'data-testid="landing-send-it"' in src
     assert 'data-testid="landing-assignee-email"' in src

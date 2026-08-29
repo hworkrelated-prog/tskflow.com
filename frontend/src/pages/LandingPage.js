@@ -40,8 +40,7 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
     const [sending, setSending] = useState(false);
 
     const displayText = value || DEMO_PROMPT;
-    const showSamplePlaceholder = !value;
-    const preview = distillLandingPrompt(displayText);
+    const preview = distillLandingPrompt(value.trim() ? value : DEMO_PROMPT);
 
     const attachRecording = async (taskId) => {
         if (!recordingBlob) return;
@@ -89,12 +88,7 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                 No account. No password. Enter sends it.
             </p>
 
-            <div className="relative min-h-[220px] sm:min-h-[320px] flex-1">
-                <ColorCodedPrompt
-                    text={displayText}
-                    className={`pointer-events-none absolute inset-0 text-2xl sm:text-3xl font-medium leading-snug whitespace-pre-wrap break-words ${showSamplePlaceholder ? 'opacity-70' : ''}`}
-                    testId="landing-tryit-colorized"
-                />
+            <div className="relative min-h-[220px] sm:min-h-[320px] flex-1 border-l-2 border-teal-400/50 pl-5">
                 <textarea
                     ref={inputRef}
                     value={value}
@@ -109,13 +103,18 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                         }
                     }}
                     rows={8}
-                    className="relative w-full resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-transparent selection:bg-teal-400/30"
-                    placeholder=""
+                    className="relative w-full h-full min-h-[220px] sm:min-h-[320px] resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white placeholder:text-white/25 selection:bg-teal-400/30"
+                    placeholder="What needs to get done"
                     data-testid="landing-tryit-input"
                     aria-label="What needs to get done"
                     autoFocus
                 />
             </div>
+            <ColorCodedPrompt
+                text={displayText}
+                className="mt-4 text-sm leading-relaxed"
+                testId="landing-tryit-colorized"
+            />
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-end">
                 <div className="flex-1">
