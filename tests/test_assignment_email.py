@@ -13,9 +13,9 @@ from email_followup import first_name  # noqa: E402
 
 
 def _load_helper():
-    start = SERVER.index("def _assignment_email_html")
+    start = SERVER.index("def _assignment_email_due")
     end = SERVER.index("async def check_and_send_reminders")
-    ns = {"first_name": first_name, "html": html_mod, "Optional": Optional}
+    ns = {"first_name": first_name, "html": html_mod, "Optional": Optional, "re": re}
     exec(SERVER[start:end], ns)
     return ns["_assignment_email_html"]
 
@@ -57,9 +57,10 @@ def test_assignment_email_is_one_line_plus_the_task():
     assert "Hi Hashim," in visible
     assert "Alex assigned you this." in visible
     assert "Send a pipeline update every day at 9" in visible
-    assert "Tell my manager" in visible
+    assert "Tell my manager" not in visible
     assert "Medium" in visible
     assert "Due 2026-08-29 at 17:00" in visible
+    assert "17:00:00" not in visible
     assert "View task" in visible
     assert "https://tskflow.com/invite?token=abc123" in markup
     assert "when you have a moment" not in visible
@@ -85,3 +86,19 @@ def test_assignment_email_skips_duplicate_description():
     assert visible.count("Call Maya") == 1
     assert "High" in visible
     assert "Henrik assigned you this." in visible
+
+
+def test_assignment_email_keeps_description_that_adds_detail():
+    render = _load_helper()
+    markup = render(
+        recipient_name="Ada",
+        assigner_name="Henrik",
+        title="Call Maya",
+        description="Call Maya. Bring the Q3 deck and ask about the Acme renewal.",
+        due_date="2026-08-29T09:00:00",
+        priority="High",
+        cta_url="https://tskflow.com/invite?token=xyz",
+    )
+    visible = _visible_text(markup)
+    assert "Bring the Q3 deck" in visible
+    assert "Acme renewal" in visible
