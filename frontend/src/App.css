@@ -611,10 +611,15 @@ body.landing-active {
 .landing-page input::placeholder {
     color: rgba(255, 255, 255, 0.28) !important;
 }
-.landing-page [data-testid="landing-tryit-colorized"] .text-teal-300 { color: #5eead4 !important; }
-.landing-page [data-testid="landing-tryit-colorized"] .text-sky-200 { color: #bae6fd !important; }
-.landing-page [data-testid="landing-tryit-colorized"] .text-amber-300 { color: #fcd34d !important; }
-.landing-page [data-testid="landing-tryit-colorized"] .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-teal-300,
+.landing-page .landing-example .text-teal-300 { color: #5eead4 !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-sky-200,
+.landing-page .landing-example .text-sky-200 { color: #bae6fd !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-amber-300,
+.landing-page .landing-example .text-amber-300 { color: #fcd34d !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-white\/55,
+.landing-page .landing-example .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
+.landing-page .landing-example:hover .text-white\/55 { color: rgba(255, 255, 255, 0.8) !important; }
 
 /* Phone recorder sheet portals to body; keep it on the landing's dark surface. */
 .landing-phone-record {

@@ -39,6 +39,10 @@ def test_task_text_becomes_a_title_without_the_scaffolding():
     title2, _ = split_task_text("Assign East Coast sales to send the Q3 outreach email by EOD.")
     assert title2.lower().startswith("send the q3 outreach email")
 
+    title3, _ = split_task_text("Tell my manager to send a pipeline update every day at 9.")
+    assert title3.lower().startswith("send a pipeline update")
+    assert "tell my manager" not in title3.lower()
+
     long_title, _ = split_task_text("x" * 300)
     assert len(long_title) <= 91
 

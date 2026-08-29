@@ -32,11 +32,17 @@ def test_landing_is_a_tool_not_a_pitch():
 
 def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert 'data-testid="landing-tryit"' in src
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
     assert "autoFocus" in src
-    assert "What needs to get done" in src
+    assert "What needs to get done" in src  # aria-label
+    assert 'data-testid="landing-examples"' in src
+    assert "LANDING_EXAMPLES" in src
+    assert "pipeline update" in demo
+    assert "best deal" in demo
+    assert "puts it on their calendar" in src
     assert "/demo/launch" in src
     assert 'data-testid="landing-send-it"' in src
     assert 'data-testid="landing-assignee-email"' in src
@@ -61,10 +67,43 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert "navigate('/register')" not in src
 
 
+def test_landing_examples_are_short_manager_asks():
+    demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    assert "LANDING_EXAMPLES" in demo
+    assert "landing-example-${ex.id}" in landing
+    assert "id: 'pipeline'" in demo
+    assert "id: 'walkthrough'" in demo
+    assert "id: 'best-deal'" in demo
+    assert "Use a sample" not in landing
+    script = r"""
+import { LANDING_EXAMPLES, colorizeAssignPrompt } from './frontend/src/lib/landingAssignDemo.js';
+if (LANDING_EXAMPLES.length < 5 || LANDING_EXAMPLES.length > 8) process.exit(1);
+for (const ex of LANDING_EXAMPLES) {
+  if (ex.text.length > 110) process.exit(2);
+  const kinds = colorizeAssignPrompt(ex.text).map((p) => p.kind);
+  if (!kinds.includes('who') || !kinds.includes('work')) process.exit(3);
+}
+const pipeline = colorizeAssignPrompt(LANDING_EXAMPLES[0].text);
+if (!/manager/i.test(pipeline.find((p) => p.kind === 'who').text)) process.exit(4);
+if (!/every day at 9/i.test(pipeline.find((p) => p.kind === 'when')?.text || '')) process.exit(5);
+console.log('ok');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "ok" in result.stdout
+
+
 def test_landing_demo_assigns_thirty_to_forty_people():
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert "DEMO_PROMPT" in demo
-    assert "East Coast" in demo
+    assert "DEMO_PEOPLE" in demo
     import re
     block = demo.split("export const DEMO_PEOPLE")[1].split("export const DEMO_ROLLUP")[0]
     people = re.findall(r"'([^']+)'", block)
@@ -116,6 +155,30 @@ console.log('ok');
     assert "ok" in result.stdout
 
 
+def test_demo_distill_handles_manager_and_org_asks():
+    script = r"""
+import { distillLandingPrompt } from './frontend/src/lib/demoDistill.js';
+const a = distillLandingPrompt('Tell my manager to send a pipeline update every day at 9.');
+if (!a || a.who !== 'Your manager') process.exit(1);
+if (!/pipeline/i.test(a.title)) process.exit(2);
+if (!/every day at 9/i.test(a.when)) process.exit(3);
+if (/tell my manager/i.test(a.ask)) process.exit(4);
+const b = distillLandingPrompt('Ask the org to submit their best deal, with all the details.');
+if (b.who !== 'Your org') process.exit(5);
+if (!/best deal/i.test(b.title)) process.exit(6);
+console.log('ok');
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "ok" in result.stdout
+
+
 def test_landing_tryit_color_codes_assign_prompt():
     """Composer sample prompt highlights who / work / when, not flat gray."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
@@ -132,7 +195,12 @@ const parts = colorizeAssignPrompt('Assign East Coast sales to send the Q3 outre
 const kinds = parts.map((p) => p.kind).join(',');
 if (!kinds.includes('who') || !kinds.includes('work') || !kinds.includes('when')) process.exit(1);
 const who = parts.find((p) => p.kind === 'who');
-if (!/east coast sales/i.test(who.text)) process.exit(2);
+    if (!/east coast sales/i.test(who.text)) process.exit(2);
+const b = colorizeAssignPrompt('Tell my manager to send a pipeline update every day at 9.');
+const bKinds = b.map((p) => p.kind);
+if (!bKinds.includes('who') || !bKinds.includes('work') || !bKinds.includes('when')) process.exit(3);
+if (!/manager/i.test(b.find((p) => p.kind === 'who').text)) process.exit(4);
+if (!/every day at 9/i.test(b.find((p) => p.kind === 'when').text)) process.exit(5);
 console.log('ok');
 """
     result = subprocess.run(
