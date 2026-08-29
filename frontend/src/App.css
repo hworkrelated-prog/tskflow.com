@@ -603,9 +603,10 @@ html:has(body.landing-active) {
 }
 .landing-step {
     scroll-snap-align: start;
-    min-height: min(78vh, 34rem);
-    padding-top: 1.5rem;
-    padding-bottom: 2.5rem;
+    scroll-margin-top: 4.5rem;
+    min-height: calc(100svh - 5.5rem);
+    padding-top: 1.25rem;
+    padding-bottom: 2rem;
 }
 @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
