@@ -587,8 +587,15 @@ body.landing-active {
 [data-theme="light"] .landing-page.min-h-screen,
 [data-theme="dark"] .landing-page.min-h-screen,
 [data-theme="minimal"] .landing-page.min-h-screen {
-    background: #050807 !important;
+    background-color: #050807 !important;
     color: #ffffff !important;
+}
+.landing-page.landing-tool {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: center top;
 }
 
 /* --- Reminder activity cards: calm, readable (light + dark) --- */

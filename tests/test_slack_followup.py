@@ -191,6 +191,7 @@ def test_server_and_ui_are_wired():
     detail = (root / "frontend" / "src" / "pages" / "TaskDetail.js").read_text(encoding="utf-8")
     settings = (root / "frontend" / "src" / "pages" / "SettingsPage.js").read_text(encoding="utf-8")
     landing = (root / "frontend" / "src" / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    demo = (root / "frontend" / "src" / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert '"/slack/events"' in server
     assert '"/tasks/{task_id}/slack-followup"' in server
     assert "slack_thread_id" in server
@@ -201,8 +202,8 @@ def test_server_and_ui_are_wired():
     assert "group-accountability" in detail
     assert "badge-pinged-twice" in detail
     assert "SLACK_BOT_TOKEN" in settings
-    assert "landing-sim-slack" in landing
-    assert "Pinged twice" in landing
+    assert "landing-channel-slack" in landing
+    assert "Pinged twice" in demo
     # Must not invent Slack threads when delivery fails / webhook-only
     assert "is_live_slack_thread" in follow
     assert "if not token:" in follow or "if not slack_bot_token()" in follow
