@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import asyncio
+import html
 import re
 import secrets
 import httpx
@@ -494,6 +495,70 @@ async def send_emails_concurrent(messages: list):
     if not messages:
         return
     await asyncio.gather(*[send_email_notification(m[0], m[1], m[2]) for m in messages], return_exceptions=True)
+
+
+def _assignment_email_html(
+    *,
+    recipient_name: str,
+    assigner_name: str,
+    title: str,
+    description: Optional[str],
+    due_date: Optional[str],
+    priority: Optional[str],
+    cta_url: str,
+) -> str:
+    """Assignment email: greeting, one line, the task, a button. No filler."""
+    hello = first_name(recipient_name) or "there"
+    who = first_name(assigner_name) or "A teammate"
+    title_s = (title or "").strip() or "Untitled"
+    desc_s = (description or "").strip()
+    if desc_s.rstrip(".").lower() == title_s.rstrip(".").lower():
+        desc_s = ""
+    if len(desc_s) > 160:
+        desc_s = desc_s[:157].rstrip() + "..."
+    due_s = str(due_date).replace("T", " at ").split(".")[0] if due_date else ""
+    pri = (priority or "").strip()
+    desc_html = (
+        f'<p style="color:#6B7280;margin:0 0 12px 0;font-size:14px;line-height:1.45;">{html.escape(desc_s)}</p>'
+        if desc_s
+        else ""
+    )
+    hot = pri in ("High", "Urgent")
+    pri_html = (
+        f'<span style="background:{"#FEF3C7" if hot else "#ccfbf1"};color:{"#92400E" if hot else "#0f766e"};'
+        f'padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600;">{html.escape(pri)}</span>'
+        if pri
+        else ""
+    )
+    due_html = (
+        f'<span style="color:#6B7280;font-size:14px;{"margin-left:10px;" if pri_html else ""}">Due {html.escape(due_s)}</span>'
+        if due_s
+        else ""
+    )
+    meta = f'<div style="margin-top:4px;">{pri_html}{due_html}</div>' if (pri_html or due_html) else ""
+    return f"""
+        <html>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
+                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 28px 24px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 22px; font-weight: 700;">New task</h1>
+                </div>
+                <div style="padding: 28px 24px; background: white;">
+                    <p style="font-size: 16px; color: #374151; margin: 0 0 8px 0;">Hi {html.escape(hello)},</p>
+                    <p style="font-size: 16px; color: #374151; margin: 0;">{html.escape(who)} assigned you this.</p>
+                    <div style="background: #F9FAFB; border-radius: 12px; padding: 20px; margin: 20px 0; border-left: 4px solid #0d9488;">
+                        <h2 style="margin: 0 0 8px 0; font-size: 18px; color: #1F2937;">{html.escape(title_s)}</h2>
+                        {desc_html}
+                        {meta}
+                    </div>
+                    <div style="text-align: center;">
+                        <a href="{html.escape(cta_url, quote=True)}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
+                            View task
+                        </a>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
 
 
 async def check_and_send_reminders():
@@ -1201,46 +1266,15 @@ async def create_task(task: TaskCreate, background_tasks: BackgroundTasks, curre
         recipient_email = assigned_user.get("email") or assigned_to_email
         recipient_name = assigned_user.get("name", "there")
         
-        email_content = f"""
-        <html>
-            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
-                </div>
-                <div style="padding: 40px 30px; background: white;">
-                    <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
-                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                        {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready. Either way, you are respected.
-                    </p>
-                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
-                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
-                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                            <div style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#ccfbf1'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#0f766e'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-                                {task.priority} Priority
-                            </div>
-                            <div style="color: #6B7280; font-size: 14px; padding: 6px 0;">
-                                Due: {task.due_date.replace('T', ' at ').split('.')[0]}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                            View Task in Tskflow
-                        </a>
-                    </div>
-                    <p style="font-size: 13px; color: #9CA3AF; margin-top: 25px; text-align: center;">
-                        You can confirm, ask for a different time, or say no from Tskflow.
-                    </p>
-                </div>
-                <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                    <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                        © 2025 Tskflow. All rights reserved.
-                    </p>
-                </div>
-            </body>
-        </html>
-        """
+        email_content = _assignment_email_html(
+            recipient_name=recipient_name,
+            assigner_name=current_user.get("name") or "",
+            title=task.title,
+            description=task.description,
+            due_date=task.due_date,
+            priority=task.priority,
+            cta_url=f"{app_url}/invite?token={invite_token}",
+        )
         background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {task.title}", email_content)
         # Background browser push (if the assignee is a registered user with a subscription)
         if assigned_to_id and not str(assigned_to_id).startswith("email_"):
@@ -1348,39 +1382,15 @@ async def create_bulk_tasks(task: BulkTaskCreate, background_tasks: BackgroundTa
             email_to_send = assigned_user.get("email") if assigned_user else assigned_to_email
             recipient_name = assigned_user.get("name", "there") if assigned_user else assigned_to_email.split('@')[0]
             if email_to_send:
-                email_content = f"""
-                <html>
-                    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                        <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
-                        </div>
-                        <div style="padding: 40px 30px; background: white;">
-                            <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
-                            <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                                {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready.
-                            </p>
-                            <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
-                                <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{task.title}</h2>
-                                <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{(task.description or '')[:300]}{'...' if task.description and len(task.description) > 300 else ''}</p>
-                                <div>
-                                    <span style="background: {'#FEF3C7' if task.priority in ['High', 'Urgent'] else '#ccfbf1'}; color: {'#92400E' if task.priority in ['High', 'Urgent'] else '#0f766e'}; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-right: 10px;">
-                                        {task.priority} Priority
-                                    </span>
-                                    <span style="color: #6B7280; font-size: 14px;">Due: {task.due_date.replace('T', ' at ').split('.')[0]}</span>
-                                </div>
-                            </div>
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="{app_url}/invite?token={invite_token}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                                    View Task in Tskflow
-                                </a>
-                            </div>
-                        </div>
-                        <div style="padding: 20px 30px; text-align: center; background: #F9FAFB;">
-                            <p style="font-size: 12px; color: #9CA3AF; margin: 0;">© 2025 Tskflow. All rights reserved.</p>
-                        </div>
-                    </body>
-                </html>
-                """
+                email_content = _assignment_email_html(
+                    recipient_name=recipient_name,
+                    assigner_name=current_user.get("name") or "",
+                    title=task.title,
+                    description=task.description,
+                    due_date=task.due_date,
+                    priority=task.priority,
+                    cta_url=f"{app_url}/invite?token={invite_token}",
+                )
                 background_tasks.add_task(send_email_notification, email_to_send, f"New Task: {task.title}", email_content)
                 if not str(assigned_to_id).startswith("email_"):
                     background_tasks.add_task(send_web_push, assigned_to_id, f"New task from {current_user['name']}", task.title, f"/task/{task_id}")
@@ -2113,33 +2123,15 @@ async def complete_draft_task(task_id: str, background_tasks: BackgroundTasks, c
         recipient_email = assigned_user.get("email") or assigned_to_email
         recipient_name = assigned_user.get("name", "there")
         
-        email_content = f"""
-        <html>
-            <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb;">
-                <div style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">New Task Assignment</h1>
-                </div>
-                <div style="padding: 40px 30px; background: white;">
-                    <p style="font-size: 16px; color: #374151;">Hi {first_name(recipient_name) or "there"},</p>
-                    <p style="font-size: 16px; color: #374151; line-height: 1.6;">
-                        {first_name(current_user.get("name")) or "A teammate"} asked if you can take this when you have a moment. Open the task when you are ready.
-                    </p>
-                    <div style="background: #F9FAFB; border-radius: 12px; padding: 24px; margin: 25px 0; border-left: 4px solid #0d9488;">
-                        <h2 style="margin: 0 0 15px 0; font-size: 20px; color: #1F2937;">{draft['title']}</h2>
-                        <p style="color: #6B7280; margin: 0 0 15px 0; line-height: 1.6;">{draft.get('description', '')[:300]}</p>
-                        <div style="color: #6B7280; font-size: 14px;">
-                            Due: {draft['due_date'].replace('T', ' at ').split('.')[0]}
-                        </div>
-                    </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="{app_url}/invite?token={draft['invite_token']}" style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%); color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; display: inline-block;">
-                            View Task in Tskflow
-                        </a>
-                    </div>
-                </div>
-            </body>
-        </html>
-        """
+        email_content = _assignment_email_html(
+            recipient_name=recipient_name,
+            assigner_name=current_user.get("name") or "",
+            title=draft.get("title") or "",
+            description=draft.get("description") or "",
+            due_date=draft.get("due_date"),
+            priority=draft.get("priority"),
+            cta_url=f"{app_url}/invite?token={draft['invite_token']}",
+        )
         background_tasks.add_task(send_email_notification, recipient_email, f"New Task: {draft['title']}", email_content)
     
     # Return updated task
