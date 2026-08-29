@@ -2892,7 +2892,10 @@ async def create_standalone_recording(
 
     attached = False
     if task_id and rec_url:
-        task = await db.tasks.find_one({"id": task_id, "created_by": current_user["id"]}, {"_id": 0, "id": 1})
+        task = await db.tasks.find_one(
+            {"id": task_id, "created_by": current_user["id"]},
+            {"_id": 0, "id": 1, "attachments": 1},
+        )
         if task:
             attachment = {
                 "id": recording_id,
@@ -2902,7 +2905,12 @@ async def create_standalone_recording(
                 "size": size_bytes or 0,
                 "kind": "video",
             }
-            await db.tasks.update_one({"id": task_id}, {"$push": {"attachments": attachment}})
+            # Tasks store attachments as null when empty, so $push would fail on the type.
+            existing = task.get("attachments") or []
+            await db.tasks.update_one(
+                {"id": task_id},
+                {"$set": {"attachments": [*existing, attachment]}},
+            )
             await log_task_activity(
                 db,
                 task_id=task_id,

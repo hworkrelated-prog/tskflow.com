@@ -214,6 +214,65 @@ def test_bad_input_and_bulk_launches_are_rejected():
     live_app.run(scenario())
 
 
+def test_landing_walkthrough_attaches_to_the_guest_task():
+    """The landing recorder uploads after launch, so the attach must survive a
+    task whose `attachments` field is still null."""
+    server = live_app.app_or_skip()
+
+    async def scenario():
+        async with live_app.client(server) as api:
+            launch = await api.post(
+                "/api/demo/launch",
+                json={
+                    "task": "Walk through the new pricing page and fix the copy",
+                    "assignee_email": "dana.lee@acme.test",
+                },
+                headers=live_app.caller_headers("launch-recording"),
+            )
+            assert launch.status_code == 200, launch.text
+            data = launch.json()
+            task_id = data["task_id"]
+            auth = {"Authorization": f"Bearer {data['access_token']}"}
+
+            fresh = await server.db.tasks.find_one({"id": task_id}, {"_id": 0, "attachments": 1})
+            assert not fresh.get("attachments")
+
+            res = await api.post(
+                "/api/recordings/standalone",
+                json={
+                    "recording_url": "https://cdn.example.com/walkthrough.webm",
+                    "task_id": task_id,
+                    "size_bytes": 175470,
+                    "mime_type": "video/mp4",
+                    "title": "Walkthrough for your ask",
+                },
+                headers=auth,
+            )
+            assert res.status_code == 200, res.text
+            assert res.json()["attached_to_task"] is True
+
+            task = await server.db.tasks.find_one({"id": task_id}, {"_id": 0})
+            assert len(task["attachments"]) == 1
+            assert task["attachments"][0]["storage_path"] == "https://cdn.example.com/walkthrough.webm"
+            assert task["attachments"][0]["kind"] == "video"
+
+            # A second walkthrough appends instead of replacing
+            again = await api.post(
+                "/api/recordings/standalone",
+                json={"recording_url": "https://cdn.example.com/second.webm", "task_id": task_id},
+                headers=auth,
+            )
+            assert again.status_code == 200, again.text
+            task = await server.db.tasks.find_one({"id": task_id}, {"_id": 0})
+            assert len(task["attachments"]) == 2
+
+            room = await api.get(f"/api/demo/room/{task_id}", headers=auth)
+            titles = [a["title"] for a in room.json()["activity"]]
+            assert "Walkthrough attached" in titles
+
+    live_app.run(scenario())
+
+
 def test_registering_pulls_the_demo_task_into_the_real_account():
     server = live_app.app_or_skip()
 
