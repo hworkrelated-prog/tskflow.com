@@ -38,7 +38,7 @@ const dueLabel = (raw) => {
 };
 
 /**
- * The guest robot room: one task, one assignee, and the robot doing the chasing.
+ * Guest follow-up after a landing send: one task, one assignee, and what happened.
  * Deliberately not the full dashboard - this is the first thing a visitor ever sees.
  */
 const RobotRoomPage = () => {
@@ -156,9 +156,9 @@ const RobotRoomPage = () => {
 
             <main className="relative z-10 max-w-4xl mx-auto px-5 pb-20">
                 <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-                    <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">Your robot room</p>
+                    <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">Your task</p>
                     <h1 className="text-3xl sm:text-4xl font-semibold leading-tight mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {copy.headline || 'Your robot has the ask now'}
+                        {copy.headline || 'Your ask is on its way'}
                     </h1>
                     <p className="text-white/60 leading-relaxed max-w-2xl mb-8" data-testid="env-subcopy">
                         {copy.sub} {copy.reassurance}
@@ -187,13 +187,13 @@ const RobotRoomPage = () => {
                         </div>
                         {!room?.delivered && (
                             <p className="mt-4 text-xs text-amber-200/80" data-testid="env-sample-note">
-                                Sample send - nothing left the building. Add a real email next time and the robot delivers it.
+                                Sample send - nothing left the building. Add a real email next time and it goes out.
                             </p>
                         )}
                     </div>
 
                     <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/12 p-5">
-                        <p className="text-[11px] uppercase tracking-wide text-white/40 mb-3">Keep the robot working</p>
+                        <p className="text-[11px] uppercase tracking-wide text-white/40 mb-3">Keep this going</p>
                         <div className="space-y-2.5">
                             <Button
                                 type="button"
@@ -224,14 +224,14 @@ const RobotRoomPage = () => {
                             )}
                         </div>
                         <p className="mt-4 text-xs text-white/40 leading-relaxed">
-                            Robots chase assignees so you never write &ldquo;just circling back&rdquo; again. Nothing here
+                            TskFlow follows up so you never write &ldquo;just circling back&rdquo; again. Nothing here
                             disappears when you keep the workspace.
                         </p>
                     </div>
                 </div>
 
                 <div className="mt-6 rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/12 p-5" data-testid="env-activity">
-                    <p className="text-[11px] uppercase tracking-wide text-white/40 mb-4">What the robot is doing</p>
+                    <p className="text-[11px] uppercase tracking-wide text-white/40 mb-4">What&apos;s happening</p>
                     <ol className="space-y-4">
                         {activity.map((row) => {
                             const Icon = CHANNEL_ICON[row.channel] || Bot;
@@ -251,7 +251,7 @@ const RobotRoomPage = () => {
                             );
                         })}
                         {!activity.length && (
-                            <li className="text-sm text-white/45">The robot is warming up. Refresh in a moment.</li>
+                            <li className="text-sm text-white/45">Updates will show here in a moment.</li>
                         )}
                     </ol>
                 </div>

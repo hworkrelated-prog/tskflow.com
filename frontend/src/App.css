@@ -578,6 +578,7 @@
 body.landing-active {
     background: #050807 !important;
     color: #ffffff !important;
+    scroll-snap-type: y proximity;
 }
 .landing-page,
 .landing-page.min-h-screen,
@@ -596,6 +597,19 @@ body.landing-active {
         linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
     background-size: 56px 56px;
     background-position: center top;
+}
+html:has(body.landing-active) {
+    scroll-behavior: smooth;
+}
+.landing-step {
+    scroll-snap-align: start;
+    scroll-margin-top: 4.5rem;
+    min-height: calc(100svh - 5.5rem);
+    padding-top: 1.25rem;
+    padding-bottom: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
 }
 .landing-page textarea,
 .landing-page input {
