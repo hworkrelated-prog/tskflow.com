@@ -18,6 +18,7 @@ import GroupsManager from '@/components/GroupsManager';
 import TeamPeoplePicker from '@/components/TeamPeoplePicker';
 import TeamClaimsInbox from '@/components/TeamClaimsInbox';
 import TeamInviteProgress from '@/components/TeamInviteProgress';
+import AccountabilityScore from '@/components/AccountabilityScore';
 import InviteManagerField from '@/components/InviteManagerField';
 
 const TeamManagementPage = () => {
@@ -348,7 +349,7 @@ const TeamManagementPage = () => {
                                         <div className="space-y-6">
                                             {/* Leaderboard */}
                                             <div>
-                                                <h3 className="font-semibold mb-3 text-foreground">Leaderboard (by Completion Rate)</h3>
+                                                <h3 className="font-semibold mb-3 text-foreground">Leaderboard (by accountability)</h3>
                                                 <div className="space-y-2">
                                                     {performance.leaderboard?.map((person, index) => (
                                                         <div key={person.user_id} className={`flex items-center justify-between p-3 rounded-xl ${index === 0 ? 'bg-amber-50 border border-amber-200' : index === 1 ? 'bg-gray-100 border border-gray-200' : index === 2 ? 'bg-orange-50 border border-orange-200' : 'bg-background border'}`}>
@@ -361,9 +362,13 @@ const TeamManagementPage = () => {
                                                                     <p className="text-xs text-muted-foreground">{person.email}</p>
                                                                 </div>
                                                             </div>
-                                                            <div className="text-right">
-                                                                <p className="font-bold text-foreground">{person.completion_rate}%</p>
-                                                                <p className="text-xs text-muted-foreground">{person.tasks_completed}/{person.tasks_assigned} tasks</p>
+                                                            <div className="text-right space-y-1">
+                                                                <AccountabilityScore
+                                                                    score={person.accountability_score}
+                                                                    label={person.accountability_label}
+                                                                    testId={`team-accountability-${person.user_id}`}
+                                                                />
+                                                                <p className="text-xs text-muted-foreground">{person.tasks_completed}/{person.tasks_assigned} done · {person.completion_rate}%</p>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -380,6 +385,7 @@ const TeamManagementPage = () => {
                                                                 <th className="text-left py-2 px-3 text-foreground">Name</th>
                                                                 <th className="text-center py-2 px-3 text-foreground">Assigned</th>
                                                                 <th className="text-center py-2 px-3 text-foreground">Completed</th>
+                                                                <th className="text-center py-2 px-3 text-foreground">Score</th>
                                                                 <th className="text-center py-2 px-3 text-foreground">Rate</th>
                                                                 <th className="text-center py-2 px-3 text-foreground">Avg Time</th>
                                                             </tr>
@@ -395,6 +401,13 @@ const TeamManagementPage = () => {
                                                                     </td>
                                                                     <td className="text-center py-3 px-3 text-foreground">{person.tasks_assigned}</td>
                                                                     <td className="text-center py-3 px-3 text-foreground">{person.tasks_completed}</td>
+                                                                    <td className="text-center py-3 px-3">
+                                                                        <AccountabilityScore
+                                                                            score={person.accountability_score}
+                                                                            label={person.accountability_label}
+                                                                            size="sm"
+                                                                        />
+                                                                    </td>
                                                                     <td className="text-center py-3 px-3">
                                                                         <Badge className={`${person.completion_rate >= 80 ? 'bg-green-100 text-green-800' : person.completion_rate >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
                                                                             {person.completion_rate}%

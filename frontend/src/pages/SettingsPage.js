@@ -13,6 +13,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
+import AccountabilityScore from '@/components/AccountabilityScore';
 import { startGoogleCalendarConnect } from '@/lib/googleCalendar';
 
 function IosSwitch({ checked, onChange, testId }) {
@@ -82,6 +83,7 @@ const SettingsPage = () => {
     });
     const [savingSheet, setSavingSheet] = React.useState(false);
     const [syncingSheet, setSyncingSheet] = React.useState(false);
+    const [accountability, setAccountability] = React.useState(null);
 
     const loadSheetConfig = React.useCallback(async () => {
         try {
@@ -109,6 +111,9 @@ const SettingsPage = () => {
         fetchPreferences();
         loadSheetConfig();
         if (user?.name) setDisplayName(user.name);
+        axios.get(`${API}/accountability/me`)
+            .then((res) => setAccountability(res.data))
+            .catch(() => setAccountability(null));
     }, [user]);
 
     React.useEffect(() => {
@@ -467,6 +472,20 @@ const SettingsPage = () => {
                             <div>
                                 <p className="text-sm text-muted-foreground">Email</p>
                                 <p className="font-semibold text-foreground">{user?.email}</p>
+                            </div>
+                            <div data-testid="settings-accountability">
+                                <p className="text-sm text-muted-foreground">Accountability</p>
+                                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                    <AccountabilityScore
+                                        score={accountability?.accountability_score}
+                                        label={accountability?.accountability_label}
+                                        testId="settings-accountability-score"
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                                    How you respond, finish, and follow through on work assigned to you.
+                                    Sitting silent or overdue pulls this down.
+                                </p>
                             </div>
                         </CardContent>
                     </Card>
