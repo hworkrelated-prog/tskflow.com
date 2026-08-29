@@ -85,6 +85,19 @@ def test_missing_google_env_errors_clearly_instead_of_crashing():
         _restore(previous)
 
 
+def test_login_page_renders_the_google_error_inline():
+    """A toast fired on first mount is dropped, so the reason has to be in the markup."""
+    login = (ROOT / "frontend" / "src" / "pages" / "LoginPage.js").read_text(encoding="utf-8")
+    assert 'data-testid="login-google-error"' in login
+    for code in ("google_not_configured", "google_signin_failed", "invalid_state"):
+        assert code in login
+    assert "GOOGLE_ERRORS[searchParams.get('error')]" in login
+    # The backend only ever sends sign-in failures to /login
+    server_src = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
+    for code in ("google_not_configured", "google_signin_failed"):
+        assert f"/login?error={code}" in server_src
+
+
 def test_signin_callback_finds_or_creates_the_user_and_folds_in_the_guest():
     server = live_app.app_or_skip()
     previous = _with_google_env()

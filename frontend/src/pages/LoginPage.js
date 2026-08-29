@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { LogIn, Target } from 'lucide-react';
+import { AlertCircle, LogIn, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
@@ -28,12 +28,7 @@ const LoginPage = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-
-    // Google redirects here with ?error=... when the identity path cannot finish.
-    useEffect(() => {
-        const code = searchParams.get('error');
-        if (code && GOOGLE_ERRORS[code]) toast.error(GOOGLE_ERRORS[code]);
-    }, [searchParams]);
+    const googleError = GOOGLE_ERRORS[searchParams.get('error')] || '';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -80,6 +75,15 @@ const LoginPage = () => {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
+                        {googleError && (
+                            <div
+                                data-testid="login-google-error"
+                                className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+                            >
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>{googleError}</span>
+                            </div>
+                        )}
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
