@@ -6392,11 +6392,18 @@ async def google_calendar_connect(http_request: HTTPRequest, current_user: dict 
     return {"auth_url": auth_url}
 
 @api_router.get("/auth/google/callback")
-async def google_calendar_callback(code: str, state: str, http_request: HTTPRequest):
-    """Handle Google OAuth callback"""
-    # Verify state — sign-in states are a different purpose and must not land here
-    state_doc = await db.oauth_states.find_one({"state": state})
-    if not state_doc or state_doc.get("purpose") == GOOGLE_SIGNIN_PURPOSE:
+async def google_calendar_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    http_request: HTTPRequest = None,
+):
+    """Google returns here for Calendar and for Sign-In. Dispatch on oauth state purpose."""
+    state_doc = await db.oauth_states.find_one({"state": state}) if state else None
+    if state_doc and state_doc.get("purpose") == GOOGLE_SIGNIN_PURPOSE:
+        return await google_signin_callback(code=code, state=state, error=error)
+
+    if not state_doc:
         return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
     
     user_id = state_doc["user_id"]
@@ -6453,7 +6460,9 @@ def google_signin_configured() -> bool:
 
 
 def _google_signin_redirect_uri() -> str:
-    return f"{APP_BASE_URL}/api/auth/google/login/callback"
+    # Same URI as Calendar. Google Cloud already allowlists it; a second
+    # `/login/callback` path is what produced redirect_uri_mismatch.
+    return f"{APP_BASE_URL}/api/auth/google/callback"
 
 
 def _safe_signin_next(raw) -> str:
@@ -6556,7 +6565,7 @@ async def google_signin_callback(
     state: Optional[str] = None,
     error: Optional[str] = None,
 ):
-    """Find-or-create the user behind a Google account and hand the SPA a token."""
+    """Alias kept for old links. Production Sign-In uses /auth/google/callback."""
     fail = f"{APP_BASE_URL}/login?error=google_signin_failed"
     if error or not code or not state:
         return RedirectResponse(url=fail)

@@ -44,19 +44,14 @@ def test_google_login_sends_the_visitor_to_google_with_openid_scopes():
             query = parse_qs(urlparse(location).query)
             assert query["scope"] == ["openid email profile"]
             assert query["response_type"] == ["code"]
-            assert query["redirect_uri"] == ["https://tskflow.test/api/auth/google/login/callback"]
+            # Must be the Calendar URI already allowlisted in Google Cloud.
+            assert query["redirect_uri"] == ["https://tskflow.test/api/auth/google/callback"]
 
             state = query["state"][0]
             doc = await server.db.oauth_states.find_one({"state": state}, {"_id": 0})
             assert doc["purpose"] == "google_signin"
             assert doc["next"] == "/env/abc12345"
             assert doc["guest_user_id"] == "guest-1"
-
-            # A sign-in state must never be usable on the Calendar callback
-            calendar = await api.get(
-                f"/api/auth/google/callback?code=x&state={state}", follow_redirects=False
-            )
-            assert "invalid_state" in calendar.headers["location"]
 
     try:
         live_app.run(scenario())
@@ -125,7 +120,7 @@ def test_signin_callback_finds_or_creates_the_user_and_folds_in_the_guest():
             state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
 
             done = await api.get(
-                f"/api/auth/google/login/callback?code=fake-code&state={state}",
+                f"/api/auth/google/callback?code=fake-code&state={state}",
                 follow_redirects=False,
             )
             assert done.status_code in (302, 303, 307), done.text
@@ -162,7 +157,7 @@ def test_signin_callback_finds_or_creates_the_user_and_folds_in_the_guest():
             start2 = await api.get("/api/auth/google/login", follow_redirects=False)
             state2 = parse_qs(urlparse(start2.headers["location"]).query)["state"][0]
             await api.get(
-                f"/api/auth/google/login/callback?code=fake-code&state={state2}",
+                f"/api/auth/google/callback?code=fake-code&state={state2}",
                 follow_redirects=False,
             )
             signups = await server.db[server.EVENTS_COLLECTION].count_documents(
@@ -192,23 +187,24 @@ def test_google_buttons_exist_on_landing_login_and_register():
     assert "auth/google/login" in button
     assert "guest_user_id" in button  # the demo room survives the upgrade
     assert 'path="/auth/google/finish"' in app
-    assert 'path="/api/auth/google/login/callback"' in app
-    # calendar routes untouched
     assert 'path="/api/auth/google/callback"' in app
     assert 'path="/api/auth/google/sheets/callback"' in app
     assert "google_not_configured" in login
+    server_src = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
+    assert '_google_signin_redirect_uri' in server_src
+    assert 'return f"{APP_BASE_URL}/api/auth/google/callback"' in server_src
+    assert "/api/auth/google/login/callback" not in server_src.split("def _google_signin_redirect_uri")[1].split("def _safe_signin_next")[0]
 
 
-def test_handoff_forwards_signin_callbacks_to_the_signin_endpoint():
+def test_handoff_still_forwards_the_registered_google_callback():
     script = r"""
 import { googleCallbackApiPath, googleCallbackBackendUrl } from './frontend/src/lib/googleOAuthHandoff.js';
 console.log(JSON.stringify([
-  googleCallbackApiPath('/api/auth/google/login/callback'),
   googleCallbackApiPath('/api/auth/google/callback'),
   googleCallbackApiPath('/api/auth/google/sheets/callback'),
   googleCallbackBackendUrl({
     backendUrl: 'https://tskflow-backend.onrender.com',
-    pathname: '/api/auth/google/login/callback',
+    pathname: '/api/auth/google/callback',
     search: '?code=abc&state=xyz',
     origin: 'https://tskflow.com',
   }),
@@ -224,7 +220,6 @@ console.log(JSON.stringify([
     )
     assert proc.returncode == 0, proc.stderr
     paths = json.loads(proc.stdout)
-    assert paths[0] == "/api/auth/google/login/callback"
-    assert paths[1] == "/api/auth/google/callback"
-    assert paths[2] == "/api/auth/google/sheets/callback"
-    assert paths[3] == "https://tskflow-backend.onrender.com/api/auth/google/login/callback?code=abc&state=xyz"
+    assert paths[0] == "/api/auth/google/callback"
+    assert paths[1] == "/api/auth/google/sheets/callback"
+    assert paths[2] == "https://tskflow-backend.onrender.com/api/auth/google/callback?code=abc&state=xyz"
