@@ -270,6 +270,17 @@ def test_landing_ignores_app_theme_preference():
     assert "[data-theme=\"light\"] .landing-page" in css
 
 
+def test_landing_rotating_idea_does_not_stack_on_placeholder():
+    """The ask box shows one rotating idea, not 'Or type your own' under it."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert 'placeholder="Or type your own"' not in landing
+    textarea_ph = css.split(".landing-page textarea::placeholder")[1].split(".landing-page input::placeholder")[0]
+    assert "transparent" in textarea_ph
+    assert "0.28" not in textarea_ph
+    assert "textarea::placeholder,\n.landing-page input::placeholder" not in css
+
+
 def test_prompt_border_is_inset_so_sides_cannot_clip():
     css = (FRONT / "index.css").read_text(encoding="utf-8")
     shell = css.split(".ai-composer-shell {")[1].split(".ai-composer-shell--inset")[0]

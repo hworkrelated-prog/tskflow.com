@@ -127,8 +127,8 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             }
                         }}
                         rows={filled ? 6 : 4}
-                        className={`relative w-full h-full resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white placeholder:text-transparent selection:bg-teal-400/30 ${filled ? 'min-h-[180px] sm:min-h-[220px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}
-                        placeholder="Or type your own"
+                        className={`relative w-full h-full resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[180px] sm:min-h-[220px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}
+                        placeholder=""
                         data-testid="landing-tryit-input"
                         aria-label="What needs to get done"
                         autoFocus
