@@ -616,6 +616,13 @@ body.landing-active {
 .landing-page [data-testid="landing-tryit-colorized"] .text-amber-300 { color: #fcd34d !important; }
 .landing-page [data-testid="landing-tryit-colorized"] .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
 
+/* Phone recorder sheet portals to body; keep it on the landing's dark surface. */
+.landing-phone-record {
+    background: #0c1210 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
 /* --- Reminder activity cards: calm, readable (light + dark) --- */
 .reminder-card {
     border-radius: 0.75rem;

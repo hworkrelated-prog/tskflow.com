@@ -13,9 +13,12 @@ def _read(*parts: str) -> str:
 def test_ios_guide_is_wired_into_record_buttons():
     picker = _read("components", "AttachmentPicker.js")
     rec = _read("components", "ScreenRecorder.js")
+    landing = _read("components", "LandingScreenRecorder.js")
+    sheet = _read("components", "LandingPhoneRecordSheet.js")
     guide = _read("components", "IosScreenRecordGuide.js")
     caps = _read("lib", "recordingCapabilities.js")
     assert "canCaptureDisplay" in caps
+    assert "canRecordWithCamera" in caps
     assert "needsIosScreenRecordFlow" in caps
     assert "pickRecorderMime" in caps
     assert "IosScreenRecordGuide" in picker
@@ -32,6 +35,14 @@ def test_ios_guide_is_wired_into_record_buttons():
     start = picker.split("const startRecording = async () => {")[1].split("const hudPrep")[0]
     assert "canCaptureDisplay()" in start
     assert "getDisplayMedia" in picker
+    # landing Record button must not dead-end on phones
+    assert "LandingPhoneRecordSheet" in landing
+    assert "needsIosScreenRecordFlow" in landing
+    assert "desktop browser" not in landing
+    assert "getUserMedia" in landing
+    assert "landing-phone-record-sheet" in sheet
+    assert "landing-phone-record-camera" in sheet
+    assert "Choose from Photos" in sheet
 
 
 def test_uploads_sniff_iphone_video_types():
@@ -46,6 +57,7 @@ def test_capabilities_helpers_via_node():
 import {
   recordingFilename,
   canCaptureDisplay,
+  canRecordWithCamera,
   needsIosScreenRecordFlow,
 } from './frontend/src/lib/recordingCapabilities.js';
 if (!recordingFilename('video/mp4').endsWith('.mp4')) {
@@ -62,6 +74,10 @@ if (canCaptureDisplay() !== false) {
 }
 if (needsIosScreenRecordFlow() !== true) {
   console.error('node should need fallback flow');
+  process.exit(1);
+}
+if (canRecordWithCamera() !== false) {
+  console.error('node has no getUserMedia/MediaRecorder; expected false');
   process.exit(1);
 }
 console.log('ok');
