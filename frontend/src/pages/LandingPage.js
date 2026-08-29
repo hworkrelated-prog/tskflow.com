@@ -9,7 +9,6 @@ import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
-import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -231,16 +230,11 @@ const LandingPage = () => {
                         TskFlow
                     </span>
                     <div className="ml-auto flex items-center gap-2">
-                        <GoogleSignInButton
-                            label="Google"
-                            next="/dashboard"
-                            className="border-white/15 bg-transparent text-white hover:bg-white/10 h-10"
-                            testId="landing-google-signin"
-                        />
                         <Button
                             variant="ghost"
                             className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
                             onClick={() => navigate('/login')}
+                            data-testid="landing-sign-in"
                         >
                             Sign in
                         </Button>

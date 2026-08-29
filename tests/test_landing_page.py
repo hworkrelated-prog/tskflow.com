@@ -57,7 +57,8 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert "Sending for real takes an account" not in src
     assert "/demo/launch" in src
     assert "LandingScreenRecorder" in src
-    assert "GoogleSignInButton" in src
+    assert "GoogleSignInButton" not in src
+    assert "navigate('/login')" in src
     assert "navigate('/register')" not in src
 
 
