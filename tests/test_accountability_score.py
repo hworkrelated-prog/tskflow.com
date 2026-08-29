@@ -92,6 +92,63 @@ def test_label_bands():
     assert accountability_label(20) == "Needs follow-up"
 
 
+def test_accountability_me_endpoint_scores_assigned_work():
+    sys.path.insert(0, str(ROOT / "tests"))
+    import live_app  # noqa: E402
+
+    server = live_app.app_or_skip()
+    now = datetime.now(timezone.utc)
+    yesterday = (now - timedelta(days=1)).isoformat()
+
+    async def scenario():
+        import uuid
+        uid = uuid.uuid4().hex[:12]
+        await server.db.users.insert_one({
+            "id": uid,
+            "name": "Casey Walsh",
+            "email": f"casey-{uid}@acme.test",
+            "email_verified": True,
+            "subscription_tier": "free",
+            "is_guest": False,
+        })
+        await server.db.tasks.insert_many([
+            {
+                "id": f"{uid}-done",
+                "assigned_to": uid,
+                "created_by": "mgr",
+                "status": "Completed",
+                "completed_at": now.isoformat(),
+                "due_date": (now + timedelta(days=1)).isoformat(),
+                "nudge_count": 0,
+                "deleted": False,
+                "created_at": now.isoformat(),
+            },
+            {
+                "id": f"{uid}-late",
+                "assigned_to": uid,
+                "created_by": "mgr",
+                "status": "Pending",
+                "due_date": yesterday,
+                "nudge_count": 2,
+                "deleted": False,
+                "created_at": now.isoformat(),
+            },
+        ])
+        token = server.create_access_token({"sub": uid})
+        async with live_app.client(server) as api:
+            res = await api.get("/api/accountability/me", headers={"Authorization": f"Bearer {token}"})
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["tasks_assigned"] == 2
+        assert body["tasks_completed"] == 1
+        assert body["tasks_silent"] == 1
+        assert body["accountability_score"] is not None
+        assert 0 <= body["accountability_score"] <= 100
+        assert body["accountability_label"]
+
+    live_app.run(scenario())
+
+
 def test_backend_exposes_me_endpoint():
     server = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
     assert "from accountability import score_assignee_tasks" in server
