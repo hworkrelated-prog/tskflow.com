@@ -1,4 +1,4 @@
-"""Landing page: pain points, simulation, and a no-login try-it demo."""
+"""Landing page: a tool you land in, not a pitch you scroll."""
 import subprocess
 from pathlib import Path
 
@@ -6,35 +6,41 @@ ROOT = Path(__file__).resolve().parents[1]
 FRONT = ROOT / "frontend" / "src"
 
 
-def test_landing_hits_pain_points_not_board_slogan():
+def test_landing_is_a_tool_not_a_pitch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert "not another board" not in src.lower()
     assert "Not just a board" not in src
-    assert "Stop chasing work in chat" in src
-    assert "Still hunting for the work you already assigned" in src
-    assert "You assign it. They accept it." in src
-    assert "Work you assign does not disappear" in src
-    assert "Follow-up is automatic" in src
-    assert "Just circling back" in src
-    assert "Thread archaeology" in src
-    assert "team-wide ghost" in src
-    assert "ownership evaporates" in src
-    assert 'data-testid="landing-pain"' in src
+    assert "Feel the difference" not in src
+    assert "Get started" not in src
+    assert "Simple pricing" not in src
+    assert "Still hunting for the work you already assigned" not in src
+    assert "Stop chasing work in chat" not in src
+    assert "Thread archaeology" not in src
+    assert "ownership evaporates" not in src
+    assert 'data-testid="landing-pain"' not in src
+    assert 'data-testid="landing-sim"' not in src
     assert 'data-testid="landing-brand"' in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
+    assert 'data-testid="landing-toolbar"' in src
+    assert 'data-testid="landing-no-account"' in src
+    # recorder is in the chrome; the page tree renders toolbar above the composer
+    assert "LandingScreenRecorder" in src
+    page_tree = src.split("const LandingPage")[-1]
+    assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
 
 
-def test_landing_has_simulation_and_tryit():
+def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
-    assert 'data-testid="landing-sim"' in src
     assert 'data-testid="landing-tryit"' in src
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
-    assert "Pinged twice" in src
-    assert "landing-sim-slack" in src
-    assert "36 people" in src or "30–40" in src
-    assert "Slack thread" in src
+    assert "autoFocus" in src
+    assert "What needs to get done" in src
+    assert "/demo/launch" in src
+    assert 'data-testid="landing-send-it"' in src
+    assert 'data-testid="landing-assignee-email"' in src
+    assert 'data-testid="landing-channel-slack"' in src
 
 
 def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
@@ -45,15 +51,14 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert 'data-testid="landing-channel-email"' in src
     assert 'data-testid="landing-channel-slack"' in src
     assert "Send it" in src
-    assert "no account, no password" in src
-    # The old dead end is gone
+    assert "No account. No password." in src
     assert "Send this for real" not in src
     assert "See the ask" not in src
     assert "Sending for real takes an account" not in src
-    # Real launch + landing recorder + Google identity
     assert "/demo/launch" in src
     assert "LandingScreenRecorder" in src
     assert "GoogleSignInButton" in src
+    assert "navigate('/register')" not in src
 
 
 def test_landing_demo_assigns_thirty_to_forty_people():
@@ -112,7 +117,7 @@ console.log('ok');
 
 
 def test_landing_tryit_color_codes_assign_prompt():
-    """Try-it sample prompt highlights who / work / when, not flat gray."""
+    """Composer sample prompt highlights who / work / when, not flat gray."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert "colorizeAssignPrompt" in demo
@@ -157,7 +162,7 @@ def test_create_task_advanced_options_color_coded_icons():
 
 
 def test_landing_ignores_app_theme_preference():
-    """App light/dark must not bleach the marketing landing page."""
+    """App light/dark must not bleach the landing workspace."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     theme = (FRONT / "lib" / "theme.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")

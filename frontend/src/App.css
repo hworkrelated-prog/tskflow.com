@@ -587,9 +587,34 @@ body.landing-active {
 [data-theme="light"] .landing-page.min-h-screen,
 [data-theme="dark"] .landing-page.min-h-screen,
 [data-theme="minimal"] .landing-page.min-h-screen {
-    background: #050807 !important;
+    background-color: #050807 !important;
     color: #ffffff !important;
 }
+.landing-page.landing-tool {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: center top;
+}
+.landing-page textarea,
+.landing-page input {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+.landing-page textarea {
+    border-color: transparent !important;
+}
+.landing-page textarea::placeholder,
+.landing-page input::placeholder {
+    color: rgba(255, 255, 255, 0.28) !important;
+}
+.landing-page [data-testid="landing-tryit-colorized"] .text-teal-300 { color: #5eead4 !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-sky-200 { color: #bae6fd !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-amber-300 { color: #fcd34d !important; }
+.landing-page [data-testid="landing-tryit-colorized"] .text-white\/55 { color: rgba(255, 255, 255, 0.55) !important; }
 
 /* --- Reminder activity cards: calm, readable (light + dark) --- */
 .reminder-card {

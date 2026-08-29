@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Video, Square, Check } from 'lucide-react';
+import { Square, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import { canCaptureDisplay, pickRecorderMime } from '@/lib/recordingCapabilities';
@@ -12,7 +12,7 @@ const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 
  * Landing-page screen recorder: no account needed. The blob stays local until the
  * visitor sends the ask, then it rides along and the robot delivers it with the task.
  */
-export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
+export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false }) => {
     const [recording, setRecording] = useState(false);
     const [starting, setStarting] = useState(false);
     const [seconds, setSeconds] = useState(0);
@@ -84,13 +84,20 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
         catch { cleanup(); }
     };
 
+    const recClass = prominent
+        ? 'rounded-full border-red-400/45 bg-red-500/15 text-white hover:bg-red-500/25 h-11 px-5 font-medium'
+        : 'rounded-full border-red-400/50 bg-red-500/10 text-red-200 hover:bg-red-500/20 h-10';
+    const idleClass = prominent
+        ? 'rounded-full border-white/20 bg-white/[0.06] text-white hover:bg-white/12 h-11 px-5 font-medium'
+        : 'rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 h-10';
+
     if (recording) {
         return (
             <Button
                 type="button"
                 variant="outline"
                 onClick={stop}
-                className="rounded-full border-red-400/50 bg-red-500/10 text-red-200 hover:bg-red-500/20 h-10"
+                className={recClass}
                 data-testid="landing-record-stop"
             >
                 <Square className="w-3.5 h-3.5 mr-2 fill-current" /> Stop {fmt(seconds)}
@@ -104,11 +111,13 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
             variant="outline"
             onClick={start}
             disabled={starting}
-            className="rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 h-10"
+            className={idleClass}
             data-testid="landing-record-screen"
         >
-            {recorded ? <Check className="w-4 h-4 mr-2 text-teal-300" /> : <Video className="w-4 h-4 mr-2" />}
-            {recorded ? 'Walkthrough ready' : starting ? 'Starting…' : 'Record screen'}
+            {recorded ? <Check className="w-4 h-4 mr-2 text-teal-300" /> : (
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2.5 ring-2 ring-red-500/30" aria-hidden />
+            )}
+            {recorded ? 'Walkthrough ready' : starting ? 'Starting…' : prominent ? 'Record' : 'Record screen'}
         </Button>
     );
 };

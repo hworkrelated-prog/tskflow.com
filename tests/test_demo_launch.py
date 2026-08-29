@@ -329,7 +329,7 @@ def test_landing_composer_sends_for_real_instead_of_dead_ending_at_register():
     assert "/demo/launch" in landing
     assert "Send it" in landing
     assert "Send this for real" not in landing
-    assert "navigate('/register')" not in landing.split("const TryIt")[1].split("const Simulation")[0]
+    assert "navigate('/register')" not in landing
     assert "environment_url" in landing
     assert "rememberGuestSession" in landing
 
