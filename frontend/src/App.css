@@ -622,6 +622,15 @@ body.landing-active {
     color: #ffffff !important;
     border-color: rgba(255, 255, 255, 0.12) !important;
 }
+.landing-phone-record [data-testid="landing-phone-record-camera"] {
+    background: #2dd4bf !important;
+    color: #020617 !important;
+}
+.landing-phone-record [data-testid="landing-phone-record-photos"] {
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
 
 /* --- Reminder activity cards: calm, readable (light + dark) --- */
 .reminder-card {

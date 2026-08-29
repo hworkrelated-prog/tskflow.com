@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Square, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -186,9 +187,18 @@ export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false 
                 </Button>
             )}
 
-            {cameraPreview && recording && (
+            {cameraPreview && recording && createPortal(
                 <div
-                    className="landing-camera-preview fixed inset-0 z-[80] bg-black flex flex-col"
+                    className="landing-camera-preview"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 2147483000,
+                        background: '#000',
+                        overflow: 'hidden',
+                        width: '100vw',
+                        height: '100dvh',
+                    }}
                     data-testid="landing-camera-preview"
                 >
                     <video
@@ -196,9 +206,21 @@ export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false 
                         autoPlay
                         muted
                         playsInline
-                        className="flex-1 w-full object-cover bg-black"
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', background: '#000' }}
                     />
-                    <div className="shrink-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex justify-center bg-black/80">
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            zIndex: 2,
+                            padding: '1rem 1rem max(1.25rem, env(safe-area-inset-bottom))',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)',
+                        }}
+                    >
                         <Button
                             type="button"
                             variant="outline"
@@ -209,7 +231,8 @@ export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false 
                             <Square className="w-3.5 h-3.5 mr-2 fill-current" /> Stop {fmt(seconds)}
                         </Button>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
 
             <LandingPhoneRecordSheet

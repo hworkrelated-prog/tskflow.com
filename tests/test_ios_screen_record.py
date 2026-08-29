@@ -38,6 +38,7 @@ def test_ios_guide_is_wired_into_record_buttons():
     # landing Record button must not dead-end on phones
     assert "LandingPhoneRecordSheet" in landing
     assert "needsIosScreenRecordFlow" in landing
+    assert "createPortal" in landing
     assert "desktop browser" not in landing
     assert "getUserMedia" in landing
     assert "landing-phone-record-sheet" in sheet
