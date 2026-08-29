@@ -51,7 +51,7 @@ import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
-import { guestTaskId } from '@/lib/guestSession';
+import { clearGuestSession } from '@/lib/guestSession';
 import { registerPush, unregisterPush } from '@/lib/push';
 import TeamSetupModal from '@/components/TeamSetupModal';
 import WhatsNewPrompt from '@/components/WhatsNewPrompt';
@@ -323,6 +323,7 @@ const AuthProvider = ({ children }) => {
         unregisterPush().catch(() => {});
         localStorage.removeItem('token');
         localStorage.removeItem('pendingTaskRedirect');
+        clearGuestSession();
         setToken(null);
         setUser(null);
         setPendingRedirect(null);
@@ -402,13 +403,9 @@ const PublicRoute = ({ children }) => {
         );
     }
 
-    // A landing-demo guest belongs in their robot room, not the full dashboard.
-    if (user?.is_guest) {
-        const room = guestTaskId();
-        return <Navigate to={room ? `/env/${room}` : '/dashboard'} replace />;
-    }
-
-    if (user) {
+    // Guests keep the landing so Chrome is not stuck on /env forever after one send.
+    // Real accounts still skip the marketing tool and go to the hub.
+    if (user && !user.is_guest) {
         return <Navigate to="/dashboard" replace />;
     }
 

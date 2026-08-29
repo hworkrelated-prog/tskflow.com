@@ -348,9 +348,15 @@ def test_env_room_is_a_protected_route_with_robot_copy():
     assert 'data-testid="env-activity"' in room
     assert 'data-testid="env-connect-slack"' in room
     assert 'data-testid="env-keep-workspace"' in room
+    assert 'data-testid="env-new-ask"' in room
+    assert 'data-testid="env-sign-in"' in room
     assert "circling back" in room
     assert "/demo/room/" in room
     assert "trackEnvView" in room
+    # A guest token must not hijack every visit to /
+    assert 'user && !user.is_guest' in app
+    assert "clearGuestSession" in app
+    assert 'Navigate to={room ? `/env/${room}`' not in app
 
 
 def test_screen_recorder_is_on_the_landing_composer():
