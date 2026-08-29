@@ -42,6 +42,8 @@ import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
+import GoogleSignInFinish from '@/pages/GoogleSignInFinish';
+import RobotRoomPage from '@/pages/RobotRoomPage';
 import ConnectCalendarPage from '@/pages/ConnectCalendarPage';
 import MailClaimPage from '@/pages/MailClaimPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -492,7 +494,17 @@ function App() {
                     <Route path="/contact" element={<ContactPage />} />
                     <Route path="/api/auth/google/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/api/auth/google/sheets/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/api/auth/google/login/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/oauth/google/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/auth/google/finish" element={<GoogleSignInFinish />} />
+                    <Route
+                        path="/env/:taskId"
+                        element={
+                            <ProtectedRoute>
+                                <RobotRoomPage />
+                            </ProtectedRoute>
+                        }
+                    />
                     <Route
                         path="/dashboard"
                         element={

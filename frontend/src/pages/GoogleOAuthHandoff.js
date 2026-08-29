@@ -16,14 +16,19 @@ const GoogleOAuthHandoff = () => {
     const [message, setMessage] = useState('Connecting Google…');
 
     useEffect(() => {
-        const failTo = `${peekCalendarOAuthNext('/settings')}?error=oauth_denied`;
+        const isSignIn = location.pathname.includes('/login/');
+        const failTo = isSignIn
+            ? '/login?error=google_signin_failed'
+            : `${peekCalendarOAuthNext('/settings')}?error=oauth_denied`;
         const params = new URLSearchParams(location.search);
         if (params.get('error')) {
             navigate(failTo, { replace: true });
             return;
         }
         if (!params.get('code')) {
-            setMessage('Calendar connection did not finish. You can try again from Settings.');
+            setMessage(isSignIn
+                ? 'Google sign-in did not finish. You can try again from the sign-in page.'
+                : 'Calendar connection did not finish. You can try again from Settings.');
             return;
         }
         const next = googleCallbackBackendUrl({
@@ -33,7 +38,9 @@ const GoogleOAuthHandoff = () => {
             origin: window.location.origin,
         });
         if (!next) {
-            setMessage('Calendar connection could not finish. Return to Settings and try again.');
+            setMessage(isSignIn
+                ? 'Google sign-in could not finish. Return to the sign-in page and try again.'
+                : 'Calendar connection could not finish. Return to Settings and try again.');
             return;
         }
         window.location.replace(next);

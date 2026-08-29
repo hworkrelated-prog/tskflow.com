@@ -10,10 +10,14 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Target } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+import { guestTaskId, guestUserId } from '@/lib/guestSession';
 
 const RegistrationPage = () => {
     const [searchParams] = useSearchParams();
     const prefillEmail = (searchParams.get('email') || '').trim();
+    const pendingGuest = (searchParams.get('guest') || '').trim() || guestUserId();
+    const pendingTask = (searchParams.get('task') || '').trim() || guestTaskId();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -27,7 +31,10 @@ const RegistrationPage = () => {
         setLoading(true);
 
         try {
-            const response = await axios.post(`${API}/auth/register`, formData);
+            const response = await axios.post(`${API}/auth/register`, {
+                ...formData,
+                guest_user_id: pendingGuest || undefined,
+            });
             
             if (response.data.verification_code) {
                 toast.success(`Verification code: ${response.data.verification_code}`);
@@ -65,7 +72,11 @@ const RegistrationPage = () => {
                         <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
                             Create your account
                         </CardTitle>
-                        <p className="text-sm text-muted-foreground">No credit card. Assign anyone by email.</p>
+                        <p className="text-sm text-muted-foreground">
+                            {pendingGuest || pendingTask
+                                ? 'Keep the ask you already sent. Your demo task moves with you.'
+                                : 'No credit card. Assign anyone by email.'}
+                        </p>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
@@ -117,6 +128,17 @@ const RegistrationPage = () => {
                                 {loading ? 'Creating account...' : 'Create Account'}
                             </Button>
                         </form>
+                        <div className="mt-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-border" />
+                            <span className="text-xs text-muted-foreground">or</span>
+                            <span className="h-px flex-1 bg-border" />
+                        </div>
+                        <GoogleSignInButton
+                            label="Sign up with Google"
+                            next={pendingTask ? `/env/${pendingTask}` : '/dashboard'}
+                            className="mt-4 w-full h-12 font-semibold"
+                            testId="register-google-signin"
+                        />
                         <div className="mt-6 text-center">
                             <button
                                 data-testid="go-to-login"

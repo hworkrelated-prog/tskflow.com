@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,13 @@ import { motion } from 'framer-motion';
 import { LogIn, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+
+const GOOGLE_ERRORS = {
+    google_not_configured: 'Google sign-in is not configured on this deployment yet. Use email and password for now.',
+    google_signin_failed: 'Google sign-in did not complete. Try again or use email and password.',
+    invalid_state: 'That Google sign-in link expired. Try again.',
+};
 
 const LoginPage = () => {
     const [loading, setLoading] = useState(false);
@@ -20,6 +27,13 @@ const LoginPage = () => {
     });
     const { login } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    // Google redirects here with ?error=... when the identity path cannot finish.
+    useEffect(() => {
+        const code = searchParams.get('error');
+        if (code && GOOGLE_ERRORS[code]) toast.error(GOOGLE_ERRORS[code]);
+    }, [searchParams]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -102,6 +116,17 @@ const LoginPage = () => {
                                 {loading ? 'Signing in...' : 'Sign In'}
                             </Button>
                         </form>
+                        <div className="mt-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-border" />
+                            <span className="text-xs text-muted-foreground">or</span>
+                            <span className="h-px flex-1 bg-border" />
+                        </div>
+                        <GoogleSignInButton
+                            label="Sign in with Google"
+                            next="/dashboard"
+                            className="mt-4 w-full h-12 font-semibold"
+                            testId="login-google-signin"
+                        />
                         <div className="mt-6 text-center space-y-3">
                             <button
                                 data-testid="forgot-password-link"
