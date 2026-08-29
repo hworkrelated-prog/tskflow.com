@@ -1,9 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Check, MessageSquare } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ArrowRight, Check, MessageSquare, Mail, Send } from 'lucide-react';
+import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
+import LandingScreenRecorder from '@/components/LandingScreenRecorder';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+import { rememberGuestSession } from '@/lib/guestSession';
+import { recordingFilename } from '@/lib/recordingCapabilities';
+import { uploadBlob } from '@/lib/upload';
+import { trackLandingView, trackLandingInteract, sessionId } from '@/lib/productAnalytics';
 import {
     DEMO_BEATS,
     DEMO_PEOPLE,
@@ -36,24 +46,63 @@ const ColorCodedPrompt = ({ text, className = '', testId }) => (
 
 const TryIt = ({ onTry }) => {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [value, setValue] = useState('');
-    const [result, setResult] = useState(null);
-
-    const run = (raw) => {
-        const text = (raw ?? value).trim();
-        if (!text) return;
-        const distilled = distillLandingPrompt(text);
-        setResult({ raw: text, group: isLargeTeamPrompt(text), ...distilled });
-        onTry?.();
-    };
+    const [assignee, setAssignee] = useState('');
+    const [channel, setChannel] = useState('email');
+    const [sending, setSending] = useState(false);
+    const [recordingBlob, setRecordingBlob] = useState(null);
 
     const displayText = value || DEMO_PROMPT;
     const showSamplePlaceholder = !value;
+    const preview = distillLandingPrompt(displayText);
+    const isGroupAsk = isLargeTeamPrompt(displayText);
+
+    const attachRecording = async (taskId) => {
+        if (!recordingBlob) return;
+        try {
+            const filename = recordingFilename(recordingBlob.type, 'walkthrough');
+            const ref = await uploadBlob(recordingBlob, filename, recordingBlob.type || 'video/webm');
+            await axios.post(`${API}/recordings/standalone`, {
+                recording_url: ref.storage_path || ref.path,
+                task_id: taskId,
+                size_bytes: recordingBlob.size,
+                mime_type: recordingBlob.type,
+                title: 'Walkthrough for your ask',
+            });
+        } catch {
+            toast.info('Your walkthrough stayed on this device - you can attach it from the room.');
+        }
+    };
+
+    const sendIt = async () => {
+        const text = (value || DEMO_PROMPT).trim();
+        if (!text) return;
+        setSending(true);
+        try {
+            const { data } = await axios.post(`${API}/demo/launch`, {
+                task: text,
+                assignee_email: assignee.trim() || undefined,
+                channel,
+                session_id: sessionId(),
+            });
+            rememberGuestSession(data.user?.id, data.task_id);
+            login(data.access_token, data.user);
+            onTry?.();
+            await attachRecording(data.task_id);
+            navigate(data.environment_url || `/env/${data.task_id}`);
+        } catch (error) {
+            const detail = error?.response?.data?.detail;
+            toast.error(typeof detail === 'string' ? detail : 'Could not send that - try again.');
+        } finally {
+            setSending(false);
+        }
+    };
 
     return (
         <div className="w-full" data-testid="landing-tryit">
             <label className="block text-xs uppercase tracking-[0.18em] text-teal-200/80 mb-3">
-                Try it - no account
+                Send it - no account, no password
             </label>
             <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/15 p-3 sm:p-4 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.8)]">
                 <div className="relative">
@@ -64,44 +113,98 @@ const TryIt = ({ onTry }) => {
                     />
                     <textarea
                         value={value}
-                        onChange={(e) => setValue(e.target.value)}
+                        onChange={(e) => {
+                            setValue(e.target.value);
+                            if (e.target.value.trim()) trackLandingInteract('typed');
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                run();
+                                sendIt();
                             }
                         }}
                         rows={3}
                         className="relative w-full resize-none bg-transparent text-base leading-relaxed outline-none caret-teal-300 text-transparent selection:bg-teal-400/30"
                         placeholder=""
                         data-testid="landing-tryit-input"
-                        aria-label="Try assigning work in plain English"
+                        aria-label="Say what needs to get done, in plain English"
                     />
                 </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Input
+                        type="email"
+                        value={assignee}
+                        onChange={(e) => setAssignee(e.target.value)}
+                        placeholder="Who should do it? name@company.com"
+                        className="h-11 rounded-xl bg-white/[0.06] border-white/15 text-white placeholder:text-white/35"
+                        data-testid="landing-assignee-email"
+                        aria-label="Assignee email"
+                    />
+                    <div className="flex items-center gap-1.5 rounded-xl bg-white/[0.06] ring-1 ring-inset ring-white/10 p-1" data-testid="landing-channel">
+                        <button
+                            type="button"
+                            onClick={() => setChannel('email')}
+                            className={`rounded-full px-3 h-9 text-xs font-medium inline-flex items-center gap-1.5 ${channel === 'email' ? 'bg-teal-400 text-slate-950' : 'text-white/60 hover:text-white'}`}
+                            data-testid="landing-channel-email"
+                        >
+                            <Mail className="w-3.5 h-3.5" /> Email now
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setChannel('slack')}
+                            className={`rounded-full px-3 h-9 text-xs font-medium inline-flex items-center gap-1.5 ${channel === 'slack' ? 'bg-white text-slate-950' : 'text-white/60 hover:text-white'}`}
+                            data-testid="landing-channel-slack"
+                        >
+                            <MessageSquare className="w-3.5 h-3.5" /> Slack
+                        </button>
+                    </div>
+                </div>
+                <p className="mt-2 text-[11px] text-white/40">
+                    {channel === 'slack'
+                        ? 'Slack follow-up gets connected in the room. The first ask still goes out by email.'
+                        : 'Leave the email blank and we send it to a sample assignee instead.'}
+                </p>
+
                 <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
-                    <button
-                        type="button"
-                        className="text-xs text-white/45 hover:text-white/80"
-                        onClick={() => {
-                            setValue(DEMO_PROMPT);
-                            run(DEMO_PROMPT);
-                        }}
-                    >
-                        Use a sample
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            className="text-xs text-white/45 hover:text-white/80"
+                            onClick={() => {
+                                setValue(DEMO_PROMPT);
+                                trackLandingInteract('sample');
+                            }}
+                            data-testid="landing-use-sample"
+                        >
+                            Use a sample
+                        </button>
+                        <LandingScreenRecorder onRecorded={setRecordingBlob} recorded={Boolean(recordingBlob)} />
+                    </div>
                     <Button
                         type="button"
                         className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-10 px-5"
-                        onClick={() => run()}
-                        data-testid="landing-tryit-go"
+                        onClick={sendIt}
+                        disabled={sending}
+                        data-testid="landing-send-it"
                     >
-                        See the ask
+                        <Send className="w-4 h-4 mr-2" />
+                        {sending ? 'Sending…' : 'Send it'}
                     </Button>
+                </div>
+                <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap items-center gap-3">
+                    <GoogleSignInButton
+                        label="Continue with Google"
+                        next="/dashboard"
+                        className="border-white/20 bg-transparent text-white hover:bg-white/10 h-10"
+                        testId="landing-google-signin"
+                    />
+                    <span className="text-[11px] text-white/35">Already have work in here? Sign in and keep everything.</span>
                 </div>
             </div>
 
             <AnimatePresence>
-                {result && (
+                {preview && (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -110,52 +213,27 @@ const TryIt = ({ onTry }) => {
                         data-testid="landing-tryit-result"
                     >
                         <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-2">What they receive</p>
-                        <p className="text-xl font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>{result.title}</p>
-                        <p className="text-slate-700 mt-2 leading-relaxed">{result.ask}</p>
+                        <p className="text-xl font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>{preview.title}</p>
+                        <p className="text-slate-700 mt-2 leading-relaxed">{preview.ask}</p>
                         <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full bg-teal-50 text-teal-900 px-2.5 py-1">{result.who}</span>
-                            <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-1">{result.when}</span>
-                            {result.group && (
-                                <span className="rounded-full bg-slate-900 text-white px-2.5 py-1">
-                                    {DEMO_PEOPLE.length} people
+                            <span className="rounded-full bg-teal-50 text-teal-900 px-2.5 py-1">
+                                {assignee.trim() || preview.who}
+                            </span>
+                            <span className="rounded-full bg-slate-100 text-slate-700 px-2.5 py-1">{preview.when}</span>
+                            <span className="rounded-full bg-slate-900 text-white px-2.5 py-1 inline-flex items-center gap-1.5">
+                                {channel === 'slack' ? <MessageSquare className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
+                                {channel === 'slack' ? 'Slack in the room' : 'Email now'}
+                            </span>
+                            {isGroupAsk && (
+                                <span className="rounded-full bg-teal-900 text-teal-50 px-2.5 py-1">
+                                    {DEMO_PEOPLE.length} people on the paid plan
                                 </span>
                             )}
                         </div>
-                        {result.group && (
-                            <div className="mt-5 space-y-4" data-testid="landing-tryit-rollup">
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                                    {[
-                                        ['Received', DEMO_ROLLUP.received],
-                                        ['Accepted', DEMO_ROLLUP.accepted],
-                                        ['Silent', DEMO_ROLLUP.silent],
-                                        ['Pinged twice', DEMO_ROLLUP.pingedTwice.length],
-                                    ].map(([label, n]) => (
-                                        <div key={label} className="rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3">
-                                            <p className="text-lg font-semibold">{n}</p>
-                                            <p className="text-[11px] text-slate-500">{label}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                    Pinged twice: {DEMO_ROLLUP.pingedTwice.slice(0, 4).join(', ')}…
-                                </p>
-                                <div className="rounded-xl bg-[#4A154B] text-white p-3" data-testid="landing-tryit-slack">
-                                    <p className="text-[11px] uppercase tracking-wide text-white/60 mb-2 flex items-center gap-1.5">
-                                        <MessageSquare className="w-3.5 h-3.5" /> Slack thread with {DEMO_SLACK.person}
-                                    </p>
-                                    <p className="text-sm text-white/90 leading-relaxed">{DEMO_SLACK.messages[1].text}</p>
-                                    <p className="text-xs text-emerald-300 mt-2">{DEMO_SLACK.result}</p>
-                                </div>
-                            </div>
-                        )}
-                        <Button
-                            className="mt-5 w-full rounded-full bg-slate-900 hover:bg-slate-800 h-11"
-                            onClick={() => navigate('/register')}
-                            data-testid="landing-tryit-send"
-                        >
-                            Send this for real
-                            <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
+                        <p className="mt-4 text-sm text-slate-500 leading-relaxed" data-testid="landing-robot-promise">
+                            Hit Send it and the robot delivers this, waits, pings politely, and reports back - so you are
+                            not the one chasing {assignee.trim() ? 'them' : 'anyone'}.
+                        </p>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -293,6 +371,11 @@ const LandingPage = () => {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
+    // One landing view per browser session - the funnel starts here.
+    useEffect(() => {
+        trackLandingView({ path: '/' });
+    }, []);
+
     // Marketing page is always brand-dark. Do not follow the app light/dark preference
     // (that preference lives in localStorage and was repainting this page).
     useEffect(() => {
@@ -420,8 +503,11 @@ const LandingPage = () => {
 
             <section id="try" className="relative py-16 md:py-24">
                 <div className="max-w-3xl mx-auto px-5">
-                    <h2 className="text-3xl font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Type an assignment. Watch it become an ask.</h2>
-                    <p className="text-white/55 mb-8">No signup for the preview. Sending for real takes an account so people can accept and you can see the rollup.</p>
+                    <h2 className="text-3xl font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Tell the robot what needs to get done.</h2>
+                    <p className="text-white/55 mb-8">
+                        Add the person&apos;s email and hit Send it. The robot reaches them, waits, pings politely, and reports
+                        back - and you land in the room where it happens. No password, no verify-email wall.
+                    </p>
                     <TryIt />
                 </div>
             </section>

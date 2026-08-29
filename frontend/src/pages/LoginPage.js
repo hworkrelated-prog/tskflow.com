@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth, API } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -8,9 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { LogIn, Target } from 'lucide-react';
+import { AlertCircle, LogIn, Target } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
+
+const GOOGLE_ERRORS = {
+    google_not_configured: 'Google sign-in is not configured on this deployment yet. Use email and password for now.',
+    google_signin_failed: 'Google sign-in did not complete. Try again or use email and password.',
+    invalid_state: 'That Google sign-in link expired. Try again.',
+};
 
 const LoginPage = () => {
     const [loading, setLoading] = useState(false);
@@ -20,6 +27,8 @@ const LoginPage = () => {
     });
     const { login } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const googleError = GOOGLE_ERRORS[searchParams.get('error')] || '';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -66,6 +75,15 @@ const LoginPage = () => {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
+                        {googleError && (
+                            <div
+                                data-testid="login-google-error"
+                                className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+                            >
+                                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                <span>{googleError}</span>
+                            </div>
+                        )}
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
@@ -102,6 +120,17 @@ const LoginPage = () => {
                                 {loading ? 'Signing in...' : 'Sign In'}
                             </Button>
                         </form>
+                        <div className="mt-4 flex items-center gap-3">
+                            <span className="h-px flex-1 bg-border" />
+                            <span className="text-xs text-muted-foreground">or</span>
+                            <span className="h-px flex-1 bg-border" />
+                        </div>
+                        <GoogleSignInButton
+                            label="Sign in with Google"
+                            next="/dashboard"
+                            className="mt-4 w-full h-12 font-semibold"
+                            testId="login-google-signin"
+                        />
                         <div className="mt-6 text-center space-y-3">
                             <button
                                 data-testid="forgot-password-link"

@@ -42,6 +42,8 @@ import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
 import ContactPage from '@/pages/ContactPage';
 import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
+import GoogleSignInFinish from '@/pages/GoogleSignInFinish';
+import RobotRoomPage from '@/pages/RobotRoomPage';
 import ConnectCalendarPage from '@/pages/ConnectCalendarPage';
 import MailClaimPage from '@/pages/MailClaimPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -49,6 +51,7 @@ import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
+import { guestTaskId } from '@/lib/guestSession';
 import { registerPush, unregisterPush } from '@/lib/push';
 import TeamSetupModal from '@/components/TeamSetupModal';
 import WhatsNewPrompt from '@/components/WhatsNewPrompt';
@@ -399,6 +402,12 @@ const PublicRoute = ({ children }) => {
         );
     }
 
+    // A landing-demo guest belongs in their robot room, not the full dashboard.
+    if (user?.is_guest) {
+        const room = guestTaskId();
+        return <Navigate to={room ? `/env/${room}` : '/dashboard'} replace />;
+    }
+
     if (user) {
         return <Navigate to="/dashboard" replace />;
     }
@@ -492,7 +501,17 @@ function App() {
                     <Route path="/contact" element={<ContactPage />} />
                     <Route path="/api/auth/google/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/api/auth/google/sheets/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/api/auth/google/login/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/oauth/google/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/auth/google/finish" element={<GoogleSignInFinish />} />
+                    <Route
+                        path="/env/:taskId"
+                        element={
+                            <ProtectedRoute>
+                                <RobotRoomPage />
+                            </ProtectedRoute>
+                        }
+                    />
                     <Route
                         path="/dashboard"
                         element={

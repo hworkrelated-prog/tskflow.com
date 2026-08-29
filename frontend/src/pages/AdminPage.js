@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Plus, Shield, Users, Crown, ArrowLeft, Activity, Send } from 'lucide-react';
+import { Trash2, Plus, Shield, Users, Crown, ArrowLeft, Activity, Send, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL + '/api';
@@ -20,6 +20,8 @@ const AdminPage = () => {
     const [grants, setGrants] = useState([]);
     const [engagement, setEngagement] = useState(null);
     const [sendingDigest, setSendingDigest] = useState(false);
+    const [daily, setDaily] = useState(null);
+    const [sendingDaily, setSendingDaily] = useState(false);
     const [newGrant, setNewGrant] = useState({ type: 'email', value: '', plan: 'pro' });
 
     useEffect(() => {
@@ -28,6 +30,7 @@ const AdminPage = () => {
             setIsLoggedIn(true);
             fetchGrants(token);
             fetchEngagement(token);
+            fetchDaily(token);
         }
     }, []);
 
@@ -40,6 +43,7 @@ const AdminPage = () => {
             setIsLoggedIn(true);
             fetchGrants(response.data.access_token);
             fetchEngagement(response.data.access_token);
+            fetchDaily(response.data.access_token);
             toast.success('Admin login successful');
         } catch (error) {
             toast.error('Invalid admin password');
@@ -80,6 +84,41 @@ const AdminPage = () => {
             toast.error(error.response?.data?.detail || 'Failed to send summary');
         } finally {
             setSendingDigest(false);
+        }
+    };
+
+    const fetchDaily = async (token) => {
+        try {
+            const response = await axios.get(`${API}/admin/analytics/daily`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setDaily(response.data);
+        } catch (error) {
+            if (error.response?.status === 401) {
+                localStorage.removeItem('admin_token');
+                setIsLoggedIn(false);
+            }
+        }
+    };
+
+    const sendDailyNow = async () => {
+        const token = localStorage.getItem('admin_token');
+        if (!token) return;
+        setSendingDaily(true);
+        try {
+            const response = await axios.post(`${API}/admin/analytics/send`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.data?.sent) {
+                toast.success(`Today's numbers emailed to ${response.data.to || 'you'}`);
+            } else {
+                toast.error(response.data?.reason || 'Could not send today\'s numbers');
+            }
+            fetchDaily(token);
+        } catch (error) {
+            toast.error(error.response?.data?.detail || 'Failed to send today\'s numbers');
+        } finally {
+            setSendingDaily(false);
         }
     };
 
@@ -142,6 +181,7 @@ const AdminPage = () => {
         setIsLoggedIn(false);
         setGrants([]);
         setEngagement(null);
+        setDaily(null);
     };
 
     if (!isLoggedIn) {
@@ -246,6 +286,68 @@ const AdminPage = () => {
                             </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">Loading engagement…</p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="mb-8 border-0 shadow-lg" data-testid="admin-daily-analytics">
+                    <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div>
+                            <CardTitle className="flex items-center gap-2">
+                                <TrendingUp className="w-5 h-5" /> Landing → robot room funnel
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                {daily?.blurb || 'Loading today’s funnel…'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {daily?.schedule || 'Every day at 8:00 AM Pacific'}
+                                {daily?.email_to ? ` → ${daily.email_to}` : ''}.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={sendDailyNow}
+                            disabled={sendingDaily}
+                            data-testid="admin-daily-analytics-send"
+                        >
+                            <Send className="w-4 h-4 mr-1" />
+                            {sendingDaily ? 'Sending…' : 'Email me today’s numbers'}
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        {daily ? (
+                            <>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="admin-funnel-cards">
+                                    {(daily.funnel || []).map((stage) => (
+                                        <div key={stage.label} className="rounded-xl bg-slate-50 px-3 py-3">
+                                            <div className="text-2xl font-semibold tabular-nums">{stage.value ?? 0}</div>
+                                            <div className="text-xs text-muted-foreground mt-0.5">{stage.label}</div>
+                                            <div className="text-[11px] text-slate-400 mt-0.5">{stage.share ?? 0}% of views</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                                    {[
+                                        ['Landing views', daily.today?.landing_views],
+                                        ['Interactions', daily.today?.interactions],
+                                        ['Asks sent for real', daily.today?.demo_sends],
+                                        ['Recordings started', daily.today?.recording_starts],
+                                        ['Guest sessions', daily.today?.guest_sessions],
+                                        ['Logins (email)', daily.today?.logins_email],
+                                        ['Logins (Google)', daily.today?.logins_google],
+                                        ['New signups', daily.today?.signups],
+                                    ].map(([label, value]) => (
+                                        <div key={label} className="rounded-xl bg-slate-50 px-3 py-3">
+                                            <div className="text-2xl font-semibold tabular-nums">{value ?? 0}</div>
+                                            <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">Loading today’s funnel…</p>
                         )}
                     </CardContent>
                 </Card>
