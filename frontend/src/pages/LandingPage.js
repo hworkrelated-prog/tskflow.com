@@ -43,7 +43,7 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
     const filled = Boolean(value.trim());
     const preview = distillLandingPrompt(filled ? value : DEMO_PROMPT);
 
-    const useExample = (text) => {
+    const pickExample = (text) => {
         setValue(text);
         trackLandingInteract('sample');
         inputRef?.current?.focus();
@@ -131,7 +131,7 @@ const LaunchPad = ({ recordingBlob, inputRef }) => {
                             <li key={ex.id}>
                                 <button
                                     type="button"
-                                    onClick={() => useExample(ex.text)}
+                                    onClick={() => pickExample(ex.text)}
                                     className="landing-example w-full text-left text-[15px] sm:text-base leading-snug hover:text-white"
                                     data-testid={`landing-example-${ex.id}`}
                                 >
