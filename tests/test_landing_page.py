@@ -30,6 +30,17 @@ def test_landing_is_a_tool_not_a_pitch():
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
 
 
+def test_landing_voice_guide_is_guest_safe():
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    guide = (FRONT / "components" / "LandingVoiceGuide.js").read_text(encoding="utf-8")
+    assert "LandingVoiceGuide" in landing
+    assert 'data-testid="landing-voice-guide"' in guide
+    assert 'data-testid="landing-voice-mic"' in guide
+    assert "/voice/command" not in guide
+    assert "GUIDE_OPEN" in guide
+    assert "who should do it" in guide.lower()
+
+
 def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
@@ -42,15 +53,21 @@ def test_landing_opens_straight_into_a_launch():
     assert "LANDING_EXAMPLES" in src
     assert "pipeline update" in demo
     assert "best deal" in demo
-    assert "puts it on their calendar" in src
+    assert "They get the ask" in src
+    assert "The robot delivers" not in src
     assert "/demo/launch" in src
+    assert 'data-testid="landing-voice"' in src
+    assert "LandingVoiceGuide" in src
+    assert "landing-step-ask" in src
+    assert "landing-step-who" in src
+    assert "landing-step-send" in src
     assert 'data-testid="landing-send-it"' in src
     assert 'data-testid="landing-assignee-email"' in src
     assert 'data-testid="landing-channel-slack"' in src
 
 
 def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
-    """The composer launches a guest robot room - no account, no password."""
+    """The composer launches a guest task - no account, no password."""
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert 'data-testid="landing-send-it"' in src
     assert 'data-testid="landing-assignee-email"' in src
@@ -73,6 +90,9 @@ def test_landing_examples_are_short_manager_asks():
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert "LANDING_EXAMPLES" in demo
     assert "landing-example-${ex.id}" in landing
+    assert "setInterval" in landing
+    assert "Use this idea" in landing
+    assert "Try one" not in landing
     assert "id: 'pipeline'" in demo
     assert "id: 'walkthrough'" in demo
     assert "id: 'best-deal'" in demo

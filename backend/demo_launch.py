@@ -183,14 +183,14 @@ def guest_user_doc(
 
 
 def room_copy(*, assignee_name: str, delivered: bool) -> dict:
-    """Copy for the guest room — robots chase the assignee so the manager does not."""
+    """Copy for the guest task page after a landing send."""
     who = assignee_name or "your assignee"
     return {
-        "headline": "Your robot has the ask now",
+        "headline": "Your ask is on its way",
         "sub": (
-            f"It went to {who}. From here the robot does the chasing - politely - and reports back."
+            f"It went to {who}. TskFlow follows up politely and reports back."
             if delivered
-            else f"This is a sample send to {who}. Add a real email and the robot delivers it for real."
+            else f"This is a sample send to {who}. Add a real email next time and it goes out."
         ),
         "reassurance": "You will not have to write \u201cjust circling back\u201d again.",
     }
