@@ -165,6 +165,9 @@ def test_frontend_surfaces_the_score():
     badge = (front / "components" / "AccountabilityScore.js").read_text(encoding="utf-8")
     assert "AccountabilityScore" in analytics
     assert "accountability_score" in analytics
+    # CRA/ESLint rejects `??` mixed with `||` without parens (Render build).
+    assert "accountability_score ?? r.performance_score ||" not in analytics
+    assert "accountability_score ?? r.performance_score ?? 0" in analytics
     assert "AccountabilityScore" in team
     assert "accountability/me" in settings
     assert "accountability/me" in hub
