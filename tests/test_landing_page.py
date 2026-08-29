@@ -31,11 +31,29 @@ def test_landing_has_simulation_and_tryit():
     assert 'data-testid="landing-tryit"' in src
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
-    assert "Send this for real" in src
     assert "Pinged twice" in src
     assert "landing-sim-slack" in src
     assert "36 people" in src or "30–40" in src
     assert "Slack thread" in src
+
+
+def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
+    """The composer launches a guest robot room - no account, no password."""
+    src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    assert 'data-testid="landing-send-it"' in src
+    assert 'data-testid="landing-assignee-email"' in src
+    assert 'data-testid="landing-channel-email"' in src
+    assert 'data-testid="landing-channel-slack"' in src
+    assert "Send it" in src
+    assert "no account, no password" in src
+    # The old dead end is gone
+    assert "Send this for real" not in src
+    assert "See the ask" not in src
+    assert "Sending for real takes an account" not in src
+    # Real launch + landing recorder + Google identity
+    assert "/demo/launch" in src
+    assert "LandingScreenRecorder" in src
+    assert "GoogleSignInButton" in src
 
 
 def test_landing_demo_assigns_thirty_to_forty_people():

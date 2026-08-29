@@ -220,6 +220,7 @@ class UserResponse(BaseModel):
     company_domain: Optional[str] = None
     org_role: Optional[str] = None
     show_billing_nudge: Optional[bool] = False
+    is_guest: Optional[bool] = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -983,6 +984,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         company_domain=current_user.get("company_domain"),
         org_role=current_user.get("org_role") or "ic",
         show_billing_nudge=await show_billing_nudge(db, current_user),
+        is_guest=bool(current_user.get("is_guest")),
     )
 
 class UpdateProfileRequest(BaseModel):
@@ -6563,7 +6565,9 @@ async def google_signin_callback(
         logging.error(f"Google sign-in failed: {e}")
         return RedirectResponse(url=fail)
 
-    email_norm = identity["email"]
+    email_norm = str(identity.get("email") or "").strip().lower()
+    if not email_norm:
+        return RedirectResponse(url=fail)
     company_domain = email_norm.split("@")[-1]
     now = get_pst_now().isoformat()
     user = await find_user_by_email(email_norm)

@@ -51,6 +51,7 @@ import GlobalAIDock from '@/components/GlobalAIDock';
 import VoiceMode from '@/components/VoiceMode';
 import CatchUpReview from '@/components/CatchUpReview';
 import { applyTheme } from '@/lib/theme';
+import { guestTaskId } from '@/lib/guestSession';
 import { registerPush, unregisterPush } from '@/lib/push';
 import TeamSetupModal from '@/components/TeamSetupModal';
 import WhatsNewPrompt from '@/components/WhatsNewPrompt';
@@ -399,6 +400,12 @@ const PublicRoute = ({ children }) => {
                 <div className="text-lg font-medium text-foreground">Loading…</div>
             </div>
         );
+    }
+
+    // A landing-demo guest belongs in their robot room, not the full dashboard.
+    if (user?.is_guest) {
+        const room = guestTaskId();
+        return <Navigate to={room ? `/env/${room}` : '/dashboard'} replace />;
     }
 
     if (user) {

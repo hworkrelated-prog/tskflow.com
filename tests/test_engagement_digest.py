@@ -73,3 +73,16 @@ def test_wired_into_admin_and_scheduler():
     assert 'data-testid="admin-engagement-send"' in admin
     assert "Email me this week" in admin
     assert "Friday at 3:00 PM Pacific" in admin
+
+
+def test_weekly_digest_still_runs_alongside_the_daily_analytics_email():
+    """Adding the daily funnel email must not displace the Friday digest."""
+    server = (ROOT / "backend" / "server.py").read_text(encoding="utf-8")
+    admin = (ROOT / "frontend" / "src" / "pages" / "AdminPage.js").read_text(encoding="utf-8")
+    loop_body = server.split("async def _scheduler_loop()")[1].split("async def _ensure_indexes")[0]
+    assert "await send_weekly_engagement_digest()" in loop_body
+    assert "await send_daily_analytics()" in loop_body
+    assert "engagement_digests" in server
+    assert "daily_analytics_digests" in server or "DIGEST_COLLECTION" in server
+    assert "Email me this week" in admin
+    assert "Email me today" in admin
