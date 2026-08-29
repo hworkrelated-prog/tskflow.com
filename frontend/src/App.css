@@ -621,7 +621,10 @@ html:has(body.landing-active) {
 .landing-page textarea {
     border-color: transparent !important;
 }
-.landing-page textarea::placeholder,
+.landing-page textarea::placeholder {
+    /* Rotating ideas sit in this box. A visible placeholder stacks on top of them. */
+    color: transparent !important;
+}
 .landing-page input::placeholder {
     color: rgba(255, 255, 255, 0.28) !important;
 }
