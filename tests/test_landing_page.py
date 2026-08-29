@@ -87,6 +87,9 @@ for (const ex of LANDING_EXAMPLES) {
 const pipeline = colorizeAssignPrompt(LANDING_EXAMPLES[0].text);
 if (!/manager/i.test(pipeline.find((p) => p.kind === 'who').text)) process.exit(4);
 if (!/every day at 9/i.test(pipeline.find((p) => p.kind === 'when')?.text || '')) process.exit(5);
+const joined = pipeline.map((p) => p.text).join('');
+if ((joined.match(/every day at 9/gi) || []).length !== 1) process.exit(6);
+if (!joined.endsWith('.')) process.exit(7);
 console.log('ok');
 """
     result = subprocess.run(

@@ -83,7 +83,7 @@ export const isLargeTeamPrompt = (text) =>
     /\b(east coast|everyone|my team|sales team|\b3[0-9]\b|\b40\b)\b/i.test(String(text || ''));
 
 const WHEN_TAIL =
-    '(every day at \\d+|each day at \\d+|by 5 each day|by eod|by tomorrow|by friday|by monday|by tuesday|by wednesday|by thursday|by saturday|by sunday)';
+    '(?:every day at \\d+|each day at \\d+|by 5 each day|by eod|by tomorrow|by friday|by monday|by tuesday|by wednesday|by thursday|by saturday|by sunday)';
 
 const splitWhen = (rest) => {
     const m = String(rest || '').match(new RegExp(`^(.*?)(\\s+)(${WHEN_TAIL})([.!?]*)$`, 'i'));
