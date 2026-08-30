@@ -4,9 +4,9 @@ import { toast } from 'sonner';
 import { createDictationSession } from '@/lib/promptVoice';
 
 export const GUIDE_OPEN =
-    'Who, what, and when. Then send.';
+    'Type the ask. Add who it is for. Then send.';
 export const GUIDE_AFTER_HEAR =
-    'Add their email, then send.';
+    'Who should own this? Add their email, then send.';
 
 const pickVoice = () => {
     if (!('speechSynthesis' in window)) return null;

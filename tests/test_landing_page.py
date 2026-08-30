@@ -43,7 +43,8 @@ def test_landing_voice_guide_is_guest_safe():
     assert 'data-testid="landing-voice-mic"' in guide
     assert "/voice/command" not in guide
     assert "GUIDE_OPEN" in guide
-    assert "who, what, and when" in guide.lower()
+    assert "type the ask" in guide.lower()
+    assert "who it is for" in guide.lower()
 
 
 def test_landing_opens_straight_into_a_launch():
