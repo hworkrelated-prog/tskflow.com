@@ -28,6 +28,15 @@ const beatLabel = (title) => {
     return (title || 'Update').replace(/\s+/g, ' ').trim();
 };
 
+const BEAT_LINE = {
+    Video: 'Walkthrough sent',
+    Queued: 'We queued the ask',
+    Sent: 'They have the ask',
+    Waiting: 'On them now',
+    Ping: 'We followed up',
+    Slack: 'We ping Slack',
+};
+
 const beatIcon = (row) => {
     const label = beatLabel(row.title);
     if (label === 'Video') return Video;
@@ -59,8 +68,7 @@ const dueLabel = (raw) => {
 };
 
 /**
- * Guest follow-up after a landing send: the ask itself, plus a status track.
- * Labels and chips carry the meaning. No lecture copy.
+ * Guest follow-up after a landing send: you assigned it, we run after them.
  */
 const RobotRoomPage = () => {
     const { taskId } = useParams();
@@ -138,7 +146,8 @@ const RobotRoomPage = () => {
     const activity = room?.activity || [];
     const channel = room?.channel || 'email';
     const delivered = Boolean(room?.delivered);
-    const statusWord = delivered ? 'Sent' : 'Queued';
+    const statusWord = delivered ? 'On them' : "We're on it";
+    const who = task.assigned_to_name || task.assigned_to_email || 'them';
     const due = dueLabel(task.due_date);
 
     return (
@@ -207,6 +216,12 @@ const RobotRoomPage = () => {
                     >
                         {task.title}
                     </h1>
+                    <p
+                        className="mt-4 text-base sm:text-lg text-teal-100/90 leading-snug max-w-md"
+                        data-testid="env-value"
+                    >
+                        You assigned it. We run after {who} until it's done.
+                    </p>
                     <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs">
                         <span className="rounded-full bg-teal-400/15 text-teal-100 px-2.5 py-1" data-testid="env-assignee">
                             {task.assigned_to_name || task.assigned_to_email}
@@ -239,7 +254,10 @@ const RobotRoomPage = () => {
                     </div>
                 </motion.div>
 
-                <ol className="mt-10 env-track" data-testid="env-activity">
+                <p className="mt-10 text-[11px] uppercase tracking-[0.18em] text-white/45" data-testid="env-track-kicker">
+                    We take it from here
+                </p>
+                <ol className="mt-3 env-track" data-testid="env-activity">
                     {activity.map((row, index) => {
                         const Icon = beatIcon(row);
                         const label = beatLabel(row.title);
@@ -257,7 +275,7 @@ const RobotRoomPage = () => {
                                     disabled={isSlack ? connectingSlack : undefined}
                                     data-testid={isSlack ? "env-connect-slack" : undefined}
                                 >
-                                    <span className="env-track-title">{isSlack && connectingSlack ? 'Opening…' : label}</span>
+                                    <span className="env-track-title">{isSlack && connectingSlack ? 'Opening…' : (BEAT_LINE[label] || label)}</span>
                                     <span className="env-track-meta">{shortTime(row.created_at)}</span>
                                 </Tag>
                             </li>
@@ -277,6 +295,9 @@ const RobotRoomPage = () => {
 
                 {isGuest && (
                     <div className="mt-10 space-y-3" data-testid="env-keep-workspace-panel">
+                        <p className="text-center text-sm text-white/55" data-testid="env-keep-hint">
+                            Keep this and we keep running it.
+                        </p>
                         <Button
                             type="button"
                             onClick={keepWorkspace}
