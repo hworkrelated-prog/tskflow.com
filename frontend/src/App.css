@@ -869,7 +869,7 @@ html:has(body.landing-active) {
 .landing-stickies-stage {
     position: relative;
     width: min(36rem, 100%);
-    height: 23.5rem;
+    height: 34rem;
 }
 .landing-sticky {
     position: absolute;
@@ -982,9 +982,19 @@ html:has(body.landing-active) {
     font-weight: 500;
     color: rgba(255, 255, 255, 0.82);
 }
+.landing-page .landing-cta {
+    background: #2dd4bf !important;
+    color: #042f2e !important;
+    border: 0 !important;
+    box-shadow: 0 10px 28px rgba(45, 212, 191, 0.28);
+}
+.landing-page .landing-cta:hover {
+    background: #5eead4 !important;
+    color: #042f2e !important;
+}
 
 @media (max-width: 40rem) {
-    .landing-stickies-stage { height: 26rem; }
+    .landing-stickies-stage { height: 38rem; }
     .landing-sticky { width: 14.5rem; margin-left: -7.25rem !important; }
     .landing-hero-fly { flex-direction: column; }
 }

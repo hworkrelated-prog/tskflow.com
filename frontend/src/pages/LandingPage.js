@@ -228,7 +228,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                     </div>
                     <Button
                         type="button"
-                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7 shrink-0"
+                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7 shrink-0 landing-cta"
                         onClick={sendIt}
                         disabled={sending}
                         data-testid="landing-send-it"
@@ -324,7 +324,7 @@ const LandingPage = () => {
                     <LandingHeroAsk />
                     <Button
                         type="button"
-                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-8 mt-8"
+                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-8 mt-8 landing-cta"
                         onClick={scrollToComposer}
                         data-testid="landing-hero-cta"
                     >

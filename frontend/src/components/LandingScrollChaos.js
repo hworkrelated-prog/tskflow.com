@@ -47,7 +47,7 @@ function StickyNote({ note, index, gather, reduceMotion }) {
     const x = useTransform(gather, (v) => (1 - v) * note.x);
     const y = useTransform(gather, (v) => (1 - v) * note.y);
     const rotate = useTransform(gather, (v) => (1 - v) * note.rot);
-    const top = 18 + index * 86;
+    const top = 10 + index * 126;
 
     return (
         <motion.article
