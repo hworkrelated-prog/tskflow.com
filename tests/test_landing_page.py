@@ -315,7 +315,9 @@ def test_landing_story_is_shown_not_told():
     flow = (FRONT / "components" / "LandingFlowIcons.js").read_text(encoding="utf-8")
 
     assert "Ask. Who. Send." in landing
-    assert "Send one now." in landing
+    assert "Try it." in landing
+    assert "Your email. To try it." in landing
+    assert "landing-who-input" in css
     assert "Ask engineering to record a demo of the fix by tomorrow" in hero
     assert "landing-nametag" in hero
     assert "landing-clockchip" in hero
