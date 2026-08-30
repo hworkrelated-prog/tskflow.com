@@ -38,6 +38,7 @@ export function shouldComposeTask(text) {
     if (!t) return false;
     if (COMMAND_OPENER_RE.test(t) || CHAT_OPENER_RE.test(t)) return false;
     if (/^(how|what|where|why|who|do you|is there|does|are there)\b/i.test(t)) return false;
+    if (/\brecurring\b/i.test(t) && !/\b(ask|assign|remind)\b/i.test(t)) return false;
     return TASK_COMPOSE_RE.test(t);
 }
 

@@ -118,7 +118,8 @@ if (routeForVoiceTarget('unbiassly') !== '/unbiassly') process.exit(3);
 if (routeForVoiceTarget('calendar') !== '/connect-calendar') process.exit(4);
 if (!VOICE_ROUTES.transcript) process.exit(5);
 
-if (!shouldComposeTask('ask Alice to send the recap by Friday')) process.exit(6);
+if (shouldComposeTask('create a recurring task')) process.exit(13);
+if (shouldComposeTask('ask Alice to send the recap by Friday') === false) process.exit(14);
 if (shouldComposeTask('how do I assign a task?')) process.exit(7);
 if (shouldComposeTask('open analytics')) process.exit(8);
 if (shouldComposeTask('hey')) process.exit(9);

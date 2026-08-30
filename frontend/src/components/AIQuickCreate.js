@@ -1131,9 +1131,20 @@ const AIQuickCreate = ({
         if (!opts.skipThreadUser) {
             const cmd = tryLocalCommand(t);
             if (cmd?.type === 'navigate') {
+                appendThread({ role: 'user', text: t });
+                appendThread({ role: 'assistant', text: `Opening ${cmd.label}.` });
                 toast.success(`Opening ${cmd.label}`);
                 setText('');
                 navigate(cmd.path);
+                onRequestExit?.();
+                return;
+            }
+            if (cmd?.type === 'search') {
+                appendThread({ role: 'user', text: t });
+                appendThread({ role: 'assistant', text: `Searching for ${cmd.query}.` });
+                navigate(`/dashboard?q=${encodeURIComponent(cmd.query)}`);
+                toast.success(`Searching “${cmd.query}”`);
+                setText('');
                 onRequestExit?.();
                 return;
             }
@@ -1150,15 +1161,10 @@ const AIQuickCreate = ({
                 startRecurringCompose();
                 return;
             }
-            if (cmd?.type === 'search') {
-                navigate(`/dashboard?q=${encodeURIComponent(cmd.query)}`);
-                toast.success(`Searching “${cmd.query}”`);
-                setText('');
-                onRequestExit?.();
-                return;
-            }
             if (cmd?.type === 'manual') {
                 setText('');
+                appendThread({ role: 'user', text: t });
+                appendThread({ role: 'assistant', text: 'Opening the full form.' });
                 onOpenAdvanced?.();
                 return;
             }
@@ -1321,12 +1327,7 @@ const AIQuickCreate = ({
         setVoicePhase('thinking');
         setText('');
         try {
-            if (previewRef.current) {
-                await runPreviewRef.current?.(t);
-                speakLastAssistantIfVoice();
-                return;
-            }
-            if (shouldComposeTask(t)) {
+            if (previewRef.current || shouldComposeTask(t) || tryLocalCommand(t)) {
                 await runPreviewRef.current?.(t);
                 speakLastAssistantIfVoice();
                 return;
