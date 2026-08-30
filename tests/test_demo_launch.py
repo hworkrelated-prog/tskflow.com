@@ -362,6 +362,8 @@ def test_env_room_is_a_protected_route_with_robot_copy():
     assert "Keep this going" not in room
     assert "What you asked" not in room
     assert "env-track" in room
+    assert 'data-testid="env-value"' in room
+    assert "We run after" in room
     assert "/demo/room/" in room
     assert "trackEnvView" in room
     # A guest token must not hijack every visit to /

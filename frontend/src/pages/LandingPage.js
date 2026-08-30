@@ -222,8 +222,10 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className="sr-only" data-testid="landing-send-promise">
-                            {channel === 'slack' ? 'Email first. Slack later.' : 'Send'}
+                        <p className="text-sm text-white/55 mt-2" data-testid="landing-send-promise">
+                            {channel === 'slack'
+                                ? 'We email first, then run after them.'
+                                : 'You send it. We run after them until it is done.'}
                         </p>
                     </div>
                     <button

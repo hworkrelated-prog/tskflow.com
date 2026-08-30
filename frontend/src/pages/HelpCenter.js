@@ -16,7 +16,7 @@ const topics = [
         body: (
             <ol className="list-decimal ml-5 space-y-2 text-sm">
                 <li>Type who, what, when. Enter.</li>
-                <li>Send.</li>
+                <li>Send. We run after them.</li>
                 <li><strong>To me</strong> · <strong>Personal</strong> · <strong>Delegated</strong></li>
                 <li><strong>Full form</strong> for extras.</li>
             </ol>
