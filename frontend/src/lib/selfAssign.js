@@ -4,7 +4,7 @@ export const LAST_ASSIGNEES_KEY = 'tskflow_ai_last_assignees';
 
 export const SELF_CHIP = { kind: 'user', id: 'self', name: 'Me' };
 
-const TEAM_PHRASE_RE = /\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b|\beveryone under me\b/i;
+const TEAM_PHRASE_RE = /\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b|\beveryone under me\b|\bmy managers?\b|\bmy org\b|\bmanager'?s?\s+teams\b|\bmy aes\b/i;
 const SELF_REMIND_RE = /\b(?:remind|nudge|ping|notify)\s+me\b/i;
 const SELF_ASSIGN_TO_RE = /\bassign(?:ed)?(?:\s+\w+){0,4}\s+to\s+(?:me|myself)\b/i;
 const SELF_TASK_FOR_RE = /\b(?:a\s+)?(?:task|reminder|todo|note)\s+for\s+(?:me|myself)\b/i;
@@ -61,7 +61,36 @@ export function looksLikeTimeOnly(text) {
     const t = String(text || '').replace(/\s+/g, ' ').trim();
     if (!t) return false;
     if (TIMEISH_RE.test(t)) return true;
-    return /^(?:(?:due|by|at|before|until)\s+)?\d{1,2}(?::\d{2})?\s*(?:o'?clock\s*)?(?:am|pm)?(?:\s*(?:pst|pdt|pt|est|edt|et|cst|mst|utc|gmt))?\s*$/i.test(t);
+    if (/^(?:(?:due|by|at|before|until)\s+)?\d{1,2}(?::\d{2})?\s*(?:o'?clock\s*)?(?:am|pm)?(?:\s*(?:pacific(?:\s+time)?|eastern(?:\s+time)?|pst|pdt|pt|est|edt|et|cst|mst|utc|gmt))?(?:\s+(?:tomorrow|today|tonight))?\s*$/i.test(t)) {
+        return true;
+    }
+    const norm = t
+        .toLowerCase()
+        .replace(/[’`]/g, "'")
+        .replace(/\bo['']clock\b/g, '')
+        .replace(/\b(pacific|eastern|central|mountain)(\s+time)?\b/g, '')
+        .replace(/\b(pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (TIMEISH_RE.test(norm)) return true;
+    if (/^(?:(?:due|by|at|before|until)\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\s+(tomorrow|today|tonight)$/i.test(norm)) return true;
+    if (/^(tomorrow|today|tonight)(?:\s+(?:at|by)\s+\d{1,2}(?::\d{2})?\s*(am|pm)?)?$/i.test(norm)) return true;
+    return false;
+}
+
+export function splitWhoWhenBlend(text) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t) return {};
+    const m = t.match(/^(@?[A-Za-z][A-Za-z'.-]*)\s+((?:by\s+|at\s+|due\s+)?(?:\d{1,2}|tomorrow|today|tonight|eod|asap).+)$/i);
+    if (!m) return {};
+    const who = m[1];
+    const rest = m[2].trim();
+    const whoKey = who.toLowerCase().replace(/^@/, '');
+    if (NAME_STOP.has(whoKey) || ['by', 'at', 'due', 'before', 'until', 'around', 'after'].includes(whoKey)) return {};
+    if (looksLikeTimeOnly(rest) || /\b(tomorrow|today|tonight|o'?clock|\d{1,2}\s*(am|pm)|eod|asap)\b/i.test(rest)) {
+        return { who, when: rest };
+    }
+    return {};
 }
 
 export function looksLikePersonName(text) {
@@ -97,7 +126,9 @@ export function classifyClarifyAnswer(question, value) {
     const q = String(question || '');
     if (!v) return {};
     if (looksLikeTimeOnly(v)) return { when: v };
-    if (looksLikePersonName(v) || /\b(team|reports|everyone)\b/i.test(v)) return { who: v };
+    const blended = splitWhoWhenBlend(v);
+    if (blended.who || blended.when) return blended;
+    if (looksLikePersonName(v) || /\b(team|reports|everyone|managers?)\b/i.test(v)) return { who: v };
     if (/who|own|assign/i.test(q)) return { who: v };
     if (/when|due|deadline/i.test(q)) return { when: v };
     if (/often|repeat|cadence/i.test(q)) return { cadence: v };

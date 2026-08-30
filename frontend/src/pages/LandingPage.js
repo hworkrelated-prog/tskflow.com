@@ -92,6 +92,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
 
     return (
         <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit">
+            <div className="landing-composer rounded-[28px] border border-white/12 bg-black/35 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md px-4 sm:px-6 py-5 sm:py-6">
             <section
                 className="landing-step flex flex-col justify-center"
                 data-testid="landing-step-ask"
@@ -103,11 +104,12 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 <p className="landing-step-kicker">
                     1 · Ask
                 </p>
+                <p className="text-sm text-white/55 mb-3">What needs to get done?</p>
 
-                <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[180px] sm:min-h-[220px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}>
+                <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[140px] sm:min-h-[160px]' : 'min-h-[5.5rem] sm:min-h-[6.5rem]'}`}>
                     {!filled && (
                         <div
-                            className="landing-example pointer-events-none absolute inset-0 text-2xl sm:text-3xl font-medium leading-snug"
+                            className="landing-example pointer-events-none absolute inset-0 text-xl sm:text-2xl font-medium leading-snug"
                             data-testid={`landing-example-${idea.id}`}
                             aria-hidden
                         >
@@ -124,11 +126,11 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                sendIt();
+                                document.getElementById('landing-assignee-email')?.focus();
                             }
                         }}
-                        rows={filled ? 6 : 4}
-                        className={`relative w-full h-full resize-none bg-transparent text-2xl sm:text-3xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[180px] sm:min-h-[220px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}
+                        rows={filled ? 5 : 3}
+                        className={`relative w-full h-full resize-none bg-transparent text-xl sm:text-2xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[140px] sm:min-h-[160px]' : 'min-h-[5.5rem] sm:min-h-[6.5rem]'}`}
                         placeholder=""
                         data-testid="landing-tryit-input"
                         aria-label="What needs to get done"
@@ -164,9 +166,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 )}
                 <a
                     href="#landing-step-who"
-                    className="mt-8 inline-flex items-center gap-1.5 text-xs text-white/35 hover:text-white/70 self-start"
+                    className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-200/90 hover:text-teal-100 self-start"
                 >
-                    Who <ChevronDown className="w-3.5 h-3.5" />
+                    Next · who it's for <ChevronDown className="w-3.5 h-3.5" />
                 </a>
             </section>
 
@@ -178,6 +180,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 <p className="landing-step-kicker">
                     2 · Who
                 </p>
+                <p className="text-sm text-white/55 mb-3">Who should own this?</p>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                     <div className="flex-1">
                         <label className="text-[11px] uppercase tracking-[0.22em] text-white/40">To</label>
@@ -188,6 +191,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             placeholder="name@company.com"
                             className="mt-1 h-12 rounded-none border-0 border-b border-white/15 bg-transparent px-0 text-lg text-white placeholder:text-white/25 focus-visible:ring-0 focus-visible:border-teal-400/70"
                             data-testid="landing-assignee-email"
+                            id="landing-assignee-email"
                             aria-label="Assignee email"
                         />
                     </div>
@@ -212,9 +216,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 </div>
                 <a
                     href="#landing-step-send"
-                    className="mt-8 inline-flex items-center gap-1.5 text-xs text-white/35 hover:text-white/70 self-start"
+                    className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-200/90 hover:text-teal-100 self-start"
                 >
-                    Send <ChevronDown className="w-3.5 h-3.5" />
+                    Next · send <ChevronDown className="w-3.5 h-3.5" />
                 </a>
             </section>
 
@@ -253,6 +257,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                     </Button>
                 </div>
             </section>
+            </div>
         </div>
     );
 };

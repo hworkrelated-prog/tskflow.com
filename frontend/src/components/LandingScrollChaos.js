@@ -75,24 +75,20 @@ const InboxPanel = ({ progress }) => {
 };
 
 const CatchHand = ({ progress, side }) => {
-    const fromX = side === 'left' ? -14 : 104;
-    const midX = side === 'left' ? 14 : 74;
-    const toX = side === 'left' ? 32 : 54;
+    const fromX = side === 'left' ? -10 : 102;
+    const midX = side === 'left' ? 18 : 70;
+    const toX = side === 'left' ? 36 : 52;
     const x = useTransform(progress, [0, 0.42, 1], [`${fromX}vw`, `${midX}vw`, `${toX}vw`]);
-    const y = useTransform(progress, [0, 0.42, 1], ['76vh', '56vh', '68vh']);
-    const z = useTransform(progress, [0, 0.42, 1], [200, 80, -20]);
-    const opacity = useTransform(progress, [0.08, 0.22, 0.58, 0.8], [0, 0.5, 0.22, 0]);
-    const rotate = useTransform(progress, [0, 0.42, 1], side === 'left' ? [18, -10, 0] : [-18, 12, 0]);
+    const y = useTransform(progress, [0, 0.42, 1], ['78vh', '58vh', '64vh']);
+    const z = useTransform(progress, [0, 0.42, 1], [160, 60, -16]);
+    const opacity = useTransform(progress, [0.08, 0.22, 0.58, 0.8], [0, 0.35, 0.16, 0]);
+    const rotate = useTransform(progress, [0, 0.42, 1], side === 'left' ? [8, -4, 0] : [-8, 4, 0]);
 
     return (
         <motion.div className="landing-chaos-hand" style={{ x, y, z, opacity, rotate }} aria-hidden>
-            <svg width="58" height="58" viewBox="0 0 56 56" fill="none">
-                <path
-                    d="M18 32c0-6 3-10 7-10 2 0 3 1 4 3V16c0-3 2-5 5-5s5 2 5 5v7c1-2 3-3 5-3 3 0 5 3 5 6v13c0 7-6 12-13 12h-3c-8 0-15-6-15-14v-6z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinejoin="round"
-                />
+            <svg width="42" height="42" viewBox="0 0 42 42" fill="none">
+                <circle cx="21" cy="21" r="15.5" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M21 12v18M12 21h18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
         </motion.div>
     );

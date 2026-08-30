@@ -784,8 +784,15 @@ const AIQuickCreate = ({
             setTeamScopePrompt({
                 current: teamChip,
                 options: [
-                    { ...teamChip, label: teamChip.name || 'Direct reports' },
-                    ...(teamChip.alternates || []).map((alt) => ({ ...alt, label: alt.name })),
+                    { ...teamChip, label: teamChip.name || 'Your managers' },
+                    ...(teamChip.alternates || []).map((alt) => ({
+                        ...alt,
+                        label: alt.id === 'everyone-under-me'
+                            ? (alt.name || 'Everyone under you')
+                            : alt.id === 'skip-level'
+                                ? (alt.name || 'Their teams')
+                                : alt.name,
+                    })),
                 ],
             });
         } else {
@@ -793,16 +800,42 @@ const AIQuickCreate = ({
         }
 
         const qs = p.clarifying_questions || [];
-        // Skip "who" if we already have a person - a first name / "me" is enough
+        const resolvedPeople = (p.assignee_resolution?.resolved || []).filter(
+            (a) => a && (a.kind !== 'team' || ((a.members || a.emails || []).length && !a.needs_scope_pick))
+        );
+        const pendingScope = Boolean(
+            p.assignee_resolution?.needs_team_scope
+            || (p.assignee_resolution?.resolved || []).some((a) => a?.needs_scope_pick)
+        );
         const hasAssignees = mergedCount > 0
             || promptMeansSelfAssign(sourceText)
-            || promptNamesSomeoneElse(sourceText)
-            || (p.assignee_resolution?.resolved || []).length > 0
-            || fromPeople.length > 0
-            || /@/.test(sourceText);
-        const filteredQs = hasAssignees
-            ? qs.filter((q) => !/who|own|assign/i.test(q || '') || /scope|direct reports|everyone under/i.test(q || ''))
-            : qs;
+            || resolvedPeople.length > 0
+            || fromPeople.length > 0;
+        const filteredQs = (qs || []).filter((q) => {
+            if (hasAssignees && /who|own|assign/i.test(q || '') && !/scope|direct reports|everyone under|managers/i.test(q || '')) {
+                return false;
+            }
+            return true;
+        });
+        if (pendingScope) {
+            const withoutWhen = filteredQs.filter((q) => !/when|due|deadline/i.test(q || '') || /scope|managers|everyone under/i.test(q || ''));
+            if (!withoutWhen.some((q) => /scope|managers|everyone under|direct reports/i.test(q || ''))) {
+                withoutWhen.unshift('Your managers, or everyone under you, including their teams?');
+            }
+            filteredQs.length = 0;
+            filteredQs.push(...withoutWhen);
+        } else if (!hasAssignees) {
+            const withoutWhen = filteredQs.filter((q) => !/when|due|deadline/i.test(q || ''));
+            if (!withoutWhen.some((q) => /who|own|assign|set up your team/i.test(q || ''))) {
+                withoutWhen.unshift(
+                    p.assignee_resolution?.needs_team_setup
+                        ? 'Who should this go to? Set up your team, or pick people.'
+                        : 'Who should this be assigned to?'
+                );
+            }
+            filteredQs.length = 0;
+            filteredQs.push(...withoutWhen);
+        }
         const nextPreview = {
             ...p,
             title: title || p.title,
@@ -1261,11 +1294,12 @@ const AIQuickCreate = ({
         const next = { ...answers };
         if (classified.when) {
             next['When should this be done by?'] = classified.when;
-        } else if (classified.who) {
+        }
+        if (classified.who) {
             next[question && /who|own|assign/i.test(question) ? question : 'Who should this be assigned to?'] = classified.who;
-        } else if (classified.cadence) {
+        } else if (classified.cadence && !classified.when) {
             next[question || 'How often should this repeat?'] = classified.cadence;
-        } else if (classified.extra) {
+        } else if (classified.extra && !classified.when) {
             next[question] = classified.extra;
             const seed = activePromptRef.current || activePrompt || '';
             if (seed && !looksLikeFollowupFragment(classified.extra)) {
@@ -1273,7 +1307,7 @@ const AIQuickCreate = ({
                 activePromptRef.current = merged;
                 setActivePrompt(merged);
             }
-        } else {
+        } else if (!classified.when && !classified.who) {
             next[question] = v;
         }
         setAnswers(next);
@@ -1561,15 +1595,33 @@ const AIQuickCreate = ({
             member_count: opt.member_count || (opt.members || []).length || (opt.emails || []).length,
             member_names: opt.member_names,
             alternates: opt.alternates,
+            needs_scope_pick: false,
         }]);
         setTeamScopePrompt(null);
-        // Drop the scope clarifying question so Confirm can appear
+        const hasDue = Boolean(editDue || preview?.due_date);
         setPreview((p) => {
             if (!p) return p;
             const qs = (p.clarifying_questions || []).filter(
-                (q) => !/scope|direct reports|everyone under/i.test(q || '')
+                (q) => !/scope|direct reports|everyone under|managers/i.test(q || '')
             );
-            return { ...p, clarifying_questions: qs };
+            if (!hasDue && !qs.some((q) => /when|due|deadline/i.test(q || ''))) {
+                qs.push('When should this be done by?');
+            }
+            return {
+                ...p,
+                clarifying_questions: qs,
+                assignee_resolution: {
+                    ...(p.assignee_resolution || {}),
+                    needs_team_scope: false,
+                    resolved: [{
+                        kind: opt.kind || 'team',
+                        id: opt.id,
+                        name: opt.label || opt.name,
+                        members: opt.members || [],
+                        member_count: opt.member_count || (opt.members || []).length,
+                    }],
+                },
+            };
         });
     };
 
@@ -1582,15 +1634,25 @@ const AIQuickCreate = ({
             setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
-        if (!editDue) {
-            toast.error('Please pick a due date');
-            appendThread({ role: 'assistant', text: 'When should this be done by?' });
-            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
+        if (teamScopePrompt) {
+            toast.error('Pick who this goes to');
+            appendThread({ role: 'assistant', text: 'Your managers, or everyone under you, including their teams?' });
             return;
         }
         if (unique.length === 0) {
             toast.error('Please pick at least one assignee');
-            appendThread({ role: 'assistant', text: 'Who should this be assigned to?' });
+            appendThread({
+                role: 'assistant',
+                text: preview?.assignee_resolution?.needs_team_setup
+                    ? 'Who should this go to? Set up your team, or pick people.'
+                    : 'Who should this be assigned to?',
+            });
+            setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
+            return;
+        }
+        if (!editDue) {
+            toast.error('Please pick a due date');
+            appendThread({ role: 'assistant', text: 'When should this be done by?' });
             setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 40);
             return;
         }
@@ -1893,6 +1955,16 @@ const AIQuickCreate = ({
                                                             <MessageCircleQuestion className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                                                             <p className="text-sm font-medium text-foreground" data-testid="ai-clarify-question">{clarifying[0]}</p>
                                                         </div>
+                                                        {(preview?.assignee_resolution?.needs_team_setup || /set up your team/i.test(clarifying[0] || '')) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => navigate('/team')}
+                                                                className="ml-6 text-xs font-medium text-teal-700 hover:text-teal-900 underline underline-offset-2"
+                                                                data-testid="ai-setup-team"
+                                                            >
+                                                                Set up your team
+                                                            </button>
+                                                        )}
                                                     <div className="relative ml-6" ref={peopleAnchorRef}>
                                                         <Input
                                                             ref={clarifyRef}

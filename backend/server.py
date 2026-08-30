@@ -10649,7 +10649,7 @@ def _fallback_parse_date_expression(expr: str, now: datetime) -> Optional[str]:
     """Regex/keyword fallback when the LLM refuses to return a date but the text has one."""
     if not expr:
         return None
-    e = expr.lower().strip()
+    e = _normalize_time_phrase(expr)
     now = now.replace(second=0, microsecond=0)
 
     # ASAP / urgently → +2h
@@ -10775,11 +10775,20 @@ def _fuzzy_name_score(haystack: str, needle: str) -> int:
     return -1
 
 
-_DIRECT_HINTS = {"my reports", "my direct reports", "direct reports"}
+_DIRECT_HINTS = {
+    "my reports", "my direct reports", "direct reports",
+    "my managers", "the managers", "my directs", "directs",
+}
 _TEAM_HINTS = {"my team", "the team", "our team", "team"}
+_SKIP_HINTS = {
+    "my manager's teams", "my managers teams", "my managers' teams",
+    "manager's teams", "managers teams", "the aes", "my aes", "the a.es",
+    "skip-level", "skip level", "skip-level reports", "skip level reports",
+}
 _EVERYONE_HINTS = {
-    "everyone under me", "everyone reporting to me", "my whole team",
-    "whole team", "all my reports", "indirect reports", "all reports",
+    "everyone under me", "everyone reporting to me", "everyone under you",
+    "my whole team", "whole team", "all my reports", "indirect reports",
+    "all reports", "my org", "the org", "whole org", "my organization",
 }
 _HAVE_NAME_RE = re.compile(
     r"\b(?:have|had|ask(?:ed)?|tell(?:s|ing)?|told|get|got|assign(?:ed)?(?:\s+to)?)\s+"
@@ -10827,12 +10836,43 @@ _NAME_TRAIL_STOP = _NAME_STOP | {
 
 
 def _classify_team_hint(low: str) -> Optional[str]:
-    """direct = reports_to me; team/everyone = full subtree."""
-    if low in _DIRECT_HINTS:
+    """direct = reports_to me; skip = managers' teams; everyone = full subtree; team = ambiguous."""
+    phrase = re.sub(r"[.?!]+$", "", (low or "").strip().lstrip("@").lower()).strip()
+    if phrase in _DIRECT_HINTS:
         return "direct"
-    if low in _TEAM_HINTS or low in _EVERYONE_HINTS:
+    if phrase in _SKIP_HINTS:
+        return "skip"
+    if phrase in _EVERYONE_HINTS:
+        return "everyone"
+    if phrase in _TEAM_HINTS:
         return "team"
     return None
+
+
+def _team_assignment_plan(scope: str, direct_count: int, skip_count: int) -> str:
+    """Who 'my team' / 'everyone under me' should land on. Never invent a domain-wide team.
+
+    Returns one of: direct, everyone, skip, ask_scope, ask_who.
+    """
+    scope = (scope or "").strip().lower()
+    has_direct = direct_count > 0
+    has_skip = skip_count > 0
+    if scope == "direct":
+        return "direct" if has_direct else "ask_who"
+    if scope == "everyone":
+        return "everyone" if (has_direct or has_skip) else "ask_who"
+    if scope == "skip":
+        if has_skip:
+            return "skip"
+        return "direct" if has_direct else "ask_who"
+    # Ambiguous "my team"
+    if has_direct and has_skip:
+        return "ask_scope"
+    if has_direct:
+        return "direct"
+    if has_skip:
+        return "everyone"
+    return "ask_who"
 
 
 _TIMEISH_ANSWER_RE = re.compile(
@@ -10841,7 +10881,13 @@ _TIMEISH_ANSWER_RE = re.compile(
     r"asap|eod|eom|now|immediately|urgent|today|tomorrow|tonight|"
     r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
     r"next week|this week|end of (?:the )?day|end of (?:the )?month|"
-    r"\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s*(?:pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?|"
+    r"\d{1,2}(?::\d{2})?\s*(?:o['']?clock\s*)?(?:am|pm)?"
+    r"(?:\s*(?:pacific(?:\s+time)?|eastern(?:\s+time)?|central(?:\s+time)?|mountain(?:\s+time)?|"
+    r"pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?"
+    r"(?:\s+(?:tomorrow|today|tonight))?|"
+    r"(?:tomorrow|today|tonight)\s+(?:at\s+|by\s+)?"
+    r"\d{1,2}(?::\d{2})?\s*(?:o['']?clock\s*)?(?:am|pm)?"
+    r"(?:\s*(?:pacific(?:\s+time)?|eastern(?:\s+time)?|pst|pdt|pt|est|edt|et))?|"
     r"(?:by\s+)?(?:fri|mon|tue|wed|thu|sat|sun)\w*"
     r"(?:\s+\w+){0,4}|"
     r"in\s+\d+\s*(?:min|mins|minutes|hours?|days?|weeks?)"
@@ -10898,18 +10944,42 @@ def _answers_as_natural_context(answers: Optional[dict]) -> str:
     return ". ".join(bits)
 
 
+def _normalize_time_phrase(expr: str) -> str:
+    """Strip o'clock / timezone words so '12 o'clock Pacific time tomorrow' parses."""
+    e = (expr or "").lower().replace("'", "'").replace("`", "'")
+    e = re.sub(r"\bo['']clock\b", "", e)
+    e = re.sub(r"\b(pacific|eastern|central|mountain)\s+time\b", "", e)
+    e = re.sub(r"\b(pacific|eastern|central|mountain)\b", "", e)
+    e = re.sub(r"\b(pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt)\b", "", e)
+    return re.sub(r"\s+", " ", e).strip()
+
+
 def _looks_like_time_only(text: str) -> bool:
     t = re.sub(r"\s+", " ", (text or "").strip())
     if not t:
         return False
     if _TIMEISH_ANSWER_RE.match(t):
         return True
-    return bool(re.match(
+    if re.match(
         r"(?i)^(?:(?:due|by|at|before|until)\s+)?"
-        r"\d{1,2}(?::\d{2})?\s*(?:o'?clock\s*)?(?:am|pm)?"
-        r"(?:\s*(?:pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?\s*$",
+        r"\d{1,2}(?::\d{2})?\s*(?:o['']?clock\s*)?(?:am|pm)?"
+        r"(?:\s*(?:pacific(?:\s+time)?|eastern(?:\s+time)?|pst|pdt|pt|est|edt|et|cst|cdt|mst|mdt|utc|gmt))?"
+        r"(?:\s+(?:tomorrow|today|tonight))?\s*$",
         t,
-    ))
+    ):
+        return True
+    norm = _normalize_time_phrase(t)
+    if norm != t.lower() and _TIMEISH_ANSWER_RE.match(norm):
+        return True
+    # "By 12 o'clock Pacific time tomorrow" after normalize → "by 12 tomorrow"
+    if re.match(
+        r"(?i)^(?:(?:due|by|at|before|until)\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\s+(tomorrow|today|tonight)$",
+        norm,
+    ):
+        return True
+    if re.match(r"(?i)^(tomorrow|today|tonight)(?:\s+(?:at|by)\s+\d{1,2}(?::\d{2})?\s*(am|pm)?)?$", norm):
+        return True
+    return False
 
 
 def _looks_like_person_name(text: str) -> bool:
@@ -10972,6 +11042,32 @@ def _dedupe_name_tokens(name: str) -> str:
     return " ".join(out)
 
 
+def _split_who_when_blend(text: str) -> dict:
+    """'Bharat 12 o'clock Pacific tomorrow' → who + when."""
+    t = re.sub(r"\s+", " ", (text or "").strip())
+    if not t:
+        return {}
+    m = re.match(
+        r"(?i)^(@?[A-Za-z][A-Za-z'.-]*)\s+"
+        r"((?:by\s+|at\s+|due\s+)?(?:\d{1,2}|tomorrow|today|tonight|eod|asap).+)$",
+        t,
+    )
+    if not m:
+        return {}
+    who, rest = m.group(1), m.group(2).strip()
+    who_key = who.lower().lstrip("@")
+    if who_key in _NAME_STOP or who_key in _PRIORITYISH_ANSWER or who_key in {
+        "by", "at", "due", "before", "until", "around", "after",
+    }:
+        return {}
+    if _looks_like_time_only(rest) or re.search(
+        r"(?i)\b(tomorrow|today|tonight|o['']?clock|\d{1,2}\s*(am|pm)|eod|asap)\b",
+        rest,
+    ):
+        return {"who": who, "when": rest}
+    return {}
+
+
 def _classify_clarify_answer(question: str, value: str) -> dict:
     """Route a chat reply by what it *is*, not only by the question we asked."""
     val = re.sub(r"\s+", " ", (value or "").strip())
@@ -10980,7 +11076,10 @@ def _classify_clarify_answer(question: str, value: str) -> dict:
         return {}
     if _looks_like_time_only(val):
         return {"when": val}
-    if _looks_like_person_name(val) or re.search(r"(?i)\b(team|reports|everyone)\b", val):
+    blended = _split_who_when_blend(val)
+    if blended:
+        return blended
+    if _looks_like_person_name(val) or re.search(r"(?i)\b(team|reports|everyone|managers?)\b", val):
         return {"who": val}
     if re.search(r"(?i)who|own|assign", key):
         return {"who": val}
@@ -10998,13 +11097,13 @@ def _remap_clarify_answers(answers: Optional[dict]) -> dict:
         classified = _classify_clarify_answer(str(k or ""), str(v or ""))
         if classified.get("when"):
             out["When should this be done by?"] = classified["when"]
-        elif classified.get("who"):
+        if classified.get("who"):
             out["Who should this be assigned to?"] = classified["who"]
-        elif classified.get("cadence"):
+        if classified.get("cadence") and not classified.get("when") and not classified.get("who"):
             out["How often should this repeat - daily, weekdays, weekly, or monthly?"] = classified["cadence"]
-        elif classified.get("extra"):
+        elif classified.get("extra") and not classified.get("when") and not classified.get("who"):
             out[str(k or "note")] = classified["extra"]
-        elif str(v or "").strip():
+        elif str(v or "").strip() and not classified:
             out[str(k or "")] = str(v).strip()
     return out
 
@@ -11138,7 +11237,9 @@ _NOT_SELF_DELIVER_TO_ME_RE = re.compile(
     r"|\b(?:send|share|email)\s+(?:it\s+)?(?:over\s+)?(?:to\s+)?my way\b"
 )
 _OTHER_ASSIGNEE_RE = re.compile(
-    r"(?i)\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b|\beveryone under me\b"
+    r"(?i)\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b"
+    r"|\beveryone under me\b|\bmy managers?\b|\bmy org\b"
+    r"|\bmanager'?s?\s+teams\b|\bmy aes\b"
 )
 
 
@@ -11191,6 +11292,30 @@ def _should_fast_self_parse(text: str) -> bool:
     return bool(t) and len(t) <= 220 and _self_assign_hint(t)
 
 
+def _text_has_team_phrase(text: str) -> bool:
+    low = (text or "").lower()
+    return bool(re.search(
+        r"(?i)\b(?:my|our|the)\s+team\b|\bmy\s+(?:direct\s+)?reports\b"
+        r"|\beveryone under me\b|\bmy managers?\b|\bmy org\b"
+        r"|\bmanager'?s?\s+teams\b|\bmy aes\b",
+        low,
+    ))
+
+
+def _should_fast_parse(text: str) -> bool:
+    """Skip the LLM for short manager-voice asks we can resolve deterministically."""
+    t = (text or "").strip()
+    if not t or len(t) > 320:
+        return False
+    if _should_fast_self_parse(t):
+        return True
+    if _text_has_team_phrase(t):
+        return True
+    if _name_hints_from_text(t) and len(t) <= 220:
+        return True
+    return False
+
+
 def _resolved_user_chip(u: dict) -> dict:
     uid = u.get("id")
     email = (u.get("email") or "").strip()
@@ -11202,10 +11327,15 @@ def _resolved_user_chip(u: dict) -> dict:
 async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
     """
     Match each raw hint against same-domain users, saved contacts, and groups.
-    'my team' → everyone under the user. 'my direct reports' → directs only.
+
+    'my managers' / 'direct reports' → people who report to you.
+    'everyone under me' / 'my org' → those people plus their teams.
+    'my manager's teams' → skip-level only.
+    'my team' → directs if that's all you have; if you also have skip-level
+    reports, ask which scope. Never invent a domain-wide team from a personal inbox.
     """
     if not hints:
-        return {"resolved": [], "ambiguous": [], "unresolved": []}
+        return {"resolved": [], "ambiguous": [], "unresolved": [], "needs_team_scope": False, "needs_team_setup": False}
 
     domain = current_user.get("company_domain")
     users = []
@@ -11250,12 +11380,29 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
         ).to_list(200)
 
     everyone_under_me = await _all_subordinates(current_user["id"]) if current_user.get("id") else []
+    direct_ids = {u.get("id") for u in my_reports if u.get("id")}
+    skip_level = [u for u in everyone_under_me if u.get("id") not in direct_ids]
 
     resolved = []
     ambiguous = []
     unresolved = []
     seen_ids = set()
     needs_team_scope = False
+    needs_team_setup = False
+
+    def _team_chip(chip_id, name, targets, *, needs_scope_pick=False, alternates=None):
+        member_ids = [u["id"] for u in targets if u.get("id")]
+        return {
+            "kind": "team",
+            "id": chip_id,
+            "name": name,
+            "email": None,
+            "members": member_ids,
+            "member_count": len(member_ids),
+            "member_names": [u.get("name") for u in targets],
+            "alternates": alternates or [],
+            "needs_scope_pick": needs_scope_pick,
+        }
 
     for raw in hints:
         h = (raw or "").strip()
@@ -11269,33 +11416,41 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
                 seen_ids.add(current_user["id"])
             continue
 
-        # Special: my team = everyone under you; my direct reports = directs only
         scope = _classify_team_hint(low)
         if scope:
-            if scope == "direct":
-                targets = my_reports
-                chip_id = "my-direct-reports"
-                chip_name = f"Direct reports ({len(my_reports)})" if my_reports else "Direct reports"
+            plan = _team_assignment_plan(scope, len(my_reports), len(skip_level))
+            direct_chip = _team_chip(
+                "my-direct-reports",
+                f"Direct reports ({len(my_reports)})" if my_reports else "Direct reports",
+                my_reports,
+            )
+            everyone_chip = _team_chip(
+                "everyone-under-me",
+                f"Everyone under you ({len(everyone_under_me)})" if everyone_under_me else "Everyone under you",
+                everyone_under_me or my_reports,
+            )
+            skip_chip = _team_chip(
+                "skip-level",
+                f"Their teams ({len(skip_level)})" if skip_level else "Their teams",
+                skip_level,
+            )
+            if plan == "ask_who":
+                unresolved.append(h)
+                needs_team_setup = True
+            elif plan == "ask_scope":
+                needs_team_scope = True
+                direct_chip["needs_scope_pick"] = True
+                direct_chip["alternates"] = [
+                    {k: v for k, v in everyone_chip.items() if k != "alternates"},
+                    {k: v for k, v in skip_chip.items() if k != "alternates"},
+                ]
+                resolved.append(direct_chip)
+            elif plan == "direct":
+                resolved.append(direct_chip)
+            elif plan == "skip":
+                resolved.append(skip_chip)
             else:
-                targets = everyone_under_me or my_reports or [u for u in users if u.get("id") != current_user.get("id") and not str(u.get("id") or "").startswith("email_")]
-                chip_id = "everyone-under-me" if everyone_under_me else "my-team"
-                chip_name = (
-                    f"My team ({len(everyone_under_me)})" if everyone_under_me
-                    else (f"Direct reports ({len(my_reports)})" if my_reports else (f"Everyone in {domain}" if domain else "My team"))
-                )
-            member_ids = [u["id"] for u in targets if u.get("id")]
-            if member_ids:
-                resolved.append({
-                    "kind": "team",
-                    "id": chip_id,
-                    "name": chip_name,
-                    "email": None,
-                    "members": member_ids,
-                    "member_count": len(member_ids),
-                    "member_names": [u.get("name") for u in targets],
-                    "alternates": [],
-                    "needs_scope_pick": False,
-                })
+                resolved.append(everyone_chip)
             continue
 
         # Exact-ish email match
@@ -11367,6 +11522,7 @@ async def _resolve_assignee_hints(hints: List[str], current_user: dict) -> dict:
         "ambiguous": ambiguous,
         "unresolved": unresolved,
         "needs_team_scope": needs_team_scope,
+        "needs_team_setup": needs_team_setup,
     }
 
 
@@ -12785,8 +12941,15 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         "confidence": {"title": 0.3, "priority": 0.2, "due_date": 0.0, "assignees": 0.0},
     }
 
-    # Always run the task parser so copy is inferred, then a logic pass rewrites it.
-    parsed = await _llm_parse(text, current_user, req.context_hint, req.history) or fallback
+    # Skip the LLM for short manager-voice / self / named-person asks.
+    skip_llm = _should_fast_parse(text)
+    if skip_llm:
+        parsed = dict(fallback)
+        parsed["confidence"] = {"title": 0.6, "priority": 0.4, "due_date": 0.7, "assignees": 0.7}
+        parsed["parse_mode"] = "fast"
+    else:
+        parsed = await _llm_parse(text, current_user, req.context_hint, req.history) or fallback
+        parsed["parse_mode"] = "llm"
     if _self_assign_hint(text):
         parsed["assignee_hints"] = ["me"]
         parsed["clarifying_questions"] = []
@@ -12822,14 +12985,18 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
         parsed.get("due_date_expression") or "", now
     )
     if fb:
+        norm_text = _normalize_time_phrase(text or "")
         explicit_clock = bool(re.search(
             r"\b(?:by\s+|at\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\s+tomorrow\b"
             r"|\btomorrow\s+(?:at\s+|by\s+)?\d{1,2}(?::\d{2})?\s*(am|pm)?\b"
             r"|\b(?:by |at )?\d{1,2}(?::\d{2})?\s*(am|pm)\b"
             r"|\bin\s+\d+\s*(minutes?|mins?|hours?|hrs?|days?|weeks?)\b"
             r"|\b(?:asap|urgent(ly)?|eod|end of day)\b",
-            (text or "").lower(),
-        ))
+            norm_text,
+        )) or bool(
+            re.search(r"\b\d{1,2}\b", norm_text)
+            and re.search(r"\b(tomorrow|today|tonight)\b", norm_text)
+        )
         if (not parsed.get("due_date")) or explicit_clock:
             parsed["due_date"] = fb
 
@@ -12868,8 +13035,9 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     # Manager-voice team phrases
     low_text = (text or "").lower()
     team_phrase_map = [
-        (r"\beveryone under me\b|\bmy whole team\b|\ball my reports\b|\bindirect reports\b", "everyone under me"),
-        (r"\bmy direct reports\b|\bdirect reports\b", "my direct reports"),
+        (r"\beveryone under (?:me|you)\b|\bmy whole team\b|\ball my reports\b|\bindirect reports\b|\bmy org\b|\bwhole org\b", "everyone under me"),
+        (r"\bmy managers?'?s?\s+teams?\b|\bmanager'?s?\s+teams\b|\bmy aes\b|\bskip[-\s]?level\b", "my manager's teams"),
+        (r"\bmy managers\b|\bmy directs\b|\bmy direct reports\b|\bdirect reports\b", "my direct reports"),
         (r"\bmy team\b|\bour team\b|\bthe team\b", "my team"),
     ]
     for pat, token in team_phrase_map:
@@ -12899,13 +13067,13 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     )
     # Fast title re-vet only when still bad (speech debris / names). Skip when already clean.
     people_for_vet = _assignee_name_list(parsed)
-    if _title_looks_bad(str(parsed.get("title") or ""), people_for_vet, text):
+    if (not skip_llm) and _title_looks_bad(str(parsed.get("title") or ""), people_for_vet, text):
         vetted = await _llm_vet_title(text, str(parsed.get("title") or ""), people_for_vet, current_user)
         if vetted:
             parsed["title"] = vetted
     self_assign = _parse_is_self_assign(parsed, text, current_user)
     parsed["self_assign"] = bool(self_assign)
-    logical = await _llm_logical_copy(
+    logical = None if skip_llm else await _llm_logical_copy(
         text,
         str(parsed.get("title") or ""),
         str(parsed.get("description") or ""),
@@ -12935,7 +13103,7 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     # Rebuild clarifying questions: one at a time, preferring who / team-scope / cadence / when
     needs_who = False
     needs_team_scope = False
-    needs_when = not bool(parsed.get("due_date"))
+    needs_team_setup = False
     rec = parsed.get("recurring") if isinstance(parsed.get("recurring"), dict) else {}
     hint_l = (req.context_hint or "").lower()
     force_recurring = "recurring" in hint_l or bool(rec.get("is_recurring"))
@@ -12947,22 +13115,31 @@ async def smart_parse_task(req: SmartParseRequest, current_user: dict = Depends(
     if req.resolve:
         ar = parsed.get("assignee_resolution") or {}
         needs_team_scope = bool(ar.get("needs_team_scope"))
-        # Ask who only when nothing was named and nothing resolved
-        if (
-            not ar.get("resolved")
-            and not ar.get("ambiguous")
-            and not parsed.get("assignee_hints")
-            and not _name_hints_from_text(text)
-            and not _self_assign_hint(text)
-            and not _prompt_names_other_assignee(text)
-        ):
+        needs_team_setup = bool(ar.get("needs_team_setup"))
+        real_people = [
+            a for a in (ar.get("resolved") or [])
+            if a.get("kind") != "team" or (a.get("members") and not a.get("needs_scope_pick"))
+        ]
+        if needs_team_scope:
+            needs_who = False
+        elif not real_people and not ar.get("ambiguous"):
+            # Named "my team" with no hierarchy still needs a real who.
             needs_who = True
+    needs_when = (
+        not bool(parsed.get("due_date"))
+        and not needs_who
+        and not needs_team_scope
+    )
 
     single_q = None
     if needs_who:
-        single_q = "Who should this be assigned to?"
+        single_q = (
+            "Who should this go to? Set up your team, or pick people."
+            if needs_team_setup else
+            "Who should this be assigned to?"
+        )
     elif needs_team_scope:
-        single_q = "Which team scope — direct reports or everyone under you?"
+        single_q = "Your managers, or everyone under you, including their teams?"
     elif needs_cadence:
         single_q = "How often should this repeat — daily, weekdays, weekly, or monthly?"
     elif needs_when:
@@ -13053,8 +13230,13 @@ async def quick_create_preview(req: QuickCreatePreviewRequest, current_user: dic
                 parsed["title"] = rebuilt
     parsed["ready_to_confirm"] = (
         bool(parsed.get("due_date"))
-        and len(ar.get("resolved", [])) > 0
+        and len([
+            a for a in (ar.get("resolved") or [])
+            if a.get("kind") != "team" or ((a.get("members") or a.get("emails")) and not a.get("needs_scope_pick"))
+        ]) > 0
         and len(ar.get("ambiguous", [])) == 0
+        and not ar.get("needs_team_scope")
+        and not ar.get("needs_team_setup")
         and len(parsed.get("clarifying_questions", [])) == 0
     )
     return parsed
