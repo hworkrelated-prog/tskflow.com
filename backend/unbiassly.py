@@ -97,8 +97,11 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def new_share_token() -> str:
-    return secrets.token_urlsafe(12).replace("-", "").replace("_", "")[:16]
+TOKEN_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def new_share_token(length: int = 16) -> str:
+    return "".join(secrets.choice(TOKEN_ALPHABET) for _ in range(length))
 
 
 def share_url(app_base_url: str, token: str) -> str:
@@ -207,7 +210,7 @@ def empty_summary(room: dict, posts: Optional[List[dict]] = None) -> dict:
     topic = room.get("topic") or "this discussion"
     if n == 0:
         headline = "No contributions yet."
-        overview = f"Share the Unbiassly link and people can weigh in on {topic} without names attached."
+        overview = f'Share the Unbiassly link. People can weigh in on "{topic}" without names attached.'
         highlights: List[str] = []
     else:
         headline = f"{n} anonymous contribution{'s' if n != 1 else ''} so far."
@@ -234,13 +237,13 @@ def fallback_summary(room: dict, posts: List[dict]) -> dict:
     if trends:
         top = ", ".join(t["label"] for t in trends[:3])
         summary["overview"] = (
-            f"{n} anonymous note{'s' if n != 1 else ''} on {topic}. "
+            f'{n} anonymous note{"s" if n != 1 else ""} on "{topic}". '
             f"Recurring language: {top}."
         )
         summary["headline"] = f"{n} voices. Strongest thread: {trends[0]['label']}."
     else:
         summary["overview"] = (
-            f"{n} anonymous note{'s' if n != 1 else ''} on {topic}. "
+            f'{n} anonymous note{"s" if n != 1 else ""} on "{topic}". '
             "No single phrase dominates yet."
         )
     if n >= 8 and trends:

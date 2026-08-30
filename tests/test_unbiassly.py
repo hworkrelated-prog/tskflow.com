@@ -9,8 +9,10 @@ sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from unbiassly import (  # noqa: E402
+    TOKEN_ALPHABET,
     extract_trends,
     fallback_summary,
+    new_share_token,
     organizer_room_payload,
     public_post,
     public_room_payload,
@@ -25,6 +27,10 @@ def _read(*parts: str) -> str:
 def test_share_url_is_short_and_public():
     assert share_url("https://tskflow.com", "abc123") == "https://tskflow.com/u/abc123"
     assert share_url("https://tskflow.com/", "abc123") == "https://tskflow.com/u/abc123"
+    token = new_share_token()
+    assert len(token) == 16
+    assert all(c in TOKEN_ALPHABET for c in token)
+    assert not any(c in token for c in "0O1Il")
 
 
 def test_public_payload_never_leaks_organizer_or_ip():
@@ -132,6 +138,7 @@ def test_frontend_wires_unbiassly():
     assert 'data-testid="landing-unbiassly"' in landing
     assert "Unbiassly" in help_src
     assert "startsWith('/u/')" in dock
+    assert "startsWith('/unbiassly')" in dock
     assert "searchParams.get('next')" in login
     assert "${API}/unbiassly/rooms" in hub
     assert "${API}/unbiassly/${token}/posts" in public
