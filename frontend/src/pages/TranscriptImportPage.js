@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, Upload, Link2, Sparkles, AlertCircle, Send, Trash2, Search, SkipForward, ChevronRight, Plus } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, Link2, Sparkles, AlertCircle, Send, Trash2, Search, SkipForward, ChevronRight, Plus, CheckSquare } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import DateTimePicker from '@/components/DateTimePicker';
 import { format, parseISO } from 'date-fns';
 
@@ -24,6 +25,9 @@ const TranscriptImportPage = () => {
     const [users, setUsers] = useState([]);
     const [query, setQuery] = useState('');
     const [cursor, setCursor] = useState(0);
+    const [selectMode, setSelectMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
 
     const fetchDrafts = async () => {
         try {
@@ -116,6 +120,32 @@ const TranscriptImportPage = () => {
     const deleteDraft = async (id) => {
         await axios.delete(`${API}/task-drafts/${id}`);
         await fetchDrafts();
+    };
+
+    const toggleSelected = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        if (!window.confirm(`Delete ${selectedIds.size} draft${selectedIds.size === 1 ? '' : 's'}?`)) return;
+        setBulkDeleting(true);
+        try {
+            await axios.post(`${API}/task-drafts/bulk-delete`, { ids: Array.from(selectedIds) });
+            toast.success(`${selectedIds.size} draft(s) deleted`);
+            setSelectedIds(new Set());
+            setSelectMode(false);
+            await fetchDrafts();
+        } catch {
+            toast.error('Failed to delete drafts');
+        } finally {
+            setBulkDeleting(false);
+        }
     };
 
     const skipCurrent = () => {
@@ -235,6 +265,47 @@ const TranscriptImportPage = () => {
                         <div>
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
                                 <h2 className="text-lg font-semibold flex-1">Review & execute ({remaining.length})</h2>
+                                {remaining.length > 0 && (
+                                    selectMode ? (
+                                        <div className="flex items-center gap-2" data-testid="transcript-draft-select-bar">
+                                            <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-full h-8"
+                                                onClick={() => setSelectedIds(new Set(remaining.map((d) => d.id)))}
+                                                data-testid="transcript-drafts-select-all"
+                                            >
+                                                All
+                                            </Button>
+                                            <Button variant="outline" size="sm" className="rounded-full h-8" onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}>
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                className="rounded-full h-8"
+                                                disabled={selectedIds.size === 0 || bulkDeleting}
+                                                onClick={handleBulkDelete}
+                                                data-testid="transcript-drafts-bulk-delete"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                                                {bulkDeleting ? '…' : 'Delete'}
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-full h-8"
+                                            onClick={() => setSelectMode(true)}
+                                            data-testid="transcript-drafts-select"
+                                        >
+                                            <CheckSquare className="w-3.5 h-3.5 mr-1" />
+                                            Select
+                                        </Button>
+                                    )
+                                )}
                                 <div className="relative sm:w-64">
                                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <Input
@@ -257,16 +328,27 @@ const TranscriptImportPage = () => {
                             ) : (
                                 <div className="space-y-3">
                                     {current && (
-                                        <DraftCard
-                                            key={current.id}
-                                            draft={current}
-                                            users={users}
-                                            index={cursor}
-                                            total={remaining.length}
-                                            onPublish={publishDraft}
-                                            onDelete={deleteDraft}
-                                            onSkip={skipCurrent}
-                                        />
+                                        <>
+                                            {selectMode && (
+                                                <label className="flex items-center gap-2 text-sm px-1" data-testid="select-current-transcript-draft">
+                                                    <Checkbox
+                                                        checked={selectedIds.has(current.id)}
+                                                        onCheckedChange={() => toggleSelected(current.id)}
+                                                    />
+                                                    Include this draft
+                                                </label>
+                                            )}
+                                            <DraftCard
+                                                key={current.id}
+                                                draft={current}
+                                                users={users}
+                                                index={cursor}
+                                                total={remaining.length}
+                                                onPublish={publishDraft}
+                                                onDelete={deleteDraft}
+                                                onSkip={skipCurrent}
+                                            />
+                                        </>
                                     )}
                                     {remaining.length > 1 && (
                                         <div className="rounded-2xl border border-slate-200 p-3 space-y-1.5" data-testid="transcript-up-next">
@@ -275,9 +357,17 @@ const TranscriptImportPage = () => {
                                                 <button
                                                     key={d.id}
                                                     type="button"
-                                                    onClick={() => setCursor(remaining.findIndex((x) => x.id === d.id))}
+                                                    onClick={() => (selectMode ? toggleSelected(d.id) : setCursor(remaining.findIndex((x) => x.id === d.id)))}
                                                     className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 text-sm"
                                                 >
+                                                    {selectMode && (
+                                                        <Checkbox
+                                                            checked={selectedIds.has(d.id)}
+                                                            onCheckedChange={() => toggleSelected(d.id)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            data-testid={`select-transcript-draft-${d.id}`}
+                                                        />
+                                                    )}
                                                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                                                         d.priority === 'Urgent' || d.priority === 'High'
                                                             ? 'bg-rose-50 text-rose-700'
