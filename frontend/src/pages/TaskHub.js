@@ -59,6 +59,7 @@ const TaskHub = () => {
     const [loading, setLoading] = useState(true);
     const [drafts, setDrafts] = useState([]);
     const [transcriptSessions, setTranscriptSessions] = useState([]);
+    const [meetSessions, setMeetSessions] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [users, setUsers] = useState([]);
@@ -215,6 +216,9 @@ const TaskHub = () => {
         fetchGroups();
         fetchParentGroups();
         fetchDrafts();
+        axios.get(`${API}/meetings/sessions`)
+            .then((res) => setMeetSessions(res.data?.sessions || []))
+            .catch(() => setMeetSessions([]));
         axios.get(`${API}/accountability/me`)
             .then((res) => setAccountability(res.data))
             .catch(() => setAccountability(null));
@@ -1406,7 +1410,7 @@ const TaskHub = () => {
                         )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                        {(drafts.length > 0 || transcriptSessions.length > 0) && (
+                        {(drafts.length > 0 || transcriptSessions.length > 0 || meetSessions.length > 0) && (
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button
@@ -1418,7 +1422,7 @@ const TaskHub = () => {
                                         <FileText className="w-4 h-4 mr-1.5" />
                                         Drafts
                                         <span className="ml-1.5 text-[11px] font-semibold">
-                                            {drafts.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)}
+                                            {drafts.length + meetSessions.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)}
                                         </span>
                                     </Button>
                                 </PopoverTrigger>
@@ -1473,6 +1477,19 @@ const TaskHub = () => {
                                         )}
                                     </div>
                                     <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                        {meetSessions.map((s) => (
+                                            <div
+                                                key={`meet-${s.id}`}
+                                                className="flex items-center gap-2 rounded-lg bg-teal-50 border border-teal-200 px-3 py-2 text-xs cursor-pointer hover:bg-teal-100"
+                                                onClick={() => navigate(`/meetings/${s.id}`)}
+                                                data-testid={`meet-session-${s.id}`}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-semibold text-slate-900 truncate">Meet · {s.title || 'Session'}</p>
+                                                    <p className="text-[10px] text-teal-800">{s.kept_count || (s.drafts || []).length} · {s.role}</p>
+                                                </div>
+                                            </div>
+                                        ))}
                                         {transcriptSessions.map((s) => (
                                             <div
                                                 key={`ts-${s.id}`}
@@ -1800,7 +1817,7 @@ const TaskHub = () => {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🤖</span>
-                                    <h3 className="font-semibold text-purple-900">Jarvis Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
+                                    <h3 className="font-semibold text-purple-900">Rook Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
                                 </div>
                                 {aiSummaryStats && (
                                     <div className="flex flex-wrap gap-2 mb-3">

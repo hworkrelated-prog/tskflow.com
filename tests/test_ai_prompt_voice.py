@@ -76,7 +76,7 @@ def test_voice_fab_does_not_overlap_prompt():
     assert "<VoiceMode dockIntegrated />" in app
     assert 'data-testid="ai-bottom-stage"' in app
     assert "voice-mode-fab" not in app
-    assert "Jarvis lives in the prompt bar" in voice
+    assert "Rook lives in the prompt bar" in voice
     assert "dockIntegrated" in voice
     assert ".ai-bottom-stage" in css
 

@@ -154,7 +154,7 @@ def build_transcript_extract_prompt(text: str, roster: List[dict], importer: dic
     today = now.strftime("%A %Y-%m-%d")
     roster_block = format_roster_block(roster, importer)
     return (
-        "You are Jarvis. Convert a meeting transcript into task drafts.\n"
+        "You are Rook. Convert a meeting transcript into task drafts.\n"
         "QUALITY OVER QUANTITY. Extract only the most logical, clearly identified action items — "
         "commitments, explicit asks, and named next steps. "
         "Do NOT invent a task for every topic, idea, question, status update, FYI, recap, "

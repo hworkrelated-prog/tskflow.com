@@ -37,8 +37,8 @@ def test_integrated_voice_mode_renders_no_fab():
     voice = _read("components", "VoiceMode.js")
     assert "<VoiceMode dockIntegrated />" in app
     assert "voice-mode-fab" not in app
-    assert "Jarvis lives in the prompt bar" in voice
-    assert "return null" in voice.split("Jarvis lives in the prompt bar")[1][:220]
+    assert "Rook lives in the prompt bar" in voice
+    assert "return null" in voice.split("Rook lives in the prompt bar")[1][:220]
     assert "tskflow:start-prompt-voice" in voice
     assert "tskflow:start-prompt-voice" in _read("components", "AIQuickCreate.js")
 
@@ -47,7 +47,7 @@ def test_help_center_points_at_the_prompt_bar():
     help_src = _read("pages", "HelpCenter.js")
     assert "J orb" not in help_src
     assert "bottom-right" not in help_src
-    assert "Jarvis is in the prompt" in help_src or "Jarvis lives in the prompt" in help_src
+    assert "Rook is in the prompt" in help_src or "Rook lives in the prompt" in help_src
 
 
 def test_degraded_voice_reply_stays_in_the_bar():

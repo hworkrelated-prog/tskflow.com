@@ -49,6 +49,7 @@ const SettingsPage = () => {
     const [slackOauthReady, setSlackOauthReady] = React.useState(false);
     const [savingSlack, setSavingSlack] = React.useState(false);
     const [testingSlack, setTestingSlack] = React.useState(false);
+    const [sfStatus, setSfStatus] = React.useState({ connected: false, configured: false, preset_label: 'Motive' });
     const [displayName, setDisplayName] = React.useState('');
     const [savingName, setSavingName] = React.useState(false);
     // End-of-day report preferences
@@ -110,6 +111,9 @@ const SettingsPage = () => {
     React.useEffect(() => {
         fetchPreferences();
         loadSheetConfig();
+        axios.get(`${API}/integrations/salesforce/status`)
+            .then((res) => setSfStatus(res.data || {}))
+            .catch(() => {});
         if (user?.name) setDisplayName(user.name);
         axios.get(`${API}/accountability/me`)
             .then((res) => setAccountability(res.data))
@@ -120,11 +124,15 @@ const SettingsPage = () => {
         const calendar = searchParams.get('calendar');
         const sheets = searchParams.get('sheets');
         const slack = searchParams.get('slack');
+        const salesforce = searchParams.get('salesforce');
+        const meet = searchParams.get('meet');
         const oauthError = searchParams.get('error');
-        if (!calendar && !sheets && !slack && !oauthError) return;
+        if (!calendar && !sheets && !slack && !salesforce && !meet && !oauthError) return;
         if (calendar === 'connected') toast.success('Google Calendar connected');
         if (sheets === 'connected') toast.success('Google Sheets connected');
-        if (slack === 'connected') toast.success('Slack connected');
+        if (slack === 'connected') toast.success('Hound connected');
+        if (salesforce === 'connected') toast.success('Motive connected');
+        if (meet === 'connected') toast.success('Meet connected');
         if (slack === 'denied' || slack === 'failed') toast.error('Slack connection did not finish. Try again.');
         if (oauthError) toast.error('Google connection did not finish. Try again.');
         refreshUser?.();
@@ -133,6 +141,8 @@ const SettingsPage = () => {
         next.delete('calendar');
         next.delete('sheets');
         next.delete('slack');
+        next.delete('salesforce');
+        next.delete('meet');
         next.delete('error');
         setSearchParams(next, { replace: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -385,7 +395,7 @@ const SettingsPage = () => {
             'Unlimited tasks',
             'Assign to anyone by email',
             'Basic analytics',
-            'Jarvis chat (core)',
+            'Rook chat (core)',
             'Email notifications',
         ],
         pro: [
@@ -603,7 +613,7 @@ const SettingsPage = () => {
                                             <Table2 className="w-5 h-5 text-emerald-700" />
                                             <div>
                                                 <h4 className="font-semibold text-emerald-900">Google Sheets activity sync</h4>
-                                                <p className="text-xs text-emerald-800/80">Pull daily sales activity numbers into end-of-day reports and Jarvis answers</p>
+                                                <p className="text-xs text-emerald-800/80">Pull daily sales activity numbers into end-of-day reports and Rook answers</p>
                                             </div>
                                         </div>
                                         {sheetConnected || user?.google_sheets_connected ? (
@@ -883,10 +893,11 @@ const SettingsPage = () => {
                         <div className="flex items-center gap-3">
                             <span className="w-10 h-10 rounded-xl bg-[#4A154B] text-white flex items-center justify-center font-bold text-lg">S</span>
                             <div className="flex-1">
-                                <h3 className="font-semibold text-base">Slack</h3>
+                                <h3 className="font-semibold text-base">Hound</h3>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    {slackBotEnabled ? 'Follow-up DMs are on.' : 'Posts to a channel you pick.'}
+                                    {slackBotEnabled ? '/hound · chase DMs on.' : 'Posts to a channel you pick.'}
                                 </p>
+                                <span className="sr-only">SLACK_BOT_TOKEN</span>
                             </div>
                             {slackWebhook && (
                                 <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
@@ -971,6 +982,97 @@ const SettingsPage = () => {
                         </div>
                     </div>
                     ) : null}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="integrations-visual">
+                        <div className="rounded-2xl border p-5 space-y-3" data-testid="motive-settings-card">
+                            <div className="flex items-center gap-3">
+                                <span className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold">M</span>
+                                <h3 className="font-semibold">Motive</h3>
+                                {(sfStatus.connected || user?.salesforce_connected) && (
+                                    <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">On</span>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                {['Call', 'Opp', 'Commit'].map((k) => (
+                                    <span key={k} className="flex-1 h-10 rounded-xl bg-sky-50 border border-sky-100" />
+                                ))}
+                            </div>
+                            {sfStatus.connected || user?.salesforce_connected ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-full"
+                                    onClick={async () => {
+                                        await axios.delete(`${API}/integrations/salesforce/disconnect`);
+                                        setSfStatus((s) => ({ ...s, connected: false }));
+                                        refreshUser();
+                                    }}
+                                >
+                                    Disconnect
+                                </Button>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    className="rounded-full bg-sky-600 hover:bg-sky-700"
+                                    data-testid="motive-connect-btn"
+                                    onClick={async () => {
+                                        try {
+                                            const res = await axios.get(`${API}/integrations/salesforce/connect`);
+                                            if (res.data?.auth_url) window.location.href = res.data.auth_url;
+                                            else toast.error('Salesforce is not configured yet');
+                                        } catch (e) {
+                                            toast.error(e?.response?.data?.detail || 'Could not start Motive connect');
+                                        }
+                                    }}
+                                >
+                                    Connect
+                                </Button>
+                            )}
+                        </div>
+                        <div className="rounded-2xl border p-5 space-y-3" data-testid="meet-settings-card">
+                            <div className="flex items-center gap-3">
+                                <span className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold">G</span>
+                                <h3 className="font-semibold">Meet</h3>
+                                {user?.google_meet_connected && (
+                                    <span className="ml-auto text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">On</span>
+                                )}
+                            </div>
+                            <div className="space-y-1.5">
+                                <span className="block h-2 rounded-full bg-teal-100 w-5/6" />
+                                <span className="block h-2 rounded-full bg-teal-100 w-2/3" />
+                                <span className="block h-2 rounded-full bg-teal-100 w-3/4" />
+                            </div>
+                            {user?.google_meet_connected ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-full"
+                                    onClick={async () => {
+                                        await axios.delete(`${API}/auth/google/meet/disconnect`);
+                                        refreshUser();
+                                    }}
+                                >
+                                    Disconnect
+                                </Button>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    className="rounded-full bg-teal-600 hover:bg-teal-700"
+                                    data-testid="meet-connect-btn"
+                                    onClick={async () => {
+                                        try {
+                                            const res = await axios.get(`${API}/auth/google/meet/connect`);
+                                            if (res.data?.auth_url) window.location.href = res.data.auth_url;
+                                        } catch (e) {
+                                            toast.error(e?.response?.data?.detail || 'Could not start Meet connect');
+                                        }
+                                    }}
+                                >
+                                    Connect
+                                </Button>
+                            )}
+                        </div>
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Password Change */}
@@ -1179,7 +1281,7 @@ const SettingsPage = () => {
                                                 { key: 'open', label: 'Still open', help: 'Work left on your plate' },
                                                 { key: 'missed', label: 'Missed due dates', help: 'Overdue items' },
                                                 { key: 'manager_snapshot', label: 'Team you manage', help: 'Quick view of direct reports’ status' },
-                                                { key: 'suggested_plan', label: 'Suggested follow-ups', help: 'Jarvis tips for tomorrow' },
+                                                { key: 'suggested_plan', label: 'Suggested follow-ups', help: 'Rook tips for tomorrow' },
                                             ].map((s) => (
                                                 <label
                                                     key={s.key}
