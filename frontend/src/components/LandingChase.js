@@ -1,68 +1,61 @@
-import React, { useRef } from 'react';
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import React from 'react';
+import { motion, useTransform } from 'framer-motion';
+import { Bell, FileText, Send } from 'lucide-react';
+import LandingPinBeat from '@/components/LandingPinBeat';
+import LandingCastMark from '@/components/LandingCastMark';
+import { CAST } from '@/lib/landingCast';
 
 const PINGS = [
-    { id: 'p1', text: 'Forecast' },
-    { id: 'p2', text: 'pipeline.png' },
-    { id: 'p3', text: 'Friday' },
+    { id: 'p1', text: 'Follow up with lead', Icon: Send, at: 0.08 },
+    { id: 'p2', text: 'pipeline.png', Icon: FileText, at: 0.2 },
+    { id: 'p3', text: 'Follow up with lead', Icon: Bell, at: 0.32 },
+    { id: 'p4', text: 'pipeline.png', Icon: FileText, at: 0.44 },
+    { id: 'p5', text: 'Follow up with lead', Icon: Send, at: 0.56 },
+    { id: 'p6', text: 'nudge', Icon: Bell, at: 0.68 },
+    { id: 'p7', text: 'nudge', Icon: Bell, at: 0.8 },
 ];
 
-/** You become the reminder. They half-do it unless you make a scene. */
+/** Beat 5: the manager becomes the reminder. Grey, repetitive, tiring. */
 export default function LandingChase() {
-    const reduce = useReducedMotion();
-    const ref = useRef(null);
-    const { scrollYProgress } = useScroll({
-        target: ref,
-        offset: ['start 0.88', 'center 0.32'],
-    });
-    const fill = useTransform(scrollYProgress, [0.15, 0.55], [0.22, 0.48]);
-    const burst = useTransform(scrollYProgress, [0.62, 0.9], [0, 1]);
-    const halfOpacity = useTransform(fill, (v) => 0.55 + v * 0.2);
-    const barWidth = useTransform(fill, (v) => `${Math.round(v * 100)}%`);
-    const dealScale = useTransform(burst, (v) => 0.92 + v * 0.08);
+    return (
+        <LandingPinBeat testId="landing-chase" label="You chase" spans={2.2} tone="wear">
+            {(progress) => <ChaseFrame progress={progress} />}
+        </LandingPinBeat>
+    );
+}
+
+function ChaseFrame({ progress }) {
+    const wear = useTransform(progress, [0.1, 1], [0.15, 1]);
+    const gray = useTransform(wear, (v) => `grayscale(${v})`);
+    const fade = useTransform(wear, (v) => 1 - v * 0.28);
 
     return (
-        <section
-            ref={ref}
-            className="landing-story landing-story--scrub"
-            data-testid="landing-chase"
-            aria-label="You chase"
+        <motion.div
+            className="landing-chase landing-chase--labor"
+            data-testid="landing-chase-pings"
+            style={{ filter: gray, opacity: fade }}
         >
-            <div className="landing-chase">
-                <div className="landing-chase-col" data-testid="landing-chase-pings">
-                    {PINGS.map((p, i) => (
-                        <motion.div
-                            key={p.id}
-                            className="landing-chase-ping"
-                            initial={reduce ? false : { x: -24, opacity: 0 }}
-                            whileInView={reduce ? undefined : { x: 0, opacity: 1 }}
-                            viewport={{ once: true, amount: 0.6 }}
-                            transition={{ delay: i * 0.14, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                            {p.text}
-                        </motion.div>
-                    ))}
-                </div>
-                <div className="landing-chase-col">
-                    <motion.div
-                        className="landing-half"
-                        data-testid="landing-half-done"
-                        style={reduce ? undefined : { opacity: halfOpacity }}
-                    >
-                        <motion.span
-                            className="landing-half-bar"
-                            style={reduce ? { width: '48%' } : { width: barWidth }}
-                        />
-                    </motion.div>
-                    <motion.div
-                        className="landing-big-deal"
-                        data-testid="landing-big-deal"
-                        style={reduce ? undefined : { opacity: burst, scale: dealScale }}
-                    >
-                        <span className="landing-hero-check" aria-hidden />
-                    </motion.div>
-                </div>
+            <div className="landing-chase-who">
+                <LandingCastMark who="hashim" />
+                <span>{CAST.hashim.name}</span>
             </div>
-        </section>
+            <div className="landing-chase-col">
+                {PINGS.map((ping, i) => (
+                    <Ping key={ping.id} ping={ping} index={i} progress={progress} />
+                ))}
+            </div>
+        </motion.div>
+    );
+}
+
+function Ping({ ping, index, progress }) {
+    const opacity = useTransform(progress, [ping.at, ping.at + 0.1], [0, 0.92 - index * 0.08]);
+    const x = useTransform(progress, [ping.at, ping.at + 0.12], [-22, 0]);
+    const Icon = ping.Icon;
+    return (
+        <motion.div className="landing-chase-ping" style={{ opacity, x }} data-testid={`landing-chase-${ping.id}`}>
+            <Icon className="w-3.5 h-3.5" aria-hidden />
+            {ping.text}
+        </motion.div>
     );
 }

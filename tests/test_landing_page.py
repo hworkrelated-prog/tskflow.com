@@ -25,9 +25,6 @@ def test_landing_is_a_tool_not_a_pitch():
     assert 'to="/legal"' in src
     assert 'data-testid="landing-toolbar"' in src
     assert 'data-testid="landing-no-account"' in src
-    assert "LandingScrollChaos" in src
-    assert 'data-testid="landing-scroll-chaos"' in (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
-    assert "useScroll" in (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
     assert "landing-step-kicker" in src
     assert "landing-step-kicker" in (FRONT / "App.css").read_text(encoding="utf-8")
     # recorder is in the chrome; the page tree renders toolbar above the composer
@@ -36,17 +33,17 @@ def test_landing_is_a_tool_not_a_pitch():
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
     assert page_tree.index("landing-brand") < page_tree.index("LandingScreenRecorder")
-    assert "LandingHeroAsk" in src
-    assert "LandingSilentTasks" in src
-    assert "LandingFlowIcons" in src
-    assert "LandingReportFlip" in src
-    assert "LandingIntegrations" in src
-    assert "LandingMeetAssign" in src
-    assert "LandingSlackReact" in src
+    assert "LandingAssignBeat" in src
     assert "LandingPileUp" in src
+    assert "LandingDeadline" in src
     assert "LandingChase" in src
-    assert "LandingSolve" in src
+    assert "LandingHalfDone" in src
+    assert "LandingTurn" in src
+    assert "LandingPeace" in src
+    assert "LandingIntegrations" in src
     assert "LandingFounder" in src
+    assert "LandingPinBeat" in (FRONT / "components" / "LandingAssignBeat.js").read_text(encoding="utf-8")
+    assert "useScroll" in (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     assert "What needs to get done?" not in src
     assert "Who should own this?" not in src
 
@@ -67,7 +64,6 @@ def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert 'data-testid="landing-hero"' in src
-    assert 'data-testid="landing-hero-cta"' in src
     assert 'data-testid="landing-tryit"' in src
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
@@ -335,40 +331,53 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
 
 
 def test_landing_story_is_shown_not_told():
-    """Headline and CTAs only. The product is explained by motion and objects."""
+    """One pain line, then a scrubbed 11-beat story. Micro-labels only."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
-    hero = (FRONT / "components" / "LandingHeroAsk.js").read_text(encoding="utf-8")
-    silent = (FRONT / "components" / "LandingSilentTasks.js").read_text(encoding="utf-8")
-    chaos = (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
-    reports = (FRONT / "components" / "LandingReportFlip.js").read_text(encoding="utf-8")
+    pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
+    assign = (FRONT / "components" / "LandingAssignBeat.js").read_text(encoding="utf-8")
+    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
+    deadline = (FRONT / "components" / "LandingDeadline.js").read_text(encoding="utf-8")
+    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
+    half = (FRONT / "components" / "LandingHalfDone.js").read_text(encoding="utf-8")
+    turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
+    peace = (FRONT / "components" / "LandingPeace.js").read_text(encoding="utf-8")
+    founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
+    cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
     integ = (FRONT / "components" / "LandingIntegrations.js").read_text(encoding="utf-8")
-    flow = (FRONT / "components" / "LandingFlowIcons.js").read_text(encoding="utf-8")
 
-    assert "Ask. Who. Send." in landing
-    assert "Stop chasing." in landing
-    assert "They already own it." in landing
-    assert "Get to Know the founder" in landing
+    assert "Managers waste hours chasing people for work they already agreed to do." in landing
+    assert "Stop chasing." not in landing
+    assert "They already own it." not in landing
+    assert "Get to Know the Founder" in landing
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "landing-who-input" in css
-    assert "Ask Maya to send the Q3 forecast by Friday" in hero
-    assert "Ask engineering to record a demo of the fix by tomorrow" not in hero
-    assert "landing-hero-steps" in hero
-    assert "landing-fly-kicker" in hero
-    assert "is-done" in hero
-    assert "PHASE_I" in hero
-    assert "landing-nametag" in hero
-    assert "landing-clockchip" in hero
-    assert "useReducedMotion" in hero
-    assert "Gone quiet." in silent
-    assert "landing-live-card" in silent
-    assert "useReducedMotion" in silent
-    assert "landing-sticky" in chaos
-    assert "Priya" in chaos and "Tomorrow" in chaos
-    assert "Asks bounce around Slack" not in chaos
-    assert "landing-report-face" in reports
-    assert "Done" in reports and "Stalled" in reports and "Moving" in reports
+    assert "landing-pin-frame" in css
+    assert "position: sticky" in css
+    assert "useScroll" in pin
+    assert "useReducedMotion" in pin
+    assert "Follow up with lead." in assign
+    assert "landing-meet-agree" in assign
+    assert "landing-meet-bar" in assign
+    assert "landing-slack-reactions" in assign
+    assert "landing-pipeline.svg" in assign
+    assert "Send proposal to Acme" in cast
+    assert "Update Salesforce stage" in pile or "TASKS" in pile
+    assert "landing-due-miss" in deadline
+    assert "landing-due-clock" in deadline
+    assert "pipeline.png" in chase
+    assert "landing-chase--labor" in chase
+    assert "landing-weak-check" in half
+    assert "landing-big-deal" in half
+    assert "landing-turn-chaos" in turn
+    assert "landing-turn-calm" in turn
+    assert "Assigned. Tracked. Done." in peace
+    assert "landing-solve-calendar" in peace
+    assert "Packed. Thursday?" in peace
+    assert "landing-group-avg" in peace
+    assert "Follow up with lead" in cast
+    assert "hashim" in assign
     assert "landing-integ-${item.id}" in integ
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
     assert "HoundScene" in integ and "MotiveScene" in integ
@@ -379,37 +388,46 @@ def test_landing_story_is_shown_not_told():
     assert "landing-integ-story" in css
     assert "hound-dash" in css
     assert "motive-stamp" in css
-    assert "landing-flow-${step.id}" in flow
-    assert "Ask" in flow and "Who" in flow and "Send" in flow
-    assert "landing-flow-arrow" in flow
     assert "prefers-reduced-motion" in css
-    assert "landing-live-pulse" in css
-    assert "landing-sticky--amber" in css
     assert "Asks bounce around Slack." not in landing
     assert "The robot delivers" not in landing
-    meet = (FRONT / "components" / "LandingMeetAssign.js").read_text(encoding="utf-8")
-    slack = (FRONT / "components" / "LandingSlackReact.js").read_text(encoding="utf-8")
-    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
-    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
-    solve = (FRONT / "components" / "LandingSolve.js").read_text(encoding="utf-8")
-    founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
-    assert "Forecast. Friday." in meet
-    assert "landing-meet-agree" in meet
-    assert "landing-meet-bar" in meet
-    assert "landing-slack-reactions" in slack
-    assert "landing-slack-images" in slack
-    assert "landing-pipeline.svg" in slack
-    assert "landing-pile" in pile
-    assert "pipeline.png" in chase
-    assert "landing-half-done" in chase
-    assert "landing-due-miss" in silent
-    assert "landing-solve-calendar" in solve
-    assert "landing-solve-conflict" in solve
-    assert "landing-group-avg" in solve
     assert "Hashim Mahmood" in founder
     assert "/founder.jpg" in founder
     assert "landing-founder-linkedin" in founder
+    assert "landing-founder-book" in founder
+    assert "5 years leading sales teams" in founder
+    assert "tired of chasing my own team" in founder
+    assert "20+ AEs" in founder
+    assert "His own problem" in founder
     assert 'data-testid="landing-tab-founder"' in landing
+    assert "Ask engineering to record a demo of the fix by tomorrow" not in landing
+
+
+def test_landing_founder_is_a_one_screen_profile():
+    founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert "landing-founder-cred" in founder
+    assert "landing-founder-origin" in founder
+    assert "Book 5 min" in founder
+    assert 'to="/contact"' in founder
+    assert "linkedin.com/in/hashim-mahmood" in founder
+    assert "landing-founder-photo" in css
+    assert "100svh" in css.split(".landing-founder {")[1].split(".landing-founder-photo")[0]
+    assert "landing-founder-cred li" in css
+
+
+def test_landing_story_cast_is_sales_and_consistent():
+    cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
+    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
+    turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
+    assert "Follow up with lead" in cast
+    assert "Send proposal to Acme" in cast
+    assert "Update Salesforce stage" in cast
+    assert "TASKS" in pile and "TASKS" in turn
+    assert "hashim" in cast and "maya" in cast and "chris" in cast and "priya" in cast
+    assert "QA signoff" not in pile
+    assert "record a demo of the fix" not in pile
+
 
 
 def test_tskflow_logo_is_a_lockup_not_plain_type():
