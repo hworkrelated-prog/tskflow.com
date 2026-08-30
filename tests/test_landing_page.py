@@ -24,6 +24,11 @@ def test_landing_is_a_tool_not_a_pitch():
     assert 'to="/legal"' in src
     assert 'data-testid="landing-toolbar"' in src
     assert 'data-testid="landing-no-account"' in src
+    assert "LandingScrollChaos" in src
+    assert 'data-testid="landing-scroll-chaos"' in (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
+    assert "useScroll" in (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
+    assert "landing-step-kicker" in src
+    assert "landing-step-kicker" in (FRONT / "App.css").read_text(encoding="utf-8")
     # recorder is in the chrome; the page tree renders toolbar above the composer
     assert "LandingScreenRecorder" in src
     page_tree = src.split("const LandingPage")[-1]

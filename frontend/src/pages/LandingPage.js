@@ -10,6 +10,7 @@ import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingVoiceGuide from '@/components/LandingVoiceGuide';
+import LandingScrollChaos from '@/components/LandingScrollChaos';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -99,7 +100,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 <p className="sr-only" data-testid="landing-no-account">
                     No account. No password. Enter sends it.
                 </p>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/40 mb-4">
+                <p className="landing-step-kicker">
                     1 · Ask
                 </p>
 
@@ -174,7 +175,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 data-testid="landing-step-who"
                 id="landing-step-who"
             >
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/40 mb-4">
+                <p className="landing-step-kicker">
                     2 · Who
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -222,7 +223,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 data-testid="landing-step-send"
                 id="landing-step-send"
             >
-                <p className="text-[11px] uppercase tracking-[0.22em] text-white/40 mb-4">
+                <p className="landing-step-kicker">
                     3 · Send
                 </p>
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-t border-white/10">
@@ -293,6 +294,7 @@ const LandingPage = () => {
 
     return (
         <div className="landing-page landing-tool min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
+            <LandingScrollChaos />
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-[4.5rem] flex items-center gap-3">
                     <LandingScreenRecorder
