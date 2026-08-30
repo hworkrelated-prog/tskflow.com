@@ -18,6 +18,8 @@ import { formatAppDateTime } from '@/lib/datetime';
 import { getErrorMessage } from '@/lib/utils';
 import { displayTaskTitle } from '@/lib/taskDescription';
 import AttachmentViewer from '@/components/AttachmentViewer';
+import SlackAttachGrid from '@/components/SlackAttachGrid';
+import CompletionRing from '@/components/CompletionRing';
 import FormattedTaskDescription from '@/components/FormattedTaskDescription';
 import RichTextEditor from '@/components/RichTextEditor';
 import GroupResponseReview from '@/components/GroupResponseReview';
@@ -1171,11 +1173,7 @@ const TaskDetail = () => {
                                     <Label className="text-gray-700">Note</Label>
                                     {task.note && <p className="mt-1 text-gray-900">{task.note}</p>}
                                     {task.note_images && task.note_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.note_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.note_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1186,11 +1184,7 @@ const TaskDetail = () => {
                                     <Label className="text-green-700">Completion Note from {task.assigned_to_name}</Label>
                                     {task.completion_note && <p className="mt-1 text-green-900">{task.completion_note}</p>}
                                     {task.completion_note_images && task.completion_note_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.completion_note_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.completion_note_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1209,11 +1203,7 @@ const TaskDetail = () => {
                                     <Label className="text-gray-600">Previous Submission</Label>
                                     {task.previous_completion_note && <p className="mt-1 text-gray-700">{task.previous_completion_note}</p>}
                                     {task.previous_completion_images && task.previous_completion_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.previous_completion_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.previous_completion_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1848,11 +1838,7 @@ const TaskDetail = () => {
                             </div>
                         )}
                         {Array.isArray(subtaskReviewFor?.completion_note_images) && subtaskReviewFor.completion_note_images.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {subtaskReviewFor.completion_note_images.map((img, i) => (
-                                    <img key={i} src={img} alt="attachment" className="w-24 h-24 object-cover rounded-lg border" />
-                                ))}
-                            </div>
+                            <SlackAttachGrid items={subtaskReviewFor.completion_note_images} compact />
                         )}
                         <Textarea placeholder="Optional feedback if sending back for revision..." rows={3} value={subtaskReviewFeedback} onChange={(e) => setSubtaskReviewFeedback(e.target.value)} className="rounded-xl" data-testid="subtask-review-feedback" />
                     </div>
@@ -1976,7 +1962,8 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 <div className="flex items-center gap-2 min-w-0">
                     <Trophy className="w-5 h-5 text-amber-600" />
                     <span className="font-semibold text-amber-950">Leaderboard</span>
-                    <span className="text-xs text-amber-800/90">{completedCount}/{rows.length} done · {pct}%</span>
+                    <CompletionRing pct={pct} size={40} />
+                    <span className="text-xs text-amber-800/90">{completedCount}/{rows.length}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {isCreator && onAddAssignees && (
