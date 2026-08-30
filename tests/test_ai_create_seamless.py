@@ -125,7 +125,9 @@ def test_hierarchy_editor_asks_three_questions():
     assert "Who reports to you?" in src
     assert "Who is your manager?" in src
     assert "Individual Contributor" in src
-    assert "Area Vice President" in src
+    assert 'data-testid="hierarchy-assign-hint"' in src
+    assert "my managers" in src
+    assert "everyone under me" in src
 
 
 def test_backend_team_scope_and_contacts():
@@ -156,8 +158,15 @@ def test_classify_team_hint_and_name_extract():
     )
     assert ns["_classify_team_hint"]("my team") == "team"
     assert ns["_classify_team_hint"]("my direct reports") == "direct"
-    assert ns["_classify_team_hint"]("everyone under me") == "team"
+    assert ns["_classify_team_hint"]("my managers") == "direct"
+    assert ns["_classify_team_hint"]("everyone under me") == "everyone"
+    assert ns["_classify_team_hint"]("my manager's teams") == "skip"
     assert ns["_classify_team_hint"]("harold") is None
+    assert ns["_team_assignment_plan"]("team", 2, 10) == "ask_scope"
+    assert ns["_team_assignment_plan"]("team", 2, 0) == "direct"
+    assert ns["_team_assignment_plan"]("team", 0, 0) == "ask_who"
+    assert ns["_team_assignment_plan"]("everyone", 2, 10) == "everyone"
+    assert ns["_team_assignment_plan"]("direct", 0, 10) == "ask_who"
     names = ns["_name_hints_from_text"]("have harold go through this and send me an update")
     assert any(n.lower().startswith("harold") for n in names)
     owner = ns["_name_hints_from_text"](

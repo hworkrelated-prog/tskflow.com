@@ -112,7 +112,7 @@ const TeamSetupModal = () => {
 
     const titles = {
         1: 'Your manager',
-        2: 'Your team',
+        2: 'Who reports to you',
         3: 'How often?',
         4: 'Joining',
     };

@@ -612,7 +612,7 @@ const TeamManagementPage = () => {
                                         My Hierarchy
                                     </CardTitle>
                                     <CardDescription>
-                                        “My team” is everyone under you. Direct reports are the people who report to you.
+                                        As a regional director you can assign the managers who report to you, or everyone under you - those managers and their AEs.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
@@ -636,6 +636,9 @@ const TeamManagementPage = () => {
                                             {directReports.length} direct report{directReports.length === 1 ? '' : 's'}
                                             {teamCount > directReports.length ? ` and ${teamCount - directReports.length} people on their teams` : ''}
                                             {teamCount > 0 ? ` · ${teamCount} total on your team` : ''}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground" data-testid="hierarchy-assign-hint">
+                                            From the bar, say “my managers” for the people who report to you, or “everyone under me” to include their teams. If you just say “my team” and both exist, we will ask.
                                         </p>
                                         {directReports.length > 0 && (
                                             <div className="flex flex-wrap gap-2">
