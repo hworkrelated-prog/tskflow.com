@@ -30,7 +30,6 @@ const UpdatesPage = () => {
                         <Sparkles className="w-6 h-6 text-indigo-600" />
                         <h1 className="text-2xl font-semibold">What&apos;s New</h1>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">Everything we shipped in the latest batch - before &amp; after.</p>
                 </div>
             </header>
             <main className="container mx-auto px-6 py-8 max-w-4xl space-y-4">

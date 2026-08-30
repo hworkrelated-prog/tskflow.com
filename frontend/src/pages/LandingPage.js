@@ -62,7 +62,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 title: 'Walkthrough for your ask',
             });
         } catch {
-            toast.info('Your walkthrough stayed on this device - you can attach it from the task.');
+            toast.info('Attach it from the task.');
         }
     };
 
@@ -97,11 +97,11 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 data-testid="landing-step-ask"
                 id="landing-step-ask"
             >
-                <p className="text-[11px] text-white/30 mb-3" data-testid="landing-no-account">
+                <p className="sr-only" data-testid="landing-no-account">
                     No account. No password. Enter sends it.
                 </p>
                 <p className="landing-step-kicker">
-                    1 · What needs to get done
+                    1 · Ask
                 </p>
 
                 <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[180px] sm:min-h-[220px]' : 'min-h-[7.5rem] sm:min-h-[8.5rem]'}`}>
@@ -166,7 +166,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                     href="#landing-step-who"
                     className="mt-8 inline-flex items-center gap-1.5 text-xs text-white/35 hover:text-white/70 self-start"
                 >
-                    Next: who should get it <ChevronDown className="w-3.5 h-3.5" />
+                    Who <ChevronDown className="w-3.5 h-3.5" />
                 </a>
             </section>
 
@@ -176,7 +176,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-who"
             >
                 <p className="landing-step-kicker">
-                    2 · Who should get it
+                    2 · Who
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                     <div className="flex-1">
@@ -210,14 +210,11 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                         </button>
                     </div>
                 </div>
-                <p className="mt-4 text-sm text-white/40">
-                    Optional. Leave it blank if you just want to see how an ask looks.
-                </p>
                 <a
                     href="#landing-step-send"
                     className="mt-8 inline-flex items-center gap-1.5 text-xs text-white/35 hover:text-white/70 self-start"
                 >
-                    Next: send it <ChevronDown className="w-3.5 h-3.5" />
+                    Send <ChevronDown className="w-3.5 h-3.5" />
                 </a>
             </section>
 
@@ -227,7 +224,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-send"
             >
                 <p className="landing-step-kicker">
-                    3 · Send it
+                    3 · Send
                 </p>
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-t border-white/10">
                     <div data-testid="landing-tryit-result" className="min-w-0">
@@ -240,10 +237,8 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className={`text-xs text-white/40 ${preview ? 'mt-2' : ''}`} data-testid="landing-send-promise">
-                            {channel === 'slack'
-                                ? 'First ask goes by email. Connect Slack later if you want follow-up there.'
-                                : 'They get the ask. TskFlow follows up and shows you what happened.'}
+                        <p className="sr-only" data-testid="landing-send-promise">
+                            {channel === 'slack' ? 'Email first. Slack later.' : 'Send'}
                         </p>
                     </div>
                     <Button

@@ -9,17 +9,17 @@ const walkthroughs = {
         steps: [
             {
                 title: "Assign anyone",
-                description: "Email is enough. They don't need an account yet.",
+                description: "",
                 icon: <Mail className="w-8 h-8" />
             },
             {
                 title: "They prove it's done",
-                description: "Done includes a note, not just a checkbox.",
+                description: "",
                 icon: <FileText className="w-8 h-8" />
             },
             {
                 title: "You review",
-                description: "Accept it, send it back, or it closes in 24 hours.",
+                description: "",
                 icon: <Eye className="w-8 h-8" />
             }
         ]
@@ -29,7 +29,7 @@ const walkthroughs = {
         steps: [
             {
                 title: "Assign in one line",
-                description: "Type who, what, and when in the bar below. They accept. You see it through.",
+                description: "Who, what, when.",
                 icon: <Plus className="w-8 h-8" />
             }
         ]
@@ -39,7 +39,7 @@ const walkthroughs = {
         steps: [
             {
                 title: "How the team is doing",
-                description: "Completion, speed, and who is falling behind.",
+                description: "",
                 icon: <BarChart3 className="w-8 h-8" />
             }
         ]
@@ -49,7 +49,7 @@ const walkthroughs = {
         steps: [
             {
                 title: "Your account",
-                description: "Profile, plan, reminders, and Slack.",
+                description: "",
                 icon: <Settings className="w-8 h-8" />
             }
         ]
@@ -59,7 +59,7 @@ const walkthroughs = {
         steps: [
             {
                 title: "Who reports to you",
-                description: "You only see work you assigned them.",
+                description: "",
                 icon: <Users className="w-8 h-8" />
             }
         ]
@@ -121,15 +121,19 @@ const OnboardingPopup = ({ page = 'dashboard', onClose }) => {
 
                 <div className="p-6">
                     <AnimatePresence mode="wait">
-                        <motion.p
-                            key={currentStep}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="text-gray-600 text-base leading-relaxed"
-                        >
-                            {steps[currentStep].description}
-                        </motion.p>
+                        {steps[currentStep].description ? (
+                            <motion.p
+                                key={currentStep}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="text-gray-600 text-base"
+                            >
+                                {steps[currentStep].description}
+                            </motion.p>
+                        ) : (
+                            <div className="h-1" />
+                        )}
                     </AnimatePresence>
 
                     {!single && (

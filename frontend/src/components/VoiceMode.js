@@ -425,9 +425,6 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         <div ref={listRef} className="h-64 overflow-y-auto px-3.5 py-3 space-y-2.5 bg-slate-50/40">
                             {messages.length === 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-xs text-slate-500 leading-relaxed">
-                                        Ask about tasks, how something works, or what&apos;s still open.
-                                    </p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {["What's outstanding?", 'How do I assign a task?', 'What can you do?'].map((chip) => (
                                             <button

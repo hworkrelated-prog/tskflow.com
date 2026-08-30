@@ -1583,8 +1583,7 @@ const TaskDetail = () => {
                                     )}
                                     {!reminderLoading && reminderActivity.length === 0 && (
                                         <p className="text-sm text-muted-foreground text-center py-6">
-                                            No reminders logged yet. In-app and email nudges for this person show up here
-                                            {slackConnected ? ', plus Slack when it was delivered' : ''}.
+                                            No reminders yet.
                                         </p>
                                     )}
                                     {!reminderLoading && reminderActivity.map((a) => {

@@ -437,7 +437,7 @@ const DraftCard = ({ draft, users, index, total, onPublish, onDelete, onSkip }) 
                     </select>
                     <label className="flex items-center gap-2 text-sm mt-2">
                         <input type="checkbox" checked={form.is_sales_task} onChange={(e) => setForm({ ...form, is_sales_task: e.target.checked })} />
-                        This is a Sales Task
+                        Sales
                     </label>
                 </div>
             </div>

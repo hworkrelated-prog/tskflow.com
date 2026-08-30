@@ -1326,7 +1326,7 @@ const TaskHub = () => {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5 sm:mb-6">
                     <div className="min-w-0">
                         <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome, {user?.name}
+                            {user?.name}
                         </h2>
                         {accountability && (
                             <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="hub-accountability">
@@ -1335,9 +1335,6 @@ const TaskHub = () => {
                                     label={accountability.accountability_label}
                                     testId="hub-accountability-score"
                                 />
-                                <span className="text-xs text-muted-foreground">
-                                    How you respond and follow through
-                                </span>
                             </div>
                         )}
                     </div>
@@ -1805,7 +1802,7 @@ const TaskHub = () => {
 
                 {showBillingNudge && (
                     <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2" data-testid="billing-nudge-banner">
-                        <p className="text-sm text-teal-800">You and your team are exchanging work. Pro adds reminders and recordings.</p>
+                        <p className="text-sm text-teal-800">Pro adds reminders and recordings.</p>
                         <div className="flex gap-2 shrink-0">
                             <Button
                                 size="sm"
@@ -1827,7 +1824,7 @@ const TaskHub = () => {
                     <DialogContent className="rounded-2xl" data-testid="billing-nudge-modal">
                         <DialogHeader>
                             <DialogTitle className="text-foreground">You are using Tskflow</DialogTitle>
-                            <DialogDescription>Reminders and recordings help when the volume sticks. No rush.</DialogDescription>
+                            <DialogDescription>Reminders and recordings, when you want them.</DialogDescription>
                         </DialogHeader>
                         <div className="flex gap-2 justify-end pt-4">
                             <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="rounded-full">Not now</Button>

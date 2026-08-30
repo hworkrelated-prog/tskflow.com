@@ -4,7 +4,7 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Mail, MessageSquare, Clock, Bell, Check, ArrowRight, Bot } from 'lucide-react';
+import { Mail, MessageSquare, Clock, Bell, Check, ArrowRight, Bot, Video, CheckCircle2 } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { guestTaskId, rememberGuestSession } from '@/lib/guestSession';
@@ -17,6 +17,27 @@ const CHANNEL_ICON = {
     in_app: Bell,
 };
 
+const beatLabel = (title) => {
+    const t = String(title || '').toLowerCase();
+    if (t.includes('walkthrough') || t.includes('video')) return 'Video';
+    if (t.includes('queued')) return 'Queued';
+    if (t.includes('deliver') || t === 'sent') return 'Sent';
+    if (t.includes('waiting')) return 'Waiting';
+    if (t.includes('ping') || t.includes('reminder')) return 'Ping';
+    if (t.includes('slack')) return 'Slack';
+    return (title || 'Update').replace(/\s+/g, ' ').trim();
+};
+
+const beatIcon = (row) => {
+    const label = beatLabel(row.title);
+    if (label === 'Video') return Video;
+    if (label === 'Slack') return MessageSquare;
+    if (label === 'Sent') return Check;
+    if (label === 'Ping') return Mail;
+    if (label === 'Waiting' || label === 'Queued') return Clock;
+    return CHANNEL_ICON[row.channel] || Bot;
+};
+
 const shortTime = (iso) => {
     if (!iso) return '';
     try {
@@ -27,7 +48,7 @@ const shortTime = (iso) => {
 };
 
 const dueLabel = (raw) => {
-    if (!raw) return 'no time set';
+    if (!raw) return '';
     try {
         const d = new Date(raw);
         if (Number.isNaN(d.getTime())) return raw;
@@ -38,8 +59,8 @@ const dueLabel = (raw) => {
 };
 
 /**
- * Guest follow-up after a landing send: one task, one assignee, and what happened.
- * Deliberately not the full dashboard - this is the first thing a visitor ever sees.
+ * Guest follow-up after a landing send: the ask itself, plus a status track.
+ * Labels and chips carry the meaning. No lecture copy.
  */
 const RobotRoomPage = () => {
     const { taskId } = useParams();
@@ -56,7 +77,7 @@ const RobotRoomPage = () => {
             const { data } = await axios.get(`${API}/demo/room/${taskId}`);
             setRoom(data);
         } catch (error) {
-            if (error?.response?.status === 404) toast.error('That room is gone. Send a new ask.');
+            if (error?.response?.status === 404) toast.error('Gone. Send a new ask.');
             else if (error?.response?.status === 403) navigate('/dashboard', { replace: true });
         } finally {
             setLoading(false);
@@ -87,11 +108,7 @@ const RobotRoomPage = () => {
             if (data?.auth_url) window.location.href = data.auth_url;
         } catch (error) {
             const detail = error?.response?.data?.detail;
-            toast.info(
-                typeof detail === 'string'
-                    ? detail
-                    : 'Keep this workspace first, then connect Slack from Settings.',
-            );
+            toast.info(typeof detail === 'string' ? detail : 'Keep the workspace, then connect Slack in Settings.');
         } finally {
             setConnectingSlack(false);
         }
@@ -112,23 +129,25 @@ const RobotRoomPage = () => {
     if (loading) {
         return (
             <div className="landing-page min-h-screen text-white flex items-center justify-center" style={{ background: '#050807' }}>
-                <div className="text-white/70" data-testid="env-loading">Opening the room…</div>
+                <div className="text-white/50" data-testid="env-loading">…</div>
             </div>
         );
     }
 
     const task = room?.task || {};
     const activity = room?.activity || [];
-    const copy = room?.copy || {};
     const channel = room?.channel || 'email';
+    const delivered = Boolean(room?.delivered);
+    const statusWord = delivered ? 'Sent' : 'Queued';
+    const due = dueLabel(task.due_date);
 
     return (
         <div className="landing-page min-h-screen text-white" style={{ background: '#050807' }} data-testid="env-page">
             <div className="pointer-events-none fixed inset-0 overflow-hidden">
-                <div className="absolute -top-40 right-[-20%] w-[620px] h-[620px] rounded-full bg-teal-500/15 blur-[120px]" />
+                <div className="absolute -top-40 right-[-20%] w-[620px] h-[620px] rounded-full bg-teal-500/12 blur-[120px]" />
             </div>
 
-            <nav className="relative z-10 max-w-4xl mx-auto px-5 min-h-16 py-3 flex flex-wrap items-center justify-between gap-2">
+            <nav className="relative z-10 max-w-xl mx-auto px-5 min-h-16 py-3 flex items-center justify-between gap-2">
                 <button
                     type="button"
                     className="text-lg font-semibold tracking-tight"
@@ -138,152 +157,153 @@ const RobotRoomPage = () => {
                 >
                     TskFlow
                 </button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                     {isGuest ? (
-                        <>
-                            <Button
-                                variant="ghost"
-                                className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
-                                onClick={() => navigate('/login')}
-                                data-testid="env-sign-in"
-                            >
-                                Sign in
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
-                                onClick={startOver}
-                                data-testid="env-new-ask"
-                            >
-                                New ask
-                            </Button>
-                            <GoogleSignInButton
-                                label="Keep this with Google"
-                                next={`/env/${taskId}`}
-                                className="border-white/20 bg-transparent text-white hover:bg-white/10 h-10 hidden sm:inline-flex"
-                                testId="env-google-signin"
-                            />
-                            <Button
-                                className="rounded-full bg-white text-slate-950 hover:bg-teal-100 h-10"
-                                onClick={keepWorkspace}
-                                data-testid="env-keep-workspace"
-                            >
-                                Keep this workspace
-                            </Button>
-                        </>
+                        <Button
+                            variant="ghost"
+                            className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
+                            onClick={() => navigate('/login')}
+                            data-testid="env-sign-in"
+                        >
+                            Sign in
+                        </Button>
                     ) : (
                         <Button
                             className="rounded-full bg-white text-slate-950 hover:bg-teal-100 h-10"
                             onClick={() => navigate('/dashboard')}
                             data-testid="env-open-dashboard"
                         >
-                            Open dashboard <ArrowRight className="w-4 h-4 ml-2" />
+                            Dashboard <ArrowRight className="w-4 h-4 ml-2" />
                         </Button>
                     )}
                 </div>
             </nav>
 
-            <main className="relative z-10 max-w-4xl mx-auto px-5 pb-20">
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-                    <p className="text-teal-300/90 text-xs uppercase tracking-[0.2em] mb-3">Your task</p>
-                    <h1 className="text-3xl sm:text-4xl font-semibold leading-tight mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {copy.headline || 'Your ask is on its way'}
-                    </h1>
-                    <p className="text-white/60 leading-relaxed max-w-2xl mb-8" data-testid="env-subcopy">
-                        {copy.sub} {copy.reassurance}
+            <main className="relative z-10 max-w-xl mx-auto px-5 pb-24">
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="flex flex-col items-center text-center pt-6 sm:pt-10"
+                >
+                    <span
+                        className={`w-14 h-14 rounded-full inline-flex items-center justify-center mb-4 ${
+                            delivered
+                                ? 'bg-teal-400/15 ring-1 ring-teal-300/30 text-teal-200'
+                                : 'bg-amber-400/15 ring-1 ring-amber-300/25 text-amber-100'
+                        }`}
+                        aria-hidden
+                    >
+                        {delivered ? <CheckCircle2 className="w-7 h-7" /> : <Clock className="w-7 h-7" />}
+                    </span>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-white/40 mb-3" data-testid="env-status">
+                        {statusWord}
                     </p>
+                    <p className="sr-only" data-testid="env-subcopy">{statusWord}</p>
+                    <h1
+                        className="text-2xl sm:text-3xl font-semibold leading-snug tracking-tight"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                        data-testid="env-ask"
+                    >
+                        {task.title}
+                    </h1>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs">
+                        <span className="rounded-full bg-teal-400/15 text-teal-100 px-2.5 py-1" data-testid="env-assignee">
+                            {task.assigned_to_name || task.assigned_to_email}
+                        </span>
+                        <span
+                            className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1 inline-flex items-center gap-1.5"
+                            data-testid="env-channel"
+                        >
+                            {channel === 'slack' ? <MessageSquare className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
+                            {channel === 'slack' ? 'Slack' : 'Email'}
+                        </span>
+                        {due ? (
+                            <span className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1 inline-flex items-center gap-1.5">
+                                <Clock className="w-3 h-3" /> {due}
+                            </span>
+                        ) : null}
+                        {task.status ? (
+                            <span className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1 capitalize">
+                                {String(task.status).replace(/_/g, ' ')}
+                            </span>
+                        ) : null}
+                        {!delivered && (
+                            <span
+                                className="rounded-full bg-amber-400/15 text-amber-100 px-2.5 py-1"
+                                data-testid="env-sample-note"
+                            >
+                                Sample
+                            </span>
+                        )}
+                    </div>
                 </motion.div>
 
-                <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
-                    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/12 p-5" data-testid="env-ask">
-                        <p className="text-[11px] uppercase tracking-wide text-white/40 mb-2">What you asked</p>
-                        <p className="text-xl font-semibold mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>{task.title}</p>
-                        {task.description && task.description !== task.title && (
-                            <p className="text-white/55 leading-relaxed text-sm">{task.description}</p>
-                        )}
-                        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full bg-teal-400/15 text-teal-100 px-2.5 py-1" data-testid="env-assignee">
-                                {task.assigned_to_name || task.assigned_to_email}
+                <ol className="mt-10 env-track" data-testid="env-activity">
+                    {activity.map((row, index) => {
+                        const Icon = beatIcon(row);
+                        const label = beatLabel(row.title);
+                        const isSlack = label === 'Slack';
+                        const Tag = isSlack ? 'button' : 'div';
+                        return (
+                            <li key={row.id || `${label}-${index}`} className="env-track-item">
+                                <span className="env-track-dot">
+                                    <Icon className="w-3.5 h-3.5" />
+                                </span>
+                                <Tag
+                                    type={isSlack ? 'button' : undefined}
+                                    className={`env-track-body ${isSlack ? 'env-track-action' : ''}`}
+                                    onClick={isSlack ? connectSlack : undefined}
+                                    disabled={isSlack ? connectingSlack : undefined}
+                                    data-testid={isSlack ? "env-connect-slack" : undefined}
+                                >
+                                    <span className="env-track-title">{isSlack && connectingSlack ? 'Opening…' : label}</span>
+                                    <span className="env-track-meta">{shortTime(row.created_at)}</span>
+                                </Tag>
+                            </li>
+                        );
+                    })}
+                    {!activity.length && (
+                        <li className="env-track-item">
+                            <span className="env-track-dot">
+                                <Bot className="w-3.5 h-3.5" />
                             </span>
-                            <span className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1 inline-flex items-center gap-1.5" data-testid="env-channel">
-                                {channel === 'slack' ? <MessageSquare className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
-                                {channel === 'slack' ? 'Slack follow-up requested' : 'Email'}
-                            </span>
-                            <span className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1 inline-flex items-center gap-1.5">
-                                <Clock className="w-3 h-3" /> Due {dueLabel(task.due_date)}
-                            </span>
-                            <span className="rounded-full bg-white/[0.07] text-white/70 px-2.5 py-1">{task.status}</span>
-                        </div>
-                        {!room?.delivered && (
-                            <p className="mt-4 text-xs text-amber-200/80" data-testid="env-sample-note">
-                                Sample send - nothing left the building. Add a real email next time and it goes out.
-                            </p>
-                        )}
-                    </div>
+                            <div className="env-track-body">
+                                <span className="env-track-title">{statusWord}</span>
+                            </div>
+                        </li>
+                    )}
+                </ol>
 
-                    <div className="rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/12 p-5">
-                        <p className="text-[11px] uppercase tracking-wide text-white/40 mb-3">Keep this going</p>
-                        <div className="space-y-2.5">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={connectSlack}
-                                disabled={connectingSlack}
-                                className="w-full justify-start rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 h-11"
-                                data-testid="env-connect-slack"
-                            >
-                                <MessageSquare className="w-4 h-4 mr-2" />
-                                {connectingSlack ? 'Opening Slack…' : 'Connect Slack for silent assignees'}
-                            </Button>
+                {isGuest && (
+                    <div className="mt-10 space-y-3" data-testid="env-keep-workspace-panel">
+                        <Button
+                            type="button"
+                            onClick={keepWorkspace}
+                            className="w-full rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 text-base font-medium"
+                            data-testid="env-keep-workspace"
+                        >
+                            <Check className="w-4 h-4 mr-2" /> Keep workspace
+                        </Button>
+                        <div className="flex items-center justify-center gap-2">
                             <GoogleSignInButton
-                                label="Continue with Google"
+                                label="Google"
                                 next={`/env/${taskId}`}
-                                className="w-full justify-start border-white/20 bg-transparent text-white hover:bg-white/10 h-11"
+                                className="border-white/20 bg-transparent text-white hover:bg-white/10 h-10 px-4"
                                 testId="env-google-continue"
                             />
-                            {isGuest && (
-                                <Button
-                                    type="button"
-                                    onClick={keepWorkspace}
-                                    className="w-full justify-start rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-11"
-                                    data-testid="env-keep-workspace-panel"
-                                >
-                                    <Check className="w-4 h-4 mr-2" /> Keep this workspace
-                                </Button>
-                            )}
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={startOver}
+                                className="rounded-full text-white/55 hover:text-white hover:bg-white/10 h-10"
+                                data-testid="env-new-ask"
+                            >
+                                New ask
+                            </Button>
                         </div>
-                        <p className="mt-4 text-xs text-white/40 leading-relaxed">
-                            TskFlow follows up so you never write &ldquo;just circling back&rdquo; again. Nothing here
-                            disappears when you keep the workspace.
-                        </p>
                     </div>
-                </div>
-
-                <div className="mt-6 rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/12 p-5" data-testid="env-activity">
-                    <p className="text-[11px] uppercase tracking-wide text-white/40 mb-4">What&apos;s happening</p>
-                    <ol className="space-y-4">
-                        {activity.map((row) => {
-                            const Icon = CHANNEL_ICON[row.channel] || Bot;
-                            return (
-                                <li key={row.id} className="flex gap-3">
-                                    <span className="mt-0.5 w-8 h-8 shrink-0 rounded-full bg-teal-400/15 ring-1 ring-teal-300/20 inline-flex items-center justify-center">
-                                        <Icon className="w-4 h-4 text-teal-200" />
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-white/90">
-                                            {row.title}
-                                            <span className="ml-2 text-[11px] text-white/35">{shortTime(row.created_at)}</span>
-                                        </p>
-                                        <p className="text-sm text-white/55 leading-relaxed">{row.body}</p>
-                                    </div>
-                                </li>
-                            );
-                        })}
-                        {!activity.length && (
-                            <li className="text-sm text-white/45">Updates will show here in a moment.</li>
-                        )}
-                    </ol>
-                </div>
+                )}
             </main>
         </div>
     );

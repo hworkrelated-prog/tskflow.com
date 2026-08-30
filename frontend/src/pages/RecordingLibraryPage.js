@@ -90,7 +90,6 @@ const RecordingLibraryPage = () => {
                         <CardContent className="py-16 text-center">
                             <Video className="w-10 h-10 text-teal-400 mx-auto mb-3" />
                             <h3 className="text-lg font-semibold mb-1">No recordings yet</h3>
-                            <p className="text-sm text-muted-foreground mb-4">Hit the &quot;Record Screen&quot; button above to create your first one.</p>
                         </CardContent>
                     </Card>
                 ) : (

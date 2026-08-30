@@ -61,7 +61,6 @@ const AdminDashboard = () => {
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-semibold" style={{ fontFamily: 'Outfit' }}>Admin Dashboard</h1>
-                        <p className="text-sm text-muted-foreground">Welcome, {user?.name}</p>
                     </div>
                     <div className="flex gap-3">
                         <Button

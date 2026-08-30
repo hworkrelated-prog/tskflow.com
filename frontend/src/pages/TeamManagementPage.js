@@ -427,7 +427,6 @@ const TeamManagementPage = () => {
                                         <div className="text-center py-12">
                                             <CheckCircle2 className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
                                             <p className="text-muted-foreground">No performance data yet</p>
-                                            <p className="text-sm text-muted-foreground">Add direct reports and assign them tasks to see metrics</p>
                                         </div>
                                     )}
                                 </CardContent>
@@ -497,9 +496,6 @@ const TeamManagementPage = () => {
                                         <div className="text-center py-12">
                                             <GitBranch className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                                             <p className="text-muted-foreground">No direct reports yet</p>
-                                            <p className="text-sm text-muted-foreground mt-2">
-                                                Add team members who report to you to track their task progress
-                                            </p>
                                         </div>
                                     ) : (
                                         <div className="space-y-4">

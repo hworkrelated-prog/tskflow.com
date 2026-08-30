@@ -33,23 +33,23 @@ export default function LandingPhoneRecordSheet({
             >
                 <DialogHeader>
                     <DialogTitle className="text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Record on this phone
+                        Record
                     </DialogTitle>
-                    <DialogDescription className="text-white/55">
-                        This browser can&apos;t capture the screen inside the page. Record with the camera, or attach a clip from Photos.
+                    <DialogDescription className="sr-only">
+                        Camera, Photos, or Control Center.
                     </DialogDescription>
                 </DialogHeader>
 
                 <ol className="text-sm text-white/70 space-y-2 list-decimal pl-5" data-testid="landing-phone-record-hint">
                     {apple ? (
                         <>
-                            <li>Swipe to Control Center and tap Screen Recording (dotted circle).</li>
-                            <li>Do the walkthrough, stop from the red status bar, then attach the clip from Photos.</li>
+                            <li>Control Center → Screen Recording.</li>
+                            <li>Stop, then attach from Photos.</li>
                         </>
                     ) : (
                         <>
-                            <li>Use the phone&apos;s screen recorder, or film with the camera.</li>
-                            <li>Then attach the clip from Photos / gallery.</li>
+                            <li>Phone screen recorder, or camera.</li>
+                            <li>Attach the clip from Photos.</li>
                         </>
                     )}
                 </ol>
@@ -105,7 +105,7 @@ export default function LandingPhoneRecordSheet({
                     </Button>
                     <p className="text-[11px] text-white/40 text-center flex items-center justify-center gap-1 pt-1">
                         <Video className="w-3 h-3" />
-                        Screen recordings live in Photos → Recents
+                        Photos → Recents
                     </p>
                 </div>
             </DialogContent>

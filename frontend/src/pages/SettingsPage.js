@@ -482,10 +482,6 @@ const SettingsPage = () => {
                                         testId="settings-accountability-score"
                                     />
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                                    How you respond, finish, and follow through on work assigned to you.
-                                    Sitting silent or overdue pulls this down.
-                                </p>
                             </div>
                         </CardContent>
                     </Card>
@@ -529,7 +525,7 @@ const SettingsPage = () => {
                                             <span className="font-semibold text-green-800">Try Teams for 30 days</span>
                                         </div>
                                         <p className="text-sm text-green-700 mb-3">
-                                            Hierarchy, leaderboards, and Slack — after you have been exchanging work.
+                                            Hierarchy, leaderboards, and Slack.
                                         </p>
                                         <Button
                                             onClick={async () => {
