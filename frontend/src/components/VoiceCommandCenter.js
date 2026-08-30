@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Mic, MicOff, X, Loader2, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { speakChatGptVoice, stopChatGptVoice } from '@/lib/chatGptVoice';
 
 const getRecognition = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -33,14 +34,11 @@ export const VoiceCommandCenter = ({ onAction }) => {
     }, []);
 
     const speak = useCallback((text) => {
-        if (!('speechSynthesis' in window) || !text) return;
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.02;
-        u.pitch = 1.0;
-        u.onstart = () => setPhase('speaking');
-        u.onend = () => setPhase('idle');
-        window.speechSynthesis.speak(u);
+        speakChatGptVoice(text, {
+            onStart: () => setPhase('speaking'),
+            onEnd: () => setPhase('idle'),
+            onError: () => setPhase('idle'),
+        });
     }, []);
 
     const sendCommand = useCallback(async (text) => {
@@ -93,7 +91,7 @@ export const VoiceCommandCenter = ({ onAction }) => {
 
     const closeAll = () => {
         stopListening();
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
         setOpen(false);
         setPhase('idle');
     };

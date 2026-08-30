@@ -2,26 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import { createDictationSession } from '@/lib/promptVoice';
+import { speakChatGptVoice, stopChatGptVoice } from '@/lib/chatGptVoice';
 
 export const GUIDE_OPEN =
     'Type the ask. Add who it is for. Then send.';
 export const GUIDE_AFTER_HEAR =
     'Who should own this? Add their email, then send.';
-
-const pickVoice = () => {
-    if (!('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices() || [];
-    if (!voices.length) return null;
-    const rank = (v) => {
-        const n = `${v.name} ${v.lang}`.toLowerCase();
-        let score = 0;
-        if (/en(-|_)?(us|gb|au)/i.test(v.lang)) score += 10;
-        if (/google|microsoft|samantha|aria|jenny|natural|neural/i.test(n)) score += 8;
-        if (/compact|espeak|robot/i.test(n)) score -= 10;
-        return score;
-    };
-    return [...voices].sort((a, b) => rank(b) - rank(a))[0] || null;
-};
 
 const forSpeech = (text) => (text || '').replace(/\s+/g, ' ').trim();
 
@@ -37,7 +23,6 @@ export default function LandingVoiceGuide({
     const [phase, setPhase] = useState('idle'); // idle | speaking | listening
     const [caption, setCaption] = useState('');
     const [supported, setSupported] = useState(true);
-    const voiceRef = useRef(null);
     const dictationRef = useRef(null);
     const inputRef = useRef(inputValue || '');
     const onHeardRef = useRef(onHeard);
@@ -57,35 +42,21 @@ export default function LandingVoiceGuide({
         supportedRef.current = supported;
     }, [supported]);
 
-    useEffect(() => {
-        if (!('speechSynthesis' in window)) return undefined;
-        const load = () => {
-            voiceRef.current = pickVoice();
-        };
-        load();
-        window.speechSynthesis.addEventListener('voiceschanged', load);
-        return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
-    }, []);
-
     const speak = useCallback((text, { thenListen = false } = {}) => {
         const cleaned = forSpeech(text);
         setCaption(cleaned);
-        if (!('speechSynthesis' in window) || !cleaned) {
+        if (!cleaned) {
             if (thenListen) startListeningRef.current();
             return;
         }
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(cleaned);
-        const voice = voiceRef.current || pickVoice();
-        if (voice) u.voice = voice;
-        u.rate = 1.02;
-        u.onstart = () => setPhase('speaking');
-        u.onend = () => {
-            if (thenListen) startListeningRef.current();
-            else setPhase('idle');
-        };
-        u.onerror = () => setPhase('idle');
-        window.speechSynthesis.speak(u);
+        setPhase('speaking');
+        speakChatGptVoice(cleaned, {
+            onEnd: () => {
+                if (thenListen) startListeningRef.current();
+                else setPhase('idle');
+            },
+            onError: () => setPhase('idle'),
+        });
     }, []);
 
     const getDictation = useCallback(() => {
@@ -111,7 +82,7 @@ export default function LandingVoiceGuide({
             toast.info('This browser cannot listen. Type the ask instead.');
             return;
         }
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
         const result = getDictation().start({
             onCommit: (t) => {
                 setPhase('idle');
@@ -138,7 +109,7 @@ export default function LandingVoiceGuide({
 
     useEffect(() => () => {
         dictationRef.current?.stop({ commit: false });
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
     }, []);
 
     const startGuide = () => {
@@ -149,7 +120,7 @@ export default function LandingVoiceGuide({
 
     const stopGuide = () => {
         stopListening();
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
         setPhase('idle');
         setCaption('');
     };

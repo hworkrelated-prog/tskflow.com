@@ -9,6 +9,7 @@ import { JarvisIcon } from '@/components/JarvisIcon';
 import { captureVisibleScreenContext } from '@/lib/screenContext';
 
 import { createDictationSession } from '@/lib/promptVoice';
+import { speakChatGptVoice, stopChatGptVoice } from '@/lib/chatGptVoice';
 
 const routeFor = (target) => ({
     dashboard: '/dashboard',
@@ -20,31 +21,6 @@ const routeFor = (target) => ({
     recordings: '/recordings',
     recurring: '/recurring',
 }[target]);
-
-/** Prefer natural-sounding system voices over the default robotic one. */
-const pickNaturalVoice = () => {
-    if (!('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices() || [];
-    if (!voices.length) return null;
-    const rank = (v) => {
-        const n = `${v.name} ${v.lang}`.toLowerCase();
-        let score = 0;
-        if (/en(-|_)?(us|gb|au)/i.test(v.lang)) score += 10;
-        if (/google|microsoft|samantha|aria|jenny|guy|natural|neural|premium|enhanced/i.test(n)) score += 8;
-        if (/zira|david|mark|susan|female|male/i.test(n)) score += 2;
-        if (/compact|espeak|robot/i.test(n)) score -= 10;
-        return score;
-    };
-    return [...voices].sort((a, b) => rank(b) - rank(a))[0] || null;
-};
-
-const forSpeech = (text) =>
-    (text || '')
-        .replace(/[•●▪︎]/g, '')
-        .replace(/\*\*?/g, '')
-        .replace(/[_#`]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
 
 /** Offline-safe answers when the API/proxy fails entirely */
 const localJarvisReply = (text) => {
@@ -92,14 +68,11 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     const [supported, setSupported] = useState(true);
     const [nudge, setNudge] = useState(false);
     const [wiggle, setWiggle] = useState(false);
-    const [voiceReady, setVoiceReady] = useState(false);
     const dictationRef = useRef(null);
     const listRef = useRef(null);
     const inputRef = useRef(null);
     const nudgeTimer = useRef(null);
     const messagesRef = useRef([]);
-    const voiceRef = useRef(null);
-    const speakQueueRef = useRef([]);
 
     useEffect(() => {
         messagesRef.current = messages;
@@ -110,60 +83,16 @@ const VoiceMode = ({ dockIntegrated = false }) => {
     }, []);
 
     useEffect(() => {
-        if (!('speechSynthesis' in window)) return undefined;
-        const load = () => {
-            voiceRef.current = pickNaturalVoice();
-            setVoiceReady(true);
-        };
-        load();
-        window.speechSynthesis.addEventListener('voiceschanged', load);
-        return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
-    }, []);
-
-    useEffect(() => {
         if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
     }, [messages, phase]);
 
     const speak = useCallback((text) => {
-        if (!('speechSynthesis' in window) || !text) return;
-        window.speechSynthesis.cancel();
-        speakQueueRef.current = [];
-
-        const cleaned = forSpeech(text);
-        // Speak in short beats so it feels conversational, not one flat drone
-        const chunks = cleaned
-            .split(/(?<=[.!?])\s+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-        const parts = chunks.length ? chunks : [cleaned];
-
-        const voice = voiceRef.current || pickNaturalVoice();
-        let i = 0;
-        const next = () => {
-            if (i >= parts.length) {
-                setPhase('idle');
-                return;
-            }
-            const u = new SpeechSynthesisUtterance(parts[i]);
-            i += 1;
-            if (voice) u.voice = voice;
-            u.rate = 1.02;
-            u.pitch = 1.0;
-            u.volume = 1;
-            u.onstart = () => setPhase('speaking');
-            u.onend = () => {
-                // Tiny pause between sentences
-                setTimeout(next, 90);
-            };
-            u.onerror = () => setPhase('idle');
-            window.speechSynthesis.speak(u);
-        };
-        next();
-        // voiceschanged may fire late on some browsers
-        if (!voiceReady) setTimeout(() => {
-            if (!voiceRef.current) voiceRef.current = pickNaturalVoice();
-        }, 50);
-    }, [voiceReady]);
+        speakChatGptVoice(text, {
+            onStart: () => setPhase('speaking'),
+            onEnd: () => setPhase('idle'),
+            onError: () => setPhase('idle'),
+        });
+    }, []);
 
     const sendCommand = useCallback(async (text, { speakReply = true, screenContext = null } = {}) => {
         const trimmed = (text || '').trim();
@@ -256,7 +185,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             inputRef.current?.focus();
             return;
         }
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
         const result = getDictation().start({
             onCommit: (t) => {
                 setPhase('idle');
@@ -296,7 +225,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     const closePanel = useCallback(() => {
         stopListening();
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
         setPhase('idle');
         setOpen(false);
     }, [stopListening]);
@@ -345,7 +274,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
 
     useEffect(() => () => {
         stopListening();
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        stopChatGptVoice();
     }, [stopListening]);
 
     if (!user) return null;

@@ -219,6 +219,7 @@ ALGORITHM = "HS256"
 # 30 days — returning to the PWA after overnight / next-day should stay signed in
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 # PST Timezone
 PST = pytz.timezone('America/Los_Angeles')
@@ -508,6 +509,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+):
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
 
 def get_pst_now():
     return datetime.now(PST)
@@ -7698,6 +7709,55 @@ class VoiceCommandRequest(BaseModel):
     text: Optional[str] = None  # alias for typed chat
     history: Optional[List[dict]] = None  # [{role, text}] prior turns while panel is open
     screen_context: Optional[dict] = None  # DOM snapshot when user taps "Need a hand?"
+
+
+class VoiceSpeakRequest(BaseModel):
+    text: Optional[str] = None
+
+
+_speak_hits: Dict[str, List[float]] = {}
+
+
+def _guest_speak_allowed(ip: str) -> bool:
+    now = datetime.now(timezone.utc).timestamp()
+    window = [t for t in (_speak_hits.get(ip) or []) if now - t < 60]
+    if len(window) >= 24:
+        _speak_hits[ip] = window
+        return False
+    window.append(now)
+    _speak_hits[ip] = window
+    return True
+
+
+@api_router.post("/voice/speak")
+async def voice_speak(
+    req: VoiceSpeakRequest,
+    request: HTTPRequest,
+    current_user: Optional[dict] = Depends(get_optional_user),
+):
+    """OpenAI TTS in ChatGPT's Nova voice. Guests may speak short lines (landing)."""
+    spoken = " ".join((req.text or "").split()).strip()
+    if not spoken:
+        raise HTTPException(status_code=400, detail="Empty text")
+    limit = 2200 if current_user else 320
+    if len(spoken) > limit:
+        raise HTTPException(status_code=400, detail="Text too long")
+    if not current_user:
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        ip = forwarded or (request.client.host if request.client else "") or "unknown"
+        if not _guest_speak_allowed(ip):
+            raise HTTPException(status_code=429, detail="Too many voice requests")
+    try:
+        from llm import synthesize_speech
+        audio = await synthesize_speech(spoken)
+    except Exception as e:
+        logging.warning("TTS failed: %s", e)
+        raise HTTPException(status_code=503, detail="Voice is unavailable")
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )
 
 VOICE_SYSTEM_PROMPT = """You are Tskflow's voice assistant. You help a user manage tasks by voice.
 You will receive the user's spoken transcript plus JSON context (their outstanding tasks and known contacts).
