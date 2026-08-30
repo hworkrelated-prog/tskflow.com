@@ -40,7 +40,7 @@ const topics = [
         id: 'voice',
         icon: <PlayCircle className="w-4 h-4" />, title: 'Voice', category: 'AI Assistant',
         body: (
-            <p className="text-sm">Tap the mic. <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd>.</p>
+            <p className="text-sm">Tap the mic and talk, like ChatGPT. Rook listens, answers or does the thing, speaks back, then keeps listening. Tap again to stop. <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd>.</p>
         )
     },
     {

@@ -16,6 +16,8 @@ import { uploadBlob, fileUrl } from '@/lib/upload';
 import { AttachmentPicker } from '@/components/AttachmentPicker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { createDictationSession } from '@/lib/promptVoice';
+import { speakChatGptVoice, stopChatGptVoice } from '@/lib/chatGptVoice';
+import { applyVoiceAction, shouldComposeTask, VOICE_ROUTES } from '@/lib/voiceActions';
 import { needsIosScreenRecordFlow } from '@/lib/recordingCapabilities';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase, looksLikeTimeOnly, looksLikeFollowupFragment, classifyClarifyAnswer, repairMessyPrompt } from '@/lib/selfAssign';
@@ -114,16 +116,20 @@ const parseConfirmChatEdit = (raw) => {
 };
 
 const COMMAND_ROUTES = [
-    { keys: ['analytics', 'metrics', 'reports', 'report'], re: /\b(analytics|metrics|reports?)\b/i, path: '/analytics', label: 'Analytics' },
-    { keys: ['settings', 'preferences'], re: /\b(settings|preferences)\b/i, path: '/settings', label: 'Settings' },
-    { keys: ['team', 'org chart', 'direct reports'], re: /\b(team|org chart|direct reports)\b/i, path: '/team', label: 'Team' },
-    { keys: ['help'], re: /\b(help|how to)\b/i, path: '/help', label: 'Help' },
-    { keys: ['recording', 'recordings'], re: /\brecordings?\b/i, path: '/recordings', label: 'Recordings' },
-    { keys: ['recurring'], re: /\brecurring\b/i, path: '/recurring', label: 'Recurring' },
-    { keys: ['transcript', 'meeting notes'], re: /\b(transcript|meeting notes)\b/i, path: '/transcript', label: 'Transcript' },
-    { keys: ['lead', 'leads'], re: /\b(leads?)\b/i, path: '/leads', label: 'Leads' },
-    { keys: ['dashboard', 'home', 'hub'], re: /\b(dashboard|home|hub)\b/i, path: '/dashboard', label: 'Dashboard' },
-    { keys: ['activity', 'activity log'], re: /\bactivity\b/i, path: '/activity', label: 'Activity log' },
+    { keys: ['analytics', 'metrics', 'reports', 'report'], re: /\b(analytics|metrics|reports?)\b/i, path: VOICE_ROUTES.analytics, label: 'Analytics' },
+    { keys: ['settings', 'preferences'], re: /\b(settings|preferences)\b/i, path: VOICE_ROUTES.settings, label: 'Settings' },
+    { keys: ['team', 'org chart', 'direct reports'], re: /\b(team|org chart|direct reports)\b/i, path: VOICE_ROUTES.team, label: 'Team' },
+    { keys: ['help'], re: /\b(help|how to)\b/i, path: VOICE_ROUTES.help, label: 'Help' },
+    { keys: ['recording', 'recordings'], re: /\brecordings?\b/i, path: VOICE_ROUTES.recordings, label: 'Recordings' },
+    { keys: ['recurring'], re: /\brecurring\b/i, path: VOICE_ROUTES.recurring, label: 'Recurring' },
+    { keys: ['transcript', 'meeting notes'], re: /\b(transcript|meeting notes)\b/i, path: VOICE_ROUTES.transcript, label: 'Transcript' },
+    { keys: ['lead', 'leads'], re: /\b(leads?)\b/i, path: VOICE_ROUTES.leads, label: 'Leads' },
+    { keys: ['dashboard', 'home', 'hub'], re: /\b(dashboard|home|hub)\b/i, path: VOICE_ROUTES.dashboard, label: 'Dashboard' },
+    { keys: ['activity', 'activity log'], re: /\bactivity\b/i, path: VOICE_ROUTES.activity, label: 'Activity log' },
+    { keys: ['unbiassly'], re: /\bunbiassly\b/i, path: VOICE_ROUTES.unbiassly, label: 'Unbiassly' },
+    { keys: ['calendar', 'connect calendar'], re: /\b(google )?calendar\b/i, path: VOICE_ROUTES.calendar, label: 'Calendar' },
+    { keys: ['leaderboard'], re: /\bleaderboard\b/i, path: VOICE_ROUTES.leaderboard, label: 'Leaderboard' },
+    { keys: ['updates', "what's new"], re: /\b(updates|what'?s new)\b/i, path: VOICE_ROUTES.updates, label: 'Updates' },
 ];
 
 const tryLocalCommand = (raw) => {
@@ -141,8 +147,15 @@ const tryLocalCommand = (raw) => {
     if (/^(from transcript|import transcript|extract tasks from)/i.test(t)) {
         return { type: 'navigate', path: '/transcript', label: 'Transcript' };
     }
+    if (/\b(record (my |the )?screen|start (a )?(screen )?record(ing)?)\b/i.test(t)) {
+        return { type: 'start_recording' };
+    }
     if (/^(start|new)\s+record(ing)?\b/i.test(t) || /^record(ing)?$/i.test(t)) {
         return { type: 'navigate', path: '/recordings', label: 'Recordings' };
+    }
+    if (/^(start |new |create |make )?(a )?recurring(\s+task|\s+series)?$/i.test(t)
+        || /\bmake (this|it) recurring\b/i.test(t)) {
+        return { type: 'start_recurring' };
     }
     const search = t.match(/^(search|find|look up)\s+(.+)/i);
     if (search) {
@@ -253,6 +266,8 @@ const AIQuickCreate = ({
     // Which confirm-summary field is open for inline edit: title|due|priority|criteria|assignees|desc|null
     const [editingField, setEditingField] = useState(null);
     const [listening, setListening] = useState(false);
+    const [voiceSession, setVoiceSession] = useState(false);
+    const [voicePhase, setVoicePhase] = useState('idle'); // idle | listening | thinking | speaking
     const [formatOpen, setFormatOpen] = useState(false);
     const fileInputRef = useRef(null);
     const plusRef = useRef(null);
@@ -260,7 +275,13 @@ const AIQuickCreate = ({
     const voiceSeedRef = useRef('');
     const dictationRef = useRef(null);
     const runPreviewRef = useRef(null);
+    const runQARef = useRef(null);
     const sendRef = useRef(null);
+    const previewRef = useRef(null);
+    const voiceSessionRef = useRef(false);
+    const voiceGenRef = useRef(0);
+    const startVoiceRef = useRef(null);
+    const handleVoiceTurnRef = useRef(null);
     const threadEndRef = useRef(null);
     const threadRef = useRef([]);
     const activePromptRef = useRef('');
@@ -272,6 +293,10 @@ const AIQuickCreate = ({
     const focusInput = useCallback(() => {
         setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 30);
     }, []);
+
+    useEffect(() => {
+        previewRef.current = preview;
+    }, [preview]);
 
     // Grow like a chat composer: start compact, expand with content, then scroll.
     const resizePrompt = useCallback(() => {
@@ -1025,15 +1050,17 @@ const AIQuickCreate = ({
         }
     };
 
-    const startRecurringCompose = () => {
+    const startRecurringCompose = (opts = {}) => {
         setPlusOpen(false);
         setRecurringHint(true);
         recurringHintRef.current = true;
         setComposerFocused(true);
-        appendThread({
-            role: 'assistant',
-            text: 'Who, what, and how often?',
-        });
+        if (!opts.silent) {
+            appendThread({
+                role: 'assistant',
+                text: 'Who, what, and how often?',
+            });
+        }
         focusInput();
     };
 
@@ -1068,14 +1095,19 @@ const AIQuickCreate = ({
             const reply = res?.data?.reply || res?.data?.answer || 'I can help with that.';
             appendThread({ role: 'assistant', text: reply });
             const action = res?.data?.action;
-            if (action?.type === 'navigate' && action?.params?.target) {
-                const routes = {
-                    dashboard: '/dashboard', analytics: '/analytics', team: '/team', settings: '/settings',
-                    leads: '/leads', help: '/help', recordings: '/recordings', recurring: '/recurring',
-                };
-                const route = routes[action.params.target];
-                if (route) setTimeout(() => navigate(route), 400);
-            }
+            applyVoiceAction(action, {
+                navigate,
+                delay: 400,
+                startRecording: () => setPlusOpen(true),
+                startRecurring: () => startRecurringCompose({ silent: true }),
+                openForm: () => onOpenAdvanced?.(),
+                executed: res?.data?.executed,
+                onExecuted: (_act, executed) => {
+                    if (['create_task', 'assign_task', 'update_status'].includes(action?.type) && executed) {
+                        window.dispatchEvent(new CustomEvent('tskflow:voice-executed', { detail: executed }));
+                    }
+                },
+            });
         } catch (err) {
             const fallback =
                 "Type an assignment, or ask what’s outstanding.";
@@ -1088,6 +1120,7 @@ const AIQuickCreate = ({
             setAnswerLoading(false);
         }
     };
+    runQARef.current = runQA;
 
     const runPreview = async (overrideText, overrideAnswers, opts = {}) => {
         const t = (overrideText ?? text).trim();
@@ -1102,6 +1135,19 @@ const AIQuickCreate = ({
                 setText('');
                 navigate(cmd.path);
                 onRequestExit?.();
+                return;
+            }
+            if (cmd?.type === 'start_recording') {
+                setText('');
+                setPlusOpen(true);
+                appendThread({ role: 'user', text: t });
+                appendThread({ role: 'assistant', text: 'Open the plus menu and hit Record screen.' });
+                return;
+            }
+            if (cmd?.type === 'start_recurring') {
+                setText('');
+                appendThread({ role: 'user', text: t });
+                startRecurringCompose();
                 return;
             }
             if (cmd?.type === 'search') {
@@ -1210,13 +1256,107 @@ const AIQuickCreate = ({
         return dictationRef.current;
     }, []);
 
+    const lastAssistantText = () => {
+        const last = [...threadRef.current].reverse().find((m) => m.role === 'assistant');
+        return (last?.text || '').trim();
+    };
+
+    const continueListening = useCallback(() => {
+        if (!voiceSessionRef.current) {
+            setVoicePhase('idle');
+            return;
+        }
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            setVoicePhase('idle');
+            return;
+        }
+        startVoiceRef.current?.();
+    }, []);
+
+    const speakThreadReply = useCallback((text) => {
+        const gen = voiceGenRef.current;
+        const cleaned = String(text || '').trim();
+        if (!voiceSessionRef.current || !cleaned) {
+            if (voiceSessionRef.current) continueListening();
+            else setVoicePhase('idle');
+            return;
+        }
+        speakChatGptVoice(cleaned, {
+            onStart: () => {
+                if (gen === voiceGenRef.current) setVoicePhase('speaking');
+            },
+            onEnd: () => {
+                if (gen !== voiceGenRef.current || !voiceSessionRef.current) {
+                    setVoicePhase('idle');
+                    return;
+                }
+                continueListening();
+            },
+            onError: () => {
+                if (gen !== voiceGenRef.current || !voiceSessionRef.current) {
+                    setVoicePhase('idle');
+                    return;
+                }
+                continueListening();
+            },
+        });
+    }, [continueListening]);
+
+    const speakLastAssistantIfVoice = useCallback(() => {
+        if (!voiceSessionRef.current) {
+            setVoicePhase('idle');
+            return;
+        }
+        const reply = lastAssistantText();
+        if (reply) speakThreadReply(reply);
+        else continueListening();
+    }, [continueListening, speakThreadReply]);
+
+    const handleVoiceTurn = useCallback(async (payload) => {
+        const t = String(payload || '').trim();
+        if (!t) {
+            continueListening();
+            return;
+        }
+        setVoicePhase('thinking');
+        setText('');
+        try {
+            if (previewRef.current) {
+                await runPreviewRef.current?.(t);
+                speakLastAssistantIfVoice();
+                return;
+            }
+            if (shouldComposeTask(t)) {
+                await runPreviewRef.current?.(t);
+                speakLastAssistantIfVoice();
+                return;
+            }
+            await runQARef.current?.(t, { alreadyLogged: false });
+            speakLastAssistantIfVoice();
+        } catch {
+            speakThreadReply("Sorry, I missed that. Try once more.");
+        }
+    }, [continueListening, speakLastAssistantIfVoice, speakThreadReply]);
+    handleVoiceTurnRef.current = handleVoiceTurn;
+
     const finishVoiceSession = useCallback((opts = {}) => {
         const { send = true } = opts;
         const payload = getDictation().stop({ commit: false });
         setListening(false);
         if (send && payload) {
-            runPreviewRef.current?.(payload);
+            handleVoiceTurnRef.current?.(payload);
         }
+        return payload;
+    }, [getDictation]);
+
+    const endVoiceConversation = useCallback(() => {
+        voiceGenRef.current += 1;
+        voiceSessionRef.current = false;
+        setVoiceSession(false);
+        stopChatGptVoice();
+        getDictation().stop({ commit: false });
+        setListening(false);
+        setVoicePhase('idle');
     }, [getDictation]);
 
     const stopVoice = useCallback(() => {
@@ -1224,23 +1364,31 @@ const AIQuickCreate = ({
     }, [finishVoiceSession]);
 
     const startVoice = useCallback(() => {
+        if (!voiceSessionRef.current) {
+            voiceSessionRef.current = true;
+            setVoiceSession(true);
+        }
+        stopChatGptVoice();
         voiceSeedRef.current = (inputRef.current?.value || '').trim();
         const result = getDictation().start({
             onCommit: (payload) => {
                 setListening(false);
-                runPreviewRef.current?.(payload);
+                handleVoiceTurnRef.current?.(payload);
             },
             onError: (error) => {
                 setListening(false);
+                setVoicePhase('idle');
                 if (error === 'not-allowed') {
                     toast.error('Microphone permission is needed for voice.');
-                } else {
-                    toast.error('Couldn’t hear that - try again.');
+                    endVoiceConversation();
+                } else if (voiceSessionRef.current) {
+                    continueListening();
                 }
             },
         });
         if (!result.started) {
             setListening(false);
+            setVoicePhase('idle');
             toast.error(result.reason === 'unsupported'
                 ? 'Voice isn’t available in this browser. Try Chrome or Safari.'
                 : 'Couldn’t start the microphone.');
@@ -1248,15 +1396,24 @@ const AIQuickCreate = ({
         }
         setComposerFocused(true);
         setListening(true);
-    }, [getDictation]);
+        setVoicePhase('listening');
+    }, [continueListening, endVoiceConversation, getDictation]);
+    startVoiceRef.current = startVoice;
 
     const toggleVoice = useCallback(() => {
-        if (listening) {
-            finishVoiceSession({ send: true });
-        } else {
+        if (voicePhase === 'speaking') {
+            stopChatGptVoice();
             startVoice();
+            return;
         }
-    }, [listening, startVoice, finishVoiceSession]);
+        if (listening) {
+            const payload = finishVoiceSession({ send: false });
+            if (payload) handleVoiceTurnRef.current?.(payload);
+            else endVoiceConversation();
+            return;
+        }
+        startVoice();
+    }, [endVoiceConversation, finishVoiceSession, listening, startVoice, voicePhase]);
 
     useEffect(() => {
         const onStartVoice = () => startVoice();
@@ -1265,21 +1422,21 @@ const AIQuickCreate = ({
     }, [startVoice]);
 
     useEffect(() => () => {
-        stopVoice();
-    }, [stopVoice]);
+        endVoiceConversation();
+    }, [endVoiceConversation]);
 
     useEffect(() => {
         const killMic = () => {
-            if (document.visibilityState === 'hidden') stopVoice();
+            if (document.visibilityState === 'hidden') endVoiceConversation();
         };
-        const onHide = () => stopVoice();
+        const onHide = () => endVoiceConversation();
         document.addEventListener('visibilitychange', killMic);
         window.addEventListener('pagehide', onHide);
         return () => {
             document.removeEventListener('visibilitychange', killMic);
             window.removeEventListener('pagehide', onHide);
         };
-    }, [stopVoice]);
+    }, [endVoiceConversation]);
 
     const removeAssignee = (idx) => {
         setEditAssignees((prev) => prev.filter((_, i) => i !== idx));
@@ -1405,10 +1562,13 @@ const AIQuickCreate = ({
     }, [focusInput, stopVoice]);
 
     useEffect(() => {
-        const onReset = () => reset();
+        const onReset = () => {
+            endVoiceConversation();
+            reset();
+        };
         window.addEventListener('tskflow:ai-dock-reset', onReset);
         return () => window.removeEventListener('tskflow:ai-dock-reset', onReset);
-    }, [reset]);
+    }, [endVoiceConversation, reset]);
 
     useEffect(() => {
         if (!Array.isArray(externalAttachments) || !externalAttachments.length) return;
@@ -1729,6 +1889,7 @@ const AIQuickCreate = ({
                 }),
             });
             reset({ keepThread: true });
+            if (voiceSessionRef.current) speakLastAssistantIfVoice();
             onCreated?.();
         } catch (err) {
             toast.error(err?.response?.data?.detail || 'Failed to create task');
@@ -1774,9 +1935,9 @@ const AIQuickCreate = ({
             thread: thread.length,
             threadTexts: thread.map((m) => m.text).filter(Boolean).slice(0, 12),
             attachments,
-            focused: composerFocused || listening,
+            focused: composerFocused || listening || voiceSession,
         });
-    }, [text, activePrompt, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, thread, attachments, composerFocused, listening, onSnapshot]);
+    }, [text, activePrompt, editTitle, editDesc, editDue, editPriority, editAssignees, editCriteria, sending, preview, answerMode, thread, attachments, composerFocused, listening, voiceSession, onSnapshot]);
     const peopleQuery = (peopleSearch || '').replace(/^@/, '').trim().toLowerCase();
     const filteredPeople = [
         { id: 'self', name: 'Me', email: '' },
@@ -1842,7 +2003,7 @@ const AIQuickCreate = ({
     };
 
     const showCommandChips = false;
-    const showPromptExample = !text.trim() && !preview && !answerMode && thread.length === 0 && !listening;
+    const showPromptExample = !text.trim() && !preview && !answerMode && thread.length === 0 && !listening && !voiceSession;
     const promptExample = PROMPT_EXAMPLES[exampleIndex] || PROMPT_EXAMPLES[0];
 
     useEffect(() => {
@@ -1891,7 +2052,7 @@ const AIQuickCreate = ({
                                 </button>
                             </div>
                         )}
-                        {(thread.length > 0 || preview || loading || answerLoading) && (
+                        {(thread.length > 0 || preview || loading || answerLoading || voiceSession) && (
                             <div className="ai-thread" data-testid="ai-chat-thread">
                                 {thread.map((m) => (
                                     <div
@@ -1902,6 +2063,18 @@ const AIQuickCreate = ({
                                         {m.text}
                                     </div>
                                 ))}
+                                {voiceSession && (
+                                    <p
+                                        className="text-[11px] text-slate-500 px-1 pt-0.5"
+                                        data-testid="ai-voice-status"
+                                        aria-live="polite"
+                                    >
+                                        {voicePhase === 'listening' ? 'Listening…'
+                                            : voicePhase === 'thinking' ? 'Thinking…'
+                                                : voicePhase === 'speaking' ? 'Speaking…'
+                                                    : 'Voice on · tap the mic to stop'}
+                                    </p>
+                                )}
                         {preview && (
                             <div className="space-y-2" data-testid="ai-preview-card">
                                 <div className="space-y-2">
@@ -2714,7 +2887,7 @@ const AIQuickCreate = ({
                             ref={composerRef}
                             className={`ai-composer-shell relative flex flex-col ${
                                 embedded ? '' : 'ai-composer-shell--inset'
-                            }${listening ? ' is-listening' : ''}`}
+                            }${listening ? ' is-listening' : ''}${voicePhase === 'speaking' ? ' is-speaking' : ''}${voicePhase === 'thinking' ? ' is-thinking' : ''}`}
                             data-testid="ai-quick-composer"
                         >
                             {formatOpen ? (
@@ -2847,6 +3020,10 @@ const AIQuickCreate = ({
                                 placeholder={
                                     listening
                                         ? 'Listening…'
+                                        : voicePhase === 'speaking'
+                                            ? 'Speaking…'
+                                            : voicePhase === 'thinking'
+                                                ? 'Thinking…'
                                         : (isWhenClarify
                                             ? (/often|repeat/i.test(clarifying[0] || '')
                                                 ? 'e.g. every weekday at 5pm'
@@ -3172,11 +3349,19 @@ const AIQuickCreate = ({
                                         disabled={loading || sending || answerLoading}
                                         className={`ai-composer-icon-btn h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
                                             listening ? 'is-listening bg-red-500 text-white animate-pulse' : ''
-                                        }`}
+                                        }${voicePhase === 'speaking' ? ' is-speaking bg-teal-600 text-white' : ''}`}
                                         data-testid="ai-prompt-voice-btn"
-                                        aria-label={listening ? 'Stop and send' : 'Speak to send'}
-                                        aria-pressed={listening}
-                                        title={listening ? 'Tap to send now' : 'Speak to send'}
+                                        aria-label={
+                                            voicePhase === 'speaking' ? 'Stop talking'
+                                                : listening ? 'Stop listening'
+                                                    : 'Start voice conversation'
+                                        }
+                                        aria-pressed={listening || voiceSession}
+                                        title={
+                                            voicePhase === 'speaking' ? 'Tap to interrupt'
+                                                : listening ? 'Tap to stop'
+                                                    : 'Talk like ChatGPT'
+                                        }
                                     >
                                         {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                                     </button>

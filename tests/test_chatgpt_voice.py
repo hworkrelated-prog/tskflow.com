@@ -57,6 +57,9 @@ def test_spoken_ui_uses_nova_tts_not_the_browser_robot():
     assert "/voice/command" not in guide
     assert "speakChatGptVoice" in voice
     assert "speakChatGptVoice" in center
+    create = _read("components", "AIQuickCreate.js")
+    assert "speakChatGptVoice" in create
+    assert "handleVoiceTurn" in create
     assert "window.speechSynthesis.speak" not in voice
     assert "window.speechSynthesis.speak" not in guide
     assert "window.speechSynthesis.speak" not in center

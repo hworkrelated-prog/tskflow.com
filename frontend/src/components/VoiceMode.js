@@ -10,17 +10,7 @@ import { captureVisibleScreenContext } from '@/lib/screenContext';
 
 import { createDictationSession } from '@/lib/promptVoice';
 import { speakChatGptVoice, stopChatGptVoice } from '@/lib/chatGptVoice';
-
-const routeFor = (target) => ({
-    dashboard: '/dashboard',
-    analytics: '/analytics',
-    team: '/team',
-    settings: '/settings',
-    leads: '/leads',
-    help: '/help',
-    recordings: '/recordings',
-    recurring: '/recurring',
-}[target]);
+import { applyVoiceAction } from '@/lib/voiceActions';
 
 /** Offline-safe answers when the API/proxy fails entirely */
 const localJarvisReply = (text) => {
@@ -28,7 +18,7 @@ const localJarvisReply = (text) => {
     if (/\b(what can you (do|help with)|who are you|what do you do|help me get started)\b/i.test(t)) {
         return {
             reply:
-                "I can assign, list what's open, and jump you to a page. What do you need?",
+                "I can assign, list what's open, jump you to a page, and answer how TskFlow works. What do you need?",
             action: { type: 'assistant_answer' },
         };
     }
@@ -111,13 +101,16 @@ const VoiceMode = ({ dockIntegrated = false }) => {
             setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: 'assistant', text: replyText }]);
             if (speakReply) speak(replyText);
             else setPhase('idle');
-            if (action?.type === 'navigate') {
-                const route = routeFor(action.params?.target);
-                if (route) setTimeout(() => navigate(route), 500);
-            }
-            if (['create_task', 'assign_task', 'update_status'].includes(action?.type) && executed) {
-                window.dispatchEvent(new CustomEvent('tskflow:voice-executed', { detail: executed }));
-            }
+            applyVoiceAction(action, {
+                navigate,
+                delay: 500,
+                executed,
+                onExecuted: () => {
+                    if (['create_task', 'assign_task', 'update_status'].includes(action?.type) && executed) {
+                        window.dispatchEvent(new CustomEvent('tskflow:voice-executed', { detail: executed }));
+                    }
+                },
+            });
         };
 
         try {

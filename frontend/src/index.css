@@ -529,6 +529,16 @@ h1, h2, h3, h4, h5, h6 {
         inset 0 0 0 1.5px rgba(239, 68, 68, 0.55),
         0 10px 28px -10px rgba(15, 23, 42, 0.2);
 }
+.ai-composer-shell.is-speaking {
+    box-shadow:
+        inset 0 0 0 1.5px rgba(13, 148, 136, 0.55),
+        0 10px 28px -10px rgba(15, 23, 42, 0.2);
+}
+.ai-composer-shell.is-thinking {
+    box-shadow:
+        inset 0 0 0 1.5px rgba(245, 158, 11, 0.5),
+        0 10px 28px -10px rgba(15, 23, 42, 0.2);
+}
 .ai-plus-menu {
     background: #fff;
     border-color: rgb(226 232 240);
@@ -564,6 +574,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ai-dock-panel.is-active .ai-composer-shell.is-listening {
     box-shadow: inset 0 0 0 1.5px rgba(239, 68, 68, 0.55);
+}
+.ai-dock-panel.is-active .ai-composer-shell.is-speaking {
+    box-shadow: inset 0 0 0 1.5px rgba(13, 148, 136, 0.55);
+}
+.ai-dock-panel.is-active .ai-composer-shell.is-thinking {
+    box-shadow: inset 0 0 0 1.5px rgba(245, 158, 11, 0.5);
 }
 
 /* Send + icon chrome - light defaults; dark overrides below. */
@@ -606,6 +622,11 @@ h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .ai-composer-shell.is-listening {
     box-shadow:
         inset 0 0 0 1.5px rgba(248, 113, 113, 0.6),
+        0 10px 28px -10px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .ai-composer-shell.is-speaking {
+    box-shadow:
+        inset 0 0 0 1.5px rgba(45, 212, 191, 0.55),
         0 10px 28px -10px rgba(0, 0, 0, 0.6);
 }
 [data-theme="dark"] .ai-plus-menu {
