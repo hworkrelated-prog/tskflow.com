@@ -85,6 +85,8 @@ def test_first_run_room_has_no_lecture():
     for phrase in LECTURE:
         assert phrase.lower() not in low, phrase
     assert 'data-testid="env-status"' in room
+    assert 'data-testid="env-value"' in room
+    assert "We run after" in room
     assert "env-track" in room
     assert "Keep workspace" in room
     assert "Sample" in room
