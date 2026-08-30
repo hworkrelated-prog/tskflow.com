@@ -43,6 +43,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     const [assignee, setAssignee] = useState('');
     const [channel, setChannel] = useState('email');
     const [sending, setSending] = useState(false);
+    const [whoNeeded, setWhoNeeded] = useState(false);
 
     const filled = Boolean(value.trim());
     const preview = distillLandingPrompt(filled ? value : '');
@@ -51,7 +52,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     const pickExample = (text) => {
         setValue(text);
         trackLandingInteract('sample');
-        inputRef?.current?.focus();
+        window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 40);
     };
 
     const attachRecording = async (taskId) => {
@@ -71,9 +72,21 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
         }
     };
 
+    const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+    const focusEmail = () => {
+        document.getElementById('landing-assignee-email')?.focus();
+        setWhoNeeded(!looksLikeEmail(assignee));
+    };
+
     const sendIt = async () => {
         const text = value.trim() || idea.text;
         if (!text) return;
+        if (!looksLikeEmail(assignee)) {
+            toast.error('Add your email to try it.');
+            focusEmail();
+            return;
+        }
         if (!value.trim()) setValue(text);
         setSending(true);
         try {
@@ -97,57 +110,54 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
 
     return (
         <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit" id="landing-tryit">
-            <div className="landing-composer rounded-[28px] border border-white/12 bg-black/35 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md px-4 sm:px-6 py-5 sm:py-6">
+            <div className="landing-composer rounded-[28px] border border-white/12 bg-black/35 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md px-4 sm:px-6 py-6 sm:py-7">
             <section
                 className="landing-step flex flex-col justify-center"
                 data-testid="landing-step-ask"
                 id="landing-step-ask"
             >
-                <p className="sr-only" data-testid="landing-no-account">
-                    No account. No password. Enter sends it.
-                </p>
                 <p className="landing-step-kicker">Ask</p>
-                <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[7rem] sm:min-h-[8rem]' : 'min-h-[4.5rem] sm:min-h-[5.5rem]'}`}>
-                    {!filled && (
-                        <div
-                            className="landing-example pointer-events-none absolute inset-0 text-xl sm:text-2xl font-medium leading-snug"
-                            data-testid={`landing-example-${idea.id}`}
-                            aria-hidden
-                        >
-                            <ColorCodedPrompt text={idea.text} as="span" />
-                        </div>
-                    )}
-                    <textarea
-                        ref={inputRef}
-                        value={value}
-                        onChange={(e) => {
-                            setValue(e.target.value);
-                            if (e.target.value.trim()) trackLandingInteract('typed');
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                document.getElementById('landing-assignee-email')?.focus();
-                            }
-                        }}
-                        rows={filled ? 4 : 3}
-                        className={`relative w-full h-full resize-none bg-transparent text-xl sm:text-2xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[7rem] sm:min-h-[8rem]' : 'min-h-[4.5rem] sm:min-h-[5.5rem]'}`}
-                        placeholder=""
-                        data-testid="landing-tryit-input"
-                        aria-label="What needs to get done"
-                    />
-                </div>
-                {!filled && (
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3" data-testid="landing-examples">
+                <div className="landing-ask-box">
+                    <div className="landing-ask-prompt">
+                        {!filled && (
+                            <div
+                                className="landing-example pointer-events-none absolute inset-0 text-[1.15rem] sm:text-2xl font-medium leading-relaxed"
+                                data-testid={`landing-example-${idea.id}`}
+                                aria-hidden
+                            >
+                                <ColorCodedPrompt text={idea.text} as="span" />
+                            </div>
+                        )}
+                        <textarea
+                            ref={inputRef}
+                            value={value}
+                            onChange={(e) => {
+                                setValue(e.target.value);
+                                if (e.target.value.trim()) trackLandingInteract('typed');
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    focusEmail();
+                                }
+                            }}
+                            rows={filled ? 4 : 3}
+                            className="landing-ask-input relative w-full h-full resize-none bg-transparent font-medium leading-relaxed outline-none caret-teal-300 text-white selection:bg-teal-400/30"
+                            placeholder=""
+                            data-testid="landing-tryit-input"
+                            aria-label="What needs to get done"
+                        />
+                    </div>
+                    <div className="landing-ask-actions" data-testid="landing-examples">
                         <button
                             type="button"
                             onClick={() => pickExample(idea.text)}
-                            className="text-sm text-teal-200/80 hover:text-teal-100"
+                            className="landing-use-idea"
                             data-testid="landing-use-idea"
                         >
                             Use this idea
                         </button>
-                        <div className="flex gap-1" aria-hidden>
+                        <div className="flex gap-1.5" aria-hidden>
                             {LANDING_EXAMPLES.map((ex, i) => (
                                 <span
                                     key={ex.id}
@@ -156,53 +166,56 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             ))}
                         </div>
                     </div>
-                )}
-                {filled && (
-                    <ColorCodedPrompt
-                        text={value}
-                        className="mt-4 text-sm leading-relaxed"
-                        testId="landing-tryit-colorized"
-                    />
-                )}
+                    {filled && (
+                        <ColorCodedPrompt
+                            text={value}
+                            className="landing-ask-parsed"
+                            testId="landing-tryit-colorized"
+                        />
+                    )}
+                </div>
             </section>
 
             <section
-                className="landing-step flex flex-col justify-center"
+                className="landing-step landing-who-step flex flex-col justify-center"
                 data-testid="landing-step-who"
                 id="landing-step-who"
             >
                 <p className="landing-step-kicker">Who</p>
-                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-                    <div className="flex-1">
-                        <Input
-                            type="email"
-                            value={assignee}
-                            onChange={(e) => setAssignee(e.target.value)}
-                            placeholder="name@company.com"
-                            className="mt-1 h-12 rounded-none border-0 border-b border-white/15 bg-transparent px-0 text-lg text-white placeholder:text-white/25 focus-visible:ring-0 focus-visible:border-teal-400/70"
-                            data-testid="landing-assignee-email"
-                            id="landing-assignee-email"
-                            aria-label="Assignee email"
-                        />
-                    </div>
-                    <div className="flex items-center gap-1" data-testid="landing-channel">
-                        <button
-                            type="button"
-                            onClick={() => setChannel('email')}
-                            className={`h-10 px-3 text-xs font-medium inline-flex items-center gap-1.5 border-b-2 ${channel === 'email' ? 'border-teal-400 text-teal-200' : 'border-transparent text-white/40 hover:text-white/70'}`}
-                            data-testid="landing-channel-email"
-                        >
-                            <Mail className="w-3.5 h-3.5" /> Email
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setChannel('slack')}
-                            className={`h-10 px-3 text-xs font-medium inline-flex items-center gap-1.5 border-b-2 ${channel === 'slack' ? 'border-white text-white' : 'border-transparent text-white/40 hover:text-white/70'}`}
-                            data-testid="landing-channel-slack"
-                        >
-                            <MessageSquare className="w-3.5 h-3.5" /> Slack
-                        </button>
-                    </div>
+                <p className="landing-who-cue" data-testid="landing-who-cue">
+                    Your email. To try it.
+                </p>
+                <Input
+                    type="email"
+                    value={assignee}
+                    onChange={(e) => {
+                        setAssignee(e.target.value);
+                        if (whoNeeded) setWhoNeeded(false);
+                    }}
+                    placeholder="you@company.com"
+                    className={`landing-who-input ${whoNeeded ? 'is-needed' : ''}`}
+                    data-testid="landing-assignee-email"
+                    id="landing-assignee-email"
+                    aria-label="Your email"
+                    autoComplete="email"
+                />
+                <div className="landing-channel-row" data-testid="landing-channel">
+                    <button
+                        type="button"
+                        onClick={() => setChannel('email')}
+                        className={channel === 'email' ? 'is-on' : ''}
+                        data-testid="landing-channel-email"
+                    >
+                        <Mail className="w-3.5 h-3.5" /> Email
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setChannel('slack')}
+                        className={channel === 'slack' ? 'is-on' : ''}
+                        data-testid="landing-channel-slack"
+                    >
+                        <MessageSquare className="w-3.5 h-3.5" /> Slack
+                    </button>
                 </div>
             </section>
 
@@ -212,7 +225,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-send"
             >
                 <p className="landing-step-kicker">Send</p>
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-t border-white/10">
+                <div className="landing-send-row">
                     <div data-testid="landing-tryit-result" className="min-w-0">
                         {preview && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -222,7 +235,10 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className="text-sm text-white/55 mt-2" data-testid="landing-send-promise">
+                        <p className="landing-try-note" data-testid="landing-no-account">
+                            No account. No password.
+                        </p>
+                        <p className="landing-try-note" data-testid="landing-send-promise">
                             {channel === 'slack'
                                 ? 'We email first, then run after them.'
                                 : 'You send it. We run after them until it is done.'}
@@ -230,7 +246,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                     </div>
                     <button
                         type="button"
-                        className="landing-cta shrink-0"
+                        className="landing-cta landing-send-cta"
                         onClick={sendIt}
                         disabled={sending}
                         data-testid="landing-send-it"
@@ -280,7 +296,7 @@ const LandingPage = () => {
 
     const scrollToComposer = () => {
         document.getElementById('landing-tryit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        window.setTimeout(() => inputRef.current?.focus(), 360);
+        window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 360);
     };
 
     return (
@@ -341,7 +357,7 @@ const LandingPage = () => {
                 <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">
-                    <p className="landing-final-line">Send one now.</p>
+                    <p className="landing-final-line">Try it.</p>
                     <LaunchPad
                         recordingBlob={recordingBlob}
                         inputRef={inputRef}
