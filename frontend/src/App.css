@@ -624,6 +624,16 @@ html:has(body.landing-active) {
     overflow: hidden;
     perspective: 1400px;
     perspective-origin: 50% 40%;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 32%, transparent 66%, #000 82%, #000 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 20%, transparent 32%, transparent 66%, #000 82%, #000 100%);
+}
+@media (min-width: 48rem) {
+    .landing-chaos {
+        -webkit-mask-image:
+            linear-gradient(to right, #000 0%, #000 16%, transparent 30%, transparent 70%, #000 84%, #000 100%);
+        mask-image:
+            linear-gradient(to right, #000 0%, #000 16%, transparent 30%, transparent 70%, #000 84%, #000 100%);
+    }
 }
 .landing-chaos-vignette {
     position: absolute;
