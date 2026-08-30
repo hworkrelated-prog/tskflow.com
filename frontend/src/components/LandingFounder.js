@@ -14,6 +14,15 @@ export default function LandingFounder() {
             />
             <h2 className="landing-founder-name" data-testid="landing-founder-name">Hashim Mahmood</h2>
             <p className="landing-founder-role">Founder · Sales</p>
+            <a
+                className="landing-founder-link"
+                href="https://www.linkedin.com/in/hashim-mahmood/"
+                target="_blank"
+                rel="noreferrer"
+                data-testid="landing-founder-linkedin"
+            >
+                LinkedIn
+            </a>
         </section>
     );
 }

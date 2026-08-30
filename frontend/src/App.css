@@ -692,6 +692,9 @@ html:has(body.landing-active) {
 .landing-hero-steps li.is-on {
     color: #5eead4;
 }
+.landing-hero-steps li.is-done {
+    color: rgba(94, 234, 212, 0.72);
+}
 .landing-hero-step-n {
     display: inline-flex;
     align-items: center;
@@ -702,17 +705,34 @@ html:has(body.landing-active) {
     border: 1px solid currentColor;
     font-size: 0.62rem;
 }
+.landing-hero-steps li.is-on .landing-hero-step-n {
+    background: #5eead4;
+    color: #042f2e;
+    border-color: #5eead4;
+}
+.landing-hero-steps li.is-done .landing-hero-step-n {
+    background: #0f766e;
+    color: #ecfdf5;
+    border-color: #0f766e;
+}
 .landing-hero-step-line {
     width: 1.6rem;
     height: 1px;
     margin: 0 0.45rem 0 0.15rem;
     background: rgba(255, 255, 255, 0.18);
 }
+.landing-hero-steps li.is-on .landing-hero-step-line,
+.landing-hero-steps li.is-done .landing-hero-step-line {
+    background: #5eead4;
+}
 .landing-fly-chip {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.28rem;
+}
+.landing-fly-chip--inline {
+    align-items: flex-start;
 }
 .landing-fly-kicker {
     font-size: 0.62rem;
@@ -792,6 +812,29 @@ html:has(body.landing-active) {
     font-size: 0.78rem;
     color: rgba(255, 255, 255, 0.72);
 }
+.landing-meet-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.9rem 0.85rem;
+    background: rgba(8, 12, 14, 0.92);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.landing-meet-ctl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+}
+.landing-meet-ctl.is-end {
+    background: #dc2626;
+    color: #fff;
+}
 .landing-meet-agree {
     position: absolute;
     right: 0.55rem;
@@ -838,6 +881,17 @@ html:has(body.landing-active) {
 .landing-shot {
     display: block;
     min-height: 5.5rem;
+    cursor: default;
+}
+.landing-page .slack-tile.landing-shot {
+    background: #0b1220;
+}
+.landing-page .slack-tile.landing-shot img {
+    width: 100%;
+    height: 100%;
+    min-height: 5.5rem;
+    object-fit: cover;
+    display: block;
 }
 .landing-shot--pipe {
     background:
@@ -917,6 +971,10 @@ html:has(body.landing-active) {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
+}
+.landing-half--mini {
+    height: 0.4rem;
+    margin-top: 0.15rem;
 }
 .landing-half-bar {
     display: block;
@@ -1053,6 +1111,31 @@ html:has(body.landing-active) {
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.5);
 }
+.landing-founder-link {
+    margin-top: 0.15rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #5eead4;
+    text-decoration: none;
+}
+.landing-founder-link:hover {
+    color: #99f6e4;
+}
+.landing-toolbar-row {
+    min-height: 4.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+}
+@media (max-width: 48rem) {
+    .landing-tabs {
+        order: 3;
+        flex: 1 0 100%;
+        justify-content: center;
+        margin: 0.15rem 0 0.2rem;
+        margin-left: 0;
+    }
+}
 @media (max-width: 40rem) {
     .landing-chase { grid-template-columns: 1fr; }
     .landing-hero-fly { gap: 1.1rem; }
@@ -1063,7 +1146,7 @@ html:has(body.landing-active) {
 }
 .landing-hero-stage {
     position: relative;
-    min-height: 13.5rem;
+    min-height: 15.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1124,11 +1207,12 @@ html:has(body.landing-active) {
 .landing-hero-card-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
+    gap: 0.7rem 1rem;
     margin-bottom: 0.7rem;
 }
 .landing-hero-card-title {
     margin: 0;
+    padding-right: 2rem;
     font-size: 1.05rem;
     font-weight: 600;
     color: #e2e8f0;
@@ -1179,6 +1263,15 @@ html:has(body.landing-active) {
 .landing-clockchip svg {
     width: 0.9rem;
     height: 0.9rem;
+}
+.landing-clockchip--sm {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.45rem;
+}
+.landing-clockchip.is-overdue {
+    border-color: rgba(251, 113, 133, 0.55);
+    background: rgba(40, 12, 18, 0.92);
+    color: #fda4af;
 }
 .landing-nametag--sm {
     font-size: 0.68rem;

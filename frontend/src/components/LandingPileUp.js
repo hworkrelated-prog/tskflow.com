@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 
 const STACK = [
-    { id: 'a', title: 'Forecast', who: 'Maya', tone: 'teal' },
+    { id: 'a', title: 'Forecast', who: 'Maya', tone: 'teal', open: true },
     { id: 'b', title: 'Call log', who: 'Maya', tone: 'amber' },
     { id: 'c', title: 'Deck', who: 'Maya', tone: 'sky' },
     { id: 'd', title: 'SFDC', who: 'Maya', tone: 'rose' },
@@ -53,6 +53,11 @@ const PileCard = ({ card, index, progress, reduce }) => {
         >
             <span className="landing-nametag landing-nametag--sm">{card.who}</span>
             <span className="landing-mini-title">{card.title}</span>
+            {card.open ? (
+                <span className="landing-half landing-half--mini" aria-hidden>
+                    <span className="landing-half-bar" style={{ width: '18%' }} />
+                </span>
+            ) : null}
         </motion.article>
     );
 };

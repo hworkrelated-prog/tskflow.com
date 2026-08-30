@@ -27,8 +27,12 @@ export default function LandingSlackReact() {
                 </div>
                 <p className="landing-slack-body">Forecast. Friday.</p>
                 <div className="slack-mosaic slack-mosaic--2 landing-slack-mosaic" data-testid="landing-slack-images">
-                    <span className="slack-tile landing-shot landing-shot--pipe" />
-                    <span className="slack-tile landing-shot landing-shot--crm" />
+                    <span className="slack-tile landing-shot landing-shot--pipe">
+                        <img src="/landing-pipeline.svg" alt="" />
+                    </span>
+                    <span className="slack-tile landing-shot landing-shot--crm">
+                        <img src="/landing-crm.svg" alt="" />
+                    </span>
                 </div>
                 <div className="landing-slack-rx" data-testid="landing-slack-reactions">
                     {REACTIONS.map((rx, i) => (

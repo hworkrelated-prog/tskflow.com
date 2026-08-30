@@ -661,7 +661,9 @@ body.app-authenticated.has-ai-dock .safe-fab-bl {
 .ai-bottom-stage .ai-command-dock {
     align-self: center;
     width: 4.75rem;
-    transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition:
+        width 400ms cubic-bezier(0.22, 1, 0.36, 1),
+        max-height 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ai-bottom-stage .ai-command-dock.is-open {
     align-self: stretch;

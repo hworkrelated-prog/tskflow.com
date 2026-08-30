@@ -8,10 +8,12 @@ export const HERO_ASK = 'Ask Maya to send the Q3 forecast by Friday.';
 const ease = [0.22, 1, 0.36, 1];
 
 const STEPS = [
-    { id: 'ask', n: '1', label: 'Ask', phase: 'type' },
-    { id: 'who', n: '2', label: 'Who', phase: 'split' },
-    { id: 'send', n: '3', label: 'Send', phase: 'card' },
+    { id: 'ask', n: '1', label: 'Ask' },
+    { id: 'who', n: '2', label: 'Who' },
+    { id: 'send', n: '3', label: 'Send' },
 ];
+
+const PHASE_I = { type: 0, split: 1, card: 2 };
 
 const TypedLine = ({ text, done }) => (
     <p className="landing-hero-sentence" data-testid="landing-hero-sentence">
@@ -37,13 +39,23 @@ const AssembledCard = ({ visible }) => (
         aria-hidden={!visible}
     >
         <div className="landing-hero-card-row">
-            <span className="landing-nametag">
-                <User className="w-3.5 h-3.5" aria-hidden />
-                Maya
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">Who</span>
+                <span className="landing-nametag">
+                    <User className="w-3.5 h-3.5" aria-hidden />
+                    Maya
+                </span>
             </span>
-            <span className="landing-clockchip">
-                <Clock className="w-3.5 h-3.5" aria-hidden />
-                Friday
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">Work</span>
+                <span className="landing-hero-work-chip">Q3 forecast</span>
+            </span>
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">When</span>
+                <span className="landing-clockchip">
+                    <Clock className="w-3.5 h-3.5" aria-hidden />
+                    Friday
+                </span>
             </span>
         </div>
         <p className="landing-hero-card-title">Send the Q3 forecast</p>
@@ -100,13 +112,17 @@ export default function LandingHeroAsk() {
     return (
         <div className="landing-hero-ask" data-testid="landing-hero-ask">
             <ol className="landing-hero-steps" data-testid="landing-hero-steps">
-                {STEPS.map((s, i) => (
-                    <li key={s.id} className={phase === s.phase || (reduce && s.phase === 'card') ? 'is-on' : ''}>
-                        {i > 0 ? <span className="landing-hero-step-line" aria-hidden /> : null}
-                        <span className="landing-hero-step-n">{s.n}</span>
-                        {s.label}
-                    </li>
-                ))}
+                {STEPS.map((s, i) => {
+                    const active = PHASE_I[phase] ?? 0;
+                    const state = i < active ? 'is-done' : i === active ? 'is-on' : '';
+                    return (
+                        <li key={s.id} className={state}>
+                            {i > 0 ? <span className="landing-hero-step-line" aria-hidden /> : null}
+                            <span className="landing-hero-step-n">{s.n}</span>
+                            {s.label}
+                        </li>
+                    );
+                })}
             </ol>
             <div className="landing-hero-stage">
                 {showSentence && (
@@ -126,9 +142,9 @@ export default function LandingHeroAsk() {
                     <div className="landing-hero-fly" aria-hidden>
                         <motion.span
                             className="landing-fly-chip"
-                            initial={{ x: -40, y: -8, opacity: 0, scale: 0.82 }}
-                            animate={{ x: -88, y: 56, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease }}
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease }}
                         >
                             <span className="landing-fly-kicker">Who</span>
                             <span className="landing-nametag">
@@ -138,18 +154,18 @@ export default function LandingHeroAsk() {
                         </motion.span>
                         <motion.span
                             className="landing-fly-chip"
-                            initial={{ y: 4, opacity: 0, scale: 0.94 }}
-                            animate={{ y: 56, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease, delay: 0.05 }}
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease, delay: 0.06 }}
                         >
                             <span className="landing-fly-kicker">Work</span>
                             <span className="landing-hero-work-chip">Q3 forecast</span>
                         </motion.span>
                         <motion.span
                             className="landing-fly-chip"
-                            initial={{ x: 40, y: -8, opacity: 0, scale: 0.82 }}
-                            animate={{ x: 88, y: 56, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease, delay: 0.1 }}
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease, delay: 0.12 }}
                         >
                             <span className="landing-fly-kicker">When</span>
                             <span className="landing-clockchip">

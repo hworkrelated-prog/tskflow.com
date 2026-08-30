@@ -331,6 +331,8 @@ def test_landing_story_is_shown_not_told():
     assert "Ask engineering to record a demo of the fix by tomorrow" not in hero
     assert "landing-hero-steps" in hero
     assert "landing-fly-kicker" in hero
+    assert "is-done" in hero
+    assert "PHASE_I" in hero
     assert "landing-nametag" in hero
     assert "landing-clockchip" in hero
     assert "useReducedMotion" in hero
@@ -360,15 +362,19 @@ def test_landing_story_is_shown_not_told():
     founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
     assert "Forecast. Friday." in meet
     assert "landing-meet-agree" in meet
+    assert "landing-meet-bar" in meet
     assert "landing-slack-reactions" in slack
     assert "landing-slack-images" in slack
+    assert "landing-pipeline.svg" in slack
     assert "landing-pile" in pile
     assert "pipeline.png" in chase
     assert "landing-half-done" in chase
+    assert "landing-due-miss" in silent
     assert "landing-solve-calendar" in solve
     assert "landing-solve-conflict" in solve
     assert "landing-group-avg" in solve
     assert "Hashim Mahmood" in founder
     assert "/founder.jpg" in founder
+    assert "landing-founder-linkedin" in founder
     assert 'data-testid="landing-tab-founder"' in landing
 

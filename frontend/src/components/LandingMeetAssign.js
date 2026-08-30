@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { Mic, Video, PhoneOff } from 'lucide-react';
 
 const ease = [0.22, 1, 0.36, 1];
 
@@ -63,6 +64,11 @@ export default function LandingMeetAssign() {
                 >
                     Forecast. Friday.
                 </motion.p>
+                <div className="landing-meet-bar" data-testid="landing-meet-bar" aria-hidden>
+                    <span className="landing-meet-ctl"><Mic className="w-4 h-4" /></span>
+                    <span className="landing-meet-ctl"><Video className="w-4 h-4" /></span>
+                    <span className="landing-meet-ctl is-end"><PhoneOff className="w-4 h-4" /></span>
+                </div>
             </div>
         </section>
     );
