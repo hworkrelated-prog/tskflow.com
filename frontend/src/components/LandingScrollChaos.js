@@ -2,51 +2,91 @@ import React from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 
 /**
- * Instagram / Apple product-page motion: a sticky viewport is scrubbed by
- * scroll, not by a looping CSS animation. Chaos (Slack pings, stray asks)
- * collapses into one owned ask as the user moves through the three steps.
+ * Raylight-style product film, scrubbed by scroll: a 3D stage of Slack /
+ * inbox / stray-ask cards. They tumble in depth, people miss them, then
+ * they collapse into one owned ask. Decorative only.
  */
-const CHIPS = [
-    { id: 'c1', label: 'can you take this?', slack: true, x: [-28, 8, 42], y: [18, 8, 62], r: [-8, 4, 0], s: [0.92, 1, 0.72] },
-    { id: 'c2', label: 'where did this go?', slack: true, x: [72, 58, 48], y: [12, 22, 64], r: [10, -6, 0], s: [0.86, 1, 0.7] },
-    { id: 'c3', label: 'ping · no reply', slack: false, x: [8, 18, 44], y: [78, 54, 66], r: [6, -3, 0], s: [0.9, 1, 0.68] },
-    { id: 'c4', label: 'who owns this?', slack: false, x: [82, 70, 50], y: [70, 48, 66], r: [-12, 5, 0], s: [0.88, 0.98, 0.7] },
-    { id: 'c5', label: 'following up again', slack: true, x: [40, 22, 46], y: [4, 16, 63], r: [4, -8, 0], s: [0.8, 1, 0.66] },
-    { id: 'c6', label: 'still waiting', slack: false, x: [55, 78, 52], y: [86, 72, 67], r: [-4, 8, 0], s: [0.85, 1, 0.68] },
-    { id: 'c7', label: '@here ??', slack: true, x: [-6, 4, 40], y: [48, 36, 64], r: [14, 2, 0], s: [0.78, 0.96, 0.64] },
-    { id: 'c8', label: 'missed in the thread', slack: false, x: [96, 86, 54], y: [38, 30, 65], r: [-9, -2, 0], s: [0.82, 1, 0.66] },
+const FLOATS = [
+    { id: 'f1', label: 'can you take this?', kind: 'slack', x: [-34, -18, 6], y: [16, 10, 58], z: [180, 80, -40], rx: [16, 8, 2], ry: [-18, -6, 0] },
+    { id: 'f2', label: 'where did this go?', kind: 'slack', x: [58, 42, 18], y: [8, 14, 56], z: [140, 40, -20], rx: [10, 4, 1], ry: [14, 6, 0] },
+    { id: 'f3', label: 'ping · no reply', kind: 'mail', x: [-22, -8, 8], y: [72, 48, 62], z: [90, 20, -30], rx: [-8, -2, 0], ry: [-10, -4, 0] },
+    { id: 'f4', label: 'who owns this?', kind: 'mail', x: [62, 48, 22], y: [68, 46, 60], z: [110, 10, -24], rx: [12, 2, 0], ry: [16, 4, 0] },
+    { id: 'f5', label: '@here ??', kind: 'slack', x: [-8, 4, 10], y: [4, 18, 54], z: [220, 60, -10], rx: [18, 6, 1], ry: [-8, 0, 0] },
 ];
 
-const Chip = ({ chip, progress }) => {
-    const x = useTransform(progress, [0, 0.45, 1], [`${chip.x[0]}vw`, `${chip.x[1]}vw`, `${chip.x[2]}vw`]);
-    const y = useTransform(progress, [0, 0.45, 1], [`${chip.y[0]}vh`, `${chip.y[1]}vh`, `${chip.y[2]}vh`]);
-    const rotate = useTransform(progress, [0, 0.45, 1], chip.r);
-    const scale = useTransform(progress, [0, 0.45, 1], chip.s);
-    const opacity = useTransform(progress, [0, 0.12, 0.72, 1], [0.15, 0.9, 0.55, 0.08]);
+const FloatCard = ({ item, progress }) => {
+    const x = useTransform(progress, [0, 0.5, 1], [`${item.x[0]}vw`, `${item.x[1]}vw`, `${item.x[2]}vw`]);
+    const y = useTransform(progress, [0, 0.5, 1], [`${item.y[0]}vh`, `${item.y[1]}vh`, `${item.y[2]}vh`]);
+    const z = useTransform(progress, [0, 0.5, 1], [item.z[0], item.z[1], item.z[2]]);
+    const rotateX = useTransform(progress, [0, 0.5, 1], item.rx);
+    const rotateY = useTransform(progress, [0, 0.5, 1], item.ry);
+    const opacity = useTransform(progress, [0, 0.1, 0.68, 0.92], [0.2, 0.95, 0.55, 0.05]);
+    const blur = useTransform(progress, [0, 0.45, 1], [2.4, 0, 1.2]);
+    const filter = useTransform(blur, (v) => `blur(${v}px)`);
 
     return (
         <motion.div
-            className={`landing-chaos-chip ${chip.slack ? 'landing-chaos-chip--slack' : ''}`}
-            style={{ x, y, rotate, scale, opacity }}
+            className={`landing-chaos-float landing-chaos-float--${item.kind}`}
+            style={{ x, y, z, rotateX, rotateY, opacity, filter }}
         >
-            {chip.slack && <span className="landing-chaos-hash" aria-hidden>#</span>}
-            {chip.label}
+            <span className="landing-chaos-float-dot" />
+            {item.label}
+        </motion.div>
+    );
+};
+
+const SlackPanel = ({ progress }) => {
+    const x = useTransform(progress, [0, 0.45, 1], ['-8vw', '-22vw', '6vw']);
+    const y = useTransform(progress, [0, 0.45, 1], ['58vh', '22vh', '52vh']);
+    const z = useTransform(progress, [0, 0.45, 1], [40, 160, -80]);
+    const rotateY = useTransform(progress, [0, 0.45, 1], [18, 28, 4]);
+    const rotateX = useTransform(progress, [0, 0.45, 1], [8, 12, 2]);
+    const opacity = useTransform(progress, [0, 0.12, 0.7, 0.9], [0.15, 0.92, 0.45, 0]);
+
+    return (
+        <motion.div className="landing-chaos-panel landing-chaos-panel--slack" style={{ x, y, z, rotateX, rotateY, opacity }}>
+            <div className="landing-chaos-panel-bar">
+                <span className="landing-chaos-hash">#</span> sales
+                <span className="landing-chaos-unread">12</span>
+            </div>
+            <p><b>Maya</b> can someone take the forecast</p>
+            <p className="is-dim"><b>Chris</b> which one? there are three</p>
+            <p><b>Priya</b> I thought Jordan had it</p>
+        </motion.div>
+    );
+};
+
+const InboxPanel = ({ progress }) => {
+    const x = useTransform(progress, [0, 0.5, 1], ['62vw', '48vw', '28vw']);
+    const y = useTransform(progress, [0, 0.5, 1], ['14vh', '28vh', '54vh']);
+    const z = useTransform(progress, [0, 0.5, 1], [120, 40, -60]);
+    const rotateY = useTransform(progress, [0, 0.5, 1], [-22, -14, -2]);
+    const rotateX = useTransform(progress, [0, 0.5, 1], [14, 6, 1]);
+    const opacity = useTransform(progress, [0, 0.14, 0.72, 0.92], [0.1, 0.9, 0.4, 0]);
+
+    return (
+        <motion.div className="landing-chaos-panel landing-chaos-panel--inbox" style={{ x, y, z, rotateX, rotateY, opacity }}>
+            <div className="landing-chaos-panel-bar">Inbox · 47 unread</div>
+            <p>Re: Re: Re: the ask from Tuesday</p>
+            <p className="is-dim">Fwd: looping you in again</p>
+            <p>nudged twice · still open</p>
         </motion.div>
     );
 };
 
 const CatchHand = ({ progress, side }) => {
-    const fromX = side === 'left' ? -12 : 108;
-    const midX = side === 'left' ? 18 : 78;
-    const toX = side === 'left' ? 38 : 58;
-    const x = useTransform(progress, [0, 0.4, 1], [`${fromX}vw`, `${midX}vw`, `${toX}vw`]);
-    const y = useTransform(progress, [0, 0.4, 1], ['72vh', '58vh', '70vh']);
-    const opacity = useTransform(progress, [0, 0.2, 0.62, 0.85], [0, 0.55, 0.28, 0]);
-    const rotate = useTransform(progress, [0, 0.4, 1], side === 'left' ? [20, -8, 0] : [-20, 10, 0]);
+    const fromX = side === 'left' ? -14 : 104;
+    const midX = side === 'left' ? 14 : 74;
+    const toX = side === 'left' ? 32 : 54;
+    const x = useTransform(progress, [0, 0.42, 1], [`${fromX}vw`, `${midX}vw`, `${toX}vw`]);
+    const y = useTransform(progress, [0, 0.42, 1], ['76vh', '56vh', '68vh']);
+    const z = useTransform(progress, [0, 0.42, 1], [200, 80, -20]);
+    const opacity = useTransform(progress, [0.08, 0.22, 0.58, 0.8], [0, 0.5, 0.22, 0]);
+    const rotate = useTransform(progress, [0, 0.42, 1], side === 'left' ? [18, -10, 0] : [-18, 12, 0]);
 
     return (
-        <motion.div className={`landing-chaos-hand landing-chaos-hand--${side}`} style={{ x, y, opacity, rotate }} aria-hidden>
-            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <motion.div className="landing-chaos-hand" style={{ x, y, z, opacity, rotate }} aria-hidden>
+            <svg width="58" height="58" viewBox="0 0 56 56" fill="none">
                 <path
                     d="M18 32c0-6 3-10 7-10 2 0 3 1 4 3V16c0-3 2-5 5-5s5 2 5 5v7c1-2 3-3 5-3 3 0 5 3 5 6v13c0 7-6 12-13 12h-3c-8 0-15-6-15-14v-6z"
                     stroke="currentColor"
@@ -61,29 +101,34 @@ const CatchHand = ({ progress, side }) => {
 const LandingScrollChaos = () => {
     const reduce = useReducedMotion();
     const { scrollYProgress } = useScroll();
-    const lineScale = useTransform(scrollYProgress, [0, 1], [0.08, 1]);
-    const captionA = useTransform(scrollYProgress, [0, 0.28, 0.42], [0.85, 0.55, 0]);
-    const captionB = useTransform(scrollYProgress, [0.32, 0.5, 0.72], [0, 0.85, 0]);
-    const captionC = useTransform(scrollYProgress, [0.62, 0.82, 1], [0, 0.8, 0.35]);
-    const gatherGlow = useTransform(scrollYProgress, [0.55, 0.9], [0, 0.55]);
+    const camY = useTransform(scrollYProgress, [0, 1], [-10, 8]);
+    const camX = useTransform(scrollYProgress, [0, 1], [8, -6]);
+    const captionA = useTransform(scrollYProgress, [0, 0.26, 0.4], [0.9, 0.5, 0]);
+    const captionB = useTransform(scrollYProgress, [0.3, 0.48, 0.7], [0, 0.88, 0]);
+    const captionC = useTransform(scrollYProgress, [0.6, 0.8, 1], [0, 0.85, 0.3]);
+    const gather = useTransform(scrollYProgress, [0.58, 0.92], [0, 0.65]);
 
     if (reduce) {
         return (
             <div className="landing-chaos landing-chaos--still" aria-hidden data-testid="landing-scroll-chaos">
-                <div className="landing-chaos-lane" />
+                <div className="landing-chaos-vignette" />
             </div>
         );
     }
 
     return (
         <div className="landing-chaos" aria-hidden data-testid="landing-scroll-chaos">
-            <motion.div className="landing-chaos-lane" style={{ scaleY: lineScale }} />
-            <motion.div className="landing-chaos-gather" style={{ opacity: gatherGlow }} />
-            {CHIPS.map((chip) => (
-                <Chip key={chip.id} chip={chip} progress={scrollYProgress} />
-            ))}
-            <CatchHand progress={scrollYProgress} side="left" />
-            <CatchHand progress={scrollYProgress} side="right" />
+            <div className="landing-chaos-vignette" />
+            <motion.div className="landing-chaos-world" style={{ rotateX: camX, rotateY: camY }}>
+                <SlackPanel progress={scrollYProgress} />
+                <InboxPanel progress={scrollYProgress} />
+                {FLOATS.map((item) => (
+                    <FloatCard key={item.id} item={item} progress={scrollYProgress} />
+                ))}
+                <CatchHand progress={scrollYProgress} side="left" />
+                <CatchHand progress={scrollYProgress} side="right" />
+                <motion.div className="landing-chaos-gather" style={{ opacity: gather }} />
+            </motion.div>
             <motion.p className="landing-chaos-caption landing-chaos-caption--a" style={{ opacity: captionA }}>
                 Asks bounce around Slack.
             </motion.p>
