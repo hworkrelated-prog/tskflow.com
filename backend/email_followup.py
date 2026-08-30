@@ -399,7 +399,7 @@ def render_followup_email(
           <a href="{link}" style="display:inline-block;background:#0f172a;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:600;">Open the task</a>
         </p>
         <p style="margin:0;color:#64748b;font-size:13px;line-height:1.55;">
-          Just reply to this email — I read it. A short note is enough.
+          Just reply to this email - I read it. A short note is enough.
         </p>
       </div>
       <p style="margin:14px 8px 0;color:#94a3b8;font-size:11px;text-align:center;">
