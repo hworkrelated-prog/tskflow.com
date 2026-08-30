@@ -30,7 +30,9 @@ export default function LandingSilentTasks() {
             data-testid="landing-silent-tasks"
             aria-label="Gone quiet"
         >
-            <p className="landing-story-kicker">Gone quiet.</p>
+            <p className="sr-only">Gone quiet.</p>
+            <div className="landing-silent-stage">
+            <span className="hound-runner landing-silent-runner" aria-hidden />
             <div className="landing-silent-grid">
                 {TASKS.map((task, i) => (
                     <SilentCard
@@ -41,6 +43,7 @@ export default function LandingSilentTasks() {
                         reduce={reduce}
                     />
                 ))}
+            </div>
             </div>
         </section>
     );

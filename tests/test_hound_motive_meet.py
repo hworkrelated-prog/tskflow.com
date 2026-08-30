@@ -164,6 +164,7 @@ def test_frontend_names_and_visuals():
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
     assert "HoundScene" in integ and "MotiveScene" in integ
     assert "landing-hound" in integ and "landing-motive" in integ
+    assert "item.scene === id" in integ
     settings = (root / "pages" / "SettingsPage.js").read_text(encoding="utf-8")
     assert "Hound" in settings
     assert "Motive" in settings

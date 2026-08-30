@@ -182,7 +182,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-who"
             >
                 <p className="landing-step-kicker">Who</p>
-                <p className="landing-who-cue" data-testid="landing-who-cue">
+                <p className="sr-only" data-testid="landing-who-cue">
                     Your email. To try it.
                 </p>
                 <Input
@@ -235,14 +235,14 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className="landing-try-note" data-testid="landing-no-account">
+                        <p className="sr-only" data-testid="landing-no-account">
                             No account. No password.
                         </p>
-                        <p className="landing-try-note" data-testid="landing-send-promise">
-                            {channel === 'slack'
-                                ? 'We email first, then run after them.'
-                                : 'You send it. We run after them until it is done.'}
-                        </p>
+                        <div className="landing-send-visual" data-testid="landing-send-promise" aria-hidden>
+                            <span className="hound-face is-silent">C</span>
+                            <span className="landing-send-dash" />
+                            <span className="hound-chip is-go">On it</span>
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -350,11 +350,11 @@ const LandingPage = () => {
                     </button>
                 </section>
 
+                <LandingIntegrations />
                 <LandingSilentTasks />
                 <LandingFlowIcons />
                 <LandingScrollChaos />
                 <LandingReportFlip />
-                <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">
                     <p className="landing-final-line">Try it.</p>

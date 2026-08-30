@@ -332,6 +332,14 @@ def test_landing_story_is_shown_not_told():
     assert "Done" in reports and "Stalled" in reports and "Moving" in reports
     assert "landing-integ-${item.id}" in integ
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
+    assert "HoundScene" in integ and "MotiveScene" in integ
+    assert "item.scene === id" in integ
+    assert "You send it. We run after them until it is done." not in landing
+    assert "We email first, then run after them." not in landing
+    assert "landing-send-visual" in landing
+    assert "landing-integ-story" in css
+    assert "hound-dash" in css
+    assert "motive-stamp" in css
     assert "landing-flow-${step.id}" in flow
     assert "Ask" in flow and "Who" in flow and "Send" in flow
     assert "prefers-reduced-motion" in css
