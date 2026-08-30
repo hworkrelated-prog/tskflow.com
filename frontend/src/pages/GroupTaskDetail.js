@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner';
 import { ArrowLeft, Trophy, MessageSquare, Send, TrendingUp, TrendingDown, Mail, Zap, AlertCircle, Sparkles, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
+import CompletionRing from '@/components/CompletionRing';
 
 // Fuzzy score - lower is better. Rewards exact prefix + substring hits.
 const fuzzyScore = (haystack, needle) => {
@@ -406,6 +407,7 @@ const GroupTaskDetail = () => {
     const all = leaderboard?.leaderboard || [];
     const activeOnly = all.filter((e) => e.status !== 'Completed');
     const completedOnly = all.filter((e) => e.status === 'Completed');
+    const avgPct = all.length ? Math.round((completedOnly.length / all.length) * 100) : 0;
     // Adaptive Top/Bottom split: show for 4+ people. Sizes shrink for small groups.
     const showTopBottomSplit = all.length >= 4;
     const splitSize = all.length >= 10 ? 5 : Math.max(2, Math.floor(all.length / 2));
@@ -441,6 +443,7 @@ const GroupTaskDetail = () => {
                                 <div className="flex items-center gap-2">
                                     <Trophy className="w-5 h-5 text-amber-500" />
                                     <h2 className="text-xl font-semibold">Leaderboard - {all.length} assignees</h2>
+                                    <CompletionRing pct={avgPct} size={44} />
                                 </div>
                                 {isCreator && activeOnly.length > 0 && (
                                     <Button

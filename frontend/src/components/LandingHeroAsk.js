@@ -3,9 +3,17 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Clock, User } from 'lucide-react';
 import { colorizeAssignPrompt, PROMPT_SEGMENT_CLASS } from '@/lib/landingAssignDemo';
 
-export const HERO_ASK = 'Ask engineering to record a demo of the fix by tomorrow.';
+export const HERO_ASK = 'Ask Maya to send the Q3 forecast by Friday.';
 
 const ease = [0.22, 1, 0.36, 1];
+
+const STEPS = [
+    { id: 'ask', n: '1', label: 'Ask' },
+    { id: 'who', n: '2', label: 'Who' },
+    { id: 'send', n: '3', label: 'Send' },
+];
+
+const PHASE_I = { type: 0, split: 1, card: 2 };
 
 const TypedLine = ({ text, done }) => (
     <p className="landing-hero-sentence" data-testid="landing-hero-sentence">
@@ -31,23 +39,32 @@ const AssembledCard = ({ visible }) => (
         aria-hidden={!visible}
     >
         <div className="landing-hero-card-row">
-            <span className="landing-nametag">
-                <User className="w-3.5 h-3.5" aria-hidden />
-                engineering
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">Who</span>
+                <span className="landing-nametag">
+                    <User className="w-3.5 h-3.5" aria-hidden />
+                    Maya
+                </span>
             </span>
-            <span className="landing-clockchip">
-                <Clock className="w-3.5 h-3.5" aria-hidden />
-                tomorrow
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">Work</span>
+                <span className="landing-hero-work-chip">Q3 forecast</span>
+            </span>
+            <span className="landing-fly-chip landing-fly-chip--inline">
+                <span className="landing-fly-kicker">When</span>
+                <span className="landing-clockchip">
+                    <Clock className="w-3.5 h-3.5" aria-hidden />
+                    Friday
+                </span>
             </span>
         </div>
-        <p className="landing-hero-card-title">Record a demo of the fix</p>
+        <p className="landing-hero-card-title">Send the Q3 forecast</p>
         <span className="landing-hero-check" aria-hidden />
     </motion.article>
 );
 
 /**
- * Types a real assign sentence. The who-word becomes a name tag, the deadline
- * becomes a clock, and both land on one task card. That motion is the product.
+ * Types a sales assign. Who / work / when peel off as labeled chips, then land on a card.
  */
 export default function LandingHeroAsk() {
     const reduce = useReducedMotion();
@@ -70,12 +87,12 @@ export default function LandingHeroAsk() {
                 for (let i = 1; i <= HERO_ASK.length; i += 1) {
                     if (cancelled) return;
                     setTyped(HERO_ASK.slice(0, i));
-                    await wait(26);
+                    await wait(24);
                 }
-                await wait(380);
+                await wait(420);
                 if (cancelled) return;
                 setPhase('split');
-                await wait(900);
+                await wait(1100);
                 if (cancelled) return;
                 setPhase('card');
                 await wait(2600);
@@ -94,6 +111,19 @@ export default function LandingHeroAsk() {
 
     return (
         <div className="landing-hero-ask" data-testid="landing-hero-ask">
+            <ol className="landing-hero-steps" data-testid="landing-hero-steps">
+                {STEPS.map((s, i) => {
+                    const active = PHASE_I[phase] ?? 0;
+                    const state = i < active ? 'is-done' : i === active ? 'is-on' : '';
+                    return (
+                        <li key={s.id} className={state}>
+                            {i > 0 ? <span className="landing-hero-step-line" aria-hidden /> : null}
+                            <span className="landing-hero-step-n">{s.n}</span>
+                            {s.label}
+                        </li>
+                    );
+                })}
+            </ol>
             <div className="landing-hero-stage">
                 {showSentence && (
                     <motion.div
@@ -111,30 +141,37 @@ export default function LandingHeroAsk() {
                 {phase === 'split' && (
                     <div className="landing-hero-fly" aria-hidden>
                         <motion.span
-                            className="landing-nametag"
-                            initial={{ x: -40, y: -8, opacity: 0, scale: 0.82 }}
-                            animate={{ x: -72, y: 48, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease }}
+                            className="landing-fly-chip"
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease }}
                         >
-                            <User className="w-3.5 h-3.5" />
-                            engineering
+                            <span className="landing-fly-kicker">Who</span>
+                            <span className="landing-nametag">
+                                <User className="w-3.5 h-3.5" />
+                                Maya
+                            </span>
                         </motion.span>
                         <motion.span
-                            className="landing-hero-work-chip"
-                            initial={{ y: 4, opacity: 0, scale: 0.94 }}
-                            animate={{ y: 52, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease, delay: 0.05 }}
+                            className="landing-fly-chip"
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease, delay: 0.06 }}
                         >
-                            record a demo of the fix
+                            <span className="landing-fly-kicker">Work</span>
+                            <span className="landing-hero-work-chip">Q3 forecast</span>
                         </motion.span>
                         <motion.span
-                            className="landing-clockchip"
-                            initial={{ x: 40, y: -8, opacity: 0, scale: 0.82 }}
-                            animate={{ x: 72, y: 48, opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.62, ease, delay: 0.1 }}
+                            className="landing-fly-chip"
+                            initial={{ y: 16, opacity: 0, scale: 0.9 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, ease, delay: 0.12 }}
                         >
-                            <Clock className="w-3.5 h-3.5" />
-                            tomorrow
+                            <span className="landing-fly-kicker">When</span>
+                            <span className="landing-clockchip">
+                                <Clock className="w-3.5 h-3.5" />
+                                Friday
+                            </span>
                         </motion.span>
                     </div>
                 )}

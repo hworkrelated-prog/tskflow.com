@@ -4,7 +4,7 @@ import { Check, Pause, Loader } from 'lucide-react';
 
 const REPORTS = [
     { id: 'done', who: 'Maya', title: 'Forecast', status: 'Done', Icon: Check, tone: 'done' },
-    { id: 'move', who: 'Priya', title: 'Demo clip', status: 'Moving', Icon: Loader, tone: 'move' },
+    { id: 'move', who: 'Priya', title: 'Discovery', status: 'Moving', Icon: Loader, tone: 'move' },
     { id: 'stall', who: 'Chris', title: 'Q3 recap', status: 'Stalled', Icon: Pause, tone: 'stall' },
 ];
 

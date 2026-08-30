@@ -2,6 +2,7 @@
 export const PROMPT_EXAMPLES = [
     'Ask my managers to review SFDC hygiene by noon tomorrow',
     'Ask everyone under me to update their opportunities by Friday 5pm',
+    'Tell my team to complete the outreach training by 12',
     'Assign Maya the Q3 recap by Friday 5pm',
     'What’s outstanding?',
     'Remind Jordan to send the client deck tomorrow',

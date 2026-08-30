@@ -38,6 +38,12 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "LandingFlowIcons" in src
     assert "LandingReportFlip" in src
     assert "LandingIntegrations" in src
+    assert "LandingMeetAssign" in src
+    assert "LandingSlackReact" in src
+    assert "LandingPileUp" in src
+    assert "LandingChase" in src
+    assert "LandingSolve" in src
+    assert "LandingFounder" in src
     assert "What needs to get done?" not in src
     assert "Who should own this?" not in src
 
@@ -315,10 +321,18 @@ def test_landing_story_is_shown_not_told():
     flow = (FRONT / "components" / "LandingFlowIcons.js").read_text(encoding="utf-8")
 
     assert "Ask. Who. Send." in landing
+    assert "Stop chasing." in landing
+    assert "They already own it." in landing
+    assert "Get to Know the founder" in landing
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "landing-who-input" in css
-    assert "Ask engineering to record a demo of the fix by tomorrow" in hero
+    assert "Ask Maya to send the Q3 forecast by Friday" in hero
+    assert "Ask engineering to record a demo of the fix by tomorrow" not in hero
+    assert "landing-hero-steps" in hero
+    assert "landing-fly-kicker" in hero
+    assert "is-done" in hero
+    assert "PHASE_I" in hero
     assert "landing-nametag" in hero
     assert "landing-clockchip" in hero
     assert "useReducedMotion" in hero
@@ -334,9 +348,33 @@ def test_landing_story_is_shown_not_told():
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
     assert "landing-flow-${step.id}" in flow
     assert "Ask" in flow and "Who" in flow and "Send" in flow
+    assert "landing-flow-arrow" in flow
     assert "prefers-reduced-motion" in css
     assert "landing-live-pulse" in css
     assert "landing-sticky--amber" in css
     assert "Asks bounce around Slack." not in landing
     assert "The robot delivers" not in landing
+    meet = (FRONT / "components" / "LandingMeetAssign.js").read_text(encoding="utf-8")
+    slack = (FRONT / "components" / "LandingSlackReact.js").read_text(encoding="utf-8")
+    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
+    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
+    solve = (FRONT / "components" / "LandingSolve.js").read_text(encoding="utf-8")
+    founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
+    assert "Forecast. Friday." in meet
+    assert "landing-meet-agree" in meet
+    assert "landing-meet-bar" in meet
+    assert "landing-slack-reactions" in slack
+    assert "landing-slack-images" in slack
+    assert "landing-pipeline.svg" in slack
+    assert "landing-pile" in pile
+    assert "pipeline.png" in chase
+    assert "landing-half-done" in chase
+    assert "landing-due-miss" in silent
+    assert "landing-solve-calendar" in solve
+    assert "landing-solve-conflict" in solve
+    assert "landing-group-avg" in solve
+    assert "Hashim Mahmood" in founder
+    assert "/founder.jpg" in founder
+    assert "landing-founder-linkedin" in founder
+    assert 'data-testid="landing-tab-founder"' in landing
 
