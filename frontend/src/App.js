@@ -40,6 +40,8 @@ import TermsOfService from '@/pages/TermsOfService';
 import LegalPage from '@/pages/LegalPage';
 import HelpCenter from '@/pages/HelpCenter';
 import RecurringPage from '@/pages/RecurringPage';
+import UnbiasslyHub from '@/pages/UnbiasslyHub';
+import UnbiasslyRoomPage from '@/pages/UnbiasslyRoomPage';
 import ContactPage from '@/pages/ContactPage';
 import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
 import GoogleSignInFinish from '@/pages/GoogleSignInFinish';
@@ -594,6 +596,8 @@ function App() {
                     <Route path="/recordings" element={<ProtectedRoute><RecordingLibraryPage /></ProtectedRoute>} />
                     <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
                     <Route path="/recurring" element={<ProtectedRoute><RecurringPage /></ProtectedRoute>} />
+                    <Route path="/unbiassly" element={<UnbiasslyHub />} />
+                    <Route path="/u/:token" element={<UnbiasslyRoomPage />} />
                 </Routes>
                 <div className="ai-bottom-stage" data-testid="ai-bottom-stage">
                     <VoiceMode dockIntegrated />

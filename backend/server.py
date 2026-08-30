@@ -194,6 +194,7 @@ from product_analytics import (
     should_send_daily,
     snapshot_for_email,
 )
+from unbiassly import register_unbiassly_routes
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -11079,6 +11080,7 @@ async def get_slack_followup(task_id: str, current_user: dict = Depends(get_curr
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
     """Static feed of product changes (newest first)."""
     updates = [
+        {"id": "u28", "area": "Unbiassly", "change": "Create a shareable Unbiassly link. Anyone can join the discussion anonymously. You get the summary, trends, and highlights - no names attached.", "was": "Honest takes had to live in a named thread or a 1:1."},
         {"id": "u27", "area": "Hound", "change": "Slack chase + launch. /hound sends an ask. Silent people get tap buttons. Rook talks. Replies close the task.", "was": "Slack only posted into a channel, then later DMed without buttons or slash launch."},
         {"id": "u26", "area": "Motive", "change": "Salesforce proof for Motive. Log a call or move a deal in Motive and Tskflow can see it — completing a sales ask writes the activity back.", "was": "Sales tasks lived only inside Tskflow."},
         {"id": "u25", "area": "Meet", "change": "Google Meet transcripts load themselves. Organizer + co-hosts decide the asks. Only the organizer sends the list.", "was": "Paste a transcript by hand."},
@@ -15488,6 +15490,16 @@ async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, bac
 
     return {"message": "Thank you for contacting us. We'll get back to you soon."}
 
+
+register_unbiassly_routes(
+    api_router,
+    db=db,
+    get_current_user=get_current_user,
+    send_email_notification=send_email_notification,
+    get_client_ip=_get_client_ip,
+    app_base_url=APP_BASE_URL,
+    secret_key=SECRET_KEY,
+)
 
 app.include_router(api_router)
 

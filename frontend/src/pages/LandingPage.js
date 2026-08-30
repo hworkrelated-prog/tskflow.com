@@ -338,6 +338,14 @@ const LandingPage = () => {
                         </button>
                     </nav>
                     <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                        <Button
+                            variant="ghost"
+                            className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
+                            onClick={() => navigate('/unbiassly')}
+                            data-testid="landing-unbiassly"
+                        >
+                            Unbiassly
+                        </Button>
                         <LandingVoiceGuide
                             inputValue={value}
                             onHeard={(text) => {
@@ -410,6 +418,7 @@ const LandingPage = () => {
                         {' '}is a trade name of Unbiassly, Inc.
                     </span>
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
+                        <Link to="/unbiassly" className="hover:text-white/70" data-testid="landing-unbiassly-footer">Unbiassly</Link>
                         <Link to="/contact" className="hover:text-white/70">Contact</Link>
                         <Link to="/legal" className="hover:text-white/70">Legal</Link>
                         <Link to="/privacy" className="hover:text-white/70">Privacy Policy</Link>
