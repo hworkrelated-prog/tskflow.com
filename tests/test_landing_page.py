@@ -20,6 +20,7 @@ def test_landing_is_a_tool_not_a_pitch():
     assert 'data-testid="landing-pain"' not in src
     assert 'data-testid="landing-sim"' not in src
     assert 'data-testid="landing-brand"' in src
+    assert "TskFlowLogo" in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
     assert 'data-testid="landing-toolbar"' in src
@@ -377,4 +378,28 @@ def test_landing_story_is_shown_not_told():
     assert "/founder.jpg" in founder
     assert "landing-founder-linkedin" in founder
     assert 'data-testid="landing-tab-founder"' in landing
+
+
+def test_tskflow_logo_is_a_lockup_not_plain_type():
+    """Mark + Tsk/Flow wordmark, reused on splash, landing, and chrome."""
+    logo = (FRONT / "components" / "TskFlowLogo.js").read_text(encoding="utf-8")
+    css = (FRONT / "index.css").read_text(encoding="utf-8")
+    splash = (ROOT / "frontend" / "public" / "index.html").read_text(encoding="utf-8")
+    mark = (ROOT / "frontend" / "public" / "favicon.svg").read_text(encoding="utf-8")
+    lockup = (ROOT / "frontend" / "public" / "logo.svg").read_text(encoding="utf-8")
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    hub = (FRONT / "pages" / "TaskHub.js").read_text(encoding="utf-8")
+    login = (FRONT / "pages" / "LoginPage.js").read_text(encoding="utf-8")
+    assert "tskflow-logo-flow" in logo
+    assert "TskFlowMark" in logo
+    assert "M8 16.7" in logo
+    assert "M8 16.7" in mark
+    assert "logo.svg" in splash
+    assert 'content: "TskFlow"' not in splash
+    assert "tskflow-logo--dark" in css
+    assert "TskFlowLogo" in landing
+    assert "TskFlowLogo" in hub
+    assert "TskFlowLogo" in login
+    assert "Tsk" in lockup and "Flow" in lockup
+
 

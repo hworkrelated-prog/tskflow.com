@@ -168,6 +168,59 @@ h1, h2, h3, h4, h5, h6 {
         @apply text-2xl font-bold bg-gradient-to-r from-teal-800 to-slate-800 bg-clip-text text-transparent;
         font-family: 'Outfit', sans-serif;
     }
+    .tskflow-logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.48em;
+        line-height: 1;
+        color: inherit;
+        vertical-align: middle;
+    }
+    .tskflow-logo-mark {
+        display: block;
+        flex: 0 0 auto;
+        filter: drop-shadow(0 8px 16px rgba(15, 118, 110, 0.28));
+    }
+    .tskflow-logo-word {
+        display: inline-flex;
+        align-items: baseline;
+        font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.055em;
+        line-height: 1;
+    }
+    .tskflow-logo-flow {
+        position: relative;
+    }
+    .tskflow-logo--sm { font-size: 0.98rem; }
+    .tskflow-logo--md { font-size: 1.32rem; }
+    .tskflow-logo--lg { font-size: 1.7rem; }
+    .tskflow-logo--dark .tskflow-logo-tsk { color: #f8fafc; }
+    .tskflow-logo--dark .tskflow-logo-flow { color: #5eead4; }
+    .tskflow-logo--dark .tskflow-logo-mark {
+        filter: drop-shadow(0 8px 18px rgba(45, 212, 191, 0.28));
+    }
+    .tskflow-logo--light .tskflow-logo-tsk { color: #134e4a; }
+    .tskflow-logo--light .tskflow-logo-flow { color: #0f766e; }
+    .tskflow-logo--auto .tskflow-logo-tsk { color: #134e4a; }
+    .tskflow-logo--auto .tskflow-logo-flow { color: #0f766e; }
+    [data-theme="dark"] .tskflow-logo--auto .tskflow-logo-tsk { color: #f8fafc; }
+    [data-theme="dark"] .tskflow-logo--auto .tskflow-logo-flow { color: #5eead4; }
+    [data-theme="dark"] .tskflow-logo--auto .tskflow-logo-mark {
+        filter: drop-shadow(0 8px 18px rgba(45, 212, 191, 0.22));
+    }
+    .tskflow-logo--lg .tskflow-logo-flow::after {
+        content: "";
+        position: absolute;
+        left: 0.05em;
+        right: -0.08em;
+        bottom: -0.22em;
+        height: 0.14em;
+        border-radius: 999px;
+        background: currentColor;
+        opacity: 0.55;
+        transform: skewX(-18deg);
+    }
     .safe-fab-bl {
         bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
         left: calc(1.25rem + env(safe-area-inset-left, 0px));

@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from 'sonner';
 import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -1314,7 +1315,9 @@ const TaskHub = () => {
             <header className="sticky top-0 z-50 glass-header border-b pt-[env(safe-area-inset-top,0px)]">
                 <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                        <h1 onClick={() => navigate('/')} className="brand-wordmark cursor-pointer hover:opacity-80 transition-opacity text-xl sm:text-2xl shrink-0">Tskflow</h1>
+                        <h1 onClick={() => navigate('/')} className="cursor-pointer hover:opacity-80 transition-opacity shrink-0">
+                            <TskFlowLogo variant="auto" size="md" />
+                        </h1>
                         {user?.subscription_tier === 'teams' ? (
                             <Badge className="hidden sm:flex bg-teal-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />

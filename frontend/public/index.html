@@ -35,12 +35,11 @@
                 background: radial-gradient(ellipse at top, #134e4a 0%, #0f172a 55%, #020617 100%);
             }
             #root:empty::before {
-                content: "TskFlow";
-                font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-                font-weight: 700;
-                letter-spacing: 0.02em;
-                color: #5eead4;
-                font-size: 1.25rem;
+                content: "";
+                width: min(280px, 78vw);
+                height: 72px;
+                background: url("%PUBLIC_URL%/logo.svg") center / contain no-repeat;
+                filter: drop-shadow(0 10px 32px rgba(45, 212, 191, 0.28));
             }
         </style>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
