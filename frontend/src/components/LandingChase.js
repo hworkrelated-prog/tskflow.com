@@ -18,7 +18,13 @@ const PINGS = [
 /** Beat 5: the manager becomes the reminder. Grey, repetitive, tiring. */
 export default function LandingChase() {
     return (
-        <LandingPinBeat testId="landing-chase" label="You chase" spans={2.2} tone="wear">
+        <LandingPinBeat
+            testId="landing-chase"
+            label="You chase"
+            caption="Now you are the reminder."
+            spans={2.2}
+            tone="wear"
+        >
             {(progress) => <ChaseFrame progress={progress} />}
         </LandingPinBeat>
     );

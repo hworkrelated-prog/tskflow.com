@@ -8,6 +8,7 @@ import { motion, useMotionValue, useReducedMotion, useScroll } from 'framer-moti
 export default function LandingPinBeat({
     testId,
     label,
+    caption,
     spans = 2.15,
     tone,
     children,
@@ -20,6 +21,7 @@ export default function LandingPinBeat({
         offset: ['start start', 'end end'],
     });
     const progress = reduce ? done : scrollYProgress;
+    const spoken = caption || label;
 
     return (
         <section
@@ -27,9 +29,14 @@ export default function LandingPinBeat({
             className={`landing-pin${tone ? ` landing-pin--${tone}` : ''}`}
             style={{ height: reduce ? '100svh' : `${spans * 100}svh` }}
             data-testid={testId}
-            aria-label={label}
+            aria-label={spoken}
         >
             <div className="landing-pin-frame">
+                {caption ? (
+                    <p className="landing-pin-caption" data-testid={`${testId}-caption`}>
+                        {caption}
+                    </p>
+                ) : null}
                 {typeof children === 'function' ? children(progress, reduce) : children}
             </div>
         </section>

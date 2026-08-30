@@ -3,13 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
-import LandingVoiceGuide from '@/components/LandingVoiceGuide';
 import LandingAssignBeat from '@/components/LandingAssignBeat';
 import LandingPileUp from '@/components/LandingPileUp';
 import LandingDeadline from '@/components/LandingDeadline';
@@ -19,6 +17,7 @@ import LandingTurn from '@/components/LandingTurn';
 import LandingPeace from '@/components/LandingPeace';
 import LandingIntegrations from '@/components/LandingIntegrations';
 import LandingFounder from '@/components/LandingFounder';
+import LandingUnbiassly from '@/components/LandingUnbiassly';
 import TskFlowLogo from '@/components/TskFlowLogo';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
@@ -41,7 +40,7 @@ const ColorCodedPrompt = ({ text, className = '', testId, as: Tag = 'p' }) => (
     </Tag>
 );
 
-const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
+const LaunchPad = ({ recordingBlob, onRecorded, inputRef, ideaIndex, value, setValue, setIdeaIndex }) => {
     const navigate = useNavigate();
     const { login } = useAuth();
     const [assignee, setAssignee] = useState('');
@@ -53,8 +52,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     const preview = distillLandingPrompt(filled ? value : '');
     const idea = LANDING_EXAMPLES[ideaIndex] || LANDING_EXAMPLES[0];
 
-    const pickExample = (text) => {
-        setValue(text);
+    const pickExample = (ex) => {
+        setValue(ex.text);
+        setIdeaIndex(LANDING_EXAMPLES.findIndex((item) => item.id === ex.id));
         trackLandingInteract('sample');
         window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 40);
     };
@@ -121,54 +121,39 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-ask"
             >
                 <p className="landing-step-kicker">Ask</p>
+                <p className="landing-step-hint">Type what needs to get done. Or tap an example.</p>
                 <div className="landing-ask-box">
-                    <div className="landing-ask-prompt">
-                        {!filled && (
-                            <div
-                                className="landing-example pointer-events-none absolute inset-0 text-[1.15rem] sm:text-2xl font-medium leading-relaxed"
-                                data-testid={`landing-example-${idea.id}`}
-                                aria-hidden
-                            >
-                                <ColorCodedPrompt text={idea.text} as="span" />
-                            </div>
-                        )}
-                        <textarea
-                            ref={inputRef}
-                            value={value}
-                            onChange={(e) => {
-                                setValue(e.target.value);
-                                if (e.target.value.trim()) trackLandingInteract('typed');
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    focusEmail();
-                                }
-                            }}
-                            rows={filled ? 4 : 3}
-                            className="landing-ask-input relative w-full h-full resize-none bg-transparent font-medium leading-relaxed outline-none caret-teal-300 text-white selection:bg-teal-400/30"
-                            placeholder=""
-                            data-testid="landing-tryit-input"
-                            aria-label="What needs to get done"
-                        />
-                    </div>
+                    <textarea
+                        ref={inputRef}
+                        value={value}
+                        onChange={(e) => {
+                            setValue(e.target.value);
+                            if (e.target.value.trim()) trackLandingInteract('typed');
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                focusEmail();
+                            }
+                        }}
+                        rows={filled ? 4 : 3}
+                        className="landing-ask-input relative w-full resize-none bg-transparent font-medium leading-relaxed outline-none caret-teal-300 text-white selection:bg-teal-400/30"
+                        placeholder={idea.text}
+                        data-testid="landing-tryit-input"
+                        aria-label="What needs to get done"
+                    />
                     <div className="landing-ask-actions" data-testid="landing-examples">
-                        <button
-                            type="button"
-                            onClick={() => pickExample(idea.text)}
-                            className="landing-use-idea"
-                            data-testid="landing-use-idea"
-                        >
-                            Use this idea
-                        </button>
-                        <div className="flex gap-1.5" aria-hidden>
-                            {LANDING_EXAMPLES.map((ex, i) => (
-                                <span
-                                    key={ex.id}
-                                    className={`h-1.5 w-1.5 rounded-full ${i === ideaIndex ? 'bg-teal-300' : 'bg-white/20'}`}
-                                />
-                            ))}
-                        </div>
+                        {LANDING_EXAMPLES.map((ex, i) => (
+                            <button
+                                key={ex.id}
+                                type="button"
+                                onClick={() => pickExample(ex)}
+                                className={`landing-example-chip${i === ideaIndex ? ' is-on' : ''}`}
+                                data-testid={`landing-example-${ex.id}`}
+                            >
+                                {ex.chip}
+                            </button>
+                        ))}
                     </div>
                     {filled && (
                         <ColorCodedPrompt
@@ -177,6 +162,15 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             testId="landing-tryit-colorized"
                         />
                     )}
+                    <div className="landing-record-row">
+                        <LandingScreenRecorder
+                            onRecorded={onRecorded}
+                            recorded={Boolean(recordingBlob)}
+                        />
+                        <p className="landing-record-hint">
+                            Optional. Record your screen so they see exactly what you mean.
+                        </p>
+                    </div>
                 </div>
             </section>
 
@@ -189,6 +183,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 <p className="sr-only" data-testid="landing-who-cue">
                     Your email. To try it.
                 </p>
+                <p className="landing-step-hint">Your email. No password. We send the ask from here.</p>
                 <Input
                     type="email"
                     value={assignee}
@@ -242,11 +237,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                         <p className="sr-only" data-testid="landing-no-account">
                             No account. No password.
                         </p>
-                        <div className="landing-send-visual" data-testid="landing-send-promise" aria-hidden>
-                            <span className="hound-face is-silent">C</span>
-                            <span className="landing-send-dash" />
-                            <span className="hound-chip is-go">On it</span>
-                        </div>
+                        <p className="landing-send-visual" data-testid="landing-send-promise">
+                            We send it. If they go quiet, we follow up.
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -287,40 +280,29 @@ const LandingPage = () => {
     }, []);
 
     useEffect(() => {
+        if (value.trim()) return undefined;
         const id = window.setInterval(() => {
             setIdeaIndex((i) => (i + 1) % LANDING_EXAMPLES.length);
         }, 3800);
         return () => window.clearInterval(id);
-    }, []);
-
-    const scrollToStep = (step) => {
-        const id = step === 'who' ? 'landing-step-who' : 'landing-step-ask';
-        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (step === 'ask') window.setTimeout(() => inputRef.current?.focus(), 280);
-    };
+    }, [value]);
 
     return (
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <div className="landing-toolbar-lead">
-                        <span data-testid="landing-brand">
-                            <TskFlowLogo variant="dark" size="sm" />
-                        </span>
-                        <LandingScreenRecorder
-                            onRecorded={setRecordingBlob}
-                            recorded={Boolean(recordingBlob)}
-                        />
-                    </div>
-                    <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
                             type="button"
-                            className={tab === 'story' ? 'is-on' : ''}
                             onClick={() => setTab('story')}
-                            data-testid="landing-tab-story"
+                            data-testid="landing-brand"
+                            className="landing-brand-btn"
+                            aria-label="TskFlow home"
                         >
-                            Story
+                            <TskFlowLogo variant="dark" size="sm" />
                         </button>
+                    </div>
+                    <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
                             type="button"
                             className={tab === 'founder' ? 'is-on' : ''}
@@ -329,45 +311,45 @@ const LandingPage = () => {
                         >
                             Get to Know the Founder
                         </button>
-                    </nav>
-                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                        <Button
-                            variant="ghost"
-                            className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
-                            onClick={() => navigate('/unbiassly')}
+                        <button
+                            type="button"
+                            className={tab === 'unbiassly' ? 'is-on' : ''}
+                            onClick={() => setTab('unbiassly')}
                             data-testid="landing-unbiassly"
                         >
                             Unbiassly
-                        </Button>
-                        <LandingVoiceGuide
-                            inputValue={value}
-                            onHeard={(text) => {
-                                setValue(text);
-                                trackLandingInteract('voice');
-                            }}
-                            onAfterGuide={scrollToStep}
-                        />
-                        <Button
-                            variant="ghost"
-                            className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
-                            onClick={() => navigate('/login')}
-                            data-testid="landing-sign-in"
-                        >
-                            Sign in
-                        </Button>
-                    </div>
+                        </button>
+                    </nav>
+                    <button
+                        type="button"
+                        className="landing-tabs-link"
+                        onClick={() => navigate('/login')}
+                        data-testid="landing-sign-in"
+                    >
+                        Sign in
+                    </button>
                 </div>
             </header>
 
             <main className="relative z-10 flex-1 flex flex-col">
                 {tab === 'founder' ? (
                     <LandingFounder />
+                ) : tab === 'unbiassly' ? (
+                    <LandingUnbiassly />
                 ) : (
                     <>
                 <section className="landing-hero-visual landing-hero-pain-only" data-testid="landing-hero">
                     <h1 className="landing-hero-line" data-testid="landing-pain-line">
                         Managers waste hours chasing people for work they already agreed to do.
                     </h1>
+                    <p className="landing-hero-sub" data-testid="landing-point">
+                        They said yes in the meeting. Then Slack ate it. You became the reminder.
+                    </p>
+                    <ol className="landing-point-steps" data-testid="landing-how">
+                        <li>Assign the work in one sentence.</li>
+                        <li>They accept. It lands on their calendar.</li>
+                        <li>If they go quiet, TskFlow follows up. You see when it is actually done.</li>
+                    </ol>
                 </section>
 
                 <LandingAssignBeat />
@@ -380,13 +362,15 @@ const LandingPage = () => {
                 <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">
-                    <p className="landing-final-line">Try it.</p>
+                    <p className="landing-final-line">Try it. No account. No password.</p>
                     <LaunchPad
                         recordingBlob={recordingBlob}
+                        onRecorded={setRecordingBlob}
                         inputRef={inputRef}
                         ideaIndex={ideaIndex}
                         value={value}
                         setValue={setValue}
+                        setIdeaIndex={setIdeaIndex}
                     />
                 </section>
                     </>
@@ -400,7 +384,7 @@ const LandingPage = () => {
                         {' '}is a trade name of Unbiassly, Inc.
                     </span>
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
-                        <Link to="/unbiassly" className="hover:text-white/70" data-testid="landing-unbiassly-footer">Unbiassly</Link>
+                        <button type="button" className="hover:text-white/70" onClick={() => setTab('unbiassly')} data-testid="landing-unbiassly-footer">Unbiassly</button>
                         <Link to="/contact" className="hover:text-white/70">Contact</Link>
                         <Link to="/legal" className="hover:text-white/70">Legal</Link>
                         <Link to="/privacy" className="hover:text-white/70">Privacy Policy</Link>

@@ -130,13 +130,17 @@ def test_frontend_wires_unbiassly():
     assert 'data-testid="unbiassly-copy-link"' in hub
     assert 'data-testid="unbiassly-refresh-insights"' in hub
     assert 'data-testid="unbiassly-email-summary"' in hub
-    assert "An unbiased link for an unbiased discussion." in hub
+    assert "Create a link. Get the discussion going." in hub
     assert 'data-testid="unbiassly-public"' in public
     assert 'data-testid="unbiassly-send"' in public
     assert "Post anonymously" in public
     assert 'data-testid="unbiassly-button"' in dash
     assert 'data-testid="landing-unbiassly"' in landing
     assert "Unbiassly" in help_src
+    assert "LandingUnbiassly" in hub
+    assert "Create a link. Get the discussion going." in hub
+    assert "user.is_guest" in hub
+    assert "pinDocumentTheme('dark')" in hub
     assert "startsWith('/u/')" in dock
     assert "startsWith('/unbiassly')" in dock
     assert "searchParams.get('next')" in login

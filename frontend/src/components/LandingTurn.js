@@ -21,7 +21,13 @@ const CALM = [
 /** Beat 7: the turn. Messy pile becomes a calm TskFlow board. */
 export default function LandingTurn() {
     return (
-        <LandingPinBeat testId="landing-turn" label="TskFlow" spans={2.7} tone="turn">
+        <LandingPinBeat
+            testId="landing-turn"
+            label="TskFlow"
+            caption="TskFlow keeps the yes."
+            spans={2.7}
+            tone="turn"
+        >
             {(progress) => <TurnFrame progress={progress} />}
         </LandingPinBeat>
     );
