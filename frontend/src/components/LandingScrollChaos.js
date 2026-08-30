@@ -20,7 +20,7 @@ const FloatCard = ({ item, progress }) => {
     const z = useTransform(progress, [0, 0.5, 1], [item.z[0], item.z[1], item.z[2]]);
     const rotateX = useTransform(progress, [0, 0.5, 1], item.rx);
     const rotateY = useTransform(progress, [0, 0.5, 1], item.ry);
-    const opacity = useTransform(progress, [0, 0.1, 0.68, 0.92], [0.2, 0.95, 0.55, 0.05]);
+    const opacity = useTransform(progress, [0, 0.1, 0.68, 0.92], [0.82, 0.95, 0.55, 0.05]);
     const blur = useTransform(progress, [0, 0.45, 1], [2.4, 0, 1.2]);
     const filter = useTransform(blur, (v) => `blur(${v}px)`);
 
@@ -36,12 +36,12 @@ const FloatCard = ({ item, progress }) => {
 };
 
 const SlackPanel = ({ progress }) => {
-    const x = useTransform(progress, [0, 0.45, 1], ['-8vw', '-22vw', '6vw']);
-    const y = useTransform(progress, [0, 0.45, 1], ['58vh', '22vh', '52vh']);
+    const x = useTransform(progress, [0, 0.45, 1], ['-4vw', '-22vw', '6vw']);
+    const y = useTransform(progress, [0, 0.45, 1], ['62vh', '22vh', '52vh']);
     const z = useTransform(progress, [0, 0.45, 1], [40, 160, -80]);
     const rotateY = useTransform(progress, [0, 0.45, 1], [18, 28, 4]);
     const rotateX = useTransform(progress, [0, 0.45, 1], [8, 12, 2]);
-    const opacity = useTransform(progress, [0, 0.12, 0.7, 0.9], [0.15, 0.92, 0.45, 0]);
+    const opacity = useTransform(progress, [0, 0.12, 0.7, 0.9], [0.78, 0.95, 0.45, 0]);
 
     return (
         <motion.div className="landing-chaos-panel landing-chaos-panel--slack" style={{ x, y, z, rotateX, rotateY, opacity }}>
@@ -62,7 +62,7 @@ const InboxPanel = ({ progress }) => {
     const z = useTransform(progress, [0, 0.5, 1], [120, 40, -60]);
     const rotateY = useTransform(progress, [0, 0.5, 1], [-22, -14, -2]);
     const rotateX = useTransform(progress, [0, 0.5, 1], [14, 6, 1]);
-    const opacity = useTransform(progress, [0, 0.14, 0.72, 0.92], [0.1, 0.9, 0.4, 0]);
+    const opacity = useTransform(progress, [0, 0.14, 0.72, 0.92], [0.8, 0.95, 0.4, 0]);
 
     return (
         <motion.div className="landing-chaos-panel landing-chaos-panel--inbox" style={{ x, y, z, rotateX, rotateY, opacity }}>
@@ -103,7 +103,7 @@ const LandingScrollChaos = () => {
     const { scrollYProgress } = useScroll();
     const camY = useTransform(scrollYProgress, [0, 1], [-10, 8]);
     const camX = useTransform(scrollYProgress, [0, 1], [8, -6]);
-    const captionA = useTransform(scrollYProgress, [0, 0.26, 0.4], [0.9, 0.5, 0]);
+    const captionA = useTransform(scrollYProgress, [0, 0.26, 0.4], [0.95, 0.55, 0]);
     const captionB = useTransform(scrollYProgress, [0.3, 0.48, 0.7], [0, 0.88, 0]);
     const captionC = useTransform(scrollYProgress, [0.6, 0.8, 1], [0, 0.85, 0.3]);
     const gather = useTransform(scrollYProgress, [0.58, 0.92], [0, 0.65]);
