@@ -328,14 +328,10 @@ def test_landing_story_is_shown_not_told():
     assert "Asks bounce around Slack" not in chaos
     assert "landing-report-face" in reports
     assert "Done" in reports and "Stalled" in reports and "Moving" in reports
-    assert "landing-integ-email" in integ
-    assert "landing-integ-slack" in integ
-    assert "landing-integ-calendar" in integ
-    assert "landing-integ-salesforce" in integ
-    assert "landing-integ-meet" in integ
-    assert "landing-flow-ask" in flow
-    assert "landing-flow-who" in flow
-    assert "landing-flow-send" in flow
+    assert "landing-integ-${item.id}" in integ
+    assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
+    assert "landing-flow-${step.id}" in flow
+    assert "Ask" in flow and "Who" in flow and "Send" in flow
     assert "prefers-reduced-motion" in css
     assert "landing-live-pulse" in css
     assert "landing-sticky--amber" in css
