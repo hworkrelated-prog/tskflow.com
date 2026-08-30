@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video, Scale } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1331,6 +1331,9 @@ const TaskHub = () => {
                         <NotificationBell />
                         {/* Desktop icon strip */}
                         <div className="hidden md:flex items-center gap-2">
+                            <Button variant="outline" size="icon" onClick={() => navigate('/unbiassly')} className="rounded-full border-teal-300 text-teal-700 hover:text-teal-800 hover:bg-teal-50" title="Unbiassly" data-testid="unbiassly-button">
+                                <Scale className="w-5 h-5" />
+                            </Button>
                             <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
                                 <Repeat className="w-5 h-5" />
                             </Button>
@@ -1357,6 +1360,9 @@ const TaskHub = () => {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem onClick={() => navigate('/unbiassly')} data-testid="unbiassly-button-mobile">
+                                    <Scale className="w-4 h-4 mr-2" /> Unbiassly
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => navigate('/recurring')}>
                                     <Repeat className="w-4 h-4 mr-2" /> Recurring
                                 </DropdownMenuItem>

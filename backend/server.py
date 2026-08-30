@@ -136,6 +136,7 @@ from product_analytics import (
     should_send_daily,
     snapshot_for_email,
 )
+from unbiassly import register_unbiassly_routes
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -9938,6 +9939,7 @@ async def get_slack_followup(task_id: str, current_user: dict = Depends(get_curr
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
     """Static feed of product changes (newest first)."""
     updates = [
+        {"id": "u25", "area": "Unbiassly", "change": "Create a shareable Unbiassly link. Anyone can join the discussion anonymously. You get the summary, trends, and highlights - no names attached.", "was": "Honest takes had to live in a named thread or a 1:1."},
         {"id": "u24", "area": "Slack follow-up", "change": "If someone ignores two pings, Jarvis DMs them on Slack, talks like a teammate, and updates the task from whatever they reply.", "was": "Slack only posted into a channel webhook — ignored assignees stayed silent."},
         {"id": "u19", "area": "AI Command Bar", "change": "A persistent bottom prompt bar — type what you need, paste a screenshot, attach a recording, @assign, and send. Recurring, sales, and reminders are inferred automatically.", "was": "Task creation lived only inside a modal and felt like a long Q&A."},
         {"id": "u20", "area": "Screen Recording", "change": "Loom-style controls stay on the bottom-left and stay draggable. Capture uses the raw screen track so video no longer freezes when you switch tabs.", "was": "Recording could freeze after leaving the tab even though audio kept going."},
@@ -14339,6 +14341,16 @@ async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, bac
 
     return {"message": "Thank you for contacting us. We'll get back to you soon."}
 
+
+register_unbiassly_routes(
+    api_router,
+    db=db,
+    get_current_user=get_current_user,
+    send_email_notification=send_email_notification,
+    get_client_ip=_get_client_ip,
+    app_base_url=APP_BASE_URL,
+    secret_key=SECRET_KEY,
+)
 
 app.include_router(api_router)
 

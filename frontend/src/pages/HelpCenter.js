@@ -72,6 +72,13 @@ const topics = [
         )
     },
     {
+        id: 'unbiassly',
+        icon: <MessageSquare className="w-4 h-4" />, title: 'Unbiassly', category: 'Side Feature',
+        body: (
+            <p className="text-sm">Create a shareable link. Anyone can write anonymously. You get the summary, trends, and highlights.</p>
+        )
+    },
+    {
         id: 'faq',
         icon: <HelpCircle className="w-4 h-4" />, title: 'FAQs', category: 'FAQs',
         body: (

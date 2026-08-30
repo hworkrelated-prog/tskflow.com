@@ -1388,3 +1388,10 @@ html:has(body.landing-active) {
     color: rgba(255, 255, 255, 0.35);
     white-space: nowrap;
 }
+
+.unbiassly-public {
+    background:
+        radial-gradient(ellipse at top left, rgba(15, 118, 110, 0.08), transparent 42%),
+        linear-gradient(180deg, #f6f3ec 0%, #eef4f1 100%);
+    color: #0f172a;
+}
