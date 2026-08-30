@@ -8,10 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { AlertCircle, LogIn, Target } from 'lucide-react';
+import { AlertCircle, LogIn } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import TskFlowLogo from '@/components/TskFlowLogo';
 
 const GOOGLE_ERRORS = {
     google_not_configured: 'Google sign-in is not configured on this deployment yet. Use email and password for now.',
@@ -38,7 +39,11 @@ const LoginPage = () => {
             const response = await axios.post(`${API}/auth/login`, formData);
             login(response.data.access_token, response.data.user);
             toast.success('Welcome back!');
-            navigate('/dashboard');
+            const next = searchParams.get('next') || '';
+            const safe = next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+                ? next
+                : '/dashboard';
+            navigate(safe === '/login' || safe.startsWith('/register') ? '/dashboard' : safe);
         } catch (error) {
             if (error.response?.status === 403) {
                 toast.error('Please verify your email first');
@@ -53,11 +58,8 @@ const LoginPage = () => {
 
     return (
         <div data-testid="login-page" className="min-h-screen gradient-mesh flex items-center justify-center p-6 relative">
-            <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 hover:opacity-80 transition-opacity">
-                <div className="w-10 h-10 bg-gradient-to-br from-teal-800 to-slate-800 rounded-xl flex items-center justify-center">
-                    <Target className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-teal-800 to-slate-800 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>Tskflow</span>
+            <Link to="/" className="absolute top-6 left-6 hover:opacity-80 transition-opacity">
+                <TskFlowLogo variant="light" size="md" />
             </Link>
             <motion.div
                 initial={{ opacity: 0, y: 20 }}

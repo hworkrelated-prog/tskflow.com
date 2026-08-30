@@ -1,18 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Target } from 'lucide-react';
 import { LegalEntityNotice } from '@/components/LegalEntityNotice';
+import TskFlowLogo from '@/components/TskFlowLogo';
 
 const TermsOfService = () => {
     return (
         <div data-testid="terms-page" className="min-h-screen bg-white">
             <header className="border-b">
                 <div className="container mx-auto px-6 py-4">
-                    <Link to="/" className="flex items-center gap-2 w-fit">
-                        <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
-                            <Target className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>Tskflow</span>
+                    <Link to="/" className="inline-flex w-fit hover:opacity-80">
+                        <TskFlowLogo variant="light" size="sm" />
                     </Link>
                 </div>
             </header>
@@ -45,6 +42,16 @@ const TermsOfService = () => {
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">4. Google Calendar Integration</h2>
                         <p>If you connect Google Calendar, you authorize Tskflow to create and manage calendar events on your behalf for tasks you accept. Your use of Google services is also subject to Google&apos;s terms. You can revoke this access at any time from Settings. Our handling of Google user data is described in our <Link to="/privacy" className="text-indigo-600 underline">Privacy Policy</Link>.</p>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">4a. Google Meet transcripts</h2>
+                        <p>If you connect Meet, Tskflow loads transcripts from meetings you organized, so you and co-hosts can decide the asks. Only the organizer can send the final task list. Disconnect anytime from Settings.</p>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">4b. Salesforce (Motive)</h2>
+                        <p>If you connect Salesforce, Tskflow reads and writes sales activity (calls, opportunities, forecast fields) as proof that an ask happened, using the Motive Sales Cloud mapping. Disconnect anytime from Settings.</p>
                     </section>
 
                     <section>

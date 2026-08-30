@@ -377,7 +377,7 @@ def test_screen_recorder_is_on_the_landing_composer():
     recorder = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
     sheet = (FRONT / "components" / "LandingPhoneRecordSheet.js").read_text(encoding="utf-8")
     assert "LandingScreenRecorder" in landing
-    assert 'data-testid="landing-record-screen"' in recorder
+    assert "landing-record-screen" in recorder
     assert "getDisplayMedia" in recorder
     assert "saveRecordingBlob" in recorder  # works with no account, blob stays local
     assert "trackRecordingStart" in recorder

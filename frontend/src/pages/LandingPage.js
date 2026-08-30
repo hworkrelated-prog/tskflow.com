@@ -19,6 +19,7 @@ import LandingTurn from '@/components/LandingTurn';
 import LandingPeace from '@/components/LandingPeace';
 import LandingIntegrations from '@/components/LandingIntegrations';
 import LandingFounder from '@/components/LandingFounder';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -185,7 +186,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-who"
             >
                 <p className="landing-step-kicker">Who</p>
-                <p className="landing-who-cue" data-testid="landing-who-cue">
+                <p className="sr-only" data-testid="landing-who-cue">
                     Your email. To try it.
                 </p>
                 <Input
@@ -238,14 +239,14 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className="landing-try-note" data-testid="landing-no-account">
+                        <p className="sr-only" data-testid="landing-no-account">
                             No account. No password.
                         </p>
-                        <p className="landing-try-note" data-testid="landing-send-promise">
-                            {channel === 'slack'
-                                ? 'We email first, then run after them.'
-                                : 'You send it. We run after them until it is done.'}
-                        </p>
+                        <div className="landing-send-visual" data-testid="landing-send-promise" aria-hidden>
+                            <span className="hound-face is-silent">C</span>
+                            <span className="landing-send-dash" />
+                            <span className="hound-chip is-go">On it</span>
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -302,18 +303,15 @@ const LandingPage = () => {
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
-                    <LandingScreenRecorder
-                        onRecorded={setRecordingBlob}
-                        recorded={Boolean(recordingBlob)}
-                        prominent
-                    />
-                    <span
-                        className="text-sm font-semibold tracking-tight text-white/70 ml-1"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                        data-testid="landing-brand"
-                    >
-                        TskFlow
-                    </span>
+                    <div className="landing-toolbar-lead">
+                        <span data-testid="landing-brand">
+                            <TskFlowLogo variant="dark" size="sm" />
+                        </span>
+                        <LandingScreenRecorder
+                            onRecorded={setRecordingBlob}
+                            recorded={Boolean(recordingBlob)}
+                        />
+                    </div>
                     <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
                             type="button"
@@ -333,6 +331,14 @@ const LandingPage = () => {
                         </button>
                     </nav>
                     <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                        <Button
+                            variant="ghost"
+                            className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
+                            onClick={() => navigate('/unbiassly')}
+                            data-testid="landing-unbiassly"
+                        >
+                            Unbiassly
+                        </Button>
                         <LandingVoiceGuide
                             inputValue={value}
                             onHeard={(text) => {
@@ -394,6 +400,7 @@ const LandingPage = () => {
                         {' '}is a trade name of Unbiassly, Inc.
                     </span>
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
+                        <Link to="/unbiassly" className="hover:text-white/70" data-testid="landing-unbiassly-footer">Unbiassly</Link>
                         <Link to="/contact" className="hover:text-white/70">Contact</Link>
                         <Link to="/legal" className="hover:text-white/70">Legal</Link>
                         <Link to="/privacy" className="hover:text-white/70">Privacy Policy</Link>

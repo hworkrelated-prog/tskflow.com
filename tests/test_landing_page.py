@@ -20,6 +20,7 @@ def test_landing_is_a_tool_not_a_pitch():
     assert 'data-testid="landing-pain"' not in src
     assert 'data-testid="landing-sim"' not in src
     assert 'data-testid="landing-brand"' in src
+    assert "TskFlowLogo" in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
     assert 'data-testid="landing-toolbar"' in src
@@ -28,8 +29,10 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "landing-step-kicker" in (FRONT / "App.css").read_text(encoding="utf-8")
     # recorder is in the chrome; the page tree renders toolbar above the composer
     assert "LandingScreenRecorder" in src
+    assert "landing-toolbar-lead" in src
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
+    assert page_tree.index("landing-brand") < page_tree.index("LandingScreenRecorder")
     assert "LandingAssignBeat" in src
     assert "LandingPileUp" in src
     assert "LandingDeadline" in src
@@ -99,6 +102,28 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert "GoogleSignInButton" not in src
     assert "navigate('/login')" in src
     assert "navigate('/register')" not in src
+
+
+def test_landing_record_is_a_walkthrough_of_the_ask():
+    """Logo first. Record is a capture of the ask, not a Record label."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    rec = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    chrome = landing.split('data-testid="landing-toolbar"')[1].split("</header>")[0]
+    assert chrome.index("landing-brand") < chrome.index("LandingScreenRecorder")
+    assert "landing-toolbar-lead" in chrome
+    assert "landing-ask-rec" in rec
+    assert "Record a walkthrough of the ask" in rec
+    assert "landing-ask-rec-chip is-who" in rec
+    assert "landing-ask-rec-chip is-work" in rec
+    assert "landing-ask-rec-chip is-when" in rec
+    assert "landing-ask-rec-pip" in rec
+    assert "landing-ask-rec-screen" in rec
+    assert "landing-ask-rec-scan" in css
+    assert "landing-ask-rec-marquee" in css
+    assert "Record screen" not in rec
+    assert "Walkthrough ready" not in rec
+    assert "prominent ? 'Record'" not in rec
 
 
 def test_landing_examples_are_short_manager_asks():
@@ -355,6 +380,14 @@ def test_landing_story_is_shown_not_told():
     assert "hashim" in assign
     assert "landing-integ-${item.id}" in integ
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
+    assert "HoundScene" in integ and "MotiveScene" in integ
+    assert "item.scene === id" in integ
+    assert "You send it. We run after them until it is done." not in landing
+    assert "We email first, then run after them." not in landing
+    assert "landing-send-visual" in landing
+    assert "landing-integ-story" in css
+    assert "hound-dash" in css
+    assert "motive-stamp" in css
     assert "prefers-reduced-motion" in css
     assert "Asks bounce around Slack." not in landing
     assert "The robot delivers" not in landing
@@ -395,4 +428,27 @@ def test_landing_story_cast_is_sales_and_consistent():
     assert "QA signoff" not in pile
     assert "record a demo of the fix" not in pile
 
+
+
+def test_tskflow_logo_is_a_lockup_not_plain_type():
+    """Mark + Tsk/Flow wordmark, reused on splash, landing, and chrome."""
+    logo = (FRONT / "components" / "TskFlowLogo.js").read_text(encoding="utf-8")
+    css = (FRONT / "index.css").read_text(encoding="utf-8")
+    splash = (ROOT / "frontend" / "public" / "index.html").read_text(encoding="utf-8")
+    mark = (ROOT / "frontend" / "public" / "favicon.svg").read_text(encoding="utf-8")
+    lockup = (ROOT / "frontend" / "public" / "logo.svg").read_text(encoding="utf-8")
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    hub = (FRONT / "pages" / "TaskHub.js").read_text(encoding="utf-8")
+    login = (FRONT / "pages" / "LoginPage.js").read_text(encoding="utf-8")
+    assert "tskflow-logo-flow" in logo
+    assert "TskFlowMark" in logo
+    assert "M8 16.7" in logo
+    assert "M8 16.7" in mark
+    assert "logo.svg" in splash
+    assert 'content: "TskFlow"' not in splash
+    assert "tskflow-logo--dark" in css
+    assert "TskFlowLogo" in landing
+    assert "TskFlowLogo" in hub
+    assert "TskFlowLogo" in login
+    assert "Tsk" in lockup and "Flow" in lockup
 

@@ -55,7 +55,7 @@ export const DEMO_SLACK = {
     messages: [
         {
             role: 'assistant',
-            name: 'Jarvis',
+            name: 'Rook',
             text: "Hey Chris - Maya asked you to take this on. It's due EOD. I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
         },
         {
@@ -65,7 +65,7 @@ export const DEMO_SLACK = {
         },
         {
             role: 'assistant',
-            name: 'Jarvis',
+            name: 'Rook',
             text: "Perfect - you're on it. I marked you accepted. I'll stay out of your way unless this slips.",
         },
     ],
@@ -76,7 +76,7 @@ export const DEMO_BEATS = [
     { id: 'sentence', label: 'One sentence' },
     { id: 'assigned', label: '36 people' },
     { id: 'rollup', label: 'AI update' },
-    { id: 'slack', label: 'Slack thread' },
+    { id: 'slack', label: 'Pinged twice' },
 ];
 
 export const isLargeTeamPrompt = (text) =>

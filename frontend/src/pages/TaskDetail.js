@@ -110,6 +110,7 @@ const TaskDetail = () => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [groupRollup, setGroupRollup] = useState(null);
     const [slackFollowup, setSlackFollowup] = useState(null);
+    const [motiveProof, setMotiveProof] = useState(null);
     const [slackConnected, setSlackConnected] = useState(false);
     const [showAllParticipants, setShowAllParticipants] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
@@ -300,8 +301,16 @@ const TaskDetail = () => {
                     const live = via === 'slack_dm' && (r.data?.slack_channel_id || r.data?.slack_thread_ts);
                     setSlackFollowup(live ? r.data : null);
                 }).catch(() => setSlackFollowup(null));
+                if (response.data.is_sales_task) {
+                    axios.get(`${API}/tasks/${response.data.id}/salesforce-proof`).then((r) => {
+                        setMotiveProof(r.data || null);
+                    }).catch(() => setMotiveProof(null));
+                } else {
+                    setMotiveProof(null);
+                }
             } else {
                 setSlackFollowup(null);
+                setMotiveProof(null);
             }
             // If this is a parent task, load participants + leaderboard for the collapsible section
             if (response.data.is_parent || response.data.status === 'Parent') {
@@ -948,13 +957,21 @@ const TaskDetail = () => {
                                         </Badge>
                                     )}
                                     {getStatusBadge(task.status)}
-                                    {String(task.source || '').toLowerCase() === 'transcript' && (
+                                    {['transcript', 'meet'].includes(String(task.source || '').toLowerCase()) && (
                                         <span
                                             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/70 px-3 py-1 text-xs text-muted-foreground"
                                             data-testid="from-transcript-chip"
                                         >
                                             <Sparkles className="w-3.5 h-3.5" />
-                                            From transcript
+                                            {String(task.source || '').toLowerCase() === 'meet' ? 'Meet' : 'From transcript'}
+                                        </span>
+                                    )}
+                                    {String(task.source || '').toLowerCase() === 'hound' && (
+                                        <span
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-[#4A154B]/20 bg-[#4A154B]/5 px-3 py-1 text-xs text-[#4A154B]"
+                                            data-testid="from-hound-chip"
+                                        >
+                                            Hound
                                         </span>
                                     )}
                                 </div>
@@ -1618,6 +1635,10 @@ const TaskDetail = () => {
                         </CardContent>
                     </Card>
 
+                    {motiveProof && (
+                        <MotiveProofStrip proof={motiveProof} />
+                    )}
+
                     {slackFollowup && (
                         <SlackFollowupCard thread={slackFollowup} />
                     )}
@@ -2059,13 +2080,45 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
     );
 };
 
+const MotiveProofStrip = ({ proof }) => {
+    const found = Boolean(proof?.found);
+    const kind = String(proof?.kind || 'generic');
+    const bars = [
+        { id: 'call', on: kind === 'call' && found },
+        { id: 'opp', on: (kind === 'pipeline' || kind === 'deal') && found },
+        { id: 'commit', on: kind === 'forecast' && found },
+    ];
+    return (
+        <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4" data-testid="motive-proof-strip">
+            <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-sm">M</span>
+                <span className="font-semibold text-sm">Motive</span>
+                {proof?.connected === false && (
+                    <span className="ml-auto text-[11px] text-muted-foreground">Not connected</span>
+                )}
+                {found && (
+                    <span className="ml-auto text-[11px] text-emerald-700 font-medium" data-testid="motive-proof-hit">In Salesforce</span>
+                )}
+            </div>
+            <div className="flex gap-2">
+                {bars.map((b) => (
+                    <span
+                        key={b.id}
+                        className={`flex-1 h-9 rounded-xl border ${b.on ? 'bg-sky-500 border-sky-500' : 'bg-white/80 border-sky-100'}`}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const SlackFollowupCard = ({ thread }) => {
     const messages = Array.isArray(thread?.messages) ? thread.messages : [];
     return (
         <Card className="border-2 rounded-2xl mt-4 overflow-hidden" data-testid="slack-followup-card">
             <div className="px-4 py-3 bg-[#4A154B] text-white flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
-                <h3 className="font-semibold text-sm">Slack thread</h3>
+                <h3 className="font-semibold text-sm">Hound</h3>
                 <span className="ml-auto text-[11px] text-white/70">
                     {thread?.status === 'resolved' ? 'Resolved' : 'Open'}
                     {thread?.via === 'slack_dm' ? ' · DM' : ''}
@@ -2078,7 +2131,7 @@ const SlackFollowupCard = ({ thread }) => {
                 {messages.map((m, i) => (
                     <div key={`${m.ts || i}-${i}`} className={m.role === 'user' ? 'pl-4' : ''}>
                         <p className="text-[11px] text-muted-foreground mb-0.5">
-                            {m.role === 'assistant' ? 'Jarvis' : 'Assignee'}
+                            {m.role === 'assistant' ? 'Rook' : 'Assignee'}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{m.text}</p>
                     </div>

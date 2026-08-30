@@ -23,8 +23,8 @@ def test_prompt_and_jarvis_share_a_bottom_stage():
 def test_jarvis_is_not_a_prompt_button():
     assert 'data-testid="ai-jarvis-mark"' not in CREATE
     assert "JarvisIcon" not in CREATE
-    assert "Jarvis lives in the prompt bar" in VOICE
-    assert "return null" in VOICE.split("Jarvis lives in the prompt bar")[1][:220]
+    assert "Rook lives in the prompt bar" in VOICE
+    assert "return null" in VOICE.split("Rook lives in the prompt bar")[1][:220]
     assert "flex-direction: row-reverse" not in CSS
     assert "max-width: 40rem" in CSS
 

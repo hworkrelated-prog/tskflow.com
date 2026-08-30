@@ -57,6 +57,62 @@ from slack_followup import (
     slack_bot_token,
     slack_signing_secret,
     verify_slack_signature,
+    apply_assignee_actions,
+    handle_assignee_slack_text,
+    find_thread_for_slack_event,
+)
+from brand import ASSISTANT_NAME, SLACK_PRODUCT, SALESFORCE_PRESET_LABEL
+from hound import (
+    ACTION_LAUNCH_CANCEL,
+    ACTION_LAUNCH_CONFIRM,
+    ACTION_SILENT,
+    HOUND_SLASH,
+    SLACK_BOT_SCOPES,
+    chase_blocks,
+    format_who_line,
+    help_blocks,
+    intent_from_action,
+    interact_action,
+    launch_need_more_blocks,
+    launch_preview_blocks,
+    parse_hound_slash,
+    parse_interact_payload,
+    parse_slash_payload,
+    post_response_url,
+    silent_blocks,
+    slack_ephemeral,
+)
+from salesforce_helpers import (
+    classify_sales_ask,
+    exchange_code as sf_exchange_code,
+    identity as sf_identity,
+    looks_like_motive,
+    oauth_authorize_url as sf_oauth_url,
+    proof_soql,
+    query as sf_query,
+    refresh_access_token as sf_refresh,
+    salesforce_configured,
+    summarize_proof,
+    user_lookup_soql,
+    writeback_task_payload,
+    sf_post,
+)
+from meet_helpers import (
+    MEET_SCOPES,
+    STATUS_PENDING,
+    STATUS_PUBLISHED,
+    apply_draft_vote,
+    can_edit_session,
+    can_publish_session,
+    event_attendee_emails,
+    event_cohost_emails,
+    event_organizer_email,
+    fetch_transcript_via_drive,
+    fetch_transcript_via_meet_api,
+    kept_drafts,
+    list_ended_meet_events,
+    meeting_code_from_event,
+    session_roles,
 )
 from email_followup import (
     first_name,
@@ -83,6 +139,8 @@ from transcript_helpers import (
     filter_clear_identified_tasks,
     next_business_day_17,
     transcript_session_mongo_filter,
+    polish_title,
+    polish_description,
 )
 from sheets_helpers import (
     SHEETS_SCOPES,
@@ -136,6 +194,7 @@ from product_analytics import (
     should_send_daily,
     snapshot_for_email,
 )
+from unbiassly import register_unbiassly_routes
 
 # App Base URL for emails (production-safe)
 APP_BASE_URL = os.environ.get('FRONTEND_URL') or os.getenv('FRONTEND_URL') or 'https://tskflow.com'
@@ -160,6 +219,7 @@ ALGORITHM = "HS256"
 # 30 days — returning to the PWA after overnight / next-day should stay signed in
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 # PST Timezone
 PST = pytz.timezone('America/Los_Angeles')
@@ -217,6 +277,9 @@ class UserResponse(BaseModel):
     team_owner_email: Optional[str] = None
     google_calendar_connected: Optional[bool] = False
     google_sheets_connected: Optional[bool] = False
+    google_meet_connected: Optional[bool] = False
+    salesforce_connected: Optional[bool] = False
+    salesforce_is_motive: Optional[bool] = False
     preferences: Optional[dict] = None
     reports_to: Optional[str] = None
     company_domain: Optional[str] = None
@@ -446,6 +509,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+):
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        return None
 
 def get_pst_now():
     return datetime.now(PST)
@@ -1076,6 +1149,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         team_owner_email=current_user.get("team_owner_email"),
         google_calendar_connected=current_user.get("google_calendar_connected", False),
         google_sheets_connected=current_user.get("google_sheets_connected", False),
+        google_meet_connected=current_user.get("google_meet_connected", False),
+        salesforce_connected=current_user.get("salesforce_connected", False),
+        salesforce_is_motive=current_user.get("salesforce_is_motive", False),
         preferences=current_user.get("preferences") or {},
         reports_to=current_user.get("reports_to"),
         company_domain=current_user.get("company_domain"),
@@ -2941,7 +3017,7 @@ async def create_standalone_recording(
                 event_type="robot_note",
                 channel="in_app",
                 actor_id="jarvis",
-                actor_name="Jarvis",
+                actor_name=ASSISTANT_NAME,
                 title="Walkthrough attached",
                 body="",
                 meta={"channels": ["in_app"], "recording_id": recording_id},
@@ -3657,7 +3733,12 @@ async def accept_counter_proposal(task_id: str, background_tasks: BackgroundTask
     return {"message": "Counter-proposal accepted", "new_due_date": task["proposed_due_date"]}
 
 @api_router.put("/tasks/{task_id}/complete")
-async def complete_task(task_id: str, completion: Optional[TaskComplete] = None, current_user: dict = Depends(get_current_user)):
+async def complete_task(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    completion: Optional[TaskComplete] = None,
+    current_user: dict = Depends(get_current_user),
+):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -3698,6 +3779,7 @@ async def complete_task(task_id: str, completion: Optional[TaskComplete] = None,
         {"id": task_id},
         {"$set": update_data}
     )
+    background_tasks.add_task(_maybe_salesforce_writeback, task_id)
     
     return {"message": "Task submitted for review" if not is_self_assigned else "Task completed"}
 
@@ -5686,7 +5768,7 @@ async def _seed_robot_room(task: dict, guest: dict, assignee_name: str, channel:
             event_type=beat["event_type"],
             channel=beat["channel"],
             actor_id="jarvis",
-            actor_name="Jarvis",
+            actor_name=ASSISTANT_NAME,
             recipient_id=task.get("assigned_to"),
             recipient_name=assignee_name,
             recipient_email=task.get("assigned_to_email"),
@@ -7628,6 +7710,55 @@ class VoiceCommandRequest(BaseModel):
     history: Optional[List[dict]] = None  # [{role, text}] prior turns while panel is open
     screen_context: Optional[dict] = None  # DOM snapshot when user taps "Need a hand?"
 
+
+class VoiceSpeakRequest(BaseModel):
+    text: Optional[str] = None
+
+
+_speak_hits: Dict[str, List[float]] = {}
+
+
+def _guest_speak_allowed(ip: str) -> bool:
+    now = datetime.now(timezone.utc).timestamp()
+    window = [t for t in (_speak_hits.get(ip) or []) if now - t < 60]
+    if len(window) >= 24:
+        _speak_hits[ip] = window
+        return False
+    window.append(now)
+    _speak_hits[ip] = window
+    return True
+
+
+@api_router.post("/voice/speak")
+async def voice_speak(
+    req: VoiceSpeakRequest,
+    request: HTTPRequest,
+    current_user: Optional[dict] = Depends(get_optional_user),
+):
+    """OpenAI TTS in ChatGPT's Nova voice. Guests may speak short lines (landing)."""
+    spoken = " ".join((req.text or "").split()).strip()
+    if not spoken:
+        raise HTTPException(status_code=400, detail="Empty text")
+    limit = 2200 if current_user else 320
+    if len(spoken) > limit:
+        raise HTTPException(status_code=400, detail="Text too long")
+    if not current_user:
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        ip = forwarded or (request.client.host if request.client else "") or "unknown"
+        if not _guest_speak_allowed(ip):
+            raise HTTPException(status_code=429, detail="Too many voice requests")
+    try:
+        from llm import synthesize_speech
+        audio = await synthesize_speech(spoken)
+    except Exception as e:
+        logging.warning("TTS failed: %s", e)
+        raise HTTPException(status_code=503, detail="Voice is unavailable")
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )
+
 VOICE_SYSTEM_PROMPT = """You are Tskflow's voice assistant. You help a user manage tasks by voice.
 You will receive the user's spoken transcript plus JSON context (their outstanding tasks and known contacts).
 Respond with a SINGLE JSON object ONLY (no markdown, no extra text) with this shape:
@@ -7656,7 +7787,7 @@ def _jarvis_local_intent(transcript: str):
     if re.search(r"\b(what can you (do|help with)|who are you|what do you do|help me get started)\b", low):
         return {
             "reply": (
-                "I'm Jarvis, your AI manager in TskFlow. I can create and assign tasks from plain English, "
+                "I'm Rook, your AI manager in TskFlow. I can create and assign tasks from plain English, "
                 "list what's still open, update status, open pages like analytics or settings, "
                 "and walk you through how things work. What do you want to tackle?"
             ),
@@ -8310,15 +8441,12 @@ async def _post_to_slack(webhook_url: str, text: str, blocks: Optional[List[dict
 
 
 async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
-    """After two ignored pings, Jarvis DMs the assignee on Slack and talks like a person.
+    """After two ignored pings, Hound DMs the assignee. Rook talks like a person.
 
-    Requires SLACK_BOT_TOKEN and a successful DM. Incoming Webhook alone never
-    creates a “Slack thread” (it cannot receive replies and previously produced
-    fake via=webhook cards when Slack was not connected).
+    Requires a bot token (env SLACK_BOT_TOKEN or the token stored on Slack OAuth)
+    and a successful DM. Incoming Webhook alone never creates a Slack thread.
     """
     if not should_open_slack_followup(task):
-        return None
-    if not slack_bot_token():
         return None
     aid = task.get("assigned_to")
     if not aid or str(aid).startswith("email_"):
@@ -8326,9 +8454,14 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
     assignee = await db.users.find_one({"id": aid}, {"_id": 0})
     if not assignee:
         return None
+    token = await _resolve_hound_token(assignee)
     assigner = None
     if task.get("created_by"):
         assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+    if not token and assigner:
+        token = await _resolve_hound_token(assigner)
+    if not token:
+        return None
 
     async def post_webhook(text: str) -> bool:
         webhook = await _resolve_slack_webhook(assignee) or await _resolve_slack_webhook(assigner or {})
@@ -8337,7 +8470,7 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
         return await _post_to_slack(webhook, text)
 
     thread = await open_ignored_task_thread(
-        db, task, assignee, assigner, get_pst_now(), post_webhook=post_webhook
+        db, task, assignee, assigner, get_pst_now(), post_webhook=post_webhook, token=token
     )
     if not is_live_slack_thread(thread):
         return None
@@ -8347,18 +8480,18 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
         await create_notification(
             assigner["id"],
             "status_change",
-            "Jarvis started a Slack thread",
-            f"No response after 2 pings — Jarvis is talking to {name} about “{title}”.",
+            f"{SLACK_PRODUCT} started a Slack thread",
+            f"No response after 2 pings — {ASSISTANT_NAME} is talking to {name} about “{title}”.",
             task_id=task.get("id"),
-            actor_name="Jarvis",
+            actor_name=ASSISTANT_NAME,
         )
     await create_notification(
         assignee["id"],
         "nudge",
-        "Jarvis messaged you on Slack",
-        f"About “{title}” — reply in Slack and I’ll update the task from whatever you say.",
+        f"{ASSISTANT_NAME} messaged you on Slack",
+        f"About “{title}” — tap a button or reply in Slack.",
         task_id=task.get("id"),
-        actor_name="Jarvis",
+        actor_name=ASSISTANT_NAME,
     )
     try:
         await log_task_activity(
@@ -8366,13 +8499,13 @@ async def _maybe_open_slack_followup(task: dict) -> Optional[dict]:
             task_id=task["id"],
             event_type="nudge",
             channel="slack",
-            actor_name="Jarvis",
+            actor_name=ASSISTANT_NAME,
             recipient_id=assignee.get("id"),
             recipient_name=assignee.get("name"),
             recipient_email=assignee.get("email"),
             company_domain=assignee.get("company_domain") or task.get("company_domain"),
             title="Slack follow-up opened",
-            body=f"Jarvis started a Slack thread with {name} after 2 ignored pings.",
+            body=f"{SLACK_PRODUCT} started a Slack thread with {name} after 2 ignored pings.",
             meta={"slack_thread_id": thread.get("id"), "via": thread.get("via")},
             created_at=get_pst_now().isoformat(),
         )
@@ -8408,18 +8541,18 @@ async def _maybe_open_email_followup(task: dict) -> Optional[dict]:
             assigner["id"],
             "status_change",
             "Jarvis started an email thread",
-            f"No response after 2 pings — Jarvis emailed {name} about “{title}”.",
+            f"No response after 2 pings — {ASSISTANT_NAME} emailed {name} about “{title}”.",
             task_id=task.get("id"),
-            actor_name="Jarvis",
+            actor_name=ASSISTANT_NAME,
             created_at=sent_at,
         )
     await create_notification(
         assignee["id"],
         "nudge",
-        "Jarvis emailed you about a task",
+        f"{ASSISTANT_NAME} emailed you about a task",
         f"About “{title}” — reply to the email and I’ll update the task from whatever you write.",
         task_id=task.get("id"),
-        actor_name="Jarvis",
+        actor_name=ASSISTANT_NAME,
         created_at=sent_at,
     )
     return thread
@@ -8440,22 +8573,22 @@ async def _notify_slack_reply_result(result: dict) -> None:
     if not assigner.get("id"):
         return
     if status == "Accepted":
-        headline, body = f"{name} accepted via Slack", f"Jarvis marked “{title}” accepted from their reply."
+        headline, body = f"{name} accepted via Slack", f"{ASSISTANT_NAME} marked “{title}” accepted from their reply."
     elif status == "Completed":
-        headline, body = f"{name} finished via Slack", f"Jarvis marked “{title}” complete from their reply."
+        headline, body = f"{name} finished via Slack", f"{ASSISTANT_NAME} marked “{title}” complete from their reply."
     elif status == "Declined":
-        headline, body = f"{name} declined via Slack", f"Jarvis declined “{title}” based on what they said."
+        headline, body = f"{name} declined via Slack", f"{ASSISTANT_NAME} declined “{title}” based on what they said."
     elif status == "Blocked":
-        headline, body = f"{name} is blocked", f"Jarvis flagged “{title}” as blocked from their Slack reply."
+        headline, body = f"{name} is blocked", f"{ASSISTANT_NAME} flagged “{title}” as blocked from their Slack reply."
     else:
-        headline, body = f"{name} replied on Slack", user_text or f"Jarvis left their note on “{title}”."
+        headline, body = f"{name} replied on Slack", user_text or f"{ASSISTANT_NAME} left their note on “{title}”."
     await create_notification(
         assigner["id"],
         "status_change",
         headline,
         body,
         task_id=task.get("id"),
-        actor_name="Jarvis",
+        actor_name=ASSISTANT_NAME,
     )
 
 
@@ -9019,7 +9152,7 @@ async def dashboard_ai_summary_v2(
         top_items = (overdue + high_urgent + due_next_hours + due_today)[:8]
         lines = [f"- {(t.get('title') or '')[:60]} [{t.get('priority','M')}, due {t.get('due_date','?')}]" for t in top_items]
         prompt = (
-            f"You are Jarvis. Given these urgent counts — overdue={stats['overdue_count']}, "
+            f"You are {ASSISTANT_NAME}. Given these urgent counts — overdue={stats['overdue_count']}, "
             f"high-urgent={stats['urgent_high_count']}, due<6h={stats['due_in_hours_count']}, due today={stats['due_today_count']} — "
             f"write 2 short crisp sentences with concrete recommendations to avoid missing deadlines. "
             f"Reference item titles when helpful.\n\nTop items:\n" + "\n".join(lines)
@@ -9711,15 +9844,18 @@ def _slack_oauth_redirect_uri() -> str:
 
 @api_router.get("/integrations/slack/status")
 async def slack_integration_status(current_user: dict = Depends(get_current_user)):
-    """Webhook (channel posts) vs bot (Jarvis DMs ignored assignees)."""
+    """Webhook (channel posts) vs Hound bot (DMs ignored assignees, slash launch)."""
     prefs = current_user.get("preferences") or {}
     webhook = (prefs.get("slack_webhook_url") or "").strip()
-    bot = bool(slack_bot_token())
+    bot = bool(slack_bot_token()) or bool((prefs.get("slack_bot_access_token") or "").strip())
     return {
         "webhook": webhook.startswith("https://hooks.slack.com/"),
         "bot": bot,
         "followup_enabled": bot,
         "oauth": _slack_oauth_configured(),
+        "hound": True,
+        "slash": f"/{HOUND_SLASH}",
+        "assistant": ASSISTANT_NAME,
     }
 
 
@@ -9739,7 +9875,7 @@ async def slack_oauth_connect(current_user: dict = Depends(get_current_user)):
     })
     params = urlencode({
         "client_id": os.getenv("SLACK_CLIENT_ID").strip(),
-        "scope": "incoming-webhook",
+        "scope": SLACK_BOT_SCOPES,
         "redirect_uri": _slack_oauth_redirect_uri(),
         "state": state,
     })
@@ -9775,12 +9911,21 @@ async def slack_oauth_callback(
     except Exception:
         return RedirectResponse(url=fail)
     webhook = str(((data or {}).get("incoming_webhook") or {}).get("url") or "").strip()
-    if not (data or {}).get("ok") or not webhook.startswith("https://hooks.slack.com/"):
+    bot_token = str((data or {}).get("access_token") or "").strip()
+    if not (data or {}).get("ok"):
+        return RedirectResponse(url=fail)
+    if not webhook.startswith("https://hooks.slack.com/") and not bot_token:
         return RedirectResponse(url=fail)
     user = await db.users.find_one({"id": state_doc["user_id"]}, {"_id": 0})
     if not user or not _can_manage_slack_webhook(user):
         return RedirectResponse(url=fail)
-    prefs = {**(user.get("preferences") or {}), "slack_webhook_url": webhook}
+    prefs = {**(user.get("preferences") or {})}
+    if webhook.startswith("https://hooks.slack.com/"):
+        prefs["slack_webhook_url"] = webhook
+    if bot_token:
+        prefs["slack_bot_access_token"] = bot_token
+        prefs["slack_team_id"] = str(((data or {}).get("team") or {}).get("id") or "")
+        prefs["slack_bot_user_id"] = str((data or {}).get("bot_user_id") or "")
     await db.users.update_one({"id": user["id"]}, {"$set": {"preferences": prefs}})
     return RedirectResponse(url=f"{APP_BASE_URL}/settings?slack=connected")
 
@@ -9848,6 +9993,1054 @@ async def _consume_slack_event(payload: dict) -> None:
         logging.warning(f"slack event failed: {e}")
 
 
+async def _resolve_hound_token(user: Optional[dict] = None) -> str:
+    env = slack_bot_token()
+    if env:
+        return env
+    if not user:
+        return ""
+    prefs = user.get("preferences") or {}
+    tok = (prefs.get("slack_bot_access_token") or "").strip()
+    if tok:
+        return tok
+    owner_email = user.get("team_owner_email")
+    if owner_email:
+        owner = await db.users.find_one({"email": owner_email}, {"_id": 0, "preferences": 1})
+        tok = (((owner or {}).get("preferences") or {}).get("slack_bot_access_token") or "").strip()
+        if tok:
+            return tok
+    domain = user.get("company_domain")
+    if domain:
+        owner = await db.users.find_one(
+            {"company_domain": domain, "is_team_owner": True},
+            {"_id": 0, "preferences": 1},
+        )
+        tok = (((owner or {}).get("preferences") or {}).get("slack_bot_access_token") or "").strip()
+        if tok:
+            return tok
+    return ""
+
+
+async def _any_hound_token() -> str:
+    env = slack_bot_token()
+    if env:
+        return env
+    owner = await db.users.find_one(
+        {"preferences.slack_bot_access_token": {"$exists": True, "$nin": [None, ""]}},
+        {"_id": 0, "preferences": 1},
+    )
+    return (((owner or {}).get("preferences") or {}).get("slack_bot_access_token") or "").strip()
+
+
+async def _tskflow_user_from_slack(slack_user_id: str, token: str) -> Optional[dict]:
+    if slack_user_id:
+        found = await db.users.find_one({"slack_user_id": slack_user_id}, {"_id": 0})
+        if found:
+            return found
+    if not token or not slack_user_id:
+        return None
+    from slack_followup import _slack_api
+    info = await _slack_api("users.info", token, {"user": slack_user_id}, http="GET")
+    email = (((info.get("user") or {}).get("profile") or {}).get("email") or "").strip().lower()
+    if not email:
+        return None
+    found = await db.users.find_one({"email": email}, {"_id": 0})
+    if found:
+        await db.users.update_one({"id": found["id"]}, {"$set": {"slack_user_id": slack_user_id}})
+    return found
+
+
+def _verify_slack_request(request: HTTPRequest, body: bytes) -> None:
+    timestamp = request.headers.get("X-Slack-Request-Timestamp") or request.headers.get("x-slack-request-timestamp") or ""
+    signature = request.headers.get("X-Slack-Signature") or request.headers.get("x-slack-signature") or ""
+    secret = slack_signing_secret()
+    if secret:
+        if not verify_slack_signature(secret, timestamp, body, signature):
+            raise HTTPException(status_code=401, detail="invalid signature")
+    else:
+        logging.warning("Slack command/interact ignored signature check — SLACK_SIGNING_SECRET is not set")
+
+
+@api_router.post("/integrations/slack/commands")
+async def slack_slash_command(request: HTTPRequest, background_tasks: BackgroundTasks):
+    """Hound slash: launch an ask, or show who went silent."""
+    body = await request.body()
+    _verify_slack_request(request, body)
+    payload = parse_slash_payload(body)
+    cmd = parse_hound_slash(payload.get("text") or "")
+    if cmd.get("kind") == "help":
+        return JSONResponse(slack_ephemeral(SLACK_PRODUCT, help_blocks()))
+    background_tasks.add_task(_hound_slash_followup, payload, cmd)
+    return JSONResponse(slack_ephemeral("…"))
+
+
+async def _hound_slash_followup(payload: dict, cmd: dict) -> None:
+    try:
+        slack_uid = payload.get("user_id") or ""
+        token = await _any_hound_token()
+        user = await _tskflow_user_from_slack(slack_uid, token)
+        if user and not token:
+            token = await _resolve_hound_token(user)
+        if not user:
+            await post_response_url(payload.get("response_url") or "", slack_ephemeral("Sign in to Tskflow with this Slack email first."))
+            return
+        if cmd.get("kind") == "silent":
+            names, total = await _hound_silent_names(user)
+            await post_response_url(payload.get("response_url") or "", slack_ephemeral("Silent", silent_blocks(names, total)))
+            return
+        text = (cmd.get("text") or "").strip()
+        if not text:
+            await post_response_url(payload.get("response_url") or "", slack_ephemeral(SLACK_PRODUCT, help_blocks()))
+            return
+        parse_req = SmartParseRequest(text=text, resolve=True)
+        parsed = await smart_parse_task(parse_req, user)
+        ar = parsed.get("assignee_resolution") or {}
+        ready = bool(parsed.get("due_date")) and bool(ar.get("resolved")) and not ar.get("ambiguous") and not ar.get("needs_team_setup")
+        if not ready:
+            q = (parsed.get("clarifying_questions") or ["Who, and by when?"])[0]
+            await post_response_url(payload.get("response_url") or "", slack_ephemeral(q, launch_need_more_blocks(q)))
+            return
+        launch_id = str(uuid.uuid4())
+        await db.hound_launches.insert_one({
+            "id": launch_id,
+            "user_id": user["id"],
+            "slack_user_id": slack_uid,
+            "text": text,
+            "parsed": parsed,
+            "status": "pending",
+            "created_at": get_pst_now().isoformat(),
+        })
+        who = format_who_line(ar)
+        when = parsed.get("due_date_expression") or parsed.get("due_date") or ""
+        title = parsed.get("title") or text
+        await post_response_url(
+            payload.get("response_url") or "",
+            slack_ephemeral(title, launch_preview_blocks(launch_id, title, who, when)),
+        )
+    except Exception as e:
+        logging.warning(f"hound slash failed: {e}")
+        try:
+            await post_response_url(payload.get("response_url") or "", slack_ephemeral("Could not read that. Try again."))
+        except Exception:
+            pass
+
+
+async def _hound_silent_names(user: dict) -> tuple:
+    kids = await db.tasks.find(
+        {
+            "created_by": user["id"],
+            "deleted": {"$ne": True},
+            "is_parent": {"$ne": True},
+            "status": "Pending",
+            "nudge_count": {"$gte": 2},
+        },
+        {"_id": 0, "assigned_to_name": 1, "assigned_to_email": 1, "nudge_count": 1},
+    ).to_list(80)
+    names = []
+    seen = set()
+    for t in kids:
+        label = t.get("assigned_to_name") or (t.get("assigned_to_email") or "").split("@")[0]
+        if label and label not in seen:
+            seen.add(label)
+            names.append(label)
+    return names, len(kids)
+
+
+@api_router.post("/integrations/slack/interact")
+async def slack_interact(request: HTTPRequest, background_tasks: BackgroundTasks):
+    """Hound buttons: chase replies + launch confirm."""
+    body = await request.body()
+    _verify_slack_request(request, body)
+    payload = parse_interact_payload(body)
+    if not payload:
+        raise HTTPException(status_code=400, detail="invalid payload")
+    background_tasks.add_task(_hound_interact_followup, payload)
+    return JSONResponse({"ok": True})
+
+
+async def _hound_interact_followup(payload: dict) -> None:
+    try:
+        action_id, value = interact_action(payload)
+        slack_uid = ((payload.get("user") or {}).get("id") or "")
+        response_url = payload.get("response_url") or ""
+        token = await _any_hound_token()
+        user = await _tskflow_user_from_slack(slack_uid, token)
+        if user and not token:
+            token = await _resolve_hound_token(user)
+        if action_id == ACTION_SILENT:
+            if not user:
+                await post_response_url(response_url, slack_ephemeral("Sign in to Tskflow first."))
+                return
+            names, total = await _hound_silent_names(user)
+            await post_response_url(response_url, slack_ephemeral("Silent", silent_blocks(names, total)))
+            return
+        if action_id == ACTION_LAUNCH_CANCEL:
+            await db.hound_launches.update_one({"id": value}, {"$set": {"status": "cancelled"}})
+            await post_response_url(response_url, slack_ephemeral("Cancelled."))
+            return
+        if action_id == ACTION_LAUNCH_CONFIRM:
+            if not user:
+                await post_response_url(response_url, slack_ephemeral("Sign in to Tskflow first."))
+                return
+            launch = await db.hound_launches.find_one({"id": value, "user_id": user["id"]}, {"_id": 0})
+            if not launch or launch.get("status") != "pending":
+                await post_response_url(response_url, slack_ephemeral("That send already finished."))
+                return
+            count = await _hound_execute_launch(user, launch.get("parsed") or {})
+            await db.hound_launches.update_one({"id": value}, {"$set": {"status": "sent", "sent_count": count}})
+            await post_response_url(response_url, slack_ephemeral(f"Sent · {count}"))
+            return
+        intent = intent_from_action(action_id)
+        if not intent or not value:
+            return
+        task = await db.tasks.find_one({"id": value}, {"_id": 0})
+        if not task:
+            return
+        thread = await db.slack_threads.find_one({"task_id": value}, {"_id": 0})
+        if not thread:
+            thread = {"id": None, "task_id": value, "assignee_id": task.get("assigned_to")}
+        assignee = user
+        if not assignee and thread.get("assignee_id"):
+            assignee = await db.users.find_one({"id": thread["assignee_id"]}, {"_id": 0})
+        if not assignee:
+            return
+        assigner = None
+        if task.get("created_by"):
+            assigner = await db.users.find_one({"id": task["created_by"]}, {"_id": 0})
+        fake_text = {"accept": "On it", "decline": "Can't", "block": "Blocked", "complete": "Done"}.get(intent, "")
+        result = await handle_assignee_slack_text(db, thread, task, assignee, assigner, fake_text, get_pst_now())
+        result["task"] = {**(task or {}), **(result.get("applied") or {})}
+        result["assignee"] = assignee
+        result["assigner"] = assigner
+        await _notify_slack_reply_result(result)
+        ack = ((result.get("parsed") or {}).get("reply") or "Got it.")
+        await post_response_url(response_url, slack_ephemeral(ack))
+    except Exception as e:
+        logging.warning(f"hound interact failed: {e}")
+
+
+async def _hound_execute_launch(user: dict, parsed: dict) -> int:
+    """Create the parsed ask for every resolved assignee."""
+    ar = parsed.get("assignee_resolution") or {}
+    assignees: List[str] = []
+    for row in ar.get("resolved") or []:
+        if row.get("kind") == "team":
+            for m in row.get("members") or []:
+                mid = m.get("id") or m.get("email")
+                if mid:
+                    assignees.append(mid)
+            for em in row.get("emails") or []:
+                if em:
+                    assignees.append(em)
+        else:
+            assignees.append(row.get("id") or row.get("email") or "")
+    assignees = [a for a in assignees if a]
+    if not assignees:
+        return 0
+    title = (parsed.get("title") or "Ask")[:200]
+    description = (parsed.get("description") or "")[:2000]
+    due = parsed.get("due_date") or next_business_day_17(get_pst_now())
+    priority = parsed.get("priority") or "Medium"
+    is_sales = bool(parsed.get("is_sales_task")) or _text_looks_like_sales(f"{title} {description}")
+    created = 0
+    is_multi = len(assignees) > 1
+    parent_id = str(uuid.uuid4()) if is_multi else None
+    now = get_pst_now().isoformat()
+    child_ids = []
+    for assignee in assignees:
+        assigned_to_id = assignee
+        assigned_to_email = None
+        assigned_user = None
+        is_self = False
+        if assignee == "self" or assignee == user["id"]:
+            assigned_to_id = user["id"]
+            assigned_user = user
+            is_self = True
+        elif "@" in str(assignee):
+            assigned_to_email = assignee
+            existing = await db.users.find_one({"email": assignee}, {"_id": 0})
+            if existing:
+                assigned_to_id = existing["id"]
+                assigned_user = existing
+            else:
+                assigned_to_id = f"email_{assignee}"
+                assigned_user = {"name": str(assignee).split("@")[0], "email": assignee}
+        else:
+            assigned_user = await db.users.find_one({"id": assignee}, {"_id": 0})
+            if not assigned_user:
+                continue
+            assigned_to_email = assigned_user.get("email")
+        task_id = str(uuid.uuid4())
+        child_ids.append(task_id)
+        t_title, t_desc = title, description
+        if is_self:
+            t_title, t_desc = _apply_self_assign_copy(title, description)
+        doc = {
+            "id": task_id,
+            "title": t_title,
+            "description": t_desc,
+            "assigned_to": assigned_to_id,
+            "assigned_to_email": assigned_to_email or (assigned_user or {}).get("email"),
+            "created_by": user["id"],
+            "due_date": due,
+            "status": "Accepted" if is_self else "Pending",
+            "priority": priority,
+            "category": "Sales" if is_sales else None,
+            "created_at": now,
+            "accepted_at": now if is_self else None,
+            "comments": [],
+            "is_sales_task": is_sales,
+            "source": "hound",
+            "invite_token": str(uuid.uuid4())[:8],
+            "shareable_token": str(uuid.uuid4())[:12],
+            "parent_id": parent_id,
+        }
+        await db.tasks.insert_one(doc)
+        created += 1
+        await _notify_new_assignment(
+            user,
+            assigned_user or {},
+            assigned_to_id,
+            assigned_to_email or (assigned_user or {}).get("email"),
+            t_title,
+            t_desc,
+            due,
+            priority,
+            doc["invite_token"],
+            task_id,
+        )
+    if parent_id and child_ids:
+        await db.tasks.insert_one({
+            "id": parent_id,
+            "title": title,
+            "description": description,
+            "created_by": user["id"],
+            "is_parent": True,
+            "child_ids": child_ids,
+            "status": "Pending",
+            "due_date": due,
+            "priority": priority,
+            "is_sales_task": is_sales,
+            "created_at": now,
+            "source": "hound",
+        })
+    return created
+
+
+async def _notify_new_assignment(
+    assigner: dict,
+    assigned_user: dict,
+    assigned_to_id: str,
+    assigned_to_email: Optional[str],
+    title: str,
+    description: str,
+    due: str,
+    priority: str,
+    invite_token: str,
+    task_id: str,
+) -> None:
+    if assigned_to_id == assigner.get("id"):
+        return
+    recipient_email = (assigned_user or {}).get("email") or assigned_to_email
+    recipient_name = (assigned_user or {}).get("name") or "there"
+    if assigned_to_id and not str(assigned_to_id).startswith("email_"):
+        try:
+            await create_notification(
+                assigned_to_id,
+                "task_assigned",
+                f"New task from {assigner.get('name') or 'your manager'}",
+                title,
+                task_id=task_id,
+                actor_name=assigner.get("name"),
+            )
+        except Exception:
+            pass
+        try:
+            await send_web_push(
+                assigned_to_id,
+                f"New task from {assigner.get('name') or 'your manager'}",
+                title,
+                f"/task/{task_id}",
+            )
+        except Exception:
+            pass
+    if recipient_email:
+        try:
+            html = _assignment_email_html(
+                recipient_name=recipient_name,
+                assigner_name=assigner.get("name") or "",
+                title=title,
+                description=description,
+                due_date=due,
+                priority=priority,
+                cta_url=f"{APP_BASE_URL}/invite?token={invite_token}",
+            )
+            await send_email_notification(recipient_email, f"New Task: {title}", html)
+        except Exception as e:
+            logging.warning(f"assignment email failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Motive (Salesforce)
+# ---------------------------------------------------------------------------
+
+async def _sf_creds_for(user: dict) -> Optional[dict]:
+    creds = user.get("salesforce_credentials") or {}
+    if not creds.get("access_token") or not creds.get("instance_url"):
+        return None
+    return creds
+
+
+async def _sf_refresh_user(user: dict) -> Optional[dict]:
+    creds = await _sf_creds_for(user)
+    if not creds:
+        return None
+    try:
+        refreshed = await sf_refresh(creds.get("refresh_token") or "")
+        access = refreshed.get("access_token") or creds.get("access_token")
+        instance = refreshed.get("instance_url") or creds.get("instance_url")
+        next_creds = {**creds, "access_token": access, "instance_url": instance}
+        await db.users.update_one({"id": user["id"]}, {"$set": {"salesforce_credentials": next_creds}})
+        return next_creds
+    except Exception:
+        return creds
+
+
+@api_router.get("/integrations/salesforce/status")
+async def salesforce_status(current_user: dict = Depends(get_current_user)):
+    creds = current_user.get("salesforce_credentials") or {}
+    return {
+        "configured": salesforce_configured(),
+        "connected": bool(current_user.get("salesforce_connected") and creds.get("access_token")),
+        "preset": "motive",
+        "preset_label": SALESFORCE_PRESET_LABEL,
+        "org_name": current_user.get("salesforce_org_name") or "",
+        "is_motive": bool(current_user.get("salesforce_is_motive")),
+        "sf_user_id": current_user.get("salesforce_user_id") or "",
+    }
+
+
+@api_router.get("/integrations/salesforce/connect")
+async def salesforce_connect(current_user: dict = Depends(get_current_user)):
+    if not salesforce_configured():
+        raise HTTPException(status_code=503, detail="Salesforce is not configured")
+    state = secrets.token_urlsafe(24)
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "provider": "salesforce",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"auth_url": sf_oauth_url(APP_BASE_URL, state)}
+
+
+@api_router.get("/integrations/salesforce/oauth/callback")
+async def salesforce_oauth_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    fail = f"{APP_BASE_URL}/settings?salesforce=failed"
+    if error or not code or not state:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?salesforce=denied")
+    state_doc = await db.oauth_states.find_one({"state": state, "provider": "salesforce"})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    await db.oauth_states.delete_one({"state": state})
+    try:
+        token = await sf_exchange_code(code, APP_BASE_URL)
+        ident = {}
+        if token.get("id"):
+            try:
+                ident = await sf_identity(token["id"], token.get("access_token") or "")
+            except Exception:
+                ident = {}
+        email = (ident.get("email") or "").strip()
+        sf_user_id = ""
+        instance = token.get("instance_url") or ""
+        access = token.get("access_token") or ""
+        connecting = await db.users.find_one({"id": state_doc["user_id"]}, {"_id": 0, "email": 1})
+        lookup_emails = []
+        for candidate in ((connecting or {}).get("email"), email):
+            c = (candidate or "").strip()
+            if c and c.lower() not in [x.lower() for x in lookup_emails]:
+                lookup_emails.append(c)
+        if instance and access:
+            for em in lookup_emails:
+                try:
+                    rows = await sf_query(instance, access, user_lookup_soql(em))
+                    if rows:
+                        sf_user_id = rows[0].get("Id") or ""
+                        break
+                except Exception as e:
+                    logging.warning(f"SF user lookup: {e}")
+        org_name = ident.get("custom_domain") or ident.get("username") or ""
+        motive = looks_like_motive(ident, instance)
+        await db.users.update_one(
+            {"id": state_doc["user_id"]},
+            {"$set": {
+                "salesforce_connected": True,
+                "salesforce_credentials": {
+                    "access_token": access,
+                    "refresh_token": token.get("refresh_token"),
+                    "instance_url": instance,
+                    "id": token.get("id"),
+                    "issued_at": token.get("issued_at"),
+                },
+                "salesforce_user_id": sf_user_id,
+                "salesforce_org_id": ident.get("organization_id") or "",
+                "salesforce_org_name": org_name or (SALESFORCE_PRESET_LABEL if motive else "Salesforce"),
+                "salesforce_is_motive": motive or True,  # Motive-first: this connector is the Motive preset
+                "salesforce_preset": "motive",
+            }},
+        )
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?salesforce=connected")
+    except Exception as e:
+        logging.error(f"Salesforce OAuth error: {e}")
+        return RedirectResponse(url=fail)
+
+
+@api_router.delete("/integrations/salesforce/disconnect")
+async def salesforce_disconnect(current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {
+            "$set": {"salesforce_connected": False, "salesforce_is_motive": False},
+            "$unset": {"salesforce_credentials": "", "salesforce_user_id": ""},
+        },
+    )
+    return {"ok": True}
+
+
+@api_router.get("/tasks/{task_id}/salesforce-proof")
+async def task_salesforce_proof(task_id: str, current_user: dict = Depends(get_current_user)):
+    task = await db.tasks.find_one({"id": task_id, "deleted": {"$ne": True}}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    uid = current_user["id"]
+    if uid not in {task.get("created_by"), task.get("assigned_to")}:
+        raise HTTPException(status_code=403, detail="Access denied")
+    assignee = await db.users.find_one({"id": task.get("assigned_to")}, {"_id": 0}) or current_user
+    kind = classify_sales_ask(task.get("title") or "", task.get("description") or "")
+    creds = await _sf_refresh_user(assignee)
+    if not creds or not assignee.get("salesforce_user_id"):
+        return {
+            "kind": kind,
+            "preset_label": SALESFORCE_PRESET_LABEL,
+            "found": False,
+            "count": 0,
+            "records": [],
+            "connected": False,
+        }
+    try:
+        rows = await sf_query(
+            creds["instance_url"],
+            creds["access_token"],
+            proof_soql(kind, assignee["salesforce_user_id"], get_pst_now()),
+        )
+    except Exception as e:
+        logging.warning(f"SF proof query: {e}")
+        rows = []
+    summary = summarize_proof(kind, rows)
+    summary["connected"] = True
+    await db.tasks.update_one({"id": task_id}, {"$set": {"salesforce_proof": summary}})
+    return summary
+
+
+async def _maybe_salesforce_writeback(task_id: str) -> None:
+    try:
+        task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+        if not task or not (task.get("is_sales_task") or _text_looks_like_sales(f"{task.get('title') or ''} {task.get('description') or ''}")):
+            return
+        assignee = await db.users.find_one({"id": task.get("assigned_to")}, {"_id": 0})
+        if not assignee:
+            return
+        creds = await _sf_refresh_user(assignee)
+        sf_uid = assignee.get("salesforce_user_id")
+        if not creds or not sf_uid:
+            return
+        kind = classify_sales_ask(task.get("title") or "", task.get("description") or "")
+        payload = writeback_task_payload(task, sf_uid, kind)
+        created = await sf_post(
+            creds["instance_url"],
+            creds["access_token"],
+            f"/services/data/v61.0/sobjects/Task",
+            payload,
+        )
+        await db.tasks.update_one(
+            {"id": task_id},
+            {"$set": {"salesforce_activity_id": created.get("id"), "salesforce_writeback_at": get_pst_now().isoformat()}},
+        )
+    except Exception as e:
+        logging.warning(f"SF writeback failed: {e}")
+
+
+async def _sweep_motive_proof_autocomplete() -> None:
+    """If Motive already shows the work, close the Tskflow call/forecast/pipeline ask."""
+    try:
+        tasks = await db.tasks.find(
+            {
+                "deleted": {"$ne": True},
+                "is_parent": {"$ne": True},
+                "is_sales_task": True,
+                "status": {"$in": ["Pending", "Accepted"]},
+            },
+            {"_id": 0},
+        ).to_list(40)
+        for task in tasks:
+            assignee = await db.users.find_one({"id": task.get("assigned_to")}, {"_id": 0})
+            if not assignee or not assignee.get("salesforce_connected"):
+                continue
+            kind = classify_sales_ask(task.get("title") or "", task.get("description") or "")
+            creds = await _sf_refresh_user(assignee)
+            sf_uid = assignee.get("salesforce_user_id")
+            if not creds or not sf_uid:
+                continue
+            try:
+                rows = await sf_query(
+                    creds["instance_url"],
+                    creds["access_token"],
+                    proof_soql(kind, sf_uid, get_pst_now()),
+                )
+            except Exception:
+                continue
+            summary = summarize_proof(kind, rows)
+            if not summary.get("auto_complete_eligible"):
+                continue
+            await db.tasks.update_one(
+                {"id": task["id"]},
+                {"$set": {
+                    "status": "Completed",
+                    "completed_at": get_pst_now().isoformat(),
+                    "completion_note": f"Closed from {SALESFORCE_PRESET_LABEL} proof.",
+                    "salesforce_proof": summary,
+                    "completed_via": "motive",
+                }},
+            )
+    except Exception as e:
+        logging.warning(f"motive autocomplete sweep: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Google Meet transcripts
+# ---------------------------------------------------------------------------
+
+def get_google_meet_flow(redirect_uri: str):
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri],
+            }
+        },
+        scopes=MEET_SCOPES,
+        redirect_uri=redirect_uri,
+    )
+
+
+@api_router.get("/auth/google/meet/connect")
+async def google_meet_connect(current_user: dict = Depends(get_current_user)):
+    redirect_uri = f"{APP_BASE_URL}/api/auth/google/meet/callback"
+    flow = get_google_meet_flow(redirect_uri)
+    auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+    await db.oauth_states.insert_one({
+        "state": state,
+        "user_id": current_user["id"],
+        "purpose": "google_meet",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"auth_url": auth_url}
+
+
+@api_router.get("/auth/google/meet/callback")
+async def google_meet_callback(code: str, state: str):
+    state_doc = await db.oauth_states.find_one({"state": state})
+    if not state_doc:
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=invalid_state")
+    user_id = state_doc["user_id"]
+    await db.oauth_states.delete_one({"state": state})
+    try:
+        redirect_uri = f"{APP_BASE_URL}/api/auth/google/meet/callback"
+        flow = get_google_meet_flow(redirect_uri)
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "google_meet_connected": True,
+                "google_meet_credentials": {
+                    "token": credentials.token,
+                    "refresh_token": credentials.refresh_token,
+                    "token_uri": credentials.token_uri,
+                    "client_id": credentials.client_id,
+                    "client_secret": credentials.client_secret,
+                    "expiry": credentials.expiry.isoformat() if credentials.expiry else None,
+                },
+            }},
+        )
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?meet=connected")
+    except Exception as e:
+        logging.error(f"Google Meet OAuth error: {e}")
+        return RedirectResponse(url=f"{APP_BASE_URL}/settings?error=meet_oauth_failed")
+
+
+@api_router.delete("/auth/google/meet/disconnect")
+async def google_meet_disconnect(current_user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {"google_meet_connected": False}, "$unset": {"google_meet_credentials": ""}},
+    )
+    return {"ok": True}
+
+
+@api_router.get("/meetings/sessions")
+async def list_meeting_sessions(current_user: dict = Depends(get_current_user)):
+    email = (current_user.get("email") or "").lower()
+    docs = await db.meeting_sessions.find(
+        {
+            "status": STATUS_PENDING,
+            "$or": [
+                {"organizer_id": current_user["id"]},
+                {"organizer_email": email},
+                {"editor_emails": email},
+                {"cohost_emails": email},
+            ],
+        },
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(30)
+    for d in docs:
+        d["role"] = "organizer" if (d.get("organizer_email") or "").lower() == email else "cohost"
+        d["can_publish"] = can_publish_session(d, email)
+        d["can_edit"] = can_edit_session(d, email)
+        d["kept_count"] = len(kept_drafts(d))
+    return {"sessions": docs}
+
+
+@api_router.get("/meetings/sessions/{session_id}")
+async def get_meeting_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    session = await db.meeting_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    email = (current_user.get("email") or "").lower()
+    if not can_edit_session(session, email) and not can_publish_session(session, email) and session.get("organizer_id") != current_user["id"]:
+        # published sessions: organizer can still view
+        if session.get("status") != STATUS_PUBLISHED or session.get("organizer_id") != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    session["role"] = "organizer" if (session.get("organizer_email") or "").lower() == email else "cohost"
+    session["can_publish"] = can_publish_session(session, email)
+    session["can_edit"] = can_edit_session(session, email)
+    return session
+
+
+class MeetingDraftVote(BaseModel):
+    draft_id: str
+    keep: bool = True
+
+
+class MeetingDraftPatch(BaseModel):
+    draft_id: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+@api_router.post("/meetings/sessions/{session_id}/vote")
+async def vote_meeting_draft(session_id: str, body: MeetingDraftVote, current_user: dict = Depends(get_current_user)):
+    session = await db.meeting_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    email = (current_user.get("email") or "").lower()
+    if not can_edit_session(session, email):
+        raise HTTPException(status_code=403, detail="Only the organizer or co-hosts can decide the ask.")
+    next_session = apply_draft_vote(session, email, body.draft_id, body.keep)
+    await db.meeting_sessions.update_one(
+        {"id": session_id},
+        {"$set": {"drafts": next_session.get("drafts"), "votes": next_session.get("votes")}},
+    )
+    next_session["can_publish"] = can_publish_session(next_session, email)
+    next_session["can_edit"] = True
+    return next_session
+
+
+@api_router.patch("/meetings/sessions/{session_id}/drafts")
+async def patch_meeting_draft(session_id: str, body: MeetingDraftPatch, current_user: dict = Depends(get_current_user)):
+    session = await db.meeting_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    email = (current_user.get("email") or "").lower()
+    if not can_edit_session(session, email):
+        raise HTTPException(status_code=403, detail="Only the organizer or co-hosts can edit.")
+    drafts = []
+    for d in session.get("drafts") or []:
+        row = dict(d)
+        if str(row.get("id")) == body.draft_id:
+            if body.title is not None:
+                row["title"] = body.title[:200]
+            if body.description is not None:
+                row["description"] = body.description[:2000]
+            if body.assigned_to is not None:
+                row["assigned_to"] = body.assigned_to
+            if body.due_date is not None:
+                row["due_date"] = body.due_date
+        drafts.append(row)
+    await db.meeting_sessions.update_one({"id": session_id}, {"$set": {"drafts": drafts}})
+    session["drafts"] = drafts
+    session["can_publish"] = can_publish_session(session, email)
+    session["can_edit"] = True
+    return session
+
+
+@api_router.post("/meetings/sessions/{session_id}/publish")
+async def publish_meeting_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    session = await db.meeting_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    email = (current_user.get("email") or "").lower()
+    if not can_publish_session(session, email):
+        raise HTTPException(status_code=403, detail="Only the meeting organizer can send the list.")
+    sent = 0
+    now = get_pst_now().isoformat()
+    for d in kept_drafts(session):
+        assigned_to = d.get("assigned_to") or current_user["id"]
+        assigned_email = d.get("assigned_to_email")
+        if assigned_to and "@" in str(assigned_to):
+            u = await db.users.find_one({"email": assigned_to}, {"_id": 0})
+            if u:
+                assigned_to = u["id"]
+                assigned_email = u.get("email")
+        is_self = assigned_to == current_user["id"]
+        title = d.get("title") or "Follow-up"
+        description = d.get("description") or ""
+        if is_self:
+            title, description = _apply_self_assign_copy(title, description)
+        task_id = str(uuid.uuid4())
+        invite_token = str(uuid.uuid4())[:8]
+        await db.tasks.insert_one({
+            "id": task_id,
+            "title": title,
+            "description": description,
+            "assigned_to": assigned_to,
+            "assigned_to_email": assigned_email,
+            "created_by": current_user["id"],
+            "due_date": d.get("due_date") or next_business_day_17(get_pst_now()),
+            "status": "Accepted" if is_self else "Pending",
+            "priority": d.get("priority") or "Medium",
+            "category": "meeting",
+            "created_at": now,
+            "accepted_at": now if is_self else None,
+            "comments": [],
+            "source": "meet",
+            "meeting_session_id": session_id,
+            "invite_token": invite_token,
+            "shareable_token": str(uuid.uuid4())[:12],
+            "is_sales_task": bool(d.get("is_sales_task")),
+        })
+        sent += 1
+        await _notify_new_assignment(
+            current_user,
+            {"name": d.get("assigned_to_name"), "email": assigned_email},
+            assigned_to,
+            assigned_email,
+            title,
+            description,
+            d.get("due_date") or next_business_day_17(get_pst_now()),
+            d.get("priority") or "Medium",
+            invite_token,
+            task_id,
+        )
+    await db.meeting_sessions.update_one(
+        {"id": session_id},
+        {"$set": {"status": STATUS_PUBLISHED, "published_at": now, "published_count": sent}},
+    )
+    return {"ok": True, "sent": sent}
+
+
+async def _extract_meeting_drafts(text: str, organizer: dict) -> List[dict]:
+    now = get_pst_now()
+    roster: List[dict] = []
+    email = organizer.get("email") or ""
+    domain = email.split("@")[-1] if "@" in email else ""
+    if domain:
+        roster = await db.users.find(
+            {"email": {"$regex": f"@{re.escape(domain)}$", "$options": "i"}},
+            {"_id": 0, "id": 1, "name": 1, "email": 1},
+        ).to_list(200)
+    if not roster:
+        roster = [{"id": organizer.get("id"), "name": organizer.get("name"), "email": email}]
+    drafts_data: List[dict] = []
+    key = os.getenv("OPENAI_API_KEY")
+    if key:
+        try:
+            from llm import chat_complete
+            prompt = build_transcript_extract_prompt(text, roster, organizer, now)
+            raw = await chat_complete(
+                model="gpt-4o-mini",
+                system=f"Extract only clearly identified action items as JSON. You are {ASSISTANT_NAME}.",
+                user=prompt,
+                timeout=28.0,
+                json_mode=True,
+                api_key=key,
+            )
+            if not isinstance(raw, str):
+                raw = str(raw)
+            raw = re.sub(r"^```(json)?", "", raw.strip()).strip()
+            raw = re.sub(r"```$", "", raw).strip()
+            parsed = json.loads(raw)
+            drafts_data = parsed.get("tasks", []) if isinstance(parsed, dict) else []
+        except Exception as e:
+            logging.warning(f"Meet transcript parse failed: {e}")
+    drafts_data = filter_clear_identified_tasks(drafts_data)
+    if not drafts_data:
+        drafts_data = fallback_extract_action_items(
+            text, now, roster, organizer, parse_date=_fallback_parse_date_expression
+        )
+    out = []
+    for raw in drafts_data:
+        d = apply_owner_and_due_guesses(
+            raw,
+            transcript=text,
+            roster=roster,
+            importer=organizer,
+            now=now,
+            parse_date=_fallback_parse_date_expression,
+        )
+        assigned_to = organizer.get("id")
+        assigned_name = organizer.get("name")
+        assigned_email = organizer.get("email")
+        hint = d.get("assignee_hint")
+        if hint:
+            try:
+                resolution = await _resolve_assignee_hints([str(hint)], organizer)
+                resolved = resolution.get("resolved") or []
+                if resolved and resolved[0].get("kind") == "user" and resolved[0].get("id"):
+                    assigned_to = resolved[0]["id"]
+                    assigned_name = resolved[0].get("name")
+                    assigned_email = resolved[0].get("email")
+            except Exception:
+                pass
+        out.append({
+            "id": str(uuid.uuid4()),
+            "title": polish_title(d.get("title") or "Follow-up", d.get("description") or ""),
+            "description": polish_description(d.get("title") or "", d.get("description") or ""),
+            "assigned_to": assigned_to,
+            "assigned_to_name": assigned_name,
+            "assigned_to_email": assigned_email,
+            "due_date": d.get("due_date") or next_business_day_17(now),
+            "priority": d.get("priority") or "Medium",
+            "dropped": False,
+        })
+    return out
+
+
+async def _ingest_meet_for_user(user: dict) -> int:
+    creds = user.get("google_meet_credentials")
+    if not creds:
+        return 0
+    created = 0
+    try:
+        events = list_ended_meet_events(creds)
+    except Exception as e:
+        logging.warning(f"Meet calendar list failed: {e}")
+        return 0
+    for ev in events:
+        code = meeting_code_from_event(ev)
+        if not code:
+            continue
+        existing = await db.meeting_sessions.find_one({"meeting_code": code}, {"_id": 1})
+        if existing:
+            continue
+        title = ev.get("summary") or "Meeting"
+        organizer_email = event_organizer_email(ev)
+        attendee_emails = event_attendee_emails(ev)
+        # Only the organizer's connected account creates the session
+        if organizer_email and organizer_email != (user.get("email") or "").lower():
+            continue
+        text = ""
+        try:
+            text = await fetch_transcript_via_meet_api(creds, code)
+        except Exception:
+            text = ""
+        if not text:
+            try:
+                text = fetch_transcript_via_drive(creds, title_hint=title)
+            except Exception:
+                text = ""
+        if not (text or "").strip():
+            continue
+        drafts = await _extract_meeting_drafts(text, user)
+        if not drafts:
+            continue
+        roles = session_roles(
+            organizer_email or (user.get("email") or ""),
+            event_cohost_emails(ev),
+            attendee_emails,
+        )
+        session_id = str(uuid.uuid4())
+        doc = {
+            "id": session_id,
+            "meeting_code": code,
+            "calendar_event_id": ev.get("id"),
+            "title": title,
+            "organizer_id": user["id"],
+            "organizer_email": roles["organizer_email"],
+            "cohost_emails": roles["cohost_emails"],
+            "attendee_emails": roles["attendee_emails"],
+            "editor_emails": roles["editor_emails"],
+            "status": STATUS_PENDING,
+            "drafts": drafts,
+            "votes": {},
+            "transcript_preview": (text or "")[:400],
+            "created_at": get_pst_now().isoformat(),
+        }
+        await db.meeting_sessions.insert_one(doc)
+        created += 1
+        try:
+            await create_notification(
+                user["id"],
+                "status_change",
+                "Meet ready",
+                title,
+                actor_name=ASSISTANT_NAME,
+            )
+        except Exception:
+            pass
+        for em in roles["editor_emails"]:
+            if em == roles["organizer_email"]:
+                continue
+            co = await db.users.find_one({"email": em}, {"_id": 0, "id": 1})
+            if co:
+                try:
+                    await create_notification(
+                        co["id"],
+                        "mention",
+                        "Meet ready",
+                        title,
+                        actor_name=ASSISTANT_NAME,
+                    )
+                except Exception:
+                    pass
+    return created
+
+
+async def _sweep_meet_transcripts() -> None:
+    try:
+        users = await db.users.find(
+            {"google_meet_connected": True, "google_meet_credentials": {"$exists": True}},
+            {"_id": 0},
+        ).to_list(40)
+        for u in users:
+            try:
+                await _ingest_meet_for_user(u)
+            except Exception as e:
+                logging.warning(f"meet ingest {u.get('email')}: {e}")
+    except Exception as e:
+        logging.warning(f"meet sweep: {e}")
+
+
 @api_router.post("/webhooks/resend/inbound")
 async def resend_inbound_webhook(request: HTTPRequest, background_tasks: BackgroundTasks):
     """Resend email.received — map a reply back to a task via the unique Reply-To token."""
@@ -9908,7 +11101,7 @@ async def _consume_resend_inbound(payload: dict) -> None:
 
 @api_router.get("/tasks/{task_id}/slack-followup")
 async def get_slack_followup(task_id: str, current_user: dict = Depends(get_current_user)):
-    """Conversation Jarvis had with the assignee after ignored pings.
+    """Conversation Hound had with the assignee after ignored pings.
 
     Only returns live Slack DM follow-ups. Legacy local / false-webhook threads
     are hidden so the UI never claims Slack ran when Slack is not connected.
@@ -9919,8 +11112,17 @@ async def get_slack_followup(task_id: str, current_user: dict = Depends(get_curr
     thread = await db.slack_threads.find_one({"task_id": task_id}, {"_id": 0})
     if not is_live_slack_thread(thread):
         raise HTTPException(status_code=404, detail="No Slack follow-up yet")
-    # Slack must still be configured (bot) — otherwise hide leftover DM records too.
-    if not slack_bot_token():
+    # Slack must still be configured (bot token in env or Hound OAuth).
+    token = await _resolve_hound_token(current_user)
+    if not token:
+        for uid in (task.get("assigned_to"), task.get("created_by")):
+            if not uid:
+                continue
+            other = await db.users.find_one({"id": uid}, {"_id": 0})
+            token = await _resolve_hound_token(other)
+            if token:
+                break
+    if not token:
         raise HTTPException(status_code=404, detail="No Slack follow-up yet")
     uid = current_user["id"]
     allowed = uid in {
@@ -9938,7 +11140,11 @@ async def get_slack_followup(task_id: str, current_user: dict = Depends(get_curr
 async def get_product_updates(current_user: dict = Depends(get_current_user)):
     """Static feed of product changes (newest first)."""
     updates = [
-        {"id": "u24", "area": "Slack follow-up", "change": "If someone ignores two pings, Jarvis DMs them on Slack, talks like a teammate, and updates the task from whatever they reply.", "was": "Slack only posted into a channel webhook — ignored assignees stayed silent."},
+        {"id": "u28", "area": "Unbiassly", "change": "Create a shareable Unbiassly link. Anyone can join the discussion anonymously. You get the summary, trends, and highlights - no names attached.", "was": "Honest takes had to live in a named thread or a 1:1."},
+        {"id": "u27", "area": "Hound", "change": "Slack chase + launch. /hound sends an ask. Silent people get tap buttons. Rook talks. Replies close the task.", "was": "Slack only posted into a channel, then later DMed without buttons or slash launch."},
+        {"id": "u26", "area": "Motive", "change": "Salesforce proof for Motive. Log a call or move a deal in Motive and Tskflow can see it — completing a sales ask writes the activity back.", "was": "Sales tasks lived only inside Tskflow."},
+        {"id": "u25", "area": "Meet", "change": "Google Meet transcripts load themselves. Organizer + co-hosts decide the asks. Only the organizer sends the list.", "was": "Paste a transcript by hand."},
+        {"id": "u24", "area": "Slack follow-up", "change": "If someone ignores two pings, Hound DMs them on Slack, Rook talks like a teammate, and the task updates from whatever they reply or tap.", "was": "Slack only posted into a channel webhook — ignored assignees stayed silent."},
         {"id": "u19", "area": "AI Command Bar", "change": "A persistent bottom prompt bar — type what you need, paste a screenshot, attach a recording, @assign, and send. Recurring, sales, and reminders are inferred automatically.", "was": "Task creation lived only inside a modal and felt like a long Q&A."},
         {"id": "u20", "area": "Screen Recording", "change": "Loom-style controls stay on the bottom-left and stay draggable. Capture uses the raw screen track so video no longer freezes when you switch tabs.", "was": "Recording could freeze after leaving the tab even though audio kept going."},
         {"id": "u23", "area": "Conversational create", "change": "Name someone and TskFlow assigns them — confirm is a chat message with clickable chips, not a form. Exited prompts save as drafts in the header.", "was": "The AI kept asking who even after you named Harold, then showed a labeled form."},
@@ -13260,7 +14466,7 @@ FEATURES
 - Smart Task Creation: type a description (or dictate one). TskFlow infers title, due date, priority, category, and assignee hints, then pre-fills the form. You can always override.
 - Screen Recordings: attach a Loom-style recording to a task or share a standalone recording. The receiver plays it inline (no download).
 - Analytics: Overall Analytics (completion rate, overdue count, avg completion time, response time, trends, team + date filters) and a separate Team Leaderboard (fastest completions, highest completion rate, most completed, streaks, badges).
-- End-of-Day Report: daily Jarvis email summarizing today's completions and open items.
+- End-of-Day Report: daily Rook email summarizing today's completions and open items.
 - Smart Reminders: enable in Settings → Reminders. Choose triggers (time-before-due, no progress, no response, approaching deadline, overdue) and channels (in-app, email, Slack).
 - Help Center: /help — quick start, feature docs, walkthrough, FAQs, and "What's New".
 
@@ -13276,7 +14482,7 @@ BEST PRACTICES
 TSKFLOW_KB = strip_ai_dashes(TSKFLOW_KB)
 
 
-VOICE_ASSISTANT_SYSTEM = """You are Jarvis, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
+VOICE_ASSISTANT_SYSTEM = """You are Rook, TskFlow's professional AI manager (voice + chat). Sound like a sharp, calm ops lead — natural spoken English, never stiff or robotic.
 When Context JSON includes daily_sheet_metrics, use those numbers to answer manager questions about what an AE/rep is doing today (calls, emails, Salesforce tasks, etc.). Prefer real metric values over guessing.
 When Context JSON includes screen (UI snapshot from Need a hand), prioritize diagnosing the on-screen state: clarifying questions, missing assignees/due dates, errors, AI bar preview, dialogs. Say what you see in plain language and give the single best next click/action. Prefer action.type="assistant_answer".
 You help with anything the user asks while they work:
@@ -14197,6 +15403,8 @@ async def _scheduler_loop():
             await send_due_eod_reports()
             await send_weekly_engagement_digest()
             await send_daily_analytics()
+            await _sweep_meet_transcripts()
+            await _sweep_motive_proof_autocomplete()
         except Exception as e:
             logging.error(f"[scheduler] {e}")
         await asyncio.sleep(300)  # every 5 min
@@ -14227,7 +15435,10 @@ async def _ensure_indexes():
         await db[EVENTS_COLLECTION].create_index([("date", 1), ("event", 1)])
         await db[EVENTS_COLLECTION].create_index([("ip_hash", 1), ("at", -1)])
         await db.users.create_index([("is_guest", 1), ("guest_ip_hash", 1), ("created_at", -1)])
-        await db.email_followup_tokens.create_index("id", unique=True)
+        await db.meeting_sessions.create_index("meeting_code")
+        await db.meeting_sessions.create_index("organizer_id")
+        await db.hound_launches.create_index("id", unique=True)
+        await db.users.create_index("slack_user_id")
         await db.email_followup_tokens.create_index("task_id")
         await db.tasks.create_index("email_reply_token")
     except Exception:
@@ -14339,6 +15550,16 @@ async def submit_contact(contact: ContactRequest, http_request: HTTPRequest, bac
 
     return {"message": "Thank you for contacting us. We'll get back to you soon."}
 
+
+register_unbiassly_routes(
+    api_router,
+    db=db,
+    get_current_user=get_current_user,
+    send_email_notification=send_email_notification,
+    get_client_ip=_get_client_ip,
+    app_base_url=APP_BASE_URL,
+    secret_key=SECRET_KEY,
+)
 
 app.include_router(api_router)
 

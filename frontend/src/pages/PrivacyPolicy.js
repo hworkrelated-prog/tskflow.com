@@ -1,18 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Target } from 'lucide-react';
 import { LegalEntityNotice } from '@/components/LegalEntityNotice';
+import TskFlowLogo from '@/components/TskFlowLogo';
 
 const PrivacyPolicy = () => {
     return (
         <div data-testid="privacy-policy-page" className="min-h-screen bg-white">
             <header className="border-b">
                 <div className="container mx-auto px-6 py-4">
-                    <Link to="/" className="flex items-center gap-2 w-fit">
-                        <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
-                            <Target className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>Tskflow</span>
+                    <Link to="/" className="inline-flex w-fit hover:opacity-80">
+                        <TskFlowLogo variant="light" size="sm" />
                     </Link>
                 </div>
             </header>
@@ -34,7 +31,8 @@ const PrivacyPolicy = () => {
                             <li><strong>Task data:</strong> tasks you create, assign, accept, or complete, including titles, descriptions, due dates, and status.</li>
                             <li><strong>Usage data:</strong> basic activity needed to operate the Service (e.g., last active time).</li>
                             <li><strong>Contact form data:</strong> if you submit our Contact Us form, we collect your name, email, phone number, and message, along with your consent to receive SMS messages if you opt in.</li>
-                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar) - see Section 5.</li>
+                            <li><strong>Google account data</strong> (only if you choose to connect Google Calendar, Meet transcripts, or Sheets) - see Section 5.</li>
+                            <li><strong>Salesforce / Motive data</strong> (only if you connect Salesforce) - activity and opportunity fields used as proof that sales work happened.</li>
                         </ul>
                     </section>
 
@@ -60,15 +58,20 @@ const PrivacyPolicy = () => {
 
                     <section>
                         <h2 className="text-2xl font-semibold text-slate-900">5. Google User Data</h2>
-                        <p>If you connect your Google account, Tskflow requests access to your Google Calendar (the <code>calendar.events</code> scope) solely to create and manage calendar events for tasks you accept in Tskflow.</p>
+                        <p>If you connect your Google account, Tskflow may request:</p>
+                        <ul className="list-disc pl-6 space-y-1">
+                            <li>Google Calendar (<code>calendar.events</code> / <code>calendar.readonly</code>) to block time for tasks and to find Meet calls that just ended.</li>
+                            <li>Google Meet (<code>meetings.space.readonly</code>) to load conference transcripts after a meeting.</li>
+                            <li>Google Drive read-only, only to open the transcript Doc Meet already saved.</li>
+                        </ul>
                         <p>Tskflow&apos;s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-indigo-600 underline">Google API Services User Data Policy</a>, including the Limited Use requirements. Specifically:</p>
                         <ul className="list-disc pl-6 space-y-1">
-                            <li>We only use Google Calendar data to provide the calendar-blocking feature you enabled.</li>
+                            <li>We only use Google Calendar, Meet, and Drive transcript data to provide the features you enabled.</li>
                             <li>We do not use Google user data for advertising.</li>
                             <li>We do not sell Google user data or transfer it to third parties except as necessary to provide the feature, for security, or to comply with the law.</li>
                             <li>Humans do not read your Google data unless you give explicit consent, it is required for security, or required by law.</li>
                         </ul>
-                        <p>You can disconnect Google Calendar at any time from Settings, which revokes our stored access tokens.</p>
+                        <p>You can disconnect Google Calendar, Meet, or Sheets at any time from Settings, which revokes our stored access tokens.</p>
                     </section>
 
                     <section>

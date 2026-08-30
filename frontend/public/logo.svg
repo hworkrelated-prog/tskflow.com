@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" role="img" aria-label="TskFlow">
+  <defs>
+    <linearGradient id="tf-mark" x1="8" y1="12" x2="64" y2="68" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5eead4"/>
+      <stop offset="0.48" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="tf-shine" x1="40" y1="12" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="tf-flow" x1="214" y1="28" x2="348" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#99f6e4"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <filter id="tf-glow" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="3.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#tf-glow)">
+    <rect x="8" y="12" width="56" height="56" rx="16" fill="url(#tf-mark)"/>
+    <rect x="8" y="12" width="56" height="56" rx="16" fill="url(#tf-shine)"/>
+    <path
+      fill="none"
+      stroke="#fff"
+      stroke-width="4.6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M22 41.2 31.2 50.6 41.4 35.8c4.2-6 10.8 0.4 16.4-6"
+    />
+  </g>
+
+  <text
+    x="78"
+    y="52"
+    fill="#f8fafc"
+    font-family="Outfit, ui-rounded, ui-sans-serif, system-ui, sans-serif"
+    font-size="38"
+    font-weight="700"
+    letter-spacing="-1.8"
+  >Tsk<tspan fill="url(#tf-flow)">Flow</tspan></text>
+  <path
+    d="M214 62c18 7 34-7 52 0 14 5.5 28-3 42 1.5"
+    fill="none"
+    stroke="#5eead4"
+    stroke-width="2.2"
+    stroke-linecap="round"
+    opacity="0.85"
+  />
+</svg>

@@ -16,8 +16,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video } from 'lucide-react';
+import { Plus, LogOut, BarChart3, Settings, HelpCircle, Crown, X, Users, User, Calendar, ChevronDown, AlertCircle, CheckCircle2, Trash2, MoreHorizontal, RotateCcw, CheckSquare, Search, Pencil, Sparkles, Trophy, FileText, DollarSign, Library, Repeat, Wand2, Video, Scale } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import TaskCard from '@/components/TaskCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getErrorMessage } from '@/lib/utils';
@@ -58,6 +59,7 @@ const TaskHub = () => {
     const [loading, setLoading] = useState(true);
     const [drafts, setDrafts] = useState([]);
     const [transcriptSessions, setTranscriptSessions] = useState([]);
+    const [meetSessions, setMeetSessions] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [users, setUsers] = useState([]);
@@ -214,6 +216,9 @@ const TaskHub = () => {
         fetchGroups();
         fetchParentGroups();
         fetchDrafts();
+        axios.get(`${API}/meetings/sessions`)
+            .then((res) => setMeetSessions(res.data?.sessions || []))
+            .catch(() => setMeetSessions([]));
         axios.get(`${API}/accountability/me`)
             .then((res) => setAccountability(res.data))
             .catch(() => setAccountability(null));
@@ -1314,7 +1319,9 @@ const TaskHub = () => {
             <header className="sticky top-0 z-50 glass-header border-b pt-[env(safe-area-inset-top,0px)]">
                 <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                        <h1 onClick={() => navigate('/')} className="brand-wordmark cursor-pointer hover:opacity-80 transition-opacity text-xl sm:text-2xl shrink-0">Tskflow</h1>
+                        <h1 onClick={() => navigate('/')} className="cursor-pointer hover:opacity-80 transition-opacity shrink-0">
+                            <TskFlowLogo variant="auto" size="md" />
+                        </h1>
                         {user?.subscription_tier === 'teams' ? (
                             <Badge className="hidden sm:flex bg-teal-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />
@@ -1331,6 +1338,9 @@ const TaskHub = () => {
                         <NotificationBell />
                         {/* Desktop icon strip */}
                         <div className="hidden md:flex items-center gap-2">
+                            <Button variant="outline" size="icon" onClick={() => navigate('/unbiassly')} className="rounded-full border-teal-300 text-teal-700 hover:text-teal-800 hover:bg-teal-50" title="Unbiassly" data-testid="unbiassly-button">
+                                <Scale className="w-5 h-5" />
+                            </Button>
                             <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
                                 <Repeat className="w-5 h-5" />
                             </Button>
@@ -1357,6 +1367,9 @@ const TaskHub = () => {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem onClick={() => navigate('/unbiassly')} data-testid="unbiassly-button-mobile">
+                                    <Scale className="w-4 h-4 mr-2" /> Unbiassly
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => navigate('/recurring')}>
                                     <Repeat className="w-4 h-4 mr-2" /> Recurring
                                 </DropdownMenuItem>
@@ -1403,7 +1416,7 @@ const TaskHub = () => {
                         )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                        {(drafts.length > 0 || transcriptSessions.length > 0) && (
+                        {(drafts.length > 0 || transcriptSessions.length > 0 || meetSessions.length > 0) && (
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button
@@ -1415,7 +1428,7 @@ const TaskHub = () => {
                                         <FileText className="w-4 h-4 mr-1.5" />
                                         Drafts
                                         <span className="ml-1.5 text-[11px] font-semibold">
-                                            {drafts.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)}
+                                            {drafts.length + meetSessions.length + transcriptSessions.reduce((n, s) => n + (s.remaining || 0), 0)}
                                         </span>
                                     </Button>
                                 </PopoverTrigger>
@@ -1470,6 +1483,19 @@ const TaskHub = () => {
                                         )}
                                     </div>
                                     <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                        {meetSessions.map((s) => (
+                                            <div
+                                                key={`meet-${s.id}`}
+                                                className="flex items-center gap-2 rounded-lg bg-teal-50 border border-teal-200 px-3 py-2 text-xs cursor-pointer hover:bg-teal-100"
+                                                onClick={() => navigate(`/meetings/${s.id}`)}
+                                                data-testid={`meet-session-${s.id}`}
+                                            >
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-semibold text-slate-900 truncate">Meet · {s.title || 'Session'}</p>
+                                                    <p className="text-[10px] text-teal-800">{s.kept_count || (s.drafts || []).length} · {s.role}</p>
+                                                </div>
+                                            </div>
+                                        ))}
                                         {transcriptSessions.map((s) => (
                                             <div
                                                 key={`ts-${s.id}`}
@@ -1797,7 +1823,7 @@ const TaskHub = () => {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="text-xl">🤖</span>
-                                    <h3 className="font-semibold text-purple-900">Jarvis Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
+                                    <h3 className="font-semibold text-purple-900">Rook Summary - {viewMode === 'active' ? 'Active Tasks' : 'Completed Tasks'}</h3>
                                 </div>
                                 {aiSummaryStats && (
                                     <div className="flex flex-wrap gap-2 mb-3">
