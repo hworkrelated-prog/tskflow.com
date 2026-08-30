@@ -32,8 +32,10 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "landing-step-kicker" in (FRONT / "App.css").read_text(encoding="utf-8")
     # recorder is in the chrome; the page tree renders toolbar above the composer
     assert "LandingScreenRecorder" in src
+    assert "landing-toolbar-lead" in src
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
+    assert page_tree.index("landing-brand") < page_tree.index("LandingScreenRecorder")
     assert "LandingHeroAsk" in src
     assert "LandingSilentTasks" in src
     assert "LandingFlowIcons" in src
@@ -104,6 +106,28 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert "GoogleSignInButton" not in src
     assert "navigate('/login')" in src
     assert "navigate('/register')" not in src
+
+
+def test_landing_record_is_a_walkthrough_of_the_ask():
+    """Logo first. Record is a capture of the ask, not a Record label."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    rec = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    chrome = landing.split('data-testid="landing-toolbar"')[1].split("</header>")[0]
+    assert chrome.index("landing-brand") < chrome.index("LandingScreenRecorder")
+    assert "landing-toolbar-lead" in chrome
+    assert "landing-ask-rec" in rec
+    assert "Record a walkthrough of the ask" in rec
+    assert "landing-ask-rec-chip is-who" in rec
+    assert "landing-ask-rec-chip is-work" in rec
+    assert "landing-ask-rec-chip is-when" in rec
+    assert "landing-ask-rec-pip" in rec
+    assert "landing-ask-rec-screen" in rec
+    assert "landing-ask-rec-scan" in css
+    assert "landing-ask-rec-marquee" in css
+    assert "Record screen" not in rec
+    assert "Walkthrough ready" not in rec
+    assert "prominent ? 'Record'" not in rec
 
 
 def test_landing_examples_are_short_manager_asks():

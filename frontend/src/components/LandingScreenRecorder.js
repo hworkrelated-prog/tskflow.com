@@ -15,7 +15,7 @@ const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 
  * Phones (no display capture) get camera / Photos / native Camera instead.
  * The blob stays local until the visitor sends the ask.
  */
-export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false }) => {
+export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
     const [recording, setRecording] = useState(false);
     const [starting, setStarting] = useState(false);
     const [seconds, setSeconds] = useState(0);
@@ -152,40 +152,50 @@ export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false 
         catch { cleanup(); }
     };
 
-    const recClass = prominent
-        ? 'rounded-full border-red-400/45 bg-red-500/15 text-white hover:bg-red-500/25 h-11 px-5 font-medium'
-        : 'rounded-full border-red-400/50 bg-red-500/10 text-red-200 hover:bg-red-500/20 h-10';
-    const idleClass = prominent
-        ? 'rounded-full border-white/20 bg-white/[0.06] text-white hover:bg-white/12 h-11 px-5 font-medium'
-        : 'rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 h-10';
+    const live = recording;
+    const ready = recorded && !live;
+    const label = live
+        ? `Stop walkthrough ${fmt(seconds)}`
+        : ready
+            ? 'Walkthrough of the ask is ready. Record again.'
+            : starting
+                ? 'Starting walkthrough'
+                : 'Record a walkthrough of the ask';
 
     return (
         <>
-            {recording ? (
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={stop}
-                    className={recClass}
-                    data-testid="landing-record-stop"
-                >
-                    <Square className="w-3.5 h-3.5 mr-2 fill-current" /> Stop {fmt(seconds)}
-                </Button>
-            ) : (
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={start}
-                    disabled={starting}
-                    className={idleClass}
-                    data-testid="landing-record-screen"
-                >
-                    {recorded ? <Check className="w-4 h-4 mr-2 text-teal-300" /> : (
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 mr-2.5 ring-2 ring-red-500/30" aria-hidden />
-                    )}
-                    {recorded ? 'Walkthrough ready' : starting ? 'Starting…' : prominent ? 'Record' : 'Record screen'}
-                </Button>
-            )}
+            <button
+                type="button"
+                className={`landing-ask-rec${live ? ' is-live' : ''}${ready ? ' is-ready' : ''}${starting && !live ? ' is-starting' : ''}`}
+                onClick={live ? stop : start}
+                disabled={starting && !live}
+                data-testid={live ? 'landing-record-stop' : 'landing-record-screen'}
+                aria-label={label}
+                title={label}
+                aria-pressed={live}
+            >
+                <span className="landing-ask-rec-stage" aria-hidden>
+                    <span className="landing-ask-rec-screen">
+                        <span className="landing-ask-rec-scan" />
+                        <span className="landing-ask-rec-marquee" />
+                        <span className="landing-ask-rec-chips">
+                            <span className="landing-ask-rec-chip is-who" />
+                            <span className="landing-ask-rec-chip is-work" />
+                            <span className="landing-ask-rec-chip is-when" />
+                        </span>
+                        <span className="landing-ask-rec-cursor" />
+                        {ready ? <span className="landing-ask-rec-play" /> : null}
+                    </span>
+                    <span className="landing-ask-rec-pip">
+                        {live ? <Square className="landing-ask-rec-stop" /> : ready ? <Check className="landing-ask-rec-check" /> : null}
+                    </span>
+                </span>
+                {live ? (
+                    <span className="landing-ask-rec-hud" aria-hidden>
+                        {fmt(seconds)}
+                    </span>
+                ) : null}
+            </button>
 
             {cameraPreview && recording && createPortal(
                 <div

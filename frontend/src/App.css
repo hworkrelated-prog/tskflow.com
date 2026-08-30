@@ -1127,6 +1127,204 @@ html:has(body.landing-active) {
     padding-top: 0.35rem;
     padding-bottom: 0.35rem;
 }
+.landing-toolbar-lead {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+.landing-ask-rec {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.5rem;
+    padding: 0 0.35rem 0 0.2rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 0.7rem;
+    color: inherit;
+}
+.landing-ask-rec:hover .landing-ask-rec-screen,
+.landing-ask-rec:focus-visible .landing-ask-rec-screen {
+    box-shadow:
+        inset 0 0 0 1px rgba(248, 113, 113, 0.55),
+        0 0 0 3px rgba(5, 8, 7, 0.95),
+        0 0 18px rgba(248, 113, 113, 0.28);
+}
+.landing-ask-rec:focus-visible {
+    outline: 2px solid #fb7185;
+    outline-offset: 3px;
+}
+.landing-ask-rec:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+.landing-ask-rec-stage {
+    position: relative;
+    display: block;
+    width: 4.85rem;
+    height: 1.9rem;
+    flex-shrink: 0;
+}
+.landing-ask-rec-screen {
+    position: absolute;
+    inset: 0;
+    border-radius: 0.4rem;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 40%),
+        #07110f;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+        0 0 0 2px #050807;
+    overflow: hidden;
+}
+.landing-ask-rec-chips {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.18rem;
+    height: 100%;
+    padding: 0 0.4rem 0 0.32rem;
+}
+.landing-ask-rec-chip {
+    display: block;
+    height: 0.42rem;
+    border-radius: 99px;
+    flex-shrink: 0;
+}
+.landing-ask-rec-chip.is-who { width: 0.72rem; background: #2dd4bf; }
+.landing-ask-rec-chip.is-work { width: 1.15rem; background: rgba(94, 234, 212, 0.42); }
+.landing-ask-rec-chip.is-when { width: 0.55rem; background: #fbbf24; }
+.landing-ask-rec-cursor {
+    position: absolute;
+    z-index: 2;
+    right: 0.38rem;
+    bottom: 0.2rem;
+    width: 0;
+    height: 0;
+    border-left: 0.42rem solid #fff;
+    border-top: 0.22rem solid transparent;
+    border-bottom: 0.5rem solid transparent;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+    animation: landing-ask-rec-point 2.6s ease-in-out infinite;
+}
+.landing-ask-rec-marquee {
+    position: absolute;
+    inset: 0.18rem;
+    border-radius: 0.22rem;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(90deg, rgba(251, 113, 133, 0.8) 0 4px, transparent 4px 8px) 0 0 / 16px 1px no-repeat,
+        repeating-linear-gradient(90deg, rgba(251, 113, 133, 0.8) 0 4px, transparent 4px 8px) 0 100% / 16px 1px no-repeat,
+        repeating-linear-gradient(180deg, rgba(251, 113, 133, 0.8) 0 4px, transparent 4px 8px) 0 0 / 1px 16px no-repeat,
+        repeating-linear-gradient(180deg, rgba(251, 113, 133, 0.8) 0 4px, transparent 4px 8px) 100% 0 / 1px 16px no-repeat;
+    animation: landing-ask-rec-dash 0.65s linear infinite;
+}
+.landing-ask-rec-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 38%;
+    top: -40%;
+    background: linear-gradient(180deg, transparent, rgba(251, 113, 133, 0.16), transparent);
+    animation: landing-ask-rec-scan 2.8s ease-in-out infinite;
+    pointer-events: none;
+}
+.landing-ask-rec-play {
+    position: absolute;
+    z-index: 3;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    margin: -0.28rem 0 0 -0.16rem;
+    border-style: solid;
+    border-width: 0.28rem 0 0.28rem 0.46rem;
+    border-color: transparent transparent transparent #ecfdf5;
+    filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.7));
+}
+.landing-ask-rec-pip {
+    position: absolute;
+    top: -0.22rem;
+    right: -0.22rem;
+    z-index: 2;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    background: #ef4444;
+    box-shadow: 0 0 0 2px #050807, 0 0 10px rgba(239, 68, 68, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    animation: landing-ask-rec-pip 1.6s ease-in-out infinite;
+}
+.landing-ask-rec-stop {
+    width: 0.34rem;
+    height: 0.34rem;
+    fill: currentColor;
+}
+.landing-ask-rec-check {
+    width: 0.42rem;
+    height: 0.42rem;
+    stroke-width: 3;
+}
+.landing-ask-rec-hud {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.06em;
+    color: #fecaca;
+    min-width: 2.2rem;
+}
+.landing-ask-rec.is-live .landing-ask-rec-screen {
+    box-shadow:
+        inset 0 0 0 1px rgba(248, 113, 113, 0.7),
+        0 0 0 2px #050807,
+        0 0 16px rgba(239, 68, 68, 0.35);
+}
+.landing-ask-rec.is-live .landing-ask-rec-pip {
+    border-radius: 0.18rem;
+    animation: none;
+}
+.landing-ask-rec.is-live .landing-ask-rec-scan {
+    animation-duration: 1.15s;
+    background: linear-gradient(180deg, transparent, rgba(251, 113, 133, 0.32), transparent);
+}
+.landing-ask-rec.is-ready .landing-ask-rec-pip {
+    background: #2dd4bf;
+    box-shadow: 0 0 0 2px #050807, 0 0 10px rgba(45, 212, 191, 0.7);
+    animation: none;
+    color: #042f2e;
+}
+.landing-ask-rec.is-ready .landing-ask-rec-marquee {
+    opacity: 0;
+    animation: none;
+}
+.landing-ask-rec.is-ready .landing-ask-rec-scan {
+    animation: none;
+    opacity: 0;
+}
+@keyframes landing-ask-rec-scan {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(220%); }
+}
+@keyframes landing-ask-rec-point {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-0.28rem, -0.12rem); }
+}
+@keyframes landing-ask-rec-dash {
+    to {
+        background-position: 16px 0, -16px 100%, 0 -16px, 100% 16px;
+    }
+}
+@keyframes landing-ask-rec-pip {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(0.86); opacity: 0.72; }
+}
 @media (max-width: 48rem) {
     .landing-tabs {
         order: 3;
@@ -1805,7 +2003,11 @@ html:has(body.landing-active) {
     .landing-flow-icon,
     .hound-runner,
     .hound-ring,
-    .landing-send-dash {
+    .landing-send-dash,
+    .landing-ask-rec-scan,
+    .landing-ask-rec-cursor,
+    .landing-ask-rec-marquee,
+    .landing-ask-rec-pip {
         animation: none !important;
     }
     .landing-mini-card.is-silent {
