@@ -68,7 +68,9 @@ def test_open_does_not_collapse_height_or_pulse_the_fab():
     assert "classList?.add('ai-dock-pulse')" not in DOCK
     assert "openingRef" in DOCK
     assert "onSnapshot={handleSnapshot}" in DOCK
-    assert "${open ? ' is-active' : ''}" in DOCK
+    assert "${showPanel ? ' is-active' : ''}" in DOCK
+    assert "is-closing" in DOCK
+    assert "is-settled" in DOCK
 
 
 def re_open_locked_only():

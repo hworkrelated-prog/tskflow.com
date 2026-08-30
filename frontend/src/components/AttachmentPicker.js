@@ -10,12 +10,7 @@ import { saveRecordingBlob } from '@/lib/recordingStore';
 import RecordingFloatingHud from '@/components/RecordingFloatingHud';
 import IosScreenRecordGuide from '@/components/IosScreenRecordGuide';
 import { canCaptureDisplay, pickRecorderMime, recordingFilename } from '@/lib/recordingCapabilities';
-
-const iconFor = (kind) => {
-    if (kind === 'video') return <VideoIcon className="w-4 h-4 text-teal-500" />;
-    if (kind === 'image') return <ImageIcon className="w-4 h-4 text-teal-500" />;
-    return <FileText className="w-4 h-4 text-teal-500" />;
-};
+import SlackAttachGrid from '@/components/SlackAttachGrid';
 
 const OptionToggle = ({ on, onClick, iconOn, iconOff, label, dataTestId }) => (
     <button
@@ -699,37 +694,11 @@ export const AttachmentPicker = forwardRef(({
             )}
 
             {!compact && attachments.length > 0 && (
-                <div className="space-y-2">
-                    {attachments.map((att) => (
-                        <div key={att.id} className="flex items-center justify-between gap-2 bg-teal-50 border border-teal-200 p-2 rounded-xl text-sm">
-                            <div className="flex items-center gap-2 min-w-0">
-                                {iconFor(att.kind)}
-                                <button
-                                    type="button"
-                                    onClick={() => replayAttachment(att)}
-                                    className="truncate text-left hover:underline"
-                                    title="Play recording"
-                                >
-                                    {att.original_filename || att.filename || 'Recording'}
-                                </button>
-                                {att.kind === 'video' && (
-                                    <button
-                                        type="button"
-                                        onClick={() => replayAttachment(att)}
-                                        className="shrink-0 text-teal-700 hover:bg-teal-100 rounded-full p-1"
-                                        title="Play again"
-                                        data-testid="replay-recording-btn"
-                                    >
-                                        <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                )}
-                            </div>
-                            <button type="button" onClick={() => removeAttachment(att.id)} className="text-red-500 hover:bg-red-100 rounded-full p-1 shrink-0">
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
+                <SlackAttachGrid
+                    attachments={attachments}
+                    onRemove={(att) => removeAttachment(att.id)}
+                    testId="picker-slack-grid"
+                />
             )}
         </div>
     );

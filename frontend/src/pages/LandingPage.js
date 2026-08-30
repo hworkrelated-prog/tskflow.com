@@ -11,11 +11,17 @@ import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingVoiceGuide from '@/components/LandingVoiceGuide';
 import LandingHeroAsk from '@/components/LandingHeroAsk';
+import LandingMeetAssign from '@/components/LandingMeetAssign';
+import LandingSlackReact from '@/components/LandingSlackReact';
+import LandingPileUp from '@/components/LandingPileUp';
 import LandingSilentTasks from '@/components/LandingSilentTasks';
+import LandingChase from '@/components/LandingChase';
 import LandingFlowIcons from '@/components/LandingFlowIcons';
 import LandingScrollChaos from '@/components/LandingScrollChaos';
 import LandingReportFlip from '@/components/LandingReportFlip';
+import LandingSolve from '@/components/LandingSolve';
 import LandingIntegrations from '@/components/LandingIntegrations';
+import LandingFounder from '@/components/LandingFounder';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -267,6 +273,7 @@ const LandingPage = () => {
     const [recordingBlob, setRecordingBlob] = useState(null);
     const [ideaIndex, setIdeaIndex] = useState(0);
     const [value, setValue] = useState('');
+    const [tab, setTab] = useState('story');
 
     useEffect(() => {
         trackLandingView({ path: '/' });
@@ -315,7 +322,25 @@ const LandingPage = () => {
                     >
                         TskFlow
                     </span>
-                    <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                    <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
+                        <button
+                            type="button"
+                            className={tab === 'story' ? 'is-on' : ''}
+                            onClick={() => setTab('story')}
+                            data-testid="landing-tab-story"
+                        >
+                            Story
+                        </button>
+                        <button
+                            type="button"
+                            className={tab === 'founder' ? 'is-on' : ''}
+                            onClick={() => setTab('founder')}
+                            data-testid="landing-tab-founder"
+                        >
+                            Get to Know the founder
+                        </button>
+                    </nav>
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                         <LandingVoiceGuide
                             inputValue={value}
                             onHeard={(text) => {
@@ -337,8 +362,14 @@ const LandingPage = () => {
             </header>
 
             <main className="relative z-10 flex-1 flex flex-col">
+                {tab === 'founder' ? (
+                    <LandingFounder />
+                ) : (
+                    <>
                 <section className="landing-hero-visual" data-testid="landing-hero">
-                    <h1 className="landing-hero-line">Ask. Who. Send.</h1>
+                    <h1 className="landing-hero-line">Stop chasing.</h1>
+                    <p className="landing-hero-pain" data-testid="landing-pain-line">They already own it.</p>
+                    <p className="landing-hero-flow">Ask. Who. Send.</p>
                     <LandingHeroAsk />
                     <button
                         type="button"
@@ -350,10 +381,15 @@ const LandingPage = () => {
                     </button>
                 </section>
 
+                <LandingMeetAssign />
+                <LandingSlackReact />
+                <LandingPileUp />
                 <LandingSilentTasks />
-                <LandingFlowIcons />
+                <LandingChase />
                 <LandingScrollChaos />
+                <LandingSolve />
                 <LandingReportFlip />
+                <LandingFlowIcons />
                 <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">
@@ -366,6 +402,8 @@ const LandingPage = () => {
                         setValue={setValue}
                     />
                 </section>
+                    </>
+                )}
             </main>
 
             <footer className="relative z-10 shrink-0 border-t border-white/8 py-4">

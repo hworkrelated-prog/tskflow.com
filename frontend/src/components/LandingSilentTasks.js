@@ -4,8 +4,8 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion
 const TASKS = [
     { id: 't1', who: 'Maya', title: 'Forecast', silent: true },
     { id: 't2', who: 'Chris', title: 'Q3 recap', silent: true },
-    { id: 't3', who: 'Priya', title: 'Demo clip', silent: false },
-    { id: 't4', who: 'Jordan', title: 'SFDC hygiene', silent: true },
+    { id: 't3', who: 'Priya', title: 'Discovery', silent: false },
+    { id: 't4', who: 'Jordan', title: 'SFDC', silent: true },
     { id: 't5', who: 'Alex', title: 'Call log', silent: true },
     { id: 't6', who: 'Sam', title: 'Deck', silent: true },
 ];

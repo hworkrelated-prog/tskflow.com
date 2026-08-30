@@ -7,7 +7,7 @@ export const LANDING_EXAMPLES = [
     },
     {
         id: 'walkthrough',
-        text: 'Ask the org to watch this recording, then send theirs of them doing it.',
+        text: 'Ask the team to record their discovery call by Friday.',
     },
     {
         id: 'best-deal',
@@ -22,8 +22,8 @@ export const LANDING_EXAMPLES = [
         text: 'Remind my team to log every call by 5 each day.',
     },
     {
-        id: 'demo',
-        text: 'Ask engineering to record a demo of the fix by tomorrow.',
+        id: 'maya',
+        text: 'Ask Maya to send the Q3 forecast by Friday.',
     },
 ];
 
