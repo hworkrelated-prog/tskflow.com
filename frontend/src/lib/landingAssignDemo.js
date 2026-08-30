@@ -76,7 +76,7 @@ export const DEMO_BEATS = [
     { id: 'sentence', label: 'One sentence' },
     { id: 'assigned', label: '36 people' },
     { id: 'rollup', label: 'AI update' },
-    { id: 'slack', label: 'Slack thread' },
+    { id: 'slack', label: 'Pinged twice' },
 ];
 
 export const isLargeTeamPrompt = (text) =>
