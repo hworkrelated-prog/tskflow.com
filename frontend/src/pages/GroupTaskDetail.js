@@ -32,10 +32,10 @@ const fuzzyScore = (haystack, needle) => {
 };
 
 const PRESETS = [
-    { key: 'gentle_nudge', label: '💬 Gentle nudge', hint: 'A friendly reminder to please close the loop' },
-    { key: 'urgent_reminder', label: '⚡ Urgent reminder', hint: 'This is well past due and needs immediate attention' },
-    { key: 'final_notice', label: '🚨 Final notice', hint: `Last call - escalation next if it's not done today` },
-    { key: 'custom', label: '✍️ Custom message', hint: 'Write your own note' },
+    { key: 'gentle_nudge', label: '💬 Gentle nudge' },
+    { key: 'urgent_reminder', label: '⚡ Urgent' },
+    { key: 'final_notice', label: '🚨 Final' },
+    { key: 'custom', label: '✍️ Custom' },
 ];
 
 const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) => {
@@ -126,8 +126,7 @@ const NudgeModal = ({ open, onClose, taskId, initialAssignees = [], onSent }) =>
                                     className={`text-left p-3 rounded-xl border-2 text-xs ${preset === p.key ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                                     data-testid={`nudge-preset-${p.key}`}
                                 >
-                                    <p className="font-semibold text-sm mb-0.5">{p.label}</p>
-                                    <p className="text-[11px] text-slate-500 leading-snug">{p.hint}</p>
+                                    <p className="font-semibold text-sm">{p.label}</p>
                                 </button>
                             ))}
                         </div>
@@ -486,7 +485,7 @@ const GroupTaskDetail = () => {
 
                         <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
                             {comments.length === 0 ? (
-                                <p className="text-center text-gray-500 py-8">No comments yet. Start the conversation!</p>
+                                <p className="text-center text-gray-500 py-8">No comments yet</p>
                             ) : (
                                 comments.map((comment) => (
                                     <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">

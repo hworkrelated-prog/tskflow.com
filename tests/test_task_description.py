@@ -159,21 +159,25 @@ if (selfMsg.includes('Slack') || selfMsg.toLowerCase().includes('them')) {
   console.error('self followup leaked slack', selfMsg);
   process.exit(1);
 }
+if (selfMsg !== 'Saved.') {
+  console.error('self followup too wordy', selfMsg);
+  process.exit(1);
+}
 
 const adminOff = sentTaskFollowupMessage({ isSelf: false, names: 'Alice', slackConnected: false, canManageSlack: true });
-if (!adminOff.includes('Connect Slack in Settings (admins only)')) {
+if (adminOff !== 'Sent to Alice.') {
   console.error('admin slack notice failed', adminOff);
   process.exit(1);
 }
 
 const memberOff = sentTaskFollowupMessage({ isSelf: false, names: 'Alice', slackConnected: false, canManageSlack: false });
-if (!memberOff.includes('Your admin can connect Slack')) {
+if (memberOff !== 'Sent to Alice.') {
   console.error('member slack notice failed', memberOff);
   process.exit(1);
 }
 
 const connected = sentTaskFollowupMessage({ isSelf: false, names: 'Alice', slackConnected: true, canManageSlack: false });
-if (!connected.includes('Slack them')) {
+if (connected !== 'Sent to Alice.') {
   console.error('connected slack copy failed', connected);
   process.exit(1);
 }

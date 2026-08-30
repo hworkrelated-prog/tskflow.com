@@ -110,48 +110,34 @@ def robot_room_beats(
     channel: str = "email",
     delivered: bool = True,
 ) -> List[Dict[str, str]]:
-    """Polite robot beats so the room is never empty while the assignee is quiet."""
-    who = assignee_name or "your assignee"
-    ask = (task_title or "the ask").rstrip(".")
-    sent_line = (
-        f"Delivered the ask to {who} by email. No chasing needed from {manager_name}."
-        if delivered
-        else f"Queued the ask for {who}. Add a real email and I will deliver it."
-    )
-    beats = [
+    """Status-track beats. Titles only — the room UI is the explanation."""
+    _ = (task_title, assignee_name, manager_name, channel)
+    return [
         {
             "event_type": "robot_note",
             "channel": "email" if delivered else "in_app",
-            "title": "Ask delivered" if delivered else "Ask queued",
-            "body": sent_line,
+            "title": "Sent" if delivered else "Queued",
+            "body": "",
         },
         {
             "event_type": "robot_note",
             "channel": "in_app",
-            "title": "Waiting on a reply",
-            "body": f"I am watching for {who} to accept \u201c{ask}\u201d. You do not have to check in.",
+            "title": "Waiting",
+            "body": "",
         },
         {
             "event_type": "robot_note",
             "channel": "email",
-            "title": "Polite ping scheduled",
-            "body": f"If {who} stays quiet, I send one gentle reminder before the due time - not five.",
+            "title": "Ping",
+            "body": "",
         },
         {
             "event_type": "robot_note",
             "channel": "slack",
-            "title": "Slack follow-up available",
-            "body": (
-                "Connect Slack and I will open a thread with them after two ignored pings, "
-                "so you never write \u201cjust circling back\u201d again."
-            ),
+            "title": "Slack",
+            "body": "",
         },
     ]
-    if channel == "slack":
-        beats[-1]["body"] = (
-            "You picked Slack. Connect it in this room and I will move the follow-up there."
-        )
-    return beats
 
 
 def guest_user_doc(
@@ -183,14 +169,10 @@ def guest_user_doc(
 
 
 def room_copy(*, assignee_name: str, delivered: bool) -> dict:
-    """Copy for the guest task page after a landing send."""
+    """Status words for the guest task page. The task card carries the rest."""
     who = assignee_name or "your assignee"
     return {
-        "headline": "Your ask is on its way",
-        "sub": (
-            f"It went to {who}. TskFlow follows up politely and reports back."
-            if delivered
-            else f"This is a sample send to {who}. Add a real email next time and it goes out."
-        ),
-        "reassurance": "You will not have to write \u201cjust circling back\u201d again.",
+        "headline": "Sent" if delivered else "Queued",
+        "sub": who,
+        "reassurance": "",
     }

@@ -84,10 +84,10 @@ def test_exited_prompts_save_as_header_drafts():
     assert 'data-testid="drafts-compact"' in hub
     assert 'data-testid="drafts-popover"' in hub
     assert "drafts-compact" in hub
-    # Drafts live in the welcome toolbar popover, not a details strip above the columns
-    welcome = hub[hub.index("Welcome,") : hub.index("grid grid-cols-1 md:grid-cols-3")]
-    assert 'data-testid="drafts-compact"' in welcome
-    assert 'data-testid="drafts-popover"' in welcome
+    # Drafts live in the header toolbar popover, not a details strip above the columns
+    toolbar = hub[hub.index("{user?.name}") : hub.index("dashboard-panels")]
+    assert 'data-testid="drafts-compact"' in toolbar
+    assert 'data-testid="drafts-popover"' in toolbar
     assert 't.status !== \'Draft\'' in hub or 't.status !== "Draft"' in hub
 
 

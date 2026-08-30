@@ -213,18 +213,10 @@ export function assigneesAreSelf(assignees, userId) {
 export function sentTaskFollowupMessage({
     names,
     isSelf,
-    slackConnected,
-    canManageSlack,
 } = {}) {
     if (isSelf) {
-        return "Saved for you. I’ll nudge you here if it’s still open.";
+        return 'Saved.';
     }
     const who = (names || '').trim() || 'your team';
-    if (slackConnected) {
-        return `Sent to ${who}. I’ll follow up if they go quiet - and if they ignore two pings, I’ll Slack them with you in the loop.`;
-    }
-    if (canManageSlack) {
-        return `Sent to ${who}. I’ll follow up here if they go quiet. Connect Slack in Settings (admins only) to also ping them there after two ignored reminders.`;
-    }
-    return `Sent to ${who}. I’ll follow up here if they go quiet. Your admin can connect Slack in Settings - once they do, those follow-ups can go to Slack too.`;
+    return `Sent to ${who}.`;
 }

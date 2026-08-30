@@ -56,7 +56,7 @@ export const LandingScreenRecorder = ({ onRecorded, recorded, prominent = false 
         }
         try { await saveRecordingBlob(blob, { type: blob.type, size: blob.size }); } catch { /* noop */ }
         onRecorded?.(blob);
-        toast.success('Walkthrough saved here. Send the ask and it goes with it.');
+        toast.success('Saved');
     };
 
     const beginRecorder = (stream, { mimeHint, source, showPreview = false } = {}) => {

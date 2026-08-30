@@ -38,7 +38,7 @@ def test_landing_voice_guide_is_guest_safe():
     assert 'data-testid="landing-voice-mic"' in guide
     assert "/voice/command" not in guide
     assert "GUIDE_OPEN" in guide
-    assert "who should do it" in guide.lower()
+    assert "who, what, and when" in guide.lower()
 
 
 def test_landing_opens_straight_into_a_launch():
@@ -53,7 +53,7 @@ def test_landing_opens_straight_into_a_launch():
     assert "LANDING_EXAMPLES" in src
     assert "pipeline update" in demo
     assert "best deal" in demo
-    assert "They get the ask" in src
+    assert 'data-testid="landing-send-promise"' in src
     assert "The robot delivers" not in src
     assert "/demo/launch" in src
     assert 'data-testid="landing-voice"' in (FRONT / "components" / "LandingVoiceGuide.js").read_text(encoding="utf-8")

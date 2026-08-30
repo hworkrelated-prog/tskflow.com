@@ -20,15 +20,15 @@ export default function IosScreenRecordGuide({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-md rounded-2xl" data-testid="ios-screen-record-guide">
                 <DialogHeader>
-                    <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Record this iPhone</DialogTitle>
-                    <DialogDescription>
-                        Safari can&apos;t capture the screen inside the browser. Use iOS Screen Recording, then attach the video here.
+                    <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Record</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Control Center screen recording, then attach from Photos.
                     </DialogDescription>
                 </DialogHeader>
                 <ol className="text-sm text-slate-700 space-y-2 list-decimal pl-5">
-                    <li>Swipe to Control Center and tap the Screen Recording button (dotted circle).</li>
-                    <li>Do the walkthrough on your phone.</li>
-                    <li>Stop from the red status bar, then attach the clip from Photos.</li>
+                    <li>Control Center → Screen Recording.</li>
+                    <li>Do the walkthrough.</li>
+                    <li>Stop, then attach from Photos.</li>
                 </ol>
                 <input
                     ref={inputRef}
@@ -69,7 +69,7 @@ export default function IosScreenRecordGuide({
                     )}
                     <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1">
                         <Video className="w-3 h-3" />
-                        Screen Recordings live in Photos → Recents
+                        Photos → Recents
                     </p>
                 </div>
             </DialogContent>

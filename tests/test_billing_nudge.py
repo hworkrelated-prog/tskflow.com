@@ -40,6 +40,7 @@ def test_product_does_not_nudge_on_task_count():
     assert "user?.show_billing_nudge" in settings
     assert "Try Teams Free for 30 Days" not in settings
     assert "No credit card" in register
-    assert "No card" in landing
-    assert "exchanging work" in landing
+    assert "No card" not in landing
+    assert "exchanging work" not in landing
+    assert "Simple pricing" not in landing
     assert "from billing_nudge import show_billing_nudge" in server

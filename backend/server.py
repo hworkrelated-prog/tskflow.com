@@ -2943,7 +2943,7 @@ async def create_standalone_recording(
                 actor_id="jarvis",
                 actor_name="Jarvis",
                 title="Walkthrough attached",
-                body="Your screen recording is on the task, so they can see exactly what you mean.",
+                body="",
                 meta={"channels": ["in_app"], "recording_id": recording_id},
             )
             attached = True

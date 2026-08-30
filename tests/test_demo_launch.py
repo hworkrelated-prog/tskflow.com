@@ -81,19 +81,24 @@ def test_guest_user_is_verified_and_expires():
     assert guest_email("abc").startswith("demo+")
 
 
-def test_robot_beats_are_polite_and_never_empty():
+def test_robot_beats_are_labels_not_lectures():
     beats = robot_room_beats(task_title="Send the Q3 outreach email", assignee_name="Chris Park")
     assert len(beats) >= 4
-    titles = " ".join(b["title"] for b in beats)
-    assert "delivered" in titles.lower()
-    assert any("Slack" in b["body"] for b in beats)
-    bodies = " ".join(b["body"] for b in beats)
-    assert "Chris Park" in bodies
+    titles = [b["title"] for b in beats]
+    assert "Sent" in titles
+    assert "Waiting" in titles
+    assert "Ping" in titles
+    assert "Slack" in titles
+    for beat in beats:
+        assert len(beat.get("body") or "") == 0
     queued = robot_room_beats(task_title="x", assignee_name="Sample", delivered=False)
-    assert queued[0]["title"] == "Ask queued"
+    assert queued[0]["title"] == "Queued"
     copy = room_copy(assignee_name="Chris Park", delivered=True)
-    assert "Chris Park" in copy["sub"]
-    assert "circling back" in copy["reassurance"]
+    assert copy["headline"] == "Sent"
+    assert copy["sub"] == "Chris Park"
+    assert not copy["reassurance"]
+    sample = room_copy(assignee_name="Chris Park", delivered=False)
+    assert sample["headline"] == "Queued"
 
 
 # ------------------------------------------------------------------ live API
@@ -346,11 +351,17 @@ def test_env_room_is_a_protected_route_with_robot_copy():
     assert "<ProtectedRoute>" in app.split('path="/env/:taskId"')[1][:220]
     assert 'data-testid="env-page"' in room
     assert 'data-testid="env-activity"' in room
-    assert 'data-testid="env-connect-slack"' in room
+    assert 'data-testid="env-connect-slack"' in room or 'env-connect-slack' in room
     assert 'data-testid="env-keep-workspace"' in room
     assert 'data-testid="env-new-ask"' in room
     assert 'data-testid="env-sign-in"' in room
-    assert "circling back" in room
+    assert "circling back" not in room
+    assert "circling back" not in (ROOT / "backend" / "demo_launch.py").read_text(encoding="utf-8")
+    assert "I am watching" not in (ROOT / "backend" / "demo_launch.py").read_text(encoding="utf-8")
+    assert "Sample send" not in room
+    assert "Keep this going" not in room
+    assert "What you asked" not in room
+    assert "env-track" in room
     assert "/demo/room/" in room
     assert "trackEnvView" in room
     # A guest token must not hijack every visit to /

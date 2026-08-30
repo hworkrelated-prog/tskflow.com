@@ -4,9 +4,9 @@ import { toast } from 'sonner';
 import { createDictationSession } from '@/lib/promptVoice';
 
 export const GUIDE_OPEN =
-    'This is simple. Say or type one sentence: who should do it, what they should do, and when. Then add their email and send.';
+    'Who, what, and when. Then send.';
 export const GUIDE_AFTER_HEAR =
-    'Got it. Next, add who should get this, then send. You can skip the email if you just want to try it.';
+    'Add their email, then send.';
 
 const pickVoice = () => {
     if (!('speechSynthesis' in window)) return null;
@@ -131,7 +131,7 @@ export default function LandingVoiceGuide({
             return;
         }
         setPhase('listening');
-        setCaption('Listening… say the ask in one sentence.');
+        setCaption('Listening…');
     }, [getDictation, speak]);
 
     startListeningRef.current = startListening;

@@ -67,10 +67,10 @@ const WhatsNewPrompt = () => {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl" style={{ fontFamily: 'Outfit' }}>
                         <Sparkles className="w-5 h-5 text-teal-700" />
-                        What&apos;s new in Tskflow
+                        What&apos;s new
                     </DialogTitle>
-                    <DialogDescription>
-                        Quicker prompt, cleaner recordings, smarter assignment.
+                    <DialogDescription className="sr-only">
+                        Latest changes
                     </DialogDescription>
                 </DialogHeader>
                 <ul className="space-y-2.5 text-sm text-slate-700">

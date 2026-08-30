@@ -1654,9 +1654,7 @@ const AIQuickCreate = ({
             const selfAssign = assigneesAreSelf(editAssignees, user?.id);
             const names = editAssignees.map((a) => a.name).filter(Boolean).join(', ') || 'your team';
             if (!isRecurring) {
-                toast.success(selfAssign
-                    ? 'Saved for you'
-                    : `Task${unique.length > 1 ? 's' : ''} sent to ${unique.length} ${unique.length === 1 ? 'person' : 'people'}`);
+                toast.success(sentTaskFollowupMessage({ names, isSelf: selfAssign }));
             }
             appendThread({
                 role: 'assistant',
@@ -2428,7 +2426,7 @@ const AIQuickCreate = ({
                                     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4" data-testid="ai-details-editor">
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-semibold text-slate-800">
-                                                {readyToConfirm ? 'Edit details' : 'Fill in what is missing'}
+                                                {readyToConfirm ? 'Edit' : 'Missing'}
                                             </span>
                                             <button
                                                 type="button"
@@ -2453,7 +2451,7 @@ const AIQuickCreate = ({
                                                 value={editDesc}
                                                 onChange={(e) => setEditDesc(e.target.value)}
                                                 className="rounded-lg text-sm border-slate-300 min-h-[48px]"
-                                                placeholder="What exactly needs to be done? (optional)"
+                                                placeholder="Details (optional)"
                                                 rows={2}
                                                 data-testid="ai-preview-desc"
                                             />

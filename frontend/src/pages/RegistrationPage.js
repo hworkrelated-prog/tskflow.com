@@ -74,7 +74,7 @@ const RegistrationPage = () => {
                         </CardTitle>
                         <p className="text-sm text-muted-foreground">
                             {pendingGuest || pendingTask
-                                ? 'Keep the ask you already sent. Your demo task moves with you.'
+                                ? 'Your ask stays with you.'
                                 : 'No credit card. Assign anyone by email.'}
                         </p>
                     </CardHeader>

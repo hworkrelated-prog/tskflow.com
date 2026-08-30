@@ -15,10 +15,10 @@ const topics = [
         icon: <Rocket className="w-4 h-4" />, title: 'Quick start', category: 'Getting Started',
         body: (
             <ol className="list-decimal ml-5 space-y-2 text-sm">
-                <li>Type who, what, and when in the bar. Press Enter.</li>
-                <li>Confirm and send. They accept. You see it through.</li>
-                <li>Dashboard columns: <strong>To me</strong>, <strong>Personal</strong>, <strong>Delegated</strong>.</li>
-                <li>Need extras (attachments, recurrence)? Open <strong>Full form</strong>.</li>
+                <li>Type who, what, when. Enter.</li>
+                <li>Send.</li>
+                <li><strong>To me</strong> · <strong>Personal</strong> · <strong>Delegated</strong></li>
+                <li><strong>Full form</strong> for extras.</li>
             </ol>
         )
     },
@@ -26,49 +26,49 @@ const topics = [
         id: 'drafts',
         icon: <Sparkles className="w-4 h-4" />, title: 'Drafts', category: 'Core Feature',
         body: (
-            <p className="text-sm">Unfinished asks save automatically. Resume them from Drafts in the header.</p>
+            <p className="text-sm">Drafts in the header.</p>
         )
     },
     {
         id: 'recurring',
         icon: <Compass className="w-4 h-4" />, title: 'Recurring', category: 'Core Feature',
         body: (
-            <p className="text-sm">Say how often in the bar, or toggle Repeat on the form. Skip or edit any occurrence later.</p>
+            <p className="text-sm">Say how often, or toggle Repeat.</p>
         )
     },
     {
         id: 'voice',
         icon: <PlayCircle className="w-4 h-4" />, title: 'Voice', category: 'AI Assistant',
         body: (
-            <p className="text-sm">Tap the mic. It listens immediately. Shortcut: <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd>.</p>
+            <p className="text-sm">Tap the mic. <kbd className="px-1.5 py-0.5 border rounded text-xs">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">Shift</kbd> + <kbd className="px-1.5 py-0.5 border rounded text-xs">M</kbd>.</p>
         )
     },
     {
         id: 'smart-create',
         icon: <Sparkles className="w-4 h-4" />, title: 'Smart create', category: 'AI Assistant',
         body: (
-            <p className="text-sm">Name, due date, and priority are inferred. Every field stays editable before you send.</p>
+            <p className="text-sm">Name, due, and priority are inferred. Edit before send.</p>
         )
     },
     {
         id: 'group',
         icon: <MessageSquare className="w-4 h-4" />, title: 'Group tasks', category: 'Team',
         body: (
-            <p className="text-sm">Assign more than one person and you get one ask per person, plus a live leaderboard.</p>
+            <p className="text-sm">More than one person → one ask each, plus a leaderboard.</p>
         )
     },
     {
         id: 'analytics',
         icon: <BookOpen className="w-4 h-4" />, title: 'Analytics', category: 'Reporting',
         body: (
-            <p className="text-sm">Completion, overdue, speed, and the team leaderboard. Export from Activity if you need a CSV.</p>
+            <p className="text-sm">Completion, overdue, speed, leaderboard. CSV from Activity.</p>
         )
     },
     {
         id: 'reminders',
         icon: <HelpCircle className="w-4 h-4" />, title: 'Reminders', category: 'Notifications',
         body: (
-            <p className="text-sm">Settings → Reminders. Quiet, Balanced, or Assertive. Customize only if you need to.</p>
+            <p className="text-sm">Settings → Reminders. Quiet, Balanced, or Assertive.</p>
         )
     },
     {
@@ -76,11 +76,11 @@ const topics = [
         icon: <HelpCircle className="w-4 h-4" />, title: 'FAQs', category: 'FAQs',
         body: (
             <div className="text-sm space-y-2">
-                <p><strong>Install anything?</strong> No. It runs in the browser.</p>
-                <p><strong>Someone ignores a task?</strong> After two pings, Jarvis follows up. Replies update the task.</p>
-                <p><strong>People not on Tskflow?</strong> Assign by email. They get a link.</p>
-                <p><strong>Direct-report privacy?</strong> You only see work you assigned them.</p>
-                <p><strong>Safari?</strong> Voice works best in Chrome or Edge.</p>
+                <p><strong>Install?</strong> No. Browser only.</p>
+                <p><strong>Ignored?</strong> Two pings, then Jarvis follows up.</p>
+                <p><strong>Not on Tskflow?</strong> Assign by email.</p>
+                <p><strong>Privacy?</strong> You see work you assigned.</p>
+                <p><strong>Safari?</strong> Voice: Chrome or Edge.</p>
             </div>
         )
     },
@@ -167,17 +167,14 @@ const HelpCenter = () => {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {[
-                                { step: '1', title: 'Assign', body: 'Type who, what, and when. Confirm. Send.' },
-                                { step: '2', title: 'Repeat', body: 'Say how often, or open Full form → Repeat.' },
-                                { step: '3', title: 'Team', body: 'Assign more than one person for a group ask.' },
-                                { step: '4', title: 'Ask', body: '“What’s overdue?” works in the same bar.' },
+                                { step: '1', title: 'Assign' },
+                                { step: '2', title: 'Repeat' },
+                                { step: '3', title: 'Team' },
+                                { step: '4', title: 'Ask' },
                             ].map((s) => (
-                                <div key={s.step} className="flex gap-4">
+                                <div key={s.step} className="flex gap-4 items-center">
                                     <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold shrink-0">{s.step}</div>
-                                    <div>
-                                        <h3 className="font-semibold">{s.title}</h3>
-                                        <p className="text-sm text-muted-foreground">{s.body}</p>
-                                    </div>
+                                    <h3 className="font-semibold">{s.title}</h3>
                                 </div>
                             ))}
                         </CardContent>

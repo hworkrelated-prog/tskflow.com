@@ -203,7 +203,7 @@ export const StandaloneRecorder = () => {
                             </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Share this link with anyone. You can turn it into a task later.
+                            Share link
                         </p>
                     </div>
                 </DialogContent>

@@ -142,7 +142,7 @@ const VerifyEmailPage = () => {
                                     className="rounded-xl h-12 text-center text-2xl tracking-widest font-mono"
                                 />
                                 <p className="text-xs text-muted-foreground text-center">
-                                    Use the code from your email - not the placeholder.
+                                    6-digit code
                                 </p>
                             </div>
                             <Button

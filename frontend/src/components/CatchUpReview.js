@@ -132,7 +132,7 @@ export const CatchUpReview = () => {
                         <div className="flex-1 min-w-0">
                             <h2 className="text-lg font-semibold text-foreground">Catch up</h2>
                             <p className="text-sm text-muted-foreground mt-0.5">
-                                {loading ? 'Loading…' : (headlineParts.join(' · ') || 'Here is what needs your attention.')}
+                                {loading ? 'Loading…' : (headlineParts.join(' · ') || '')}
                             </p>
                         </div>
                         <button
