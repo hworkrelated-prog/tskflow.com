@@ -99,10 +99,13 @@ def test_copy_is_human_not_a_system_banner():
         "Ada Lovelace",
         "Henrik",
     )
+    assert wording["subject"] == "Finish outreach training"
+    assert wording["greeting"] == ""
+    assert wording["body"] == "Saturday, August 22 at 5:00 PM"
     blob = f"{wording['subject']} {wording['greeting']} {wording['body']}".lower()
-    assert "hey ada" in blob
-    assert "checking in on finish outreach training" in blob
-    assert "henrik asked you to take this on" in blob
+    assert "hey ada" not in blob
+    assert "checking in" not in blob
+    assert "asked you to take this on" not in blob
     assert "asked you to handle" not in blob
     assert "saturday, august 22 at 5:00 pm" in blob
     assert "circling back" not in blob
@@ -110,18 +113,24 @@ def test_copy_is_human_not_a_system_banner():
     assert "⚠️" not in blob
     html = render_followup_email(
         "Ada Lovelace", "Henrik",
-        {"id": "t1", "title": "Finish outreach training"},
+        {"id": "t1", "title": "Finish outreach training", "due_date": "2026-08-22T17:00"},
         wording, "https://tskflow.com",
         reply_address("abc123token"),
     )
+    lower = html.lower()
     assert "Open the task" in html
-    assert "Just reply to this email" in html
+    assert "Just reply to this email" not in html
+    assert "this is still open" not in lower
     assert "TSKFLOW REMINDER" not in html
-    # Task card first, then due/status, then how to reply.
-    title_at = html.lower().index("finish outreach training")
-    asked_at = html.lower().index("asked you to take this on")
-    reply_at = html.lower().index("reply done")
-    assert title_at < asked_at < reply_at
+    assert ">Henrik<" in html
+    assert ">Done<" in html
+    assert ">Working<" in html
+    assert ">Blocked<" in html
+    title_at = lower.index("finish outreach training")
+    due_at = lower.index("saturday, august 22 at 5:00 pm")
+    done_at = lower.index(">done<")
+    open_at = lower.index("open the task")
+    assert title_at < due_at < done_at < open_at
 
 
 def test_reply_token_roundtrip():
@@ -193,12 +202,13 @@ def test_ignored_guidance_opens_after_two_pings():
     assert should_open_email_thread({**task, "assigned_to": "a", "created_by": "a"}) is False
     copy = ignored_guidance_copy(task, "Ada Lovelace", "Henrik")
     blob = f"{copy['subject']} {copy['greeting']} {copy['body']}".lower()
-    assert "ada" in blob
-    assert "henrik asked you to take this on" in blob
+    assert copy["subject"] == "Finish outreach training"
+    assert copy["greeting"] == ""
+    assert "hey ada" not in blob
+    assert "henrik asked you to take this on" not in blob
     assert "asked you to handle" not in blob
-    assert "twice" in blob
-    assert "reply" in blob
-    assert "tskflow" in blob
+    assert "twice" not in blob
+    assert "tskflow reminder" not in blob
     assert "⚠️" not in blob
 
 
@@ -240,29 +250,34 @@ def test_copy_never_greets_email_or_lets_render_ask():
     )
     blob = f"{wording['subject']} {wording['greeting']} {wording['body']}"
     lower = blob.lower()
+    assert wording["subject"] == "Preview assigned to Hashim"
+    assert wording["greeting"] == ""
     assert "hey email" not in lower
     assert "hi email" not in lower
     assert "render asked" not in lower
     assert "asked you to handle" not in lower
     assert "handle preview assigned to hashim" not in lower
-    assert "this is still open" in lower
+    assert "this is still open" not in lower
+    assert "checking in" not in lower
     assert "saturday, august 29 at 5:00 pm" in lower
-    assert "checking in on preview assigned to hashim" in lower
     assert "circling back" not in lower
     html = render_followup_email(
         "Email",
         "Render",
-        {"id": "t1", "title": "Preview assigned to Hashim"},
+        {"id": "t1", "title": "Preview assigned to Hashim", "due_date": "2026-08-29T17:00:00"},
         wording,
         "https://tskflow.com",
         reply_address("abc123token"),
     )
+    html_l = html.lower()
     assert "Hey Email" not in html
     assert "asked you to handle" not in html
-    title_at = html.lower().index("preview assigned to hashim")
-    open_at = html.lower().index("this is still open")
-    reply_at = html.lower().index("reply done")
-    assert title_at < open_at < reply_at
+    assert ">Render<" not in html
+    title_at = html_l.index("preview assigned to hashim")
+    due_at = html_l.index("saturday, august 29 at 5:00 pm")
+    done_at = html_l.index(">done<")
+    open_at = html_l.index("open the task")
+    assert title_at < due_at < done_at < open_at
     ignored = ignored_guidance_copy(
         {"title": "Preview assigned to Hashim", "due_date": "2026-08-29T17:00:00"},
         "Email",

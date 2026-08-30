@@ -321,49 +321,29 @@ def format_due_for_humans(iso: Optional[str]) -> str:
     return f"{weekday}, {month} {day} at {hour12}:{dt.minute:02d} {ampm}"
 
 
-def _due_bit(task: dict) -> str:
-    due = format_due_for_humans(task.get("due_date"))
-    return f" It's due {due}." if due else ""
-
-
-def _greeting(first: str, with_name: str, without_name: str) -> str:
-    return with_name.format(first=first) if first else without_name
-
-
 def followup_copy(kind: str, task: dict, assignee_name: str, assigner_name: str) -> dict:
-    """Short, plain colleague voice — not a system banner."""
-    first = first_name(assignee_name)
-    mgr = first_name(assigner_name)
+    """Inbox subject is the task. Body is the due stamp. No lecture."""
     title = (task.get("title") or "this").strip() or "this"
-    due_bit = _due_bit(task)
-    open_line = f"{mgr} asked you to take this on." if mgr else "This is still open."
-    reply_line = "Reply done, still working, or blocked, and I'll update the task."
-    if kind == "no_progress":
-        subject = f"Checking in on {title}"
-        greeting = _greeting(first, "Hey {first} — just checking in.", "Just checking in.")
-        body = f"{open_line}{due_bit}\n\n{reply_line}"
-    else:
-        subject = f"Checking in on {title}"
-        greeting = _greeting(first, "Hey {first} — no rush, just a nudge.", "No rush, just a nudge.")
-        body = f"{open_line}{due_bit}\n\n{reply_line}"
-    return {"subject": subject, "greeting": greeting, "body": body, "kind": kind}
+    due = format_due_for_humans(task.get("due_date"))
+    return {"subject": title, "greeting": "", "body": due, "kind": kind}
 
 
 def ignored_guidance_copy(task: dict, assignee_name: str, assigner_name: str) -> dict:
-    """Opening email when someone has ignored two in-app pings."""
-    first = first_name(assignee_name)
-    mgr = first_name(assigner_name)
-    title = (task.get("title") or "this").strip() or "this"
-    due_bit = _due_bit(task)
-    open_line = f"{mgr} asked you to take this on." if mgr else "This is still open."
-    subject = f"Checking in on {title}"
-    greeting = _greeting(first, "Hi {first} — checking in.", "Checking in.")
-    body = (
-        f"{open_line}{due_bit} "
-        "I've pinged you twice in Tskflow with no response, so I'm writing here instead. "
-        "\n\nReply done, still working, or blocked, and I'll update the task."
+    """Same visual email after two ignored pings. No extra paragraph."""
+    return followup_copy("ignored_guidance", task, assignee_name, assigner_name)
+
+
+def _mailto(reply_addr: str, body: str) -> str:
+    addr = (reply_addr or "").strip()
+    return f"mailto:{html.escape(addr, quote=True)}?body={quote(body)}"
+
+
+def _chip(href: str, label: str) -> str:
+    return (
+        f'<a href="{href}" style="display:inline-block;padding:8px 14px;margin:0 8px 8px 0;'
+        f'border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;'
+        f'text-decoration:none;font-size:13px;font-weight:600;">{html.escape(label)}</a>'
     )
-    return {"subject": subject, "greeting": greeting, "body": body, "kind": "ignored_guidance"}
 
 
 def render_followup_email(
@@ -374,36 +354,46 @@ def render_followup_email(
     app_url: str,
     reply_addr: str,
 ) -> str:
-    """Greeting, the task, then due/status and how to reply. Task is never last."""
+    """Task, due chip, reply chips. No paragraphs."""
     title = html.escape(task.get("title") or "this task")
-    first = first_name(assignee_name)
-    raw_greeting = (wording.get("greeting") or (f"Hey {first}," if first else "")).strip()
-    greeting_html = (
-        f'<p style="margin:0 0 14px 0;color:#111827;font-size:16px;line-height:1.5;">{html.escape(raw_greeting)}</p>'
-        if raw_greeting
-        else ""
-    )
-    body = html.escape(wording.get("body") or "").replace("\n", "<br>")
+    due = html.escape(format_due_for_humans(task.get("due_date")) or (wording or {}).get("body") or "")
+    mgr = first_name(assigner_name)
     task_id = quote(str(task.get("id") or ""), safe="")
     base = (app_url or "https://tskflow.com").rstrip("/")
     link = f"{base}/task/{task_id}"
+    who = (
+        f'<span style="display:inline-block;padding:5px 10px;margin:0 8px 10px 0;border-radius:999px;'
+        f'border:1px solid #99f6e4;background:#f0fdfa;color:#0f766e;font-size:12px;font-weight:600;">'
+        f'{html.escape(mgr)}</span>'
+        if mgr
+        else ""
+    )
+    due_chip = (
+        f'<span style="display:inline-block;padding:5px 10px;margin:0 0 10px 0;border-radius:999px;'
+        f'border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-size:12px;font-weight:600;">'
+        f'{due}</span>'
+        if due
+        else ""
+    )
+    replies = (
+        _chip(_mailto(reply_addr, "Done"), "Done")
+        + _chip(_mailto(reply_addr, "Still working"), "Working")
+        + _chip(_mailto(reply_addr, "Blocked"), "Blocked")
+    )
     return f"""<html><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;padding:28px 20px;">
       <div style="background:#fff;border-radius:18px;padding:28px 28px 22px;box-shadow:0 10px 30px -18px rgba(15,23,42,0.28);">
-        {greeting_html}
-        <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;margin:0 0 18px 0;">
+        <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;margin:0 0 14px 0;">
           <p style="margin:0;color:#0f172a;font-size:16px;font-weight:600;">{title}</p>
         </div>
-        <p style="margin:0 0 18px 0;color:#374151;font-size:15px;line-height:1.65;">{body}</p>
-        <p style="margin:0 0 22px 0;">
+        <p style="margin:0 0 16px 0;">{who}{due_chip}</p>
+        <p style="margin:0 0 20px 0;">{replies}</p>
+        <p style="margin:0;">
           <a href="{link}" style="display:inline-block;background:#0f172a;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:600;">Open the task</a>
-        </p>
-        <p style="margin:0;color:#64748b;font-size:13px;line-height:1.55;">
-          Just reply to this email - I read it. A short note is enough.
         </p>
       </div>
       <p style="margin:14px 8px 0;color:#94a3b8;font-size:11px;text-align:center;">
-        Reply goes to {html.escape(reply_addr)}. You can also update the task in Tskflow.
+        {html.escape(reply_addr)}
       </p>
     </div>
     </body></html>"""
