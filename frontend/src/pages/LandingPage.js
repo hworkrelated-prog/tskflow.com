@@ -311,14 +311,15 @@ const LandingPage = () => {
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
-                    <LandingScreenRecorder
-                        onRecorded={setRecordingBlob}
-                        recorded={Boolean(recordingBlob)}
-                        prominent
-                    />
-                    <span className="ml-1" data-testid="landing-brand">
-                        <TskFlowLogo variant="dark" size="sm" />
-                    </span>
+                    <div className="landing-toolbar-lead">
+                        <span data-testid="landing-brand">
+                            <TskFlowLogo variant="dark" size="sm" />
+                        </span>
+                        <LandingScreenRecorder
+                            onRecorded={setRecordingBlob}
+                            recorded={Boolean(recordingBlob)}
+                        />
+                    </div>
                     <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
                             type="button"
