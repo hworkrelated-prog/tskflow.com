@@ -5,12 +5,17 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mail, MessageSquare, Send, ChevronDown } from 'lucide-react';
+import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingVoiceGuide from '@/components/LandingVoiceGuide';
+import LandingHeroAsk from '@/components/LandingHeroAsk';
+import LandingSilentTasks from '@/components/LandingSilentTasks';
+import LandingFlowIcons from '@/components/LandingFlowIcons';
 import LandingScrollChaos from '@/components/LandingScrollChaos';
+import LandingReportFlip from '@/components/LandingReportFlip';
+import LandingIntegrations from '@/components/LandingIntegrations';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -91,7 +96,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     };
 
     return (
-        <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit">
+        <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit" id="landing-tryit">
             <div className="landing-composer rounded-[28px] border border-white/12 bg-black/35 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md px-4 sm:px-6 py-5 sm:py-6">
             <section
                 className="landing-step flex flex-col justify-center"
@@ -101,12 +106,8 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 <p className="sr-only" data-testid="landing-no-account">
                     No account. No password. Enter sends it.
                 </p>
-                <p className="landing-step-kicker">
-                    1 · Ask
-                </p>
-                <p className="text-sm text-white/55 mb-3">What needs to get done?</p>
-
-                <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[140px] sm:min-h-[160px]' : 'min-h-[5.5rem] sm:min-h-[6.5rem]'}`}>
+                <p className="landing-step-kicker">Ask</p>
+                <div className={`relative border-l-2 border-teal-400/50 pl-5 ${filled ? 'min-h-[7rem] sm:min-h-[8rem]' : 'min-h-[4.5rem] sm:min-h-[5.5rem]'}`}>
                     {!filled && (
                         <div
                             className="landing-example pointer-events-none absolute inset-0 text-xl sm:text-2xl font-medium leading-snug"
@@ -129,12 +130,11 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 document.getElementById('landing-assignee-email')?.focus();
                             }
                         }}
-                        rows={filled ? 5 : 3}
-                        className={`relative w-full h-full resize-none bg-transparent text-xl sm:text-2xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[140px] sm:min-h-[160px]' : 'min-h-[5.5rem] sm:min-h-[6.5rem]'}`}
+                        rows={filled ? 4 : 3}
+                        className={`relative w-full h-full resize-none bg-transparent text-xl sm:text-2xl font-medium leading-snug outline-none caret-teal-300 text-white selection:bg-teal-400/30 ${filled ? 'min-h-[7rem] sm:min-h-[8rem]' : 'min-h-[4.5rem] sm:min-h-[5.5rem]'}`}
                         placeholder=""
                         data-testid="landing-tryit-input"
                         aria-label="What needs to get done"
-                        autoFocus
                     />
                 </div>
                 {!filled && (
@@ -164,12 +164,6 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                         testId="landing-tryit-colorized"
                     />
                 )}
-                <a
-                    href="#landing-step-who"
-                    className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-200/90 hover:text-teal-100 self-start"
-                >
-                    Next · who it's for <ChevronDown className="w-3.5 h-3.5" />
-                </a>
             </section>
 
             <section
@@ -177,13 +171,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 data-testid="landing-step-who"
                 id="landing-step-who"
             >
-                <p className="landing-step-kicker">
-                    2 · Who
-                </p>
-                <p className="text-sm text-white/55 mb-3">Who should own this?</p>
+                <p className="landing-step-kicker">Who</p>
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                     <div className="flex-1">
-                        <label className="text-[11px] uppercase tracking-[0.22em] text-white/40">To</label>
                         <Input
                             type="email"
                             value={assignee}
@@ -214,12 +204,6 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                         </button>
                     </div>
                 </div>
-                <a
-                    href="#landing-step-send"
-                    className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-200/90 hover:text-teal-100 self-start"
-                >
-                    Next · send <ChevronDown className="w-3.5 h-3.5" />
-                </a>
             </section>
 
             <section
@@ -227,14 +211,11 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 data-testid="landing-step-send"
                 id="landing-step-send"
             >
-                <p className="landing-step-kicker">
-                    3 · Send
-                </p>
+                <p className="landing-step-kicker">Send</p>
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-t border-white/10">
                     <div data-testid="landing-tryit-result" className="min-w-0">
                         {preview && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-white/35 mb-1">They receive</p>
                                 <p className="text-sm text-white/80 leading-relaxed truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                     {preview.title}
                                     <span className="text-white/40"> · {assignee.trim() || preview.who} · {preview.when}</span>
@@ -245,16 +226,16 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             {channel === 'slack' ? 'Email first. Slack later.' : 'Send'}
                         </p>
                     </div>
-                    <Button
+                    <button
                         type="button"
-                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7 shrink-0"
+                        className="landing-cta shrink-0"
                         onClick={sendIt}
                         disabled={sending}
                         data-testid="landing-send-it"
                     >
-                        <Send className="w-4 h-4 mr-2" />
+                        <Send className="w-4 h-4" />
                         {sending ? 'Opening…' : 'Send it'}
-                    </Button>
+                    </button>
                 </div>
             </section>
             </div>
@@ -276,9 +257,7 @@ const LandingPage = () => {
     useEffect(() => {
         pinDocumentTheme('dark');
         document.body.classList.add('landing-active');
-        const t = window.setTimeout(() => inputRef.current?.focus(), 40);
         return () => {
-            window.clearTimeout(t);
             document.body.classList.remove('landing-active');
             restoreDocumentTheme();
         };
@@ -297,9 +276,13 @@ const LandingPage = () => {
         if (step === 'ask') window.setTimeout(() => inputRef.current?.focus(), 280);
     };
 
+    const scrollToComposer = () => {
+        document.getElementById('landing-tryit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => inputRef.current?.focus(), 360);
+    };
+
     return (
-        <div className="landing-page landing-tool min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
-            <LandingScrollChaos />
+        <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-[4.5rem] flex items-center gap-3">
                     <LandingScreenRecorder
@@ -335,14 +318,36 @@ const LandingPage = () => {
                 </div>
             </header>
 
-            <main className="relative z-10 flex-1 flex flex-col px-4 sm:px-6">
-                <LaunchPad
-                    recordingBlob={recordingBlob}
-                    inputRef={inputRef}
-                    ideaIndex={ideaIndex}
-                    value={value}
-                    setValue={setValue}
-                />
+            <main className="relative z-10 flex-1 flex flex-col">
+                <section className="landing-hero-visual" data-testid="landing-hero">
+                    <h1 className="landing-hero-line">Ask. Who. Send.</h1>
+                    <LandingHeroAsk />
+                    <button
+                        type="button"
+                        className="landing-cta mt-8"
+                        onClick={scrollToComposer}
+                        data-testid="landing-hero-cta"
+                    >
+                        Send it
+                    </button>
+                </section>
+
+                <LandingSilentTasks />
+                <LandingFlowIcons />
+                <LandingScrollChaos />
+                <LandingReportFlip />
+                <LandingIntegrations />
+
+                <section className="landing-final" data-testid="landing-final">
+                    <p className="landing-final-line">Send one now.</p>
+                    <LaunchPad
+                        recordingBlob={recordingBlob}
+                        inputRef={inputRef}
+                        ideaIndex={ideaIndex}
+                        value={value}
+                        setValue={setValue}
+                    />
+                </section>
             </main>
 
             <footer className="relative z-10 shrink-0 border-t border-white/8 py-4">

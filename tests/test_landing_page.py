@@ -33,6 +33,13 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "LandingScreenRecorder" in src
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
+    assert "LandingHeroAsk" in src
+    assert "LandingSilentTasks" in src
+    assert "LandingFlowIcons" in src
+    assert "LandingReportFlip" in src
+    assert "LandingIntegrations" in src
+    assert "What needs to get done?" not in src
+    assert "Who should own this?" not in src
 
 
 def test_landing_voice_guide_is_guest_safe():
@@ -50,10 +57,11 @@ def test_landing_voice_guide_is_guest_safe():
 def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
+    assert 'data-testid="landing-hero"' in src
+    assert 'data-testid="landing-hero-cta"' in src
     assert 'data-testid="landing-tryit"' in src
     assert 'data-testid="landing-tryit-input"' in src
     assert "distillLandingPrompt" in src
-    assert "autoFocus" in src
     assert "What needs to get done" in src  # aria-label
     assert 'data-testid="landing-examples"' in src
     assert "LANDING_EXAMPLES" in src
@@ -293,3 +301,40 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
     assert "inset 0 0 0 1px" in shell
     assert "overflow: hidden" not in css.split("@media (max-width: 51.99rem)")[-1].split(".ai-prompt-field")[0]
     assert "translateX(-50%)" not in css.split(".ai-bottom-stage")[1].split(".ai-prompt-field")[0]
+
+
+def test_landing_story_is_shown_not_told():
+    """Headline and CTAs only. The product is explained by motion and objects."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    hero = (FRONT / "components" / "LandingHeroAsk.js").read_text(encoding="utf-8")
+    silent = (FRONT / "components" / "LandingSilentTasks.js").read_text(encoding="utf-8")
+    chaos = (FRONT / "components" / "LandingScrollChaos.js").read_text(encoding="utf-8")
+    reports = (FRONT / "components" / "LandingReportFlip.js").read_text(encoding="utf-8")
+    integ = (FRONT / "components" / "LandingIntegrations.js").read_text(encoding="utf-8")
+    flow = (FRONT / "components" / "LandingFlowIcons.js").read_text(encoding="utf-8")
+
+    assert "Ask. Who. Send." in landing
+    assert "Send one now." in landing
+    assert "Ask engineering to record a demo of the fix by tomorrow" in hero
+    assert "landing-nametag" in hero
+    assert "landing-clockchip" in hero
+    assert "useReducedMotion" in hero
+    assert "Gone quiet." in silent
+    assert "landing-live-card" in silent
+    assert "useReducedMotion" in silent
+    assert "landing-sticky" in chaos
+    assert "Priya" in chaos and "Tomorrow" in chaos
+    assert "Asks bounce around Slack" not in chaos
+    assert "landing-report-face" in reports
+    assert "Done" in reports and "Stalled" in reports and "Moving" in reports
+    assert "landing-integ-${item.id}" in integ
+    assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
+    assert "landing-flow-${step.id}" in flow
+    assert "Ask" in flow and "Who" in flow and "Send" in flow
+    assert "prefers-reduced-motion" in css
+    assert "landing-live-pulse" in css
+    assert "landing-sticky--amber" in css
+    assert "Asks bounce around Slack." not in landing
+    assert "The robot delivers" not in landing
+
