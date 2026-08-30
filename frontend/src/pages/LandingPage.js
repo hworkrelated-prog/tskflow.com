@@ -22,6 +22,7 @@ import LandingReportFlip from '@/components/LandingReportFlip';
 import LandingSolve from '@/components/LandingSolve';
 import LandingIntegrations from '@/components/LandingIntegrations';
 import LandingFounder from '@/components/LandingFounder';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -315,12 +316,8 @@ const LandingPage = () => {
                         recorded={Boolean(recordingBlob)}
                         prominent
                     />
-                    <span
-                        className="text-sm font-semibold tracking-tight text-white/70 ml-1"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                        data-testid="landing-brand"
-                    >
-                        TskFlow
+                    <span className="ml-1" data-testid="landing-brand">
+                        <TskFlowLogo variant="dark" size="sm" />
                     </span>
                     <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
