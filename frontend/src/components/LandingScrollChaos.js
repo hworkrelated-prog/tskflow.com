@@ -2,10 +2,10 @@ import React, { useRef } from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 
 const NOTES = [
-    { id: 'n1', title: 'Demo clip', owner: 'Priya', due: 'Tomorrow', x: -210, y: -86, rot: -13, tone: 'amber' },
-    { id: 'n2', title: 'QA signoff', owner: 'Chris', due: 'Fri', x: 198, y: -64, rot: 10, tone: 'rose' },
-    { id: 'n3', title: 'Client recap', owner: 'Maya', due: 'Today', x: -118, y: 92, rot: 7, tone: 'sky' },
-    { id: 'n4', title: 'Scope check', owner: 'Henrik', due: 'Mon', x: 156, y: 108, rot: -9, tone: 'lilac' },
+    { id: 'n1', title: 'Forecast', owner: 'Priya', due: 'Tomorrow', x: -210, y: -86, rot: -13, tone: 'amber' },
+    { id: 'n2', title: 'Discovery', owner: 'Chris', due: 'Fri', x: 198, y: -64, rot: 10, tone: 'rose' },
+    { id: 'n3', title: 'Call log', owner: 'Maya', due: 'Today', x: -118, y: 92, rot: 7, tone: 'sky' },
+    { id: 'n4', title: 'SFDC', owner: 'Henrik', due: 'Mon', x: 156, y: 108, rot: -9, tone: 'lilac' },
 ];
 
 /**

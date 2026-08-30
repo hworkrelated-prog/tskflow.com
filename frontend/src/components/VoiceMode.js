@@ -366,7 +366,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
         sendCommand(t, { speakReply: false });
     };
 
-    // Jarvis lives in the prompt bar. This shell only keeps shortcuts + nudges.
+    // Rook lives in the prompt bar. This shell only keeps shortcuts + nudges.
     if (dockIntegrated) {
         return null;
     }
@@ -409,7 +409,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                                 <JarvisIcon phase={phase} size={36} />
                                 <div className="min-w-0">
                                     <p className="text-sm font-semibold text-slate-800 truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Jarvis
+                                        Rook
                                     </p>
                                     <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
                                         <StatusDot phase={phase} />
@@ -475,7 +475,7 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                                 ref={inputRef}
                                 type="text"
                                 className="flex-1 min-w-0 border border-slate-200 rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300/60"
-                                placeholder="Ask Jarvis…"
+                                placeholder="Ask Rook…"
                                 value={textInput}
                                 onChange={(e) => setTextInput(e.target.value)}
                                 onKeyDown={(e) => {
@@ -514,8 +514,8 @@ const VoiceMode = ({ dockIntegrated = false }) => {
                         ? 'h-11 w-11 shadow-[0_8px_22px_rgba(13,148,136,0.28)]'
                         : 'h-14 w-14 shadow-[0_12px_32px_rgba(13,148,136,0.35)]'
                 }`}
-                title="Jarvis - AI manager"
-                aria-label="Open Jarvis"
+                title="Rook - AI manager"
+                aria-label="Open Rook"
             >
                 <JarvisIcon
                     phase={open && phase === 'idle' ? 'idle' : phase}

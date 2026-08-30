@@ -11,11 +11,18 @@ import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingVoiceGuide from '@/components/LandingVoiceGuide';
 import LandingHeroAsk from '@/components/LandingHeroAsk';
+import LandingMeetAssign from '@/components/LandingMeetAssign';
+import LandingSlackReact from '@/components/LandingSlackReact';
+import LandingPileUp from '@/components/LandingPileUp';
 import LandingSilentTasks from '@/components/LandingSilentTasks';
+import LandingChase from '@/components/LandingChase';
 import LandingFlowIcons from '@/components/LandingFlowIcons';
 import LandingScrollChaos from '@/components/LandingScrollChaos';
 import LandingReportFlip from '@/components/LandingReportFlip';
+import LandingSolve from '@/components/LandingSolve';
 import LandingIntegrations from '@/components/LandingIntegrations';
+import LandingFounder from '@/components/LandingFounder';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import { rememberGuestSession } from '@/lib/guestSession';
 import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
@@ -182,7 +189,7 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                 id="landing-step-who"
             >
                 <p className="landing-step-kicker">Who</p>
-                <p className="landing-who-cue" data-testid="landing-who-cue">
+                <p className="sr-only" data-testid="landing-who-cue">
                     Your email. To try it.
                 </p>
                 <Input
@@ -235,14 +242,14 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                                 </p>
                             </motion.div>
                         )}
-                        <p className="landing-try-note" data-testid="landing-no-account">
+                        <p className="sr-only" data-testid="landing-no-account">
                             No account. No password.
                         </p>
-                        <p className="landing-try-note" data-testid="landing-send-promise">
-                            {channel === 'slack'
-                                ? 'We email first, then run after them.'
-                                : 'You send it. We run after them until it is done.'}
-                        </p>
+                        <div className="landing-send-visual" data-testid="landing-send-promise" aria-hidden>
+                            <span className="hound-face is-silent">C</span>
+                            <span className="landing-send-dash" />
+                            <span className="hound-chip is-go">On it</span>
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -267,6 +274,7 @@ const LandingPage = () => {
     const [recordingBlob, setRecordingBlob] = useState(null);
     const [ideaIndex, setIdeaIndex] = useState(0);
     const [value, setValue] = useState('');
+    const [tab, setTab] = useState('story');
 
     useEffect(() => {
         trackLandingView({ path: '/' });
@@ -302,20 +310,34 @@ const LandingPage = () => {
     return (
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-[4.5rem] flex items-center gap-3">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <LandingScreenRecorder
                         onRecorded={setRecordingBlob}
                         recorded={Boolean(recordingBlob)}
                         prominent
                     />
-                    <span
-                        className="text-sm font-semibold tracking-tight text-white/70 ml-1"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                        data-testid="landing-brand"
-                    >
-                        TskFlow
+                    <span className="ml-1" data-testid="landing-brand">
+                        <TskFlowLogo variant="dark" size="sm" />
                     </span>
-                    <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                    <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
+                        <button
+                            type="button"
+                            className={tab === 'story' ? 'is-on' : ''}
+                            onClick={() => setTab('story')}
+                            data-testid="landing-tab-story"
+                        >
+                            Story
+                        </button>
+                        <button
+                            type="button"
+                            className={tab === 'founder' ? 'is-on' : ''}
+                            onClick={() => setTab('founder')}
+                            data-testid="landing-tab-founder"
+                        >
+                            Get to Know the founder
+                        </button>
+                    </nav>
+                    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                         <Button
                             variant="ghost"
                             className="rounded-full text-white/70 hover:text-white hover:bg-white/10 h-10"
@@ -345,8 +367,14 @@ const LandingPage = () => {
             </header>
 
             <main className="relative z-10 flex-1 flex flex-col">
+                {tab === 'founder' ? (
+                    <LandingFounder />
+                ) : (
+                    <>
                 <section className="landing-hero-visual" data-testid="landing-hero">
-                    <h1 className="landing-hero-line">Ask. Who. Send.</h1>
+                    <h1 className="landing-hero-line">Stop chasing.</h1>
+                    <p className="landing-hero-pain" data-testid="landing-pain-line">They already own it.</p>
+                    <p className="landing-hero-flow">Ask. Who. Send.</p>
                     <LandingHeroAsk />
                     <button
                         type="button"
@@ -358,10 +386,15 @@ const LandingPage = () => {
                     </button>
                 </section>
 
+                <LandingMeetAssign />
+                <LandingSlackReact />
+                <LandingPileUp />
                 <LandingSilentTasks />
-                <LandingFlowIcons />
+                <LandingChase />
                 <LandingScrollChaos />
+                <LandingSolve />
                 <LandingReportFlip />
+                <LandingFlowIcons />
                 <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">
@@ -374,6 +407,8 @@ const LandingPage = () => {
                         setValue={setValue}
                     />
                 </section>
+                    </>
+                )}
             </main>
 
             <footer className="relative z-10 shrink-0 border-t border-white/8 py-4">

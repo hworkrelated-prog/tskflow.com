@@ -20,6 +20,7 @@ import { needsIosScreenRecordFlow } from '@/lib/recordingCapabilities';
 import { PROMPT_EXAMPLES, PROMPT_EXAMPLE_INTERVAL_MS, nextPromptExampleIndex } from '@/lib/promptExamples';
 import { promptMeansSelfAssign, promptNamesSomeoneElse, rememberedAssigneesForPrompt, writeLastAssignees, matchAssigneesFromPeople, SELF_CHIP, subjectForPhrase, looksLikeTimeOnly, looksLikeFollowupFragment, classifyClarifyAnswer, repairMessyPrompt } from '@/lib/selfAssign';
 import { assigneesAreSelf, sentTaskFollowupMessage, rewriteSelfAssignCopy, layoutTaskDescription, isSelfAssigneeChip, fallbackTaskTitle, displayTaskTitle } from '@/lib/taskDescription';
+import SlackAttachGrid from '@/components/SlackAttachGrid';
 
 /*
  * AIQuickCreate - text an assistant, not fill a form.
@@ -2217,30 +2218,11 @@ const AIQuickCreate = ({
                                         <div className="flex justify-start">
                                             <div className="max-w-[95%] w-full rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-3 space-y-3" data-testid="ai-confirm-summary">
                                                 {attachments.length > 0 && (
-                                                    <div className="flex flex-wrap gap-2" data-testid="ai-confirm-attachments">
-                                                        {attachments.map((att, i) => {
-                                                            const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
-                                                            const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
-                                                            const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
-                                                            return (
-                                                                <button
-                                                                    key={att.id || att.storage_path || i}
-                                                                    type="button"
-                                                                    onClick={() => setPreviewAttachment(att)}
-                                                                    className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-white hover:ring-2 hover:ring-teal-300"
-                                                                    title="View attachment"
-                                                                >
-                                                                    {thumb ? (
-                                                                        <img src={thumb} alt="" className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <span className="w-full h-full flex items-center justify-center text-slate-500">
-                                                                            {isVideo ? <Video className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
-                                                                        </span>
-                                                                    )}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
+                                                    <SlackAttachGrid
+                                                        attachments={attachments}
+                                                        compact
+                                                        testId="ai-confirm-attachments"
+                                                    />
                                                 )}
 
                                                 <p className="text-[15px] leading-7 text-slate-800" data-testid="ai-confirm-message">
@@ -3054,7 +3036,17 @@ const AIQuickCreate = ({
                             )}
 
                             {(editAssignees.length > 0 || attachments.length > 0) && !preview && (
-                                <div className="flex flex-wrap gap-1.5 px-3 pb-1">
+                                <div className="flex flex-col gap-2 px-3 pb-1">
+                                    {attachments.length > 0 && (
+                                        <SlackAttachGrid
+                                            attachments={attachments}
+                                            compact
+                                            onRemove={(_att, i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                                            testId="ai-composer-attachments"
+                                        />
+                                    )}
+                                    {editAssignees.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
                                     {editAssignees.map((a, i) => (
                                         <span
                                             key={`${a.id || a.email || a.name}-${i}`}
@@ -3073,42 +3065,8 @@ const AIQuickCreate = ({
                                             </button>
                                         </span>
                                     ))}
-                                    {attachments.map((att, i) => {
-                                        const isVideo = att.kind === 'video' || (att.content_type || '').startsWith('video/');
-                                        const isImage = att.kind === 'image' || (att.content_type || '').startsWith('image/');
-                                        const thumb = att.storage_path && isImage ? fileUrl(att.storage_path) : null;
-                                        return (
-                                            <span
-                                                key={att.id || att.storage_path || i}
-                                                className="inline-flex items-center gap-1.5 text-[11px] pl-1 pr-2 py-1 rounded-xl border bg-slate-50 text-slate-700 border-slate-200"
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPreviewAttachment(att)}
-                                                    className="inline-flex items-center gap-1.5 hover:opacity-90"
-                                                    title="View attachment"
-                                                    data-testid={`ai-attachment-preview-${i}`}
-                                                >
-                                                    {thumb ? (
-                                                        <img src={thumb} alt="" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
-                                                    ) : (
-                                                        <span className="w-8 h-8 rounded-md bg-slate-200/80 flex items-center justify-center">
-                                                            {isVideo ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-                                                        </span>
-                                                    )}
-                                                    <span className="max-w-[120px] truncate text-left">{att.original_filename || (isVideo ? 'Recording' : 'Screenshot')}</span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                                                    className="opacity-60 hover:opacity-100"
-                                                    aria-label="Remove attachment"
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </span>
-                                        );
-                                    })}
+                                </div>
+                                    )}
                                 </div>
                             )}
 

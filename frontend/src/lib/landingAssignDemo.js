@@ -7,7 +7,7 @@ export const LANDING_EXAMPLES = [
     },
     {
         id: 'walkthrough',
-        text: 'Ask the org to watch this recording, then send theirs of them doing it.',
+        text: 'Ask the team to record their discovery call by Friday.',
     },
     {
         id: 'best-deal',
@@ -22,8 +22,8 @@ export const LANDING_EXAMPLES = [
         text: 'Remind my team to log every call by 5 each day.',
     },
     {
-        id: 'demo',
-        text: 'Ask engineering to record a demo of the fix by tomorrow.',
+        id: 'maya',
+        text: 'Ask Maya to send the Q3 forecast by Friday.',
     },
 ];
 
@@ -55,7 +55,7 @@ export const DEMO_SLACK = {
     messages: [
         {
             role: 'assistant',
-            name: 'Jarvis',
+            name: 'Rook',
             text: "Hey Chris - Maya asked you to take this on. It's due EOD. I've pinged you twice in Tskflow with no response, so I'm checking in here instead of making her chase you. Can you take this, or should I tell her you're blocked?",
         },
         {
@@ -65,7 +65,7 @@ export const DEMO_SLACK = {
         },
         {
             role: 'assistant',
-            name: 'Jarvis',
+            name: 'Rook',
             text: "Perfect - you're on it. I marked you accepted. I'll stay out of your way unless this slips.",
         },
     ],
@@ -76,7 +76,7 @@ export const DEMO_BEATS = [
     { id: 'sentence', label: 'One sentence' },
     { id: 'assigned', label: '36 people' },
     { id: 'rollup', label: 'AI update' },
-    { id: 'slack', label: 'Slack thread' },
+    { id: 'slack', label: 'Pinged twice' },
 ];
 
 export const isLargeTeamPrompt = (text) =>

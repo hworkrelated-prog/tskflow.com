@@ -10,6 +10,7 @@ import GoogleSignInButton from '@/components/GoogleSignInButton';
 import { guestTaskId, rememberGuestSession } from '@/lib/guestSession';
 import { trackEnvView } from '@/lib/productAnalytics';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
+import TskFlowLogo from '@/components/TskFlowLogo';
 
 const CHANNEL_ICON = {
     email: Mail,
@@ -159,12 +160,12 @@ const RobotRoomPage = () => {
             <nav className="relative z-10 max-w-xl mx-auto px-5 min-h-16 py-3 flex items-center justify-between gap-2">
                 <button
                     type="button"
-                    className="text-lg font-semibold tracking-tight"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    className="rounded-full hover:opacity-80"
                     onClick={startOver}
                     data-testid="env-brand-home"
+                    aria-label="TskFlow"
                 >
-                    TskFlow
+                    <TskFlowLogo variant="dark" size="sm" />
                 </button>
                 <div className="flex items-center gap-1">
                     {isGuest ? (

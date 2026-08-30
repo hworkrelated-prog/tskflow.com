@@ -10,8 +10,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Target } from 'lucide-react';
 import { getErrorMessage } from '@/lib/utils';
+import TskFlowLogo from '@/components/TskFlowLogo';
 
 const ContactPage = () => {
     const [loading, setLoading] = useState(false);
@@ -55,11 +55,8 @@ const ContactPage = () => {
         <div data-testid="contact-page" className="min-h-screen bg-white">
             <header className="border-b">
                 <div className="container mx-auto px-6 py-4">
-                    <Link to="/" className="flex items-center gap-2 w-fit">
-                        <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
-                            <Target className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Outfit' }}>Tskflow</span>
+                    <Link to="/" className="inline-flex w-fit hover:opacity-80">
+                        <TskFlowLogo variant="light" size="sm" />
                     </Link>
                 </div>
             </header>

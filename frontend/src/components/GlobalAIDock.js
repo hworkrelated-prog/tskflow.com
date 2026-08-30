@@ -55,6 +55,10 @@ const GlobalAIDock = () => {
     const hoverLeaveTimerRef = useRef(null);
     const openingRef = useRef(false);
     const openingDoneTimerRef = useRef(null);
+    const wasOpenRef = useRef(false);
+    const closeTimerRef = useRef(null);
+    const [closing, setClosing] = useState(false);
+    const [settled, setSettled] = useState(false);
 
     const visible =
         !!user
@@ -128,9 +132,12 @@ const GlobalAIDock = () => {
         const markActive = () => setActive(true);
         const beginOpen = () => {
             openingRef.current = true;
+            setClosing(false);
+            setSettled(false);
             if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
             openingDoneTimerRef.current = setTimeout(() => {
                 openingRef.current = false;
+                setSettled(true);
             }, 480);
         };
         const focusPrompt = () => {
@@ -183,6 +190,7 @@ const GlobalAIDock = () => {
             if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
             if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current);
             if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
+            if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
         };
     }, []);
 
@@ -201,6 +209,7 @@ const GlobalAIDock = () => {
         }
         clearHoverLeaveTimer();
         openingRef.current = false;
+        setSettled(false);
         if (openingDoneTimerRef.current) {
             clearTimeout(openingDoneTimerRef.current);
             openingDoneTimerRef.current = null;
@@ -278,17 +287,43 @@ const GlobalAIDock = () => {
         }
     };
 
-    if (!visible) return null;
-
     const lockedOpen = active || focused || recordingPending;
     const open = lockedOpen;
+
+    useEffect(() => {
+        if (open) {
+            wasOpenRef.current = true;
+            setClosing(false);
+            if (closeTimerRef.current) {
+                clearTimeout(closeTimerRef.current);
+                closeTimerRef.current = null;
+            }
+            return undefined;
+        }
+        if (!wasOpenRef.current) return undefined;
+        wasOpenRef.current = false;
+        setClosing(true);
+        setSettled(false);
+        closeTimerRef.current = setTimeout(() => {
+            setClosing(false);
+            closeTimerRef.current = null;
+        }, 520);
+        return () => {
+            if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+        };
+    }, [open]);
+
+    if (!visible) return null;
 
     const expandFromFab = () => {
         clearHoverLeaveTimer();
         openingRef.current = true;
+        setClosing(false);
+        setSettled(false);
         if (openingDoneTimerRef.current) clearTimeout(openingDoneTimerRef.current);
         openingDoneTimerRef.current = setTimeout(() => {
             openingRef.current = false;
+            setSettled(true);
         }, 480);
         setFocused(true);
         setActive(true);
@@ -297,10 +332,12 @@ const GlobalAIDock = () => {
         });
     };
 
+    const showPanel = open || closing;
+
     return (
         <div
             ref={dockRef}
-            className={`ai-command-dock${open ? ' is-open' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}`}
+            className={`ai-command-dock${open ? ' is-open' : closing ? ' is-closing' : ' is-collapsed'}${focused ? ' is-focused' : ''}${lockedOpen ? ' is-locked' : ''}${settled && open ? ' is-settled' : ''}`}
             data-testid="ai-command-dock"
         >
             <button
@@ -310,16 +347,16 @@ const GlobalAIDock = () => {
                 title="New task"
                 aria-label="Create a task"
                 aria-expanded={open}
-                tabIndex={open ? -1 : 0}
-                aria-hidden={open}
+                tabIndex={showPanel ? -1 : 0}
+                aria-hidden={showPanel}
                 onClick={expandFromFab}
             >
                 <Plus className="ai-dock-fab-plus" strokeWidth={2.25} />
             </button>
             <div
-                className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${open ? ' is-active' : ''}`}
-                inert={!open ? true : undefined}
-                aria-hidden={!open}
+                className={`ai-dock-panel relative max-h-[min(78dvh,720px)] clean-scroll${showPanel ? ' is-active' : ''}`}
+                inert={!showPanel ? true : undefined}
+                aria-hidden={!showPanel}
             >
                 <button
                     type="button"
@@ -328,8 +365,8 @@ const GlobalAIDock = () => {
                     data-testid="ai-dock-exit"
                     title="Clear (Esc)"
                     aria-label="Clear"
-                    tabIndex={open ? 0 : -1}
-                    aria-hidden={!open}
+                    tabIndex={showPanel ? 0 : -1}
+                    aria-hidden={!showPanel}
                 >
                     <X className="w-3.5 h-3.5" />
                 </button>

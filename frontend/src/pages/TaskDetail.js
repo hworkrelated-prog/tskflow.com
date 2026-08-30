@@ -18,6 +18,8 @@ import { formatAppDateTime } from '@/lib/datetime';
 import { getErrorMessage } from '@/lib/utils';
 import { displayTaskTitle } from '@/lib/taskDescription';
 import AttachmentViewer from '@/components/AttachmentViewer';
+import SlackAttachGrid from '@/components/SlackAttachGrid';
+import CompletionRing from '@/components/CompletionRing';
 import FormattedTaskDescription from '@/components/FormattedTaskDescription';
 import RichTextEditor from '@/components/RichTextEditor';
 import GroupResponseReview from '@/components/GroupResponseReview';
@@ -108,6 +110,7 @@ const TaskDetail = () => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [groupRollup, setGroupRollup] = useState(null);
     const [slackFollowup, setSlackFollowup] = useState(null);
+    const [motiveProof, setMotiveProof] = useState(null);
     const [slackConnected, setSlackConnected] = useState(false);
     const [showAllParticipants, setShowAllParticipants] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
@@ -298,8 +301,16 @@ const TaskDetail = () => {
                     const live = via === 'slack_dm' && (r.data?.slack_channel_id || r.data?.slack_thread_ts);
                     setSlackFollowup(live ? r.data : null);
                 }).catch(() => setSlackFollowup(null));
+                if (response.data.is_sales_task) {
+                    axios.get(`${API}/tasks/${response.data.id}/salesforce-proof`).then((r) => {
+                        setMotiveProof(r.data || null);
+                    }).catch(() => setMotiveProof(null));
+                } else {
+                    setMotiveProof(null);
+                }
             } else {
                 setSlackFollowup(null);
+                setMotiveProof(null);
             }
             // If this is a parent task, load participants + leaderboard for the collapsible section
             if (response.data.is_parent || response.data.status === 'Parent') {
@@ -946,13 +957,21 @@ const TaskDetail = () => {
                                         </Badge>
                                     )}
                                     {getStatusBadge(task.status)}
-                                    {String(task.source || '').toLowerCase() === 'transcript' && (
+                                    {['transcript', 'meet'].includes(String(task.source || '').toLowerCase()) && (
                                         <span
                                             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/70 px-3 py-1 text-xs text-muted-foreground"
                                             data-testid="from-transcript-chip"
                                         >
                                             <Sparkles className="w-3.5 h-3.5" />
-                                            From transcript
+                                            {String(task.source || '').toLowerCase() === 'meet' ? 'Meet' : 'From transcript'}
+                                        </span>
+                                    )}
+                                    {String(task.source || '').toLowerCase() === 'hound' && (
+                                        <span
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-[#4A154B]/20 bg-[#4A154B]/5 px-3 py-1 text-xs text-[#4A154B]"
+                                            data-testid="from-hound-chip"
+                                        >
+                                            Hound
                                         </span>
                                     )}
                                 </div>
@@ -1154,11 +1173,7 @@ const TaskDetail = () => {
                                     <Label className="text-gray-700">Note</Label>
                                     {task.note && <p className="mt-1 text-gray-900">{task.note}</p>}
                                     {task.note_images && task.note_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.note_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.note_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1169,11 +1184,7 @@ const TaskDetail = () => {
                                     <Label className="text-green-700">Completion Note from {task.assigned_to_name}</Label>
                                     {task.completion_note && <p className="mt-1 text-green-900">{task.completion_note}</p>}
                                     {task.completion_note_images && task.completion_note_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.completion_note_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.completion_note_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1192,11 +1203,7 @@ const TaskDetail = () => {
                                     <Label className="text-gray-600">Previous Submission</Label>
                                     {task.previous_completion_note && <p className="mt-1 text-gray-700">{task.previous_completion_note}</p>}
                                     {task.previous_completion_images && task.previous_completion_images.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {task.previous_completion_images.map((img, i) => (
-                                                <img key={i} src={img} alt="" className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80" onClick={() => window.open(img, '_blank')} />
-                                            ))}
-                                        </div>
+                                        <SlackAttachGrid items={task.previous_completion_images} compact />
                                     )}
                                 </div>
                             )}
@@ -1628,6 +1635,10 @@ const TaskDetail = () => {
                         </CardContent>
                     </Card>
 
+                    {motiveProof && (
+                        <MotiveProofStrip proof={motiveProof} />
+                    )}
+
                     {slackFollowup && (
                         <SlackFollowupCard thread={slackFollowup} />
                     )}
@@ -1827,11 +1838,7 @@ const TaskDetail = () => {
                             </div>
                         )}
                         {Array.isArray(subtaskReviewFor?.completion_note_images) && subtaskReviewFor.completion_note_images.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                                {subtaskReviewFor.completion_note_images.map((img, i) => (
-                                    <img key={i} src={img} alt="attachment" className="w-24 h-24 object-cover rounded-lg border" />
-                                ))}
-                            </div>
+                            <SlackAttachGrid items={subtaskReviewFor.completion_note_images} compact />
                         )}
                         <Textarea placeholder="Optional feedback if sending back for revision..." rows={3} value={subtaskReviewFeedback} onChange={(e) => setSubtaskReviewFeedback(e.target.value)} className="rounded-xl" data-testid="subtask-review-feedback" />
                     </div>
@@ -1955,7 +1962,8 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
                 <div className="flex items-center gap-2 min-w-0">
                     <Trophy className="w-5 h-5 text-amber-600" />
                     <span className="font-semibold text-amber-950">Leaderboard</span>
-                    <span className="text-xs text-amber-800/90">{completedCount}/{rows.length} done · {pct}%</span>
+                    <CompletionRing pct={pct} size={40} />
+                    <span className="text-xs text-amber-800/90">{completedCount}/{rows.length}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {isCreator && onAddAssignees && (
@@ -2072,13 +2080,45 @@ const ParticipantsSection = ({ subtasks, leaderboard, showAll, setShowAll, isCre
     );
 };
 
+const MotiveProofStrip = ({ proof }) => {
+    const found = Boolean(proof?.found);
+    const kind = String(proof?.kind || 'generic');
+    const bars = [
+        { id: 'call', on: kind === 'call' && found },
+        { id: 'opp', on: (kind === 'pipeline' || kind === 'deal') && found },
+        { id: 'commit', on: kind === 'forecast' && found },
+    ];
+    return (
+        <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4" data-testid="motive-proof-strip">
+            <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-sm">M</span>
+                <span className="font-semibold text-sm">Motive</span>
+                {proof?.connected === false && (
+                    <span className="ml-auto text-[11px] text-muted-foreground">Not connected</span>
+                )}
+                {found && (
+                    <span className="ml-auto text-[11px] text-emerald-700 font-medium" data-testid="motive-proof-hit">In Salesforce</span>
+                )}
+            </div>
+            <div className="flex gap-2">
+                {bars.map((b) => (
+                    <span
+                        key={b.id}
+                        className={`flex-1 h-9 rounded-xl border ${b.on ? 'bg-sky-500 border-sky-500' : 'bg-white/80 border-sky-100'}`}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const SlackFollowupCard = ({ thread }) => {
     const messages = Array.isArray(thread?.messages) ? thread.messages : [];
     return (
         <Card className="border-2 rounded-2xl mt-4 overflow-hidden" data-testid="slack-followup-card">
             <div className="px-4 py-3 bg-[#4A154B] text-white flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
-                <h3 className="font-semibold text-sm">Slack thread</h3>
+                <h3 className="font-semibold text-sm">Hound</h3>
                 <span className="ml-auto text-[11px] text-white/70">
                     {thread?.status === 'resolved' ? 'Resolved' : 'Open'}
                     {thread?.via === 'slack_dm' ? ' · DM' : ''}
@@ -2091,7 +2131,7 @@ const SlackFollowupCard = ({ thread }) => {
                 {messages.map((m, i) => (
                     <div key={`${m.ts || i}-${i}`} className={m.role === 'user' ? 'pl-4' : ''}>
                         <p className="text-[11px] text-muted-foreground mb-0.5">
-                            {m.role === 'assistant' ? 'Jarvis' : 'Assignee'}
+                            {m.role === 'assistant' ? 'Rook' : 'Assignee'}
                         </p>
                         <p className="text-sm whitespace-pre-wrap">{m.text}</p>
                     </div>

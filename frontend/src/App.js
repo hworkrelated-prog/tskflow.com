@@ -47,6 +47,7 @@ import GoogleOAuthHandoff from '@/pages/GoogleOAuthHandoff';
 import GoogleSignInFinish from '@/pages/GoogleSignInFinish';
 import RobotRoomPage from '@/pages/RobotRoomPage';
 import ConnectCalendarPage from '@/pages/ConnectCalendarPage';
+import MeetingSessionPage from '@/pages/MeetingSessionPage';
 import MailClaimPage from '@/pages/MailClaimPage';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import GlobalAIDock from '@/components/GlobalAIDock';
@@ -500,6 +501,7 @@ function App() {
                     <Route path="/contact" element={<ContactPage />} />
                     <Route path="/api/auth/google/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/api/auth/google/sheets/callback" element={<GoogleOAuthHandoff />} />
+                    <Route path="/api/auth/google/meet/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/api/auth/google/login/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/oauth/google/callback" element={<GoogleOAuthHandoff />} />
                     <Route path="/auth/google/finish" element={<GoogleSignInFinish />} />
@@ -587,6 +589,7 @@ function App() {
                     <Route path="/updates" element={<ProtectedRoute><UpdatesPage /></ProtectedRoute>} />
                     <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
                     <Route path="/transcript" element={<ProtectedRoute><TranscriptImportPage /></ProtectedRoute>} />
+                    <Route path="/meetings/:sessionId" element={<ProtectedRoute><MeetingSessionPage /></ProtectedRoute>} />
                     <Route path="/recording/edit" element={<ProtectedRoute><RecordingEditorPage /></ProtectedRoute>} />
                     <Route path="/recording/controls" element={<RecordingControlsPopup />} />
                     <Route path="/recording/:token" element={<RecordingSharePage />} />

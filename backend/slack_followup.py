@@ -1,7 +1,7 @@
 """Slack follow-up when someone ignores a task after repeated pings.
 
-After two unanswered pings, Jarvis opens a Slack DM (or a recorded thread if
-no bot token is configured) and talks like a teammate. Replies update the task.
+After two unanswered pings, Hound opens a Slack DM (Rook talking like a teammate).
+Replies and tap buttons update the task.
 """
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ async def maybe_llm_interpret(text: str, task: Optional[dict], assigner_name: st
 
         title = (task or {}).get("title") or "this task"
         prompt = (
-            "You are Jarvis, a teammate following up in a Slack DM. Speak like a person, not a bot menu.\n"
+            "You are Rook, a teammate following up in a Slack DM. Speak like a person, not a bot menu.\n"
             f"Task: {title}\nAssigner: {assigner_name}\nTheir message: {text}\n"
             "Return JSON only, no markdown: "
             '{"intent":"accept|complete|decline|block|comment","reply":"1-3 casual sentences"}\n'
@@ -163,7 +163,7 @@ async def maybe_llm_interpret(text: str, task: Optional[dict], assigner_name: st
         )
         raw = await chat_complete(
             model="gpt-4o-mini",
-            system="You are Jarvis, a concise human teammate on Slack. Never mention being an AI.",
+            system="You are Rook, a concise human teammate on Slack. Never mention being an AI.",
             user=prompt,
             json_mode=True,
             api_key=key,
@@ -275,10 +275,18 @@ async def lookup_slack_user_id(token: str, email: str) -> Optional[str]:
     return uid
 
 
-async def post_slack_message(token: str, channel: str, text: str, thread_ts: Optional[str] = None) -> dict:
+async def post_slack_message(
+    token: str,
+    channel: str,
+    text: str,
+    thread_ts: Optional[str] = None,
+    blocks: Optional[List[dict]] = None,
+) -> dict:
     payload: Dict[str, Any] = {"channel": channel, "text": text}
     if thread_ts:
         payload["thread_ts"] = thread_ts
+    if blocks:
+        payload["blocks"] = blocks
     return await _slack_api("chat.postMessage", token, payload)
 
 
@@ -292,8 +300,8 @@ async def open_dm_channel(token: str, slack_user_id: str) -> Optional[str]:
 def _comment_doc(user: dict, text: str, now: str) -> dict:
     return {
         "id": str(uuid.uuid4()),
-        "user_id": (user or {}).get("id") or "slack-jarvis",
-        "user_name": (user or {}).get("name") or "Jarvis",
+        "user_id": (user or {}).get("id") or "slack-rook",
+        "user_name": (user or {}).get("name") or "Rook",
         "content": text,
         "created_at": now,
         "via": "slack",
@@ -366,7 +374,7 @@ def is_live_slack_thread(thread: Optional[dict]) -> bool:
     """True only for follow-ups that were actually delivered as a Slack DM.
 
     Incoming Webhook / local stubs are one-way or fake — they must not show a
-    “Slack thread” card or Catch Up claim that Jarvis started a Slack conversation.
+    “Slack thread” card or Catch Up claim that Hound started a Slack conversation.
     """
     if not thread or not isinstance(thread, dict):
         return False
@@ -376,11 +384,15 @@ def is_live_slack_thread(thread: Optional[dict]) -> bool:
 
 
 def is_slack_followup_notification(title: Optional[str], body: Optional[str] = None) -> bool:
-    """Detect Jarvis Slack follow-up notifications (legacy + current copy)."""
+    """Detect Hound / Rook Slack follow-up notifications (legacy Jarvis copy too)."""
     blob = f"{title or ''} {body or ''}".lower()
     if "slack thread" in blob:
         return True
     if "messaged you on slack" in blob:
+        return True
+    if "hound" in blob and "slack" in blob:
+        return True
+    if "rook" in blob and "slack" in blob:
         return True
     if "jarvis" in blob and "slack" in blob:
         return True
@@ -394,6 +406,7 @@ async def open_ignored_task_thread(
     assigner: Optional[dict],
     now: datetime,
     post_webhook=None,
+    token: Optional[str] = None,
 ) -> Optional[dict]:
     """Open a Slack DM follow-up after ignored pings.
 
@@ -403,7 +416,7 @@ async def open_ignored_task_thread(
     """
     if not should_open_slack_followup(task):
         return None
-    token = slack_bot_token()
+    token = (token or slack_bot_token() or "").strip()
     if not token:
         return None
     iso = now.isoformat() if hasattr(now, "isoformat") else str(now)
@@ -420,7 +433,12 @@ async def open_ignored_task_thread(
         channel_id = await open_dm_channel(token, slack_user_id)
     if not channel_id:
         return None
-    posted = await post_slack_message(token, channel_id, text)
+    try:
+        from hound import chase_blocks
+        blocks = chase_blocks(task, text)
+    except Exception:
+        blocks = None
+    posted = await post_slack_message(token, channel_id, text, blocks=blocks)
     if not posted.get("ok"):
         return None
     thread_ts = posted.get("ts")

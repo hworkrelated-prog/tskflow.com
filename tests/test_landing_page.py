@@ -20,6 +20,7 @@ def test_landing_is_a_tool_not_a_pitch():
     assert 'data-testid="landing-pain"' not in src
     assert 'data-testid="landing-sim"' not in src
     assert 'data-testid="landing-brand"' in src
+    assert "TskFlowLogo" in src
     assert "Unbiassly, Inc." in src
     assert 'to="/legal"' in src
     assert 'data-testid="landing-toolbar"' in src
@@ -38,6 +39,12 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "LandingFlowIcons" in src
     assert "LandingReportFlip" in src
     assert "LandingIntegrations" in src
+    assert "LandingMeetAssign" in src
+    assert "LandingSlackReact" in src
+    assert "LandingPileUp" in src
+    assert "LandingChase" in src
+    assert "LandingSolve" in src
+    assert "LandingFounder" in src
     assert "What needs to get done?" not in src
     assert "Who should own this?" not in src
 
@@ -315,10 +322,18 @@ def test_landing_story_is_shown_not_told():
     flow = (FRONT / "components" / "LandingFlowIcons.js").read_text(encoding="utf-8")
 
     assert "Ask. Who. Send." in landing
+    assert "Stop chasing." in landing
+    assert "They already own it." in landing
+    assert "Get to Know the founder" in landing
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "landing-who-input" in css
-    assert "Ask engineering to record a demo of the fix by tomorrow" in hero
+    assert "Ask Maya to send the Q3 forecast by Friday" in hero
+    assert "Ask engineering to record a demo of the fix by tomorrow" not in hero
+    assert "landing-hero-steps" in hero
+    assert "landing-fly-kicker" in hero
+    assert "is-done" in hero
+    assert "PHASE_I" in hero
     assert "landing-nametag" in hero
     assert "landing-clockchip" in hero
     assert "useReducedMotion" in hero
@@ -332,11 +347,66 @@ def test_landing_story_is_shown_not_told():
     assert "Done" in reports and "Stalled" in reports and "Moving" in reports
     assert "landing-integ-${item.id}" in integ
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
+    assert "HoundScene" in integ and "MotiveScene" in integ
+    assert "item.scene === id" in integ
+    assert "You send it. We run after them until it is done." not in landing
+    assert "We email first, then run after them." not in landing
+    assert "landing-send-visual" in landing
+    assert "landing-integ-story" in css
+    assert "hound-dash" in css
+    assert "motive-stamp" in css
     assert "landing-flow-${step.id}" in flow
     assert "Ask" in flow and "Who" in flow and "Send" in flow
+    assert "landing-flow-arrow" in flow
     assert "prefers-reduced-motion" in css
     assert "landing-live-pulse" in css
     assert "landing-sticky--amber" in css
     assert "Asks bounce around Slack." not in landing
     assert "The robot delivers" not in landing
+    meet = (FRONT / "components" / "LandingMeetAssign.js").read_text(encoding="utf-8")
+    slack = (FRONT / "components" / "LandingSlackReact.js").read_text(encoding="utf-8")
+    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
+    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
+    solve = (FRONT / "components" / "LandingSolve.js").read_text(encoding="utf-8")
+    founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
+    assert "Forecast. Friday." in meet
+    assert "landing-meet-agree" in meet
+    assert "landing-meet-bar" in meet
+    assert "landing-slack-reactions" in slack
+    assert "landing-slack-images" in slack
+    assert "landing-pipeline.svg" in slack
+    assert "landing-pile" in pile
+    assert "pipeline.png" in chase
+    assert "landing-half-done" in chase
+    assert "landing-due-miss" in silent
+    assert "landing-solve-calendar" in solve
+    assert "landing-solve-conflict" in solve
+    assert "landing-group-avg" in solve
+    assert "Hashim Mahmood" in founder
+    assert "/founder.jpg" in founder
+    assert "landing-founder-linkedin" in founder
+    assert 'data-testid="landing-tab-founder"' in landing
+
+
+def test_tskflow_logo_is_a_lockup_not_plain_type():
+    """Mark + Tsk/Flow wordmark, reused on splash, landing, and chrome."""
+    logo = (FRONT / "components" / "TskFlowLogo.js").read_text(encoding="utf-8")
+    css = (FRONT / "index.css").read_text(encoding="utf-8")
+    splash = (ROOT / "frontend" / "public" / "index.html").read_text(encoding="utf-8")
+    mark = (ROOT / "frontend" / "public" / "favicon.svg").read_text(encoding="utf-8")
+    lockup = (ROOT / "frontend" / "public" / "logo.svg").read_text(encoding="utf-8")
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    hub = (FRONT / "pages" / "TaskHub.js").read_text(encoding="utf-8")
+    login = (FRONT / "pages" / "LoginPage.js").read_text(encoding="utf-8")
+    assert "tskflow-logo-flow" in logo
+    assert "TskFlowMark" in logo
+    assert "M8 16.7" in logo
+    assert "M8 16.7" in mark
+    assert "logo.svg" in splash
+    assert 'content: "TskFlow"' not in splash
+    assert "tskflow-logo--dark" in css
+    assert "TskFlowLogo" in landing
+    assert "TskFlowLogo" in hub
+    assert "TskFlowLogo" in login
+    assert "Tsk" in lockup and "Flow" in lockup
 

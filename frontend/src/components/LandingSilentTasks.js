@@ -2,10 +2,10 @@ import React, { useRef } from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 
 const TASKS = [
-    { id: 't1', who: 'Maya', title: 'Forecast', silent: true },
+    { id: 't1', who: 'Maya', title: 'Forecast', silent: true, due: 'Friday' },
     { id: 't2', who: 'Chris', title: 'Q3 recap', silent: true },
-    { id: 't3', who: 'Priya', title: 'Demo clip', silent: false },
-    { id: 't4', who: 'Jordan', title: 'SFDC hygiene', silent: true },
+    { id: 't3', who: 'Priya', title: 'Discovery', silent: false },
+    { id: 't4', who: 'Jordan', title: 'SFDC', silent: true },
     { id: 't5', who: 'Alex', title: 'Call log', silent: true },
     { id: 't6', who: 'Sam', title: 'Deck', silent: true },
 ];
@@ -30,7 +30,9 @@ export default function LandingSilentTasks() {
             data-testid="landing-silent-tasks"
             aria-label="Gone quiet"
         >
-            <p className="landing-story-kicker">Gone quiet.</p>
+            <p className="sr-only">Gone quiet.</p>
+            <div className="landing-silent-stage">
+            <span className="hound-runner landing-silent-runner" aria-hidden />
             <div className="landing-silent-grid">
                 {TASKS.map((task, i) => (
                     <SilentCard
@@ -41,6 +43,7 @@ export default function LandingSilentTasks() {
                         reduce={reduce}
                     />
                 ))}
+            </div>
             </div>
         </section>
     );
@@ -63,6 +66,11 @@ const SilentCard = ({ task, index, fade, reduce }) => {
         >
             <span className="landing-nametag landing-nametag--sm">{task.who}</span>
             <span className="landing-mini-title">{task.title}</span>
+            {task.due ? (
+                <span className="landing-clockchip landing-clockchip--sm is-overdue" data-testid="landing-due-miss">
+                    {task.due}
+                </span>
+            ) : null}
             {!task.silent ? <span className="landing-live-dot" aria-hidden /> : null}
         </motion.article>
     );

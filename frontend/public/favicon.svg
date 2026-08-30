@@ -1,22 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Tskflow">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="TskFlow">
   <defs>
-    <linearGradient id="bg" x1="12%" y1="0%" x2="90%" y2="100%">
-      <stop offset="0%" stop-color="#2dd4bf"/>
-      <stop offset="55%" stop-color="#14b8a6"/>
-      <stop offset="100%" stop-color="#0d9488"/>
+    <linearGradient id="tf-mark" x1="3" y1="1" x2="30" y2="31" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5eead4"/>
+      <stop offset="0.48" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="tf-shine" x1="16" y1="0" x2="16" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-
-  <!-- Modern squircle -->
-  <rect width="128" height="128" rx="32" fill="url(#bg)"/>
-
-  <!-- Crisp bold check — high contrast, no fluff -->
+  <rect width="32" height="32" rx="9" fill="url(#tf-mark)"/>
+  <rect width="32" height="32" rx="9" fill="url(#tf-shine)"/>
+  <!-- Check that keeps moving: the finishing stroke becomes a current. -->
   <path
     fill="none"
-    stroke="#ffffff"
-    stroke-width="15"
+    stroke="#fff"
+    stroke-width="2.7"
     stroke-linecap="round"
     stroke-linejoin="round"
-    d="M36 66 L55 86 L94 44"
+    d="M8 16.7 13.2 22 19.1 13.6c2.4-3.4 6.2 0.2 9.4-3.4"
   />
 </svg>
