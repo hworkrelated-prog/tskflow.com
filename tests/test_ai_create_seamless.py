@@ -88,6 +88,8 @@ def test_exited_prompts_save_as_header_drafts():
     toolbar = hub[hub.index("{user?.name}") : hub.index("dashboard-panels")]
     assert 'data-testid="drafts-compact"' in toolbar
     assert 'data-testid="drafts-popover"' in toolbar
+    assert 'data-testid="drafts-select"' in toolbar
+    assert 'data-testid="drafts-bulk-delete"' in toolbar
     assert 't.status !== \'Draft\'' in hub or 't.status !== "Draft"' in hub
 
 

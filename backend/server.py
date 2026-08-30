@@ -9609,6 +9609,33 @@ async def list_task_drafts(current_user: dict = Depends(get_current_user), sessi
     return {"drafts": docs, "sessions": sessions}
 
 
+class BulkTranscriptDraftDelete(BaseModel):
+    ids: Optional[List[str]] = None
+    session_ids: Optional[List[str]] = None
+
+
+@api_router.post("/task-drafts/bulk-delete")
+async def bulk_delete_transcript_drafts(
+    body: BulkTranscriptDraftDelete, current_user: dict = Depends(get_current_user)
+):
+    """Delete transcript drafts by id and/or whole leftover sessions."""
+    clauses = []
+    if body.ids:
+        clauses.append({"id": {"$in": body.ids}})
+    if body.session_ids:
+        session_ids = [s for s in body.session_ids if s and s != "legacy"]
+        if session_ids:
+            clauses.append({"session_id": {"$in": session_ids}})
+        if "legacy" in (body.session_ids or []):
+            clauses.append({"$or": [{"session_id": {"$in": [None, ""]}}, {"session_id": {"$exists": False}}]})
+    if not clauses:
+        return {"ok": True, "deleted_count": 0}
+    result = await db.transcript_drafts.delete_many(
+        {"created_by": current_user["id"], "status": "Draft", "$or": clauses}
+    )
+    return {"ok": True, "deleted_count": result.deleted_count}
+
+
 @api_router.delete("/task-drafts/{draft_id}")
 async def delete_task_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
     await db.transcript_drafts.delete_one({"id": draft_id, "created_by": current_user["id"]})
@@ -10345,6 +10372,22 @@ async def _background_generate_all_recurring():
 # ==========================================================================
 # DELETE DRAFT
 # ==========================================================================
+
+@api_router.post("/tasks/drafts/bulk-delete")
+async def bulk_delete_draft_tasks(task_ids: List[str], current_user: dict = Depends(get_current_user)):
+    """Hard-delete the current user's draft tasks. Live tasks are ignored."""
+    deleted_count = 0
+    for task_id in task_ids or []:
+        draft = await db.tasks.find_one(
+            {"id": task_id, "status": "Draft", "created_by": current_user["id"]},
+            {"_id": 0},
+        )
+        if not draft:
+            continue
+        await db.tasks.delete_one({"id": task_id})
+        deleted_count += 1
+    return {"ok": True, "deleted_count": deleted_count}
+
 
 @api_router.delete("/tasks/drafts/{task_id}")
 async def delete_draft_task(task_id: str, current_user: dict = Depends(get_current_user)):
