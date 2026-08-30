@@ -402,4 +402,3 @@ def test_tskflow_logo_is_a_lockup_not_plain_type():
     assert "TskFlowLogo" in login
     assert "Tsk" in lockup and "Flow" in lockup
 
-
