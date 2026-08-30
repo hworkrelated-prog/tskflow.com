@@ -4,6 +4,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL || ''}/api`;
 
 let currentAudio = null;
 let currentUrl = null;
+let currentUtterance = null;
 let speakGen = 0;
 
 // Tiny silent wav so play() stays unlocked after the TTS fetch.
@@ -53,6 +54,11 @@ export const stopChatGptVoice = () => {
         URL.revokeObjectURL(currentUrl);
         currentUrl = null;
     }
+    if (currentUtterance) {
+        currentUtterance.onend = null;
+        currentUtterance.onerror = null;
+        currentUtterance = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
     }
@@ -63,15 +69,39 @@ const speakBrowserFallback = (text, { onEnd, onError } = {}) => {
         onError?.();
         return;
     }
-    const u = new window.SpeechSynthesisUtterance(text);
-    const voice = pickChatGptLikeVoice();
-    if (voice) u.voice = voice;
-    u.rate = 0.96;
-    u.pitch = 1.04;
-    u.volume = 1;
-    u.onend = () => onEnd?.();
-    u.onerror = () => onError?.();
-    window.speechSynthesis.speak(u);
+    const synth = window.speechSynthesis;
+    let started = false;
+    const start = () => {
+        if (started) return;
+        started = true;
+        const u = new window.SpeechSynthesisUtterance(text);
+        currentUtterance = u;
+        const voice = pickChatGptLikeVoice();
+        if (voice) u.voice = voice;
+        u.rate = 0.96;
+        u.pitch = 1.04;
+        u.volume = 1;
+        u.onend = () => {
+            if (currentUtterance !== u) return;
+            currentUtterance = null;
+            onEnd?.();
+        };
+        u.onerror = (event) => {
+            if (currentUtterance !== u) return;
+            const why = event?.error || '';
+            if (why === 'interrupted' || why === 'canceled') return;
+            currentUtterance = null;
+            onError?.();
+        };
+        synth.speak(u);
+    };
+    if ((synth.getVoices() || []).length) {
+        start();
+        return;
+    }
+    const onVoices = () => start();
+    synth.addEventListener?.('voiceschanged', onVoices, { once: true });
+    setTimeout(start, 300);
 };
 
 /**
