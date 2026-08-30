@@ -983,6 +983,16 @@ html:has(body.landing-active) {
     color: rgba(255, 255, 255, 0.82);
 }
 .landing-page .landing-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 3rem;
+    padding: 0 2rem;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
     background: #2dd4bf !important;
     color: #042f2e !important;
     border: 0 !important;
@@ -991,6 +1001,11 @@ html:has(body.landing-active) {
 .landing-page .landing-cta:hover {
     background: #5eead4 !important;
     color: #042f2e !important;
+}
+.landing-page .landing-cta:disabled {
+    opacity: 0.55;
+    cursor: default;
+    box-shadow: none;
 }
 
 @media (max-width: 40rem) {

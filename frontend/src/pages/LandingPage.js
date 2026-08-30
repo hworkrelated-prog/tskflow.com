@@ -226,16 +226,16 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
                             {channel === 'slack' ? 'Email first. Slack later.' : 'Send'}
                         </p>
                     </div>
-                    <Button
+                    <button
                         type="button"
-                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-7 shrink-0 landing-cta"
+                        className="landing-cta shrink-0"
                         onClick={sendIt}
                         disabled={sending}
                         data-testid="landing-send-it"
                     >
-                        <Send className="w-4 h-4 mr-2" />
+                        <Send className="w-4 h-4" />
                         {sending ? 'Opening…' : 'Send it'}
-                    </Button>
+                    </button>
                 </div>
             </section>
             </div>
@@ -322,14 +322,14 @@ const LandingPage = () => {
                 <section className="landing-hero-visual" data-testid="landing-hero">
                     <h1 className="landing-hero-line">Ask. Who. Send.</h1>
                     <LandingHeroAsk />
-                    <Button
+                    <button
                         type="button"
-                        className="rounded-full bg-teal-400 hover:bg-teal-300 text-slate-950 h-12 px-8 mt-8 landing-cta"
+                        className="landing-cta mt-8"
                         onClick={scrollToComposer}
                         data-testid="landing-hero-cta"
                     >
                         Send it
-                    </Button>
+                    </button>
                 </section>
 
                 <LandingSilentTasks />
