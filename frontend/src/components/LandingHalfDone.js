@@ -17,10 +17,10 @@ export default function LandingHalfDone() {
 }
 
 function HalfFrame({ progress }) {
-    const weakOp = useTransform(progress, [0.08, 0.28, 0.62, 0.78], [0, 1, 1, 0.35]);
-    const flagOp = useTransform(progress, [0.58, 0.78], [0, 1]);
-    const flagScale = useTransform(progress, [0.58, 0.82], [0.6, 1]);
-    const flagRot = useTransform(progress, [0.58, 0.82], [-18, -8]);
+    const weakOp = useTransform(progress, [0.06, 0.22], [0, 1]);
+    const flagOp = useTransform(progress, [0.52, 0.72], [0, 1]);
+    const flagScale = useTransform(progress, [0.52, 0.78], [0.6, 1]);
+    const flagRot = useTransform(progress, [0.52, 0.78], [-18, -8]);
 
     return (
         <div className="landing-half-stage" data-testid="landing-half-done">

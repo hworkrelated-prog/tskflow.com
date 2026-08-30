@@ -1327,7 +1327,7 @@ html:has(body.landing-active) {
 }
 .landing-tray-stack {
     position: relative;
-    height: 14.5rem;
+    height: 17.5rem;
 }
 .landing-tray-stack--spread {
     height: 17.5rem;
@@ -1524,10 +1524,19 @@ html:has(body.landing-active) {
 .landing-week-day.is-open {
     color: #99f6e4;
 }
-.landing-cal-slot {
+.landing-week .landing-cal-slot {
     width: 100%;
-    height: 1.85rem;
-    border-radius: 8px;
+    height: 2.15rem;
+}
+.landing-week .landing-cal-slot.is-busy {
+    background: repeating-linear-gradient(-45deg, rgba(255,255,255,0.14) 0 5px, rgba(255,255,255,0.04) 5px 10px);
+}
+.landing-week .landing-cal-slot.is-due {
+    background: rgba(45, 212, 191, 0.32);
+    box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.55);
+}
+.landing-week-day.is-open .landing-cal-slot.is-due {
+    box-shadow: 0 0 16px rgba(45, 212, 191, 0.35);
 }
 .landing-cal-wrap {
     display: flex;

@@ -7,14 +7,14 @@ import { CAST } from '@/lib/landingCast';
 
 const TILES = [
     { person: CAST.hashim, you: true },
-    { person: CAST.maya, agree: '✅', at: 0.28 },
-    { person: CAST.chris, agree: '👍', at: 0.34 },
-    { person: CAST.priya, agree: '👍', at: 0.4 },
+    { person: CAST.maya, agree: '✅', at: 0.16 },
+    { person: CAST.chris, agree: '👍', at: 0.22 },
+    { person: CAST.priya, agree: '👍', at: 0.28 },
 ];
 
 const REACTIONS = [
-    { id: 'ok', mark: '✅', n: 3, at: 0.78 },
-    { id: 'up', mark: '👍', n: 4, at: 0.84 },
+    { id: 'ok', mark: '✅', n: 3, at: 0.64 },
+    { id: 'up', mark: '👍', n: 4, at: 0.72 },
 ];
 
 /** Beat 2: assign live in Meet, then the same task lands in Slack. */
@@ -35,8 +35,7 @@ function AssignFrames({ progress }) {
     const meetY = useTransform(progress, [0, 0.5, 0.6], [0, 0, -24]);
     const slackOp = useTransform(progress, [0.5, 0.6, 1], [0, 1, 1]);
     const slackY = useTransform(progress, [0.5, 0.62], [28, 0]);
-    const askOp = useTransform(progress, [0.12, 0.22], [0, 1]);
-    const mosaicOp = useTransform(progress, [0.62, 0.74], [0, 1]);
+    const mosaicOp = useTransform(progress, [0.58, 0.68], [0, 1]);
 
     return (
         <BeatStage className="landing-assign-stage">
@@ -54,9 +53,9 @@ function AssignFrames({ progress }) {
                         <MeetTile key={tile.person.id} tile={tile} progress={progress} />
                     ))}
                 </div>
-                <motion.p className="landing-meet-ask" data-testid="landing-meet-ask" style={{ opacity: askOp }}>
+                <p className="landing-meet-ask" data-testid="landing-meet-ask">
                     Follow up with lead.
-                </motion.p>
+                </p>
                 <div className="landing-meet-bar" data-testid="landing-meet-bar" aria-hidden>
                     <span className="landing-meet-ctl"><Mic className="w-4 h-4" /></span>
                     <span className="landing-meet-ctl"><Video className="w-4 h-4" /></span>

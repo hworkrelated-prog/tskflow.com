@@ -5,10 +5,10 @@ import LandingCastMark, { StoryTask } from '@/components/LandingCastMark';
 import { CAST, TASKS } from '@/lib/landingCast';
 
 const DROP = [
-    { at: 0.08, restY: 54, restR: -2, restX: 0, z: 1 },
-    { at: 0.28, restY: 36, restR: 3, restX: 6, z: 2 },
-    { at: 0.48, restY: 18, restR: -3, restX: -5, z: 3 },
-    { at: 0.68, restY: 0, restR: 2, restX: 4, z: 4 },
+    { at: 0.06, restY: 86, restR: -2.5, restX: -2, z: 1 },
+    { at: 0.24, restY: 56, restR: 3.5, restX: 8, z: 2 },
+    { at: 0.42, restY: 28, restR: -3, restX: -6, z: 3 },
+    { at: 0.6, restY: 0, restR: 2.2, restX: 5, z: 4 },
 ];
 
 /** Beat 3: Maya's tray. Task 1 lands, then 2, 3, 4 stack on top before it's touched. */
