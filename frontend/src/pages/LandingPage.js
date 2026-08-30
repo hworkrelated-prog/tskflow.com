@@ -10,16 +10,13 @@ import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingVoiceGuide from '@/components/LandingVoiceGuide';
-import LandingHeroAsk from '@/components/LandingHeroAsk';
-import LandingMeetAssign from '@/components/LandingMeetAssign';
-import LandingSlackReact from '@/components/LandingSlackReact';
+import LandingAssignBeat from '@/components/LandingAssignBeat';
 import LandingPileUp from '@/components/LandingPileUp';
-import LandingSilentTasks from '@/components/LandingSilentTasks';
+import LandingDeadline from '@/components/LandingDeadline';
 import LandingChase from '@/components/LandingChase';
-import LandingFlowIcons from '@/components/LandingFlowIcons';
-import LandingScrollChaos from '@/components/LandingScrollChaos';
-import LandingReportFlip from '@/components/LandingReportFlip';
-import LandingSolve from '@/components/LandingSolve';
+import LandingHalfDone from '@/components/LandingHalfDone';
+import LandingTurn from '@/components/LandingTurn';
+import LandingPeace from '@/components/LandingPeace';
 import LandingIntegrations from '@/components/LandingIntegrations';
 import LandingFounder from '@/components/LandingFounder';
 import { rememberGuestSession } from '@/lib/guestSession';
@@ -301,11 +298,6 @@ const LandingPage = () => {
         if (step === 'ask') window.setTimeout(() => inputRef.current?.focus(), 280);
     };
 
-    const scrollToComposer = () => {
-        document.getElementById('landing-tryit')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 360);
-    };
-
     return (
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
@@ -337,7 +329,7 @@ const LandingPage = () => {
                             onClick={() => setTab('founder')}
                             data-testid="landing-tab-founder"
                         >
-                            Get to Know the founder
+                            Get to Know the Founder
                         </button>
                     </nav>
                     <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -366,30 +358,19 @@ const LandingPage = () => {
                     <LandingFounder />
                 ) : (
                     <>
-                <section className="landing-hero-visual" data-testid="landing-hero">
-                    <h1 className="landing-hero-line">Stop chasing.</h1>
-                    <p className="landing-hero-pain" data-testid="landing-pain-line">They already own it.</p>
-                    <p className="landing-hero-flow">Ask. Who. Send.</p>
-                    <LandingHeroAsk />
-                    <button
-                        type="button"
-                        className="landing-cta mt-8"
-                        onClick={scrollToComposer}
-                        data-testid="landing-hero-cta"
-                    >
-                        Send it
-                    </button>
+                <section className="landing-hero-visual landing-hero-pain-only" data-testid="landing-hero">
+                    <h1 className="landing-hero-line" data-testid="landing-pain-line">
+                        Managers waste hours chasing people for work they already agreed to do.
+                    </h1>
                 </section>
 
-                <LandingMeetAssign />
-                <LandingSlackReact />
+                <LandingAssignBeat />
                 <LandingPileUp />
-                <LandingSilentTasks />
+                <LandingDeadline />
                 <LandingChase />
-                <LandingScrollChaos />
-                <LandingSolve />
-                <LandingReportFlip />
-                <LandingFlowIcons />
+                <LandingHalfDone />
+                <LandingTurn />
+                <LandingPeace />
                 <LandingIntegrations />
 
                 <section className="landing-final" data-testid="landing-final">

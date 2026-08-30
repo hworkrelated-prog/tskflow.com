@@ -1,63 +1,55 @@
-import React, { useRef } from 'react';
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import React from 'react';
+import { motion, useTransform } from 'framer-motion';
+import LandingPinBeat from '@/components/LandingPinBeat';
+import LandingCastMark, { StoryTask } from '@/components/LandingCastMark';
+import { CAST, TASKS } from '@/lib/landingCast';
 
-const STACK = [
-    { id: 'a', title: 'Forecast', who: 'Maya', tone: 'teal', open: true },
-    { id: 'b', title: 'Call log', who: 'Maya', tone: 'amber' },
-    { id: 'c', title: 'Deck', who: 'Maya', tone: 'sky' },
-    { id: 'd', title: 'SFDC', who: 'Maya', tone: 'rose' },
+const DROP = [
+    { at: 0.08, restY: 54, restR: -2, restX: 0, z: 1 },
+    { at: 0.28, restY: 36, restR: 3, restX: 6, z: 2 },
+    { at: 0.48, restY: 18, restR: -3, restX: -5, z: 3 },
+    { at: 0.68, restY: 0, restR: 2, restX: 4, z: 4 },
 ];
 
-/** First task, then another, then another. */
+/** Beat 3: Maya's tray. Task 1 lands, then 2, 3, 4 stack on top before it's touched. */
 export default function LandingPileUp() {
-    const reduce = useReducedMotion();
-    const ref = useRef(null);
-    const { scrollYProgress } = useScroll({
-        target: ref,
-        offset: ['start 0.85', 'center 0.35'],
-    });
-
     return (
-        <section
-            ref={ref}
-            className="landing-story landing-story--scrub"
-            data-testid="landing-pile"
-            aria-label="Then another"
-        >
-            <div className="landing-pile-stage">
-                {STACK.map((card, i) => (
-                    <PileCard
-                        key={card.id}
-                        card={card}
-                        index={i}
-                        progress={scrollYProgress}
-                        reduce={reduce}
-                    />
-                ))}
-            </div>
-        </section>
+        <LandingPinBeat testId="landing-pile" label="Pileup" spans={2.3}>
+            {(progress) => <Tray progress={progress} />}
+        </LandingPinBeat>
     );
 }
 
-const PileCard = ({ card, index, progress, reduce }) => {
-    const start = 0.08 + index * 0.18;
-    const y = useTransform(progress, [start, start + 0.28], [90 + index * 18, index * 18]);
-    const opacity = useTransform(progress, [start, start + 0.16], [0, 1]);
-    const rotate = useTransform(progress, [start, start + 0.28], [8 - index * 2, index * 1.4 - 2]);
+function Tray({ progress }) {
+    return (
+        <div className="landing-tray" data-testid="landing-pile-stage">
+            <header className="landing-tray-head">
+                <LandingCastMark who="maya" />
+                <span>{CAST.maya.name}</span>
+            </header>
+            <div className="landing-tray-stack">
+                {TASKS.map((task, i) => (
+                    <DropCard key={task.id} task={task} drop={DROP[i]} progress={progress} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function DropCard({ task, drop, progress }) {
+    const y = useTransform(progress, [drop.at, drop.at + 0.16], [-120, drop.restY]);
+    const opacity = useTransform(progress, [drop.at, drop.at + 0.1], [0, 1]);
+    const rotate = useTransform(progress, [drop.at, drop.at + 0.16], [10, drop.restR]);
+    const x = useTransform(progress, [drop.at, drop.at + 0.16], [0, drop.restX]);
+    const scale = useTransform(progress, [drop.at, drop.at + 0.12], [0.92, 1]);
 
     return (
-        <motion.article
-            className={`landing-pile-card landing-pile-card--${card.tone}`}
-            style={reduce ? { top: index * 18 } : { y, opacity, rotate }}
-            data-testid={`landing-pile-${card.id}`}
+        <motion.div
+            className="landing-tray-card"
+            style={{ y, opacity, rotate, x, scale, zIndex: drop.z }}
+            data-testid={`landing-pile-${task.id}`}
         >
-            <span className="landing-nametag landing-nametag--sm">{card.who}</span>
-            <span className="landing-mini-title">{card.title}</span>
-            {card.open ? (
-                <span className="landing-half landing-half--mini" aria-hidden>
-                    <span className="landing-half-bar" style={{ width: '18%' }} />
-                </span>
-            ) : null}
-        </motion.article>
+            <StoryTask task={task} />
+        </motion.div>
     );
-};
+}
