@@ -117,6 +117,11 @@ def test_copy_is_human_not_a_system_banner():
     assert "Open the task" in html
     assert "Just reply to this email" in html
     assert "TSKFLOW REMINDER" not in html
+    # Task card first, then due/status, then how to reply.
+    title_at = html.lower().index("finish outreach training")
+    asked_at = html.lower().index("asked you to take this on")
+    reply_at = html.lower().index("reply done")
+    assert title_at < asked_at < reply_at
 
 
 def test_reply_token_roundtrip():
@@ -254,6 +259,10 @@ def test_copy_never_greets_email_or_lets_render_ask():
     )
     assert "Hey Email" not in html
     assert "asked you to handle" not in html
+    title_at = html.lower().index("preview assigned to hashim")
+    open_at = html.lower().index("this is still open")
+    reply_at = html.lower().index("reply done")
+    assert title_at < open_at < reply_at
     ignored = ignored_guidance_copy(
         {"title": "Preview assigned to Hashim", "due_date": "2026-08-29T17:00:00"},
         "Email",

@@ -374,6 +374,7 @@ def render_followup_email(
     app_url: str,
     reply_addr: str,
 ) -> str:
+    """Greeting, the task, then due/status and how to reply. Task is never last."""
     title = html.escape(task.get("title") or "this task")
     first = first_name(assignee_name)
     raw_greeting = (wording.get("greeting") or (f"Hey {first}," if first else "")).strip()
@@ -390,10 +391,10 @@ def render_followup_email(
     <div style="max-width:560px;margin:0 auto;padding:28px 20px;">
       <div style="background:#fff;border-radius:18px;padding:28px 28px 22px;box-shadow:0 10px 30px -18px rgba(15,23,42,0.28);">
         {greeting_html}
-        <p style="margin:0 0 18px 0;color:#374151;font-size:15px;line-height:1.65;">{body}</p>
-        <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;margin:0 0 22px 0;">
+        <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;margin:0 0 18px 0;">
           <p style="margin:0;color:#0f172a;font-size:16px;font-weight:600;">{title}</p>
         </div>
+        <p style="margin:0 0 18px 0;color:#374151;font-size:15px;line-height:1.65;">{body}</p>
         <p style="margin:0 0 22px 0;">
           <a href="{link}" style="display:inline-block;background:#0f172a;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:600;">Open the task</a>
         </p>
