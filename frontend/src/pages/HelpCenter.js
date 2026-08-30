@@ -77,7 +77,8 @@ const topics = [
         body: (
             <div className="text-sm space-y-2">
                 <p><strong>Install?</strong> No. Browser only.</p>
-                <p><strong>Ignored?</strong> Two pings, then Jarvis follows up.</p>
+                <p><strong>Ignored?</strong> Two pings, then Hound follows up.</p>
+                <p><strong>Rook is in the prompt.</strong></p>
                 <p><strong>Not on Tskflow?</strong> Assign by email.</p>
                 <p><strong>Privacy?</strong> You see work you assigned.</p>
                 <p><strong>Safari?</strong> Voice: Chrome or Edge.</p>

@@ -5,6 +5,7 @@
  */
 export function googleCallbackApiPath(pathname = '') {
     if (String(pathname).includes('sheets')) return '/api/auth/google/sheets/callback';
+    if (String(pathname).includes('meet')) return '/api/auth/google/meet/callback';
     // Sign-in is a separate purpose from the Calendar/Sheets grants.
     if (String(pathname).includes('/login/')) return '/api/auth/google/login/callback';
     return '/api/auth/google/callback';

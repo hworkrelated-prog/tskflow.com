@@ -48,6 +48,16 @@ const TermsOfService = () => {
                     </section>
 
                     <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">4a. Google Meet transcripts</h2>
+                        <p>If you connect Meet, Tskflow loads transcripts from meetings you organized, so you and co-hosts can decide the asks. Only the organizer can send the final task list. Disconnect anytime from Settings.</p>
+                    </section>
+
+                    <section>
+                        <h2 className="text-2xl font-semibold text-slate-900">4b. Salesforce (Motive)</h2>
+                        <p>If you connect Salesforce, Tskflow reads and writes sales activity (calls, opportunities, forecast fields) as proof that an ask happened, using the Motive Sales Cloud mapping. Disconnect anytime from Settings.</p>
+                    </section>
+
+                    <section>
                         <h2 className="text-2xl font-semibold text-slate-900">5. Your Content</h2>
                         <p>You retain ownership of the tasks and content you create. You grant us a limited license to store and process this content solely to provide the Service.</p>
                     </section>

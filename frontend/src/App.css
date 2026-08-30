@@ -970,6 +970,156 @@ html:has(body.landing-active) {
     color: rgba(255, 255, 255, 0.72);
     background: rgba(10, 16, 15, 0.7);
 }
+.landing-integ-story {
+    gap: 1.25rem;
+}
+.landing-integ-stage {
+    min-height: 11.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.integ-mark {
+    display: block;
+    margin: 0 auto 0.85rem;
+    font-family: Outfit, sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(45, 212, 191, 0.85);
+    text-align: center;
+}
+.landing-integ-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+}
+.landing-integ-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    border: 0;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+}
+.landing-integ-dot.is-on { background: #2dd4bf; }
+.hound-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin-bottom: 0.85rem;
+}
+.hound-face {
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+.hound-face.is-silent { filter: grayscale(1); opacity: 0.45; }
+.hound-face.is-live { box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.45); }
+.hound-runner {
+    width: 1.35rem;
+    height: 0.7rem;
+    border-radius: 999px 4px 999px 4px;
+    background: #2dd4bf;
+    margin-left: 0.25rem;
+    box-shadow: 0 0 16px rgba(45, 212, 191, 0.55);
+}
+.hound-slack { display: flex; justify-content: center; gap: 0.4rem; flex-wrap: wrap; }
+.hound-chip {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.7);
+}
+.hound-chip.is-go {
+    background: #2dd4bf;
+    color: #042f2e;
+    border-color: transparent;
+}
+.motive-board { display: flex; gap: 0.65rem; justify-content: center; }
+.motive-card {
+    width: 4.6rem;
+    height: 5.2rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(12, 18, 16, 0.9);
+    padding: 0.7rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+}
+.motive-bar {
+    height: 0.35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+}
+.motive-card.is-hit { border-color: rgba(110, 231, 183, 0.55); }
+.motive-card.is-hit .motive-bar { background: #6ee7b7; }
+.motive-check {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: #6ee7b7;
+    box-shadow: 0 0 12px rgba(110, 231, 183, 0.7);
+}
+.meet-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: min(16rem, 80vw);
+    margin: 0 auto 0.8rem;
+}
+.meet-line {
+    display: block;
+    height: 0.38rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    transform-origin: left center;
+}
+.meet-chips { display: flex; justify-content: center; gap: 0.45rem; flex-wrap: wrap; }
+.meet-chip {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(45, 212, 191, 0.16);
+    color: #99f6e4;
+    border: 1px solid rgba(45, 212, 191, 0.28);
+}
+.meet-send {
+    display: block;
+    width: 2.4rem;
+    height: 2.4rem;
+    margin: 0.7rem auto 0;
+    border-radius: 999px;
+    background: #2dd4bf;
+    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5);
+    animation: meet-send-pulse 1.6s ease-out infinite;
+}
+@keyframes meet-send-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.45); }
+    70% { box-shadow: 0 0 0 12px rgba(45, 212, 191, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .meet-send { animation: none; }
+}
 
 .landing-final {
     padding: 1.5rem 1.25rem 3.5rem;
