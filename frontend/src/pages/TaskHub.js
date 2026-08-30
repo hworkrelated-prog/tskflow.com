@@ -140,6 +140,10 @@ const TaskHub = () => {
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedTasks, setSelectedTasks] = useState(new Set());
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [draftSelectMode, setDraftSelectMode] = useState(false);
+    const [selectedDrafts, setSelectedDrafts] = useState(new Set());
+    const [selectedTranscriptSessions, setSelectedTranscriptSessions] = useState(new Set());
+    const [draftDeleteLoading, setDraftDeleteLoading] = useState(false);
 
     // Full form is opened from the command bar (`/form`) or `?create=advanced`.
 
@@ -389,6 +393,66 @@ const TaskHub = () => {
             toast.success('Draft deleted');
         } catch (err) {
             toast.error('Failed to delete draft');
+        }
+    };
+
+    const toggleDraftSelection = (draftId, e) => {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        setSelectedDrafts((prev) => {
+            const next = new Set(prev);
+            if (next.has(draftId)) next.delete(draftId);
+            else next.add(draftId);
+            return next;
+        });
+    };
+
+    const toggleTranscriptSessionSelection = (sessionId, e) => {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        setSelectedTranscriptSessions((prev) => {
+            const next = new Set(prev);
+            if (next.has(sessionId)) next.delete(sessionId);
+            else next.add(sessionId);
+            return next;
+        });
+    };
+
+    const selectedDraftCount = selectedDrafts.size + selectedTranscriptSessions.size;
+
+    const selectAllDrafts = () => {
+        setSelectedDrafts(new Set(drafts.map((d) => d.id)));
+        setSelectedTranscriptSessions(new Set(transcriptSessions.map((s) => s.id)));
+    };
+
+    const cancelDraftSelection = () => {
+        setDraftSelectMode(false);
+        setSelectedDrafts(new Set());
+        setSelectedTranscriptSessions(new Set());
+    };
+
+    const handleBulkDeleteDrafts = async () => {
+        if (selectedDraftCount === 0) return;
+        if (!window.confirm(`Delete ${selectedDraftCount} draft${selectedDraftCount === 1 ? '' : 's'}?`)) return;
+        setDraftDeleteLoading(true);
+        try {
+            let deleted = 0;
+            if (selectedDrafts.size > 0) {
+                const res = await axios.post(`${API}/tasks/drafts/bulk-delete`, Array.from(selectedDrafts));
+                deleted += res.data?.deleted_count || selectedDrafts.size;
+            }
+            if (selectedTranscriptSessions.size > 0) {
+                const res = await axios.post(`${API}/task-drafts/bulk-delete`, {
+                    session_ids: Array.from(selectedTranscriptSessions),
+                });
+                deleted += res.data?.deleted_count || 0;
+            }
+            toast.success(`${deleted || selectedDraftCount} draft(s) deleted`);
+            cancelDraftSelection();
+            window.dispatchEvent(new CustomEvent('tskflow:drafts-changed'));
+            await fetchDrafts();
+        } catch (err) {
+            toast.error('Failed to delete drafts');
+        } finally {
+            setDraftDeleteLoading(false);
         }
     };
 
@@ -1356,14 +1420,71 @@ const TaskHub = () => {
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent align="end" className="w-80 p-2" data-testid="drafts-popover">
+                                    <div className="flex items-center gap-1 px-1 pb-1.5 mb-1 border-b border-black/5">
+                                        {draftSelectMode ? (
+                                            <>
+                                                <span className="text-[11px] text-slate-500 flex-1" data-testid="drafts-selected-count">
+                                                    {selectedDraftCount} selected
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className="text-[11px] text-slate-600 hover:text-slate-900 px-1.5 py-0.5"
+                                                    onClick={selectAllDrafts}
+                                                    data-testid="drafts-select-all"
+                                                >
+                                                    All
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="text-[11px] text-slate-600 hover:text-slate-900 px-1.5 py-0.5"
+                                                    onClick={cancelDraftSelection}
+                                                    data-testid="drafts-select-cancel"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    className="h-7 rounded-full px-2.5 text-[11px]"
+                                                    onClick={handleBulkDeleteDrafts}
+                                                    disabled={selectedDraftCount === 0 || draftDeleteLoading}
+                                                    data-testid="drafts-bulk-delete"
+                                                >
+                                                    <Trash2 className="w-3 h-3 mr-1" />
+                                                    {draftDeleteLoading ? '…' : 'Delete'}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-[11px] text-slate-500 flex-1">Saved drafts</span>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 text-[11px] text-slate-600 hover:text-slate-900 px-1.5 py-0.5"
+                                                    onClick={() => setDraftSelectMode(true)}
+                                                    data-testid="drafts-select"
+                                                >
+                                                    <CheckSquare className="w-3 h-3" />
+                                                    Select
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                     <div className="space-y-1.5 max-h-72 overflow-y-auto">
                                         {transcriptSessions.map((s) => (
                                             <div
                                                 key={`ts-${s.id}`}
-                                                className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs cursor-pointer hover:bg-indigo-100"
-                                                onClick={() => navigate(`/transcript?session=${encodeURIComponent(s.id)}`)}
+                                                className={`flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs cursor-pointer hover:bg-indigo-100 ${draftSelectMode && selectedTranscriptSessions.has(s.id) ? 'ring-1 ring-indigo-400' : ''}`}
+                                                onClick={(e) => (draftSelectMode ? toggleTranscriptSessionSelection(s.id, e) : navigate(`/transcript?session=${encodeURIComponent(s.id)}`))}
                                                 data-testid={`transcript-session-${s.id}`}
                                             >
+                                                {draftSelectMode && (
+                                                    <Checkbox
+                                                        checked={selectedTranscriptSessions.has(s.id)}
+                                                        onCheckedChange={() => toggleTranscriptSessionSelection(s.id)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        data-testid={`select-transcript-session-${s.id}`}
+                                                    />
+                                                )}
                                                 <div className="min-w-0 flex-1">
                                                     <p className="font-semibold text-slate-900 truncate">Transcript · {s.top_title || 'Session'}</p>
                                                     <p className="text-[10px] text-indigo-700">{s.remaining} left to knock out</p>
@@ -1373,10 +1494,18 @@ const TaskHub = () => {
                                         {drafts.map((draft) => (
                                             <div
                                                 key={draft.id}
-                                                className="relative flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs cursor-pointer hover:bg-amber-100 group/draft"
-                                                onClick={() => resumeDraft(draft)}
+                                                className={`relative flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs cursor-pointer hover:bg-amber-100 group/draft ${draftSelectMode && selectedDrafts.has(draft.id) ? 'ring-1 ring-amber-400' : ''}`}
+                                                onClick={(e) => (draftSelectMode ? toggleDraftSelection(draft.id, e) : resumeDraft(draft))}
                                                 data-testid={`draft-card-${draft.id}`}
                                             >
+                                                {draftSelectMode && (
+                                                    <Checkbox
+                                                        checked={selectedDrafts.has(draft.id)}
+                                                        onCheckedChange={() => toggleDraftSelection(draft.id)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        data-testid={`select-draft-${draft.id}`}
+                                                    />
+                                                )}
                                                 <div className="min-w-0 flex-1">
                                                     <p className="font-semibold text-slate-900 truncate">{draft.title || 'Untitled draft'}</p>
                                                     <p className="text-[10px] text-amber-700">
@@ -1385,15 +1514,17 @@ const TaskHub = () => {
                                                             : 'Recent'}
                                                     </p>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => deleteDraft(draft.id, e)}
-                                                    className="opacity-0 group-hover/draft:opacity-100 text-red-500 hover:bg-red-50 rounded-full p-1"
-                                                    title="Delete draft"
-                                                    data-testid={`delete-draft-${draft.id}`}
-                                                >
-                                                    <Trash2 className="w-3 h-3" />
-                                                </button>
+                                                {!draftSelectMode && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => deleteDraft(draft.id, e)}
+                                                        className="opacity-0 group-hover/draft:opacity-100 text-red-500 hover:bg-red-50 rounded-full p-1"
+                                                        title="Delete draft"
+                                                        data-testid={`delete-draft-${draft.id}`}
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
