@@ -14,7 +14,12 @@ const REST = [
 /** Beat 4: Friday ticks in. Task 1 sits buried, untouched. */
 export default function LandingDeadline() {
     return (
-        <LandingPinBeat testId="landing-deadline" label="Deadline" spans={2.05}>
+        <LandingPinBeat
+            testId="landing-deadline"
+            label="Deadline"
+            caption="Friday. Still sitting there."
+            spans={2.05}
+        >
             {(progress) => <DeadlineFrame progress={progress} />}
         </LandingPinBeat>
     );

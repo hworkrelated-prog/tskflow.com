@@ -14,7 +14,12 @@ const DROP = [
 /** Beat 3: Maya's tray. Task 1 lands, then 2, 3, 4 stack on top before it's touched. */
 export default function LandingPileUp() {
     return (
-        <LandingPinBeat testId="landing-pile" label="Pileup" spans={2.3}>
+        <LandingPinBeat
+            testId="landing-pile"
+            label="Pileup"
+            caption="Then more work landed on top of it."
+            spans={2.3}
+        >
             {(progress) => <Tray progress={progress} />}
         </LandingPinBeat>
     );

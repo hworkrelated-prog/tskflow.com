@@ -155,12 +155,12 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
     const live = recording;
     const ready = recorded && !live;
     const label = live
-        ? `Stop walkthrough ${fmt(seconds)}`
+        ? `Stop recording ${fmt(seconds)}`
         : ready
-            ? 'Walkthrough of the ask is ready. Record again.'
+            ? 'Walkthrough saved. Record again'
             : starting
-                ? 'Starting walkthrough'
-                : 'Record a walkthrough of the ask';
+                ? 'Starting recording'
+                : 'Record a walkthrough';
 
     return (
         <>
@@ -195,6 +195,7 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
                         {fmt(seconds)}
                     </span>
                 ) : null}
+                <span className="landing-ask-rec-label">{label}</span>
             </button>
 
             {cameraPreview && recording && createPortal(

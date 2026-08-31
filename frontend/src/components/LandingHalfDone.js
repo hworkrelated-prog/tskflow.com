@@ -10,7 +10,12 @@ const TASK = TASKS[0];
 /** Beat 6: marked done, weakly — unless it becomes a red-flag escalation. */
 export default function LandingHalfDone() {
     return (
-        <LandingPinBeat testId="landing-half" label="Half done" spans={2.05}>
+        <LandingPinBeat
+            testId="landing-half"
+            label="Half done"
+            caption="They marked it done. It wasn't."
+            spans={2.05}
+        >
             {(progress) => <HalfFrame progress={progress} />}
         </LandingPinBeat>
     );

@@ -13,16 +13,40 @@ const STEPS = ['Assigned', 'Tracked', 'Done'];
 export default function LandingPeace() {
     return (
         <>
-            <LandingPinBeat testId="landing-assigner" label="Assigned. Tracked. Done." spans={1.85} tone="calm">
+            <LandingPinBeat
+                testId="landing-assigner"
+                label="Assigned. Tracked. Done."
+                caption="Assigned. Tracked. Done."
+                spans={1.85}
+                tone="calm"
+            >
                 {(progress) => <AssignerFrame progress={progress} />}
             </LandingPinBeat>
-            <LandingPinBeat testId="landing-receiver" label="Open time" spans={2.05} tone="calm">
+            <LandingPinBeat
+                testId="landing-receiver"
+                label="Open time"
+                caption="Accepted work blocks time on their calendar."
+                spans={2.05}
+                tone="calm"
+            >
                 {(progress) => <ReceiverFrame progress={progress} />}
             </LandingPinBeat>
-            <LandingPinBeat testId="landing-overload" label="Plan" spans={2.05} tone="calm">
+            <LandingPinBeat
+                testId="landing-overload"
+                label="Plan"
+                caption="If they are packed, it finds a slot."
+                spans={2.05}
+                tone="calm"
+            >
                 {(progress) => <OverloadFrame progress={progress} />}
             </LandingPinBeat>
-            <LandingPinBeat testId="landing-group" label="Group" spans={1.9} tone="calm">
+            <LandingPinBeat
+                testId="landing-group"
+                label="Group"
+                caption="You see who actually did it."
+                spans={1.9}
+                tone="calm"
+            >
                 {(progress) => <GroupFrame progress={progress} />}
             </LandingPinBeat>
         </>

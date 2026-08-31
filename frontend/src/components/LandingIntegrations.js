@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Mail, MessageSquare, Calendar, Video } from 'lucide-react';
+import LandingCastMark from '@/components/LandingCastMark';
+import { CAST, TASKS, WEEK } from '@/lib/landingCast';
 
 const SalesforceMark = () => (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -9,16 +11,37 @@ const SalesforceMark = () => (
 );
 
 const LOGOS = [
-    { id: 'email', label: 'Email', Icon: Mail, scene: null },
+    { id: 'email', label: 'Email', Icon: Mail, scene: 'email' },
     { id: 'slack', label: 'Slack', Icon: MessageSquare, scene: 'hound' },
-    { id: 'calendar', label: 'Calendar', Icon: Calendar, scene: null },
+    { id: 'calendar', label: 'Calendar', Icon: Calendar, scene: 'calendar' },
     { id: 'salesforce', label: 'Salesforce', Icon: SalesforceMark, scene: 'motive' },
     { id: 'meet', label: 'Meet', Icon: Video, scene: 'meet' },
 ];
 
-const SCENES = ['hound', 'motive', 'meet'];
+const SCENES = [
+    {
+        id: 'email',
+        caption: 'The ask lands in their inbox. Owner. Due date. One click to accept.',
+    },
+    {
+        id: 'hound',
+        caption: 'If they go quiet, TskFlow follows up in Slack. Not you.',
+    },
+    {
+        id: 'calendar',
+        caption: 'When they accept, it blocks time on their calendar.',
+    },
+    {
+        id: 'motive',
+        caption: 'When they do the work, it shows up as proof in Salesforce.',
+    },
+    {
+        id: 'meet',
+        caption: 'What they agreed to on the call becomes an assigned ask.',
+    },
+];
 
-/** Motion-first product story. Almost no copy. */
+/** How TskFlow shows up in the tools managers already live in. Plain words, working buttons. */
 export default function LandingIntegrations() {
     const reduce = useReducedMotion();
     const [scene, setScene] = useState(0);
@@ -29,7 +52,8 @@ export default function LandingIntegrations() {
         return () => window.clearInterval(t);
     }, [reduce]);
 
-    const id = SCENES[scene];
+    const current = SCENES[scene];
+    const id = current.id;
 
     return (
         <section
@@ -37,19 +61,24 @@ export default function LandingIntegrations() {
             data-testid="landing-integrations"
             aria-label="Email, Slack, Calendar, Salesforce, Meet"
         >
+            <p className="landing-integ-caption" data-testid="landing-integ-caption">
+                {current.caption}
+            </p>
             <div className="landing-integ-stage" data-testid={`landing-scene-${id}`}>
+                {id === 'email' && <EmailScene reduce={reduce} />}
                 {id === 'hound' && <HoundScene reduce={reduce} />}
+                {id === 'calendar' && <CalendarScene reduce={reduce} />}
                 {id === 'motive' && <MotiveScene reduce={reduce} />}
                 {id === 'meet' && <MeetScene reduce={reduce} />}
             </div>
             <div className="landing-integ-dots" aria-hidden>
                 {SCENES.map((s, i) => (
                     <button
-                        key={s}
+                        key={s.id}
                         type="button"
                         className={`landing-integ-dot ${i === scene ? 'is-on' : ''}`}
                         onClick={() => setScene(i)}
-                        aria-label={s}
+                        aria-label={LOGOS.find((logo) => logo.scene === s.id)?.label || s.id}
                     />
                 ))}
             </div>
@@ -63,10 +92,12 @@ export default function LandingIntegrations() {
                         aria-label={item.label}
                         data-testid={`landing-integ-${item.id}`}
                         onClick={() => {
-                            if (item.scene) setScene(SCENES.indexOf(item.scene));
+                            const next = SCENES.findIndex((s) => s.id === item.scene);
+                            if (next >= 0) setScene(next);
                         }}
                     >
                         <item.Icon className="w-5 h-5" />
+                        <span className="landing-integ-name">{item.label}</span>
                     </button>
                 ))}
             </div>
@@ -82,10 +113,60 @@ const PEOPLE = [
     { n: 'A', silent: true },
 ];
 
+function EmailScene({ reduce }) {
+    const task = TASKS[0];
+    return (
+        <div className="email-scene" data-testid="landing-email">
+            <article className="landing-mail-card">
+                <p className="landing-mail-from">TskFlow</p>
+                <p className="landing-mail-subject">{task.title}</p>
+                <div className="landing-mail-who">
+                    <LandingCastMark who="maya" size="sm" />
+                    <span>{CAST.maya.name}</span>
+                    <span className="landing-clockchip landing-clockchip--sm">{task.due}</span>
+                </div>
+                <motion.span
+                    className="landing-mail-accept"
+                    initial={reduce ? false : { scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.35, type: 'spring', stiffness: 280, damping: 16 }}
+                >
+                    Accept
+                </motion.span>
+            </article>
+        </div>
+    );
+}
+
+function CalendarScene({ reduce }) {
+    return (
+        <div className="cal-scene" data-testid="landing-integ-calendar">
+            <div className="landing-week landing-week--integ">
+                {WEEK.map((day) => (
+                    <div key={day.d} className={`landing-week-day${day.open ? ' is-open' : ''}`}>
+                        <span>{day.d}</span>
+                        {day.busy.map((busy, i) => (
+                            <span key={`${day.d}-${i}`} className={`landing-cal-slot${busy ? ' is-busy' : ' is-due'}`} />
+                        ))}
+                    </div>
+                ))}
+            </div>
+            <motion.div
+                className="landing-cal-chip landing-cal-chip--integ"
+                initial={reduce ? false : { x: -80, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.25, type: 'spring', stiffness: 220, damping: 18 }}
+            >
+                <LandingCastMark who="maya" size="sm" />
+                <span>{TASKS[0].title}</span>
+            </motion.div>
+        </div>
+    );
+}
+
 function HoundScene({ reduce }) {
     return (
         <div className="hound-scene" data-testid="landing-hound">
-            <span className="integ-mark">Hound</span>
             <div className="hound-chase">
                 <div className="hound-row">
                     {PEOPLE.map((p, i) => (
@@ -123,7 +204,6 @@ function HoundScene({ reduce }) {
 function MotiveScene({ reduce }) {
     return (
         <div className="motive-scene" data-testid="landing-motive">
-            <span className="integ-mark">Motive</span>
             <div className="motive-board">
                 {['Call', 'Opp', 'Commit'].map((label, i) => (
                     <motion.div
@@ -133,6 +213,7 @@ function MotiveScene({ reduce }) {
                         animate={{ y: 0, opacity: 1, rotateX: 0 }}
                         transition={{ delay: i * 0.12, type: 'spring', stiffness: 220, damping: 18 }}
                     >
+                        <span className="motive-name">{label}</span>
                         <span className="motive-bar" style={{ '--fill': `${42 + i * 22}%` }} />
                         {i === 1 && <span className="motive-check" aria-hidden />}
                     </motion.div>
@@ -145,7 +226,6 @@ function MotiveScene({ reduce }) {
 function MeetScene({ reduce }) {
     return (
         <div className="meet-scene" data-testid="landing-meet">
-            <span className="integ-mark">Meet</span>
             <div className="meet-lines" aria-hidden>
                 {[0, 1, 2, 3].map((i) => (
                     <motion.span

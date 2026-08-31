@@ -33,10 +33,10 @@ export default function LandingPhoneRecordSheet({
             >
                 <DialogHeader>
                     <DialogTitle className="text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Record
+                        Record a walkthrough
                     </DialogTitle>
-                    <DialogDescription className="sr-only">
-                        Camera, Photos, or Control Center.
+                    <DialogDescription className="text-white/60">
+                        Show them the screen, or attach a clip from your phone.
                     </DialogDescription>
                 </DialogHeader>
 

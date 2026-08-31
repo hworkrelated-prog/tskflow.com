@@ -89,7 +89,7 @@ const UnbiasslyRoomPage = () => {
                         <p className="text-sm font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="unbiassly-public-brand">
                             Unbiassly
                         </p>
-                        <p className="text-[11px] text-slate-500 truncate">An unbiased link for an unbiased discussion.</p>
+                        <p className="text-[11px] text-slate-500 truncate">Create a link. Get the discussion going. You get the summary.</p>
                     </div>
                     <Link to="/" className="ml-auto text-xs text-slate-500 hover:text-teal-800" data-testid="unbiassly-to-tskflow">
                         TskFlow

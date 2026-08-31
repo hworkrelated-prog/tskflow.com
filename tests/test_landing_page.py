@@ -32,7 +32,8 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "landing-toolbar-lead" in src
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
-    assert page_tree.index("landing-brand") < page_tree.index("LandingScreenRecorder")
+    assert "landing-brand" in page_tree
+    assert "LandingScreenRecorder" in src.split("const LaunchPad")[1].split("const LandingPage")[0]
     assert "LandingAssignBeat" in src
     assert "LandingPileUp" in src
     assert "LandingDeadline" in src
@@ -51,7 +52,7 @@ def test_landing_is_a_tool_not_a_pitch():
 def test_landing_voice_guide_is_guest_safe():
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     guide = (FRONT / "components" / "LandingVoiceGuide.js").read_text(encoding="utf-8")
-    assert "LandingVoiceGuide" in landing
+    assert "LandingVoiceGuide" not in landing
     assert 'data-testid="landing-voice-guide"' in guide
     assert 'data-testid="landing-voice-mic"' in guide
     assert "/voice/command" not in guide
@@ -75,8 +76,7 @@ def test_landing_opens_straight_into_a_launch():
     assert 'data-testid="landing-send-promise"' in src
     assert "The robot delivers" not in src
     assert "/demo/launch" in src
-    assert 'data-testid="landing-voice"' in (FRONT / "components" / "LandingVoiceGuide.js").read_text(encoding="utf-8")
-    assert "LandingVoiceGuide" in src
+    assert "LandingVoiceGuide" not in src
     assert "landing-step-ask" in src
     assert "landing-step-who" in src
     assert "landing-step-send" in src
@@ -105,15 +105,19 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
 
 
 def test_landing_record_is_a_walkthrough_of_the_ask():
-    """Logo first. Record is a capture of the ask, not a Record label."""
+    """Record sits in the ask box with a plain label, not a mystery icon in the header."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     rec = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     chrome = landing.split('data-testid="landing-toolbar"')[1].split("</header>")[0]
-    assert chrome.index("landing-brand") < chrome.index("LandingScreenRecorder")
-    assert "landing-toolbar-lead" in chrome
+    composer = landing.split("const LaunchPad")[1].split("const LandingPage")[0]
+    assert "landing-brand" in chrome
+    assert "LandingScreenRecorder" not in chrome
+    assert "LandingScreenRecorder" in composer
+    assert "Optional. Record your screen" in composer
     assert "landing-ask-rec" in rec
-    assert "Record a walkthrough of the ask" in rec
+    assert "Record a walkthrough" in rec
+    assert "landing-ask-rec-label" in rec
     assert "landing-ask-rec-chip is-who" in rec
     assert "landing-ask-rec-chip is-work" in rec
     assert "landing-ask-rec-chip is-when" in rec
@@ -130,9 +134,10 @@ def test_landing_examples_are_short_manager_asks():
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert "LANDING_EXAMPLES" in demo
-    assert "landing-example-${idea.id}" in landing
+    assert "landing-example-${ex.id}" in landing
     assert "setInterval" in landing
-    assert "Use this idea" in landing
+    assert "landing-example-chip" in landing
+    assert "Use this idea" not in landing
     assert "Try one" not in landing
     assert "id: 'pipeline'" in demo
     assert "id: 'walkthrough'" in demo
@@ -312,13 +317,14 @@ def test_landing_ignores_app_theme_preference():
 
 
 def test_landing_rotating_idea_does_not_stack_on_placeholder():
-    """The ask box shows one rotating idea, not 'Or type your own' under it."""
+    """The ask box uses one rotating placeholder, not a second overlay."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     assert 'placeholder="Or type your own"' not in landing
+    assert "landing-example pointer-events-none" not in landing
     textarea_ph = css.split(".landing-page textarea::placeholder")[1].split(".landing-page input::placeholder")[0]
-    assert "transparent" in textarea_ph
-    assert "0.28" not in textarea_ph
+    assert "transparent" not in textarea_ph
+    assert "0.38" in textarea_ph
     assert "textarea::placeholder,\n.landing-page input::placeholder" not in css
 
 
@@ -331,7 +337,7 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
 
 
 def test_landing_story_is_shown_not_told():
-    """One pain line, then a scrubbed 11-beat story. Micro-labels only."""
+    """Pain line, then the point in words, then a captioned 11-beat story."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
@@ -343,21 +349,33 @@ def test_landing_story_is_shown_not_told():
     turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
     peace = (FRONT / "components" / "LandingPeace.js").read_text(encoding="utf-8")
     founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
+    unbiassly = (FRONT / "components" / "LandingUnbiassly.js").read_text(encoding="utf-8")
     cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
     integ = (FRONT / "components" / "LandingIntegrations.js").read_text(encoding="utf-8")
 
     assert "Managers waste hours chasing people for work they already agreed to do." in landing
+    assert "They said yes in the meeting" in landing
+    assert 'data-testid="landing-point"' in landing
+    assert 'data-testid="landing-how"' in landing
     assert "Stop chasing." not in landing
     assert "They already own it." not in landing
     assert "Get to Know the Founder" in landing
+    assert 'data-testid="landing-tab-story"' not in landing
+    assert "navigate('/unbiassly')" not in landing
+    assert "setTab('unbiassly')" in landing
+    assert "LandingUnbiassly" in landing
+    assert "Create a link. Get the discussion going." in unbiassly
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "landing-who-input" in css
     assert "landing-pin-frame" in css
+    assert "landing-pin-caption" in css
     assert "position: sticky" in css
     assert "useScroll" in pin
     assert "useReducedMotion" in pin
+    assert "caption" in pin
     assert "Follow up with lead." in assign
+    assert "They agreed. In the meeting." in assign
     assert "landing-meet-agree" in assign
     assert "landing-meet-bar" in assign
     assert "landing-slack-reactions" in assign
@@ -382,6 +400,10 @@ def test_landing_story_is_shown_not_told():
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
     assert "HoundScene" in integ and "MotiveScene" in integ
     assert "item.scene === id" in integ
+    assert "landing-integ-caption" in integ
+    assert "landing-integ-name" in integ
+    assert ">Hound<" not in integ
+    assert ">Motive<" not in integ
     assert "You send it. We run after them until it is done." not in landing
     assert "We email first, then run after them." not in landing
     assert "landing-send-visual" in landing
@@ -408,8 +430,9 @@ def test_landing_founder_is_a_one_screen_profile():
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     assert "landing-founder-cred" in founder
     assert "landing-founder-origin" in founder
-    assert "Book 5 min" in founder
-    assert 'to="/contact"' in founder
+    assert "Book a meeting" in founder
+    assert "calendly.com/hashim-tskflow" in founder
+    assert 'to="/contact"' not in founder
     assert "linkedin.com/in/hashim-mahmood" in founder
     assert "landing-founder-photo" in css
     assert "100svh" in css.split(".landing-founder {")[1].split(".landing-founder-photo")[0]

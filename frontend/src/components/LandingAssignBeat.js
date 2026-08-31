@@ -23,6 +23,7 @@ export default function LandingAssignBeat() {
         <LandingPinBeat
             testId="landing-assign"
             label="Assignment"
+            caption="They agreed. In the meeting."
             spans={2.4}
         >
             {(progress) => <AssignFrames progress={progress} />}

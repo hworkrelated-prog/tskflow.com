@@ -3,26 +3,32 @@
 export const LANDING_EXAMPLES = [
     {
         id: 'pipeline',
+        chip: 'Daily pipeline',
         text: 'Tell my manager to send a pipeline update every day at 9.',
     },
     {
         id: 'walkthrough',
+        chip: 'Discovery call',
         text: 'Ask the team to record their discovery call by Friday.',
     },
     {
         id: 'best-deal',
+        chip: 'Best deal',
         text: 'Ask the org to submit their best deal, with all the details.',
     },
     {
         id: 'forecast',
+        chip: 'Weekly forecast',
         text: 'Tell sales to send this week\'s forecast by Friday.',
     },
     {
         id: 'calls',
+        chip: 'Log every call',
         text: 'Remind my team to log every call by 5 each day.',
     },
     {
         id: 'maya',
+        chip: 'Maya forecast',
         text: 'Ask Maya to send the Q3 forecast by Friday.',
     },
 ];

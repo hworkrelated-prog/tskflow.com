@@ -11,6 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { getErrorMessage } from '@/lib/utils';
+import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
+import LandingUnbiassly from '@/components/LandingUnbiassly';
+import TskFlowLogo from '@/components/TskFlowLogo';
 import {
     ArrowLeft, Check, Copy, Link2, Loader2, Mail, RefreshCw, Scale, Trash2, Lock,
 } from 'lucide-react';
@@ -33,6 +36,50 @@ const copyText = async (value) => {
         toast.error('Could not copy. Select the link instead.');
         return false;
     }
+};
+
+const UnbiasslyPublicIntro = () => {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        pinDocumentTheme('dark');
+        document.body.classList.add('landing-active');
+        return () => {
+            document.body.classList.remove('landing-active');
+            restoreDocumentTheme();
+        };
+    }, []);
+
+    return (
+        <div
+            className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col"
+            style={{ background: '#050807' }}
+            data-testid="unbiassly-intro"
+        >
+            <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
+                    <button
+                        type="button"
+                        className="landing-brand-btn"
+                        onClick={() => navigate('/')}
+                        aria-label="TskFlow home"
+                    >
+                        <TskFlowLogo variant="dark" size="sm" />
+                    </button>
+                    <button
+                        type="button"
+                        className="landing-tabs-link ml-auto"
+                        onClick={() => navigate('/')}
+                    >
+                        TskFlow
+                    </button>
+                </div>
+            </header>
+            <main className="relative z-10 flex-1 flex flex-col">
+                <LandingUnbiassly />
+            </main>
+        </div>
+    );
 };
 
 const TrendBars = ({ trends }) => {
@@ -103,20 +150,22 @@ const UnbiasslyHub = () => {
         }
     }, []);
 
+    const publicMode = !user || Boolean(user.is_guest);
+
     useEffect(() => {
-        if (!user) {
+        if (publicMode) {
             setLoading(false);
             return;
         }
         fetchRooms();
-    }, [fetchRooms, user]);
+    }, [fetchRooms, publicMode]);
 
     useEffect(() => {
-        if (!user) return;
+        if (publicMode) return;
         const id = searchParams.get('room') || '';
         setSelectedId(id);
         fetchDetail(id);
-    }, [searchParams, fetchDetail, user]);
+    }, [searchParams, fetchDetail, publicMode]);
 
     const selectRoom = (id) => {
         const next = new URLSearchParams(searchParams);
@@ -219,37 +268,8 @@ const UnbiasslyHub = () => {
         );
     }
 
-    if (!user) {
-        return (
-            <div className="unbiassly-public min-h-screen flex flex-col" data-testid="unbiassly-intro">
-                <header className="border-b border-teal-900/10 bg-[#f6f3ec]/90">
-                    <div className="max-w-2xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center">
-                            <Scale className="w-4 h-4" />
-                        </div>
-                        <p className="font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>Unbiassly</p>
-                        <Button variant="ghost" className="ml-auto rounded-full" onClick={() => navigate('/')}>TskFlow</Button>
-                    </div>
-                </header>
-                <main className="flex-1 max-w-xl mx-auto px-4 py-16 text-center">
-                    <h1 className="text-4xl font-bold" style={{ fontFamily: 'Outfit, sans-serif' }}>Unbiassly</h1>
-                    <p className="mt-3 text-slate-600 text-lg">An unbiased link for an unbiased discussion about anything and everything.</p>
-                    <ol className="text-left mt-8 space-y-3 text-sm text-slate-700">
-                        <li>1. Create a shareable link.</li>
-                        <li>2. Send it to whoever needs to speak.</li>
-                        <li>3. They write anonymously. No account required.</li>
-                        <li>4. You get the summary, trends, and highlights.</li>
-                    </ol>
-                    <Button
-                        className="mt-8 rounded-full bg-teal-800 hover:bg-teal-900"
-                        onClick={() => navigate('/login?next=/unbiassly')}
-                        data-testid="unbiassly-intro-signin"
-                    >
-                        Sign in to create a link
-                    </Button>
-                </main>
-            </div>
-        );
+    if (publicMode) {
+        return <UnbiasslyPublicIntro />;
     }
 
     return (
@@ -267,7 +287,7 @@ const UnbiasslyHub = () => {
                             <h1 className="text-xl sm:text-2xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }} data-testid="unbiassly-wordmark">
                                 Unbiassly
                             </h1>
-                            <p className="text-xs text-muted-foreground truncate">An unbiased link for an unbiased discussion.</p>
+                            <p className="text-xs text-muted-foreground truncate">Create a link. Get the discussion going. You get the summary.</p>
                         </div>
                     </div>
                     <span className="ml-auto hidden sm:inline text-xs text-slate-500">{user?.name}</span>
@@ -279,8 +299,8 @@ const UnbiasslyHub = () => {
                     <section className="space-y-4">
                         <Card className="rounded-2xl border-2 shadow-soft" data-testid="unbiassly-create-card">
                             <CardContent className="p-5 sm:p-6">
-                                <h2 className="font-semibold mb-1" style={{ fontFamily: 'Outfit' }}>New discussion</h2>
-                                <p className="text-sm text-muted-foreground mb-4">Create a link. Share it with whoever needs to speak.</p>
+                                <h2 className="font-semibold mb-1" style={{ fontFamily: 'Outfit' }}>Create a link</h2>
+                                <p className="text-sm text-muted-foreground mb-4">Share it. People write. You get the summary.</p>
                                 <form onSubmit={createRoom} className="space-y-3" data-testid="unbiassly-create-form">
                                     <div>
                                         <Label htmlFor="unbiassly-topic">Topic</Label>
@@ -290,7 +310,7 @@ const UnbiasslyHub = () => {
                                             value={topic}
                                             onChange={(e) => setTopic(e.target.value)}
                                             maxLength={160}
-                                            placeholder="What should people weigh in on?"
+                                            placeholder="What is this discussion about?"
                                             className="mt-1 rounded-xl"
                                         />
                                     </div>
@@ -303,7 +323,7 @@ const UnbiasslyHub = () => {
                                             onChange={(e) => setPrompt(e.target.value)}
                                             maxLength={800}
                                             rows={3}
-                                            placeholder="A question, a draft, a decision. No names needed."
+                                            placeholder="Optional. The question you want answered."
                                             className="mt-1 rounded-xl"
                                         />
                                     </div>
@@ -360,9 +380,9 @@ const UnbiasslyHub = () => {
                             <Card className="rounded-2xl border-dashed border-2 min-h-[18rem] flex items-center justify-center">
                                 <CardContent className="text-center py-12">
                                     <Scale className="w-10 h-10 mx-auto text-teal-400 mb-3" />
-                                    <p className="font-medium">Pick a discussion or create a link</p>
+                                    <p className="font-medium">Create a link, or open one you already made</p>
                                     <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-                                        People write without names. You get the summary, trends, and highlights.
+                                        People write with no name attached. You get the summary.
                                     </p>
                                 </CardContent>
                             </Card>

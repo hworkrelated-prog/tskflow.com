@@ -1,6 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { Briefcase, Users, Sparkles, Linkedin, Calendar } from 'lucide-react';
+
+export const FOUNDER_CALENDAR_URL = 'https://calendly.com/hashim-tskflow/30min';
 
 const CRED = [
     { id: 'yrs', Icon: Briefcase, label: '5 yrs leading' },
@@ -47,14 +48,16 @@ export default function LandingFounder() {
                         <Linkedin className="w-4 h-4" aria-hidden />
                         LinkedIn
                     </a>
-                    <Link
+                    <a
                         className="landing-founder-btn landing-founder-btn--ghost"
-                        to="/contact"
+                        href={FOUNDER_CALENDAR_URL}
+                        target="_blank"
+                        rel="noreferrer"
                         data-testid="landing-founder-book"
                     >
                         <Calendar className="w-4 h-4" aria-hidden />
-                        Book 5 min
-                    </Link>
+                        Book a meeting
+                    </a>
                 </div>
             </div>
         </section>
