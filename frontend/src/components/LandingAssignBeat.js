@@ -41,27 +41,31 @@ function AssignFrames({ progress }) {
     return (
         <BeatStage className="landing-assign-stage">
             <motion.div
-                className="landing-meet"
-                data-testid="landing-meet-frame"
+                className="landing-meet-block"
                 style={{ opacity: meetOp, y: meetY }}
             >
-                <div className="landing-meet-top">
-                    <span className="landing-meet-dot" aria-hidden />
-                    <span>Meet</span>
-                </div>
+            <p className="landing-meet-kicker" data-testid="landing-meet-kicker">
+                <span className="landing-meet-dot" aria-hidden />
+                Meet
+            </p>
+            <div
+                className="landing-meet"
+                data-testid="landing-meet-frame"
+            >
                 <div className="landing-meet-grid">
                     {TILES.map((tile) => (
                         <MeetTile key={tile.person.id} tile={tile} progress={progress} />
                     ))}
                 </div>
                 <p className="landing-meet-ask" data-testid="landing-meet-ask">
-                    Follow up with lead.
+                    Send the Q3 forecast.
                 </p>
                 <div className="landing-meet-bar" data-testid="landing-meet-bar" aria-hidden>
-                    <span className="landing-meet-ctl"><Mic className="w-4 h-4" /></span>
-                    <span className="landing-meet-ctl"><Video className="w-4 h-4" /></span>
-                    <span className="landing-meet-ctl is-end"><PhoneOff className="w-4 h-4" /></span>
+                    <span className="landing-meet-ctl"><Mic className="w-4 h-4" /><span>Mic</span></span>
+                    <span className="landing-meet-ctl"><Video className="w-4 h-4" /><span>Video</span></span>
+                    <span className="landing-meet-ctl is-end"><PhoneOff className="w-4 h-4" /><span>Leave</span></span>
                 </div>
+            </div>
             </motion.div>
 
             <motion.article
@@ -74,7 +78,7 @@ function AssignFrames({ progress }) {
                     <span className="landing-slack-name">{CAST.hashim.name}</span>
                     <span className="landing-slack-time">2:14</span>
                 </div>
-                <p className="landing-slack-body">Follow up with lead.</p>
+                <p className="landing-slack-body">Send the Q3 forecast.</p>
                 <motion.div
                     className="slack-mosaic slack-mosaic--2 landing-slack-mosaic"
                     data-testid="landing-slack-images"

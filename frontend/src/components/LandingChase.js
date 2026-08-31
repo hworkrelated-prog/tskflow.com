@@ -6,11 +6,11 @@ import LandingCastMark from '@/components/LandingCastMark';
 import { CAST } from '@/lib/landingCast';
 
 const PINGS = [
-    { id: 'p1', text: 'Follow up with lead', Icon: Send, at: 0.08 },
+    { id: 'p1', text: 'Send the Q3 forecast', Icon: Send, at: 0.08 },
     { id: 'p2', text: 'pipeline.png', Icon: FileText, at: 0.2 },
-    { id: 'p3', text: 'Follow up with lead', Icon: Bell, at: 0.32 },
+    { id: 'p3', text: 'Send the Q3 forecast', Icon: Bell, at: 0.32 },
     { id: 'p4', text: 'pipeline.png', Icon: FileText, at: 0.44 },
-    { id: 'p5', text: 'Follow up with lead', Icon: Send, at: 0.56 },
+    { id: 'p5', text: 'Send the Q3 forecast', Icon: Send, at: 0.56 },
     { id: 'p6', text: 'nudge', Icon: Bell, at: 0.68 },
     { id: 'p7', text: 'nudge', Icon: Bell, at: 0.8 },
 ];

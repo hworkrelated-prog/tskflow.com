@@ -33,7 +33,8 @@ def test_landing_is_a_tool_not_a_pitch():
     page_tree = src.split("const LandingPage")[-1]
     assert page_tree.index("landing-toolbar") < page_tree.index("<LaunchPad")
     assert "landing-brand" in page_tree
-    assert "LandingScreenRecorder" in src.split("const LaunchPad")[1].split("const LandingPage")[0]
+    assert "LandingScreenRecorder" in page_tree
+    assert "LandingScreenRecorder" not in src.split("const LaunchPad")[1].split("const LandingPage")[0]
     assert "LandingAssignBeat" in src
     assert "LandingPileUp" in src
     assert "LandingDeadline" in src
@@ -105,16 +106,17 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
 
 
 def test_landing_record_is_a_walkthrough_of_the_ask():
-    """Record sits in the ask box with a plain label, not a mystery icon in the header."""
+    """Record sits at the top of the page, labeled, not buried in the composer."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     rec = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     chrome = landing.split('data-testid="landing-toolbar"')[1].split("</header>")[0]
     composer = landing.split("const LaunchPad")[1].split("const LandingPage")[0]
     assert "landing-brand" in chrome
-    assert "LandingScreenRecorder" not in chrome
-    assert "LandingScreenRecorder" in composer
-    assert "Optional. Record your screen" in composer
+    assert "LandingScreenRecorder" in chrome
+    assert chrome.index("landing-brand") < chrome.index("LandingScreenRecorder")
+    assert "LandingScreenRecorder" not in composer
+    assert "landing-toolbar-actions" in chrome
     assert "landing-ask-rec" in rec
     assert "Record a walkthrough" in rec
     assert "landing-ask-rec-label" in rec
@@ -356,7 +358,11 @@ def test_landing_story_is_shown_not_told():
     assert "Managers waste hours chasing people for work they already agreed to do." in landing
     assert "They said yes in the meeting" in landing
     assert 'data-testid="landing-point"' in landing
-    assert 'data-testid="landing-how"' in landing
+    assert 'data-testid="landing-pain-more"' in landing
+    assert 'data-testid="landing-how"' not in landing
+    assert "Assign the work in one sentence." not in landing
+    assert "They accept. It lands on their calendar." not in landing
+    assert "If they go quiet, TskFlow follows up." not in landing
     assert "Stop chasing." not in landing
     assert "They already own it." not in landing
     assert "Get to Know the Founder" in landing
@@ -364,7 +370,10 @@ def test_landing_story_is_shown_not_told():
     assert "navigate('/unbiassly')" not in landing
     assert "setTab('unbiassly')" in landing
     assert "LandingUnbiassly" in landing
-    assert "Create a link. Get the discussion going." in unbiassly
+    assert "People hold back their honest thoughts" in unbiassly
+    assert "unbiassly-office-hours" in unbiassly
+    assert "Tuesday and Thursday" in unbiassly
+    assert "unbiassly-expires" in unbiassly
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "landing-who-input" in css
@@ -374,10 +383,14 @@ def test_landing_story_is_shown_not_told():
     assert "useScroll" in pin
     assert "useReducedMotion" in pin
     assert "caption" in pin
-    assert "Follow up with lead." in assign
+    assert "Send the Q3 forecast." in assign
     assert "They agreed. In the meeting." in assign
+    assert "landing-meet-kicker" in assign
     assert "landing-meet-agree" in assign
     assert "landing-meet-bar" in assign
+    assert "landing-meet-bar" in css
+    assert "landing-meet-ctl span" in css
+    assert "landing-toolbar-actions" in css
     assert "landing-slack-reactions" in assign
     assert "landing-pipeline.svg" in assign
     assert "Send proposal to Acme" in cast
@@ -394,7 +407,7 @@ def test_landing_story_is_shown_not_told():
     assert "landing-solve-calendar" in peace
     assert "Packed. Thursday?" in peace
     assert "landing-group-avg" in peace
-    assert "Follow up with lead" in cast
+    assert "Send the Q3 forecast" in cast
     assert "hashim" in assign
     assert "landing-integ-${item.id}" in integ
     assert "Email" in integ and "Slack" in integ and "Salesforce" in integ and "Meet" in integ
@@ -450,7 +463,7 @@ def test_landing_story_cast_is_sales_and_consistent():
     cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
     pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
     turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
-    assert "Follow up with lead" in cast
+    assert "Send the Q3 forecast" in cast
     assert "Send proposal to Acme" in cast
     assert "Update Salesforce stage" in cast
     assert "TASKS" in pile and "TASKS" in turn
