@@ -36,9 +36,10 @@ def test_assignment_email_source_drops_the_lecture():
     ):
         assert phrase not in SERVER, phrase
     assert "def _assignment_email_html" in SERVER
-    assert SERVER.count("_assignment_email_html(") == 4
+    assert SERVER.count("_assignment_email_html(") == 5
     assert "assigned you this." in SERVER
-    assert ">New task<" in SERVER
+    assert ">New task<" not in SERVER
+    assert "Assign it. See who did it." not in SERVER
     assert "View task" in SERVER
 
 
@@ -54,9 +55,10 @@ def test_assignment_email_is_one_line_plus_the_task():
         cta_url="https://tskflow.com/invite?token=abc123",
     )
     visible = _visible_text(markup)
-    assert "Hi Hashim," in visible
-    assert "Alex assigned you this." in visible
     assert "Send a pipeline update every day at 9" in visible
+    assert "Alex assigned you this." in visible
+    assert "Hi Hashim" not in visible
+    assert "New task" not in visible
     assert "Tell my manager" not in visible
     assert "Medium" in visible
     assert "Due 2026-08-29 at 17:00" in visible
@@ -67,8 +69,7 @@ def test_assignment_email_is_one_line_plus_the_task():
     assert "respected" not in visible.lower()
     assert "confirm, ask" not in visible.lower()
     assert "Tskflow" not in visible
-    prose = visible.split("Send a pipeline update")[0]
-    assert prose.count(".") == 1
+    assert visible.index("Send a pipeline update") < visible.index("Alex assigned you this.")
 
 
 def test_assignment_email_skips_duplicate_description():

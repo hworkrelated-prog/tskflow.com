@@ -509,14 +509,13 @@ def summary_email_html(room: dict, summary: dict, *, app_base_url: str) -> str:
         f" ({int(t.get('count') or 0)}) - {html.escape(str(t.get('note') or ''))}</li>"
         for t in trends[:6]
     ) or "<li>No repeating themes yet.</li>"
+    lead = headline or topic
     return f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;background:#f8fafc;">
-      <div style="background:#0f766e;padding:28px 24px;color:#fff;">
-        <p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;opacity:0.85;">Unbiassly</p>
-        <h1 style="margin:8px 0 0;font-size:22px;">{topic}</h1>
-      </div>
-      <div style="padding:24px;background:#fff;color:#0f172a;">
-        <p style="margin:0 0 12px;font-size:16px;font-weight:600;">{headline}</p>
+      <div style="background:#fff;color:#0f172a;border-radius:16px;overflow:hidden;">
+        <div style="height:4px;background:#0d9488;font-size:0;line-height:0;">&nbsp;</div>
+        <div style="padding:24px;">
+        <h1 style="margin:0 0 8px;font-size:22px;color:#111827;">{lead}</h1>
         <p style="margin:0 0 16px;line-height:1.55;color:#334155;">{overview}</p>
         <p style="margin:0 0 8px;font-size:13px;color:#64748b;">{n} anonymous contribution{"s" if n != 1 else ""}.</p>
         <h2 style="font-size:15px;margin:20px 0 8px;">Highlights</h2>
@@ -526,6 +525,7 @@ def summary_email_html(room: dict, summary: dict, *, app_base_url: str) -> str:
         <p style="margin:24px 0 0;text-align:center;">
           <a href="{hub}" style="background:#0d9488;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Open Unbiassly</a>
         </p>
+        </div>
       </div>
     </div>
     """

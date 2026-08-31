@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from eod_report import (
     DEFAULT_WEEKEND_DAYS,
     aggregate_leaderboard,
+    eod_lead,
     eod_sends_on_weekday,
     format_hours,
     group_unfinished,
@@ -40,6 +41,9 @@ def test_weekend_only_skips_monday():
 
 
 def test_eod_is_due_respects_days():
+    import os
+    os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
+    os.environ.setdefault("DB_NAME", "tskflow_test")
     from server import _eod_is_due
     weekend = {"eod_enabled": True, "eod_hour": 16, "eod_days": [5, 6]}
     sunday = datetime(2026, 8, 16, 17, 0)  # Sunday
@@ -75,7 +79,7 @@ def test_didnt_finish_groups_people():
 
 
 def test_email_is_short_glance():
-    html = render_eod_inner({
+    payload = {
         "first": "Hashim",
         "day": "Sunday, Aug 16, 2026",
         "done_count": 2,
@@ -86,9 +90,12 @@ def test_email_is_short_glance():
         "most_done": [{"name": "Alice", "completed": 2}],
         "fastest": [{"name": "Bob", "avg_hours": 0.3}],
         "board_label": "Today",
-    })
-    assert "Your day, Hashim" in html
-    assert "2 done · 1 open · 1 overdue" in html
+    }
+    assert eod_lead(payload) == ("Bob is overdue", "Outreach email")
+    html = render_eod_inner(payload)
+    assert html.index("Bob is overdue") < html.index("2 done · 1 open · 1 overdue")
+    assert "Outreach email" in html
+    assert "Sunday, Aug 16, 2026" in html
     assert "Done" in html
     assert "Didn't finish" in html or "Didn&#39;t finish" in html or "Didn\\'t finish" in html
     assert "Most done" in html
@@ -98,12 +105,22 @@ def test_email_is_short_glance():
     assert "Still open (0)" not in html
     slack = render_eod_slack({
         "first": "Hashim", "day": "Sunday", "done_count": 2, "open_count": 1,
-        "overdue_count": 1, "stuck_items": [{"who": "Bob", "why": "overdue"}],
+        "overdue_count": 1, "stuck_items": [{"who": "Bob", "why": "overdue", "titles": ["Outreach email"]}],
         "most_done": [{"name": "Alice", "completed": 2}],
         "fastest": [{"name": "Bob", "avg_hours": 0.3}],
     })
+    assert slack.startswith("*Bob is overdue*")
     assert "Most done" in slack
     assert "Fastest" in slack
+
+
+def test_eod_lead_prefers_wrapped_and_quiet():
+    assert eod_lead({"first": "Ada", "done_count": 3, "open_count": 0, "overdue_count": 0}) == (
+        "Everyone wrapped what was due.",
+        "",
+    )
+    assert eod_lead({"first": "Ada", "done_count": 0, "open_count": 0})[0].startswith("Quiet day")
+    assert eod_lead({"first": "Ada", "done_count": 1, "open_count": 2}) == ("Your day, Ada", "")
 
 
 def test_settings_has_day_chips_including_weekend():

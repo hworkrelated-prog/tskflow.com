@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { AlertCircle, LogIn } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '@/lib/utils';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
@@ -68,12 +68,9 @@ const LoginPage = () => {
                 className="w-full max-w-md"
             >
                 <Card className="border-2 shadow-soft rounded-2xl">
-                    <CardHeader className="space-y-2 text-center">
-                        <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <LogIn className="w-8 h-8 text-primary" />
-                        </div>
-                        <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
-                            Welcome back
+                    <CardHeader className="space-y-1 text-center">
+                        <CardTitle className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
+                            Sign in
                         </CardTitle>
                     </CardHeader>
                     <CardContent>

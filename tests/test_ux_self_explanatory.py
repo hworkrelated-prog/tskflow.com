@@ -22,6 +22,13 @@ def test_dashboard_does_not_lecture():
     assert "Nothing delegated" in hub
     assert "dashboard-panels" in hub
     assert "New task" in hub
+    assert 'data-testid="hub-nav"' in hub
+    assert 'data-testid="hub-heading"' in hub
+    assert "What's open" in hub
+    assert "Unbiassly" in hub
+    assert ">Unbiassly<" in hub or "Unbiassly\n" in hub
+    assert "hub-nav-link" in hub
+    assert 'size="icon"' not in hub.split("data-testid=\"hub-nav\"")[1].split("DropdownMenu")[0]
     assert "Manual form" not in hub
     assert "activeTaskCount >= 10" not in hub
     assert "show_billing_nudge" in hub

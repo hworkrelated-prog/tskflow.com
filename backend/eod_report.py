@@ -142,8 +142,34 @@ def _esc(s: str) -> str:
     )
 
 
+def eod_lead(payload: dict) -> Tuple[str, str]:
+    """The first line of the digest is the news, not a greeting."""
+    stuck = payload.get("stuck_items") or []
+    if stuck:
+        item = stuck[0]
+        who = str(item.get("who") or "Someone").strip() or "Someone"
+        why = str(item.get("why") or "still open").strip()
+        titles = item.get("titles") or []
+        title = str(titles[0]).strip() if titles else ""
+        if why == "overdue":
+            head = f"{who} is overdue"
+        elif why == "hasn't accepted":
+            head = f"{who} hasn't accepted"
+        else:
+            head = f"{who} still has open work"
+        return head, title
+    done_n = int(payload.get("done_count") or 0)
+    open_n = int(payload.get("open_count") or 0)
+    overdue_n = int(payload.get("overdue_count") or 0)
+    if done_n and not open_n and not overdue_n:
+        return "Everyone wrapped what was due.", ""
+    if not done_n and not open_n:
+        return "Quiet day — nothing on the board.", ""
+    first = payload.get("first") or "there"
+    return f"Your day, {first}", ""
+
+
 def render_eod_inner(payload: dict) -> str:
-    first = _esc(payload.get("first") or "there")
     day = _esc(payload.get("day") or "")
     done_n = int(payload.get("done_count") or 0)
     open_n = int(payload.get("open_count") or 0)
@@ -151,12 +177,20 @@ def render_eod_inner(payload: dict) -> str:
     glance = f"{done_n} done · {open_n} open"
     if overdue_n:
         glance += f" · {overdue_n} overdue"
+    head, lead_title = eod_lead(payload)
 
     parts = [
-        f'<h2 style="margin:0 0 4px;font-size:22px;color:#111827;">Your day, {first}</h2>',
-        f'<p style="margin:0 0 16px;color:#6b7280;font-size:14px;">{day}</p>',
-        f'<p style="margin:0 0 22px;font-size:18px;font-weight:700;color:#111827;">{_esc(glance)}</p>',
+        f'<h1 style="margin:0 0 6px;font-size:22px;color:#111827;font-weight:700;">{_esc(head)}</h1>',
     ]
+    if lead_title:
+        parts.append(
+            f'<p style="margin:0 0 12px;font-size:15px;color:#374151;">{_esc(lead_title)}</p>'
+        )
+    if day:
+        parts.append(f'<p style="margin:0 0 4px;color:#6b7280;font-size:13px;">{day}</p>')
+    parts.append(
+        f'<p style="margin:0 0 22px;font-size:14px;color:#6b7280;">{_esc(glance)}</p>'
+    )
 
     done_items = payload.get("done_items") or []
     if done_items:
@@ -183,8 +217,6 @@ def render_eod_inner(payload: dict) -> str:
             )
         parts.append('<p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;">Didn\'t finish</p>')
         parts.append(f'<table width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;">{"".join(rows)}</table>')
-    elif done_n or open_n:
-        parts.append('<p style="margin:0 0 20px;font-size:14px;color:#059669;">Everyone wrapped what was due.</p>')
 
     most = payload.get("most_done") or []
     fastest = payload.get("fastest") or []
@@ -215,13 +247,10 @@ def render_eod_inner(payload: dict) -> str:
         )
         parts.append('<p style="margin:0;font-size:12px;color:#9ca3af;">Same ranking as Analytics.</p>')
 
-    if len(parts) <= 3:
-        parts.append('<p style="margin:0;color:#6b7280;font-size:14px;">Quiet day — nothing on the board.</p>')
     return "".join(parts)
 
 
 def render_eod_slack(payload: dict) -> str:
-    first = payload.get("first") or "there"
     day = payload.get("day") or ""
     done_n = int(payload.get("done_count") or 0)
     open_n = int(payload.get("open_count") or 0)
@@ -229,7 +258,13 @@ def render_eod_slack(payload: dict) -> str:
     glance = f"{done_n} done · {open_n} open"
     if overdue_n:
         glance += f" · {overdue_n} overdue"
-    lines = [f":sunset: *Your day, {first}* — {day}", glance]
+    head, lead_title = eod_lead(payload)
+    lead = f"*{head}*"
+    if lead_title:
+        lead += f" — {lead_title}"
+    if day:
+        lead += f" · {day}"
+    lines = [lead, glance]
     stuck = payload.get("stuck_items") or []
     if stuck:
         bits = [f"{s.get('who')} ({s.get('why')})" for s in stuck[:4]]

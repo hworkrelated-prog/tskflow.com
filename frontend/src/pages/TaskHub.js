@@ -1317,48 +1317,47 @@ const TaskHub = () => {
             </AnimatePresence>
 
             <header className="sticky top-0 z-50 glass-header border-b pt-[env(safe-area-inset-top,0px)]">
-                <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                <div className="container mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                         <h1 onClick={() => navigate('/')} className="cursor-pointer hover:opacity-80 transition-opacity shrink-0">
-                            <TskFlowLogo variant="auto" size="md" />
+                            <TskFlowLogo variant="auto" size="sm" />
                         </h1>
                         {user?.subscription_tier === 'teams' ? (
-                            <Badge className="hidden sm:flex bg-teal-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
+                            <Badge className="hidden sm:flex bg-teal-600 text-white rounded-full px-2.5 py-0.5 text-[10px] font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 TEAMS
                             </Badge>
                         ) : user?.subscription_tier === 'pro' ? (
-                            <Badge className="hidden sm:flex bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold items-center gap-1">
+                            <Badge className="hidden sm:flex bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full px-2.5 py-0.5 text-[10px] font-semibold items-center gap-1">
                                 <Crown className="w-3 h-3" />
                                 PRO
                             </Badge>
                         ) : null}
                     </div>
-                    <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <NotificationBell />
-                        {/* Desktop icon strip */}
-                        <div className="hidden md:flex items-center gap-2">
-                            <Button variant="outline" size="icon" onClick={() => navigate('/unbiassly')} className="rounded-full border-teal-300 text-teal-700 hover:text-teal-800 hover:bg-teal-50" title="Unbiassly" data-testid="unbiassly-button">
-                                <Scale className="w-5 h-5" />
-                            </Button>
-                            <Button variant="outline" size="icon" onClick={() => navigate('/recurring')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Recurring series" data-testid="recurring-button">
-                                <Repeat className="w-5 h-5" />
-                            </Button>
+                        <nav className="hub-nav hidden md:flex" data-testid="hub-nav">
+                            <button type="button" className="hub-nav-link" onClick={() => navigate('/unbiassly')} title="Unbiassly" data-testid="unbiassly-button">
+                                Unbiassly
+                            </button>
+                            <button type="button" className="hub-nav-link" onClick={() => navigate('/recurring')} title="Recurring series" data-testid="recurring-button">
+                                Recurring
+                            </button>
                             {user?.subscription_tier === 'teams' && (
-                                <Button data-testid="team-button" variant="outline" size="icon" onClick={() => navigate('/team')} className="rounded-full border-teal-300 text-teal-600 hover:text-teal-700 hover:bg-teal-50" title="Manage Team">
-                                    <Users className="w-5 h-5" />
-                                </Button>
+                                <button type="button" className="hub-nav-link" onClick={() => navigate('/team')} title="Manage Team" data-testid="team-button">
+                                    Team
+                                </button>
                             )}
-                            <Button data-testid="analytics-button" variant="outline" size="icon" onClick={() => navigate('/analytics')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100" title="Analytics, Activity Log & Leaderboards">
-                                <BarChart3 className="w-5 h-5" />
-                            </Button>
-                            <Button data-testid="settings-button" variant="outline" size="icon" onClick={() => navigate('/settings')} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
-                                <Settings className="w-5 h-5" />
-                            </Button>
-                            <Button data-testid="logout-button" variant="outline" size="icon" onClick={logout} className="rounded-full border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100">
-                                <LogOut className="w-5 h-5" />
-                            </Button>
-                        </div>
+                            <button type="button" className="hub-nav-link" onClick={() => navigate('/analytics')} title="Analytics" data-testid="analytics-button">
+                                Analytics
+                            </button>
+                            <button type="button" className="hub-nav-link" onClick={() => navigate('/settings')} data-testid="settings-button">
+                                Settings
+                            </button>
+                            <button type="button" className="hub-nav-link" onClick={logout} data-testid="logout-button">
+                                Log out
+                            </button>
+                        </nav>
                         {/* Mobile overflow menu - keeps the header one-handed */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -1402,9 +1401,14 @@ const TaskHub = () => {
             <main className="container mx-auto px-4 sm:px-6 py-5 sm:py-8">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5 sm:mb-6">
                     <div className="min-w-0">
-                        <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }}>
-                            {user?.name}
+                        <h2 className="text-2xl sm:text-3xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }} data-testid="hub-heading">
+                            {overdueCount > 0
+                                ? `${overdueCount} overdue`
+                                : viewMode === 'completed'
+                                    ? 'Done'
+                                    : "What's open"}
                         </h2>
+                        <p className="mt-1 text-sm text-muted-foreground truncate">{user?.name}</p>
                         {accountability && (
                             <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="hub-accountability">
                                 <AccountabilityScore

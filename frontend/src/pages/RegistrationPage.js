@@ -66,7 +66,7 @@ const RegistrationPage = () => {
             >
                 <Card className="border-2 shadow-soft rounded-2xl">
                     <CardHeader className="space-y-2 text-center">
-                        <CardTitle className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
+                        <CardTitle className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>
                             Create your account
                         </CardTitle>
                         <p className="text-sm text-muted-foreground">

@@ -186,13 +186,12 @@ const AnalyticsPage = () => {
                     transition={{ duration: 0.5 }}
                     className="space-y-8"
                 >
-                    <div className="text-center">
-                        <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: 'Outfit' }}>Analytics</h1>
-                        <p className="text-muted-foreground text-lg">Track your productivity and team performance</p>
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ fontFamily: 'Outfit' }}>Analytics</h1>
                     </div>
 
                     {/* Section tabs - Overall Analytics + Activity Log + Leaderboards */}
-                    <div className="flex flex-wrap gap-2 justify-center">
+                    <div className="flex flex-wrap gap-2">
                         {[
                             { key: 'analytics', label: 'Overall Analytics' },
                             { key: 'activity', label: 'Activity Log' },
