@@ -31,9 +31,17 @@ MAX_BODY = 2000
 MIN_BODY = 3
 MAX_POSTS_PER_ROOM = 500
 MAX_ROOMS_PER_USER = 80
+MAX_GUEST_ROOMS_PER_IP = 16
+GUEST_ROOM_WINDOW_HOURS = 24
 POSTS_PER_WINDOW = 12
 POST_WINDOW_MINUTES = 10
 SUMMARY_POST_CAP = 80
+EXPIRE_CHOICES = ("24h", "48h", "7d", "never")
+EXPIRE_DELTAS = {
+    "24h": timedelta(hours=24),
+    "48h": timedelta(hours=48),
+    "7d": timedelta(days=7),
+}
 STOPWORDS = {
     "the", "a", "an", "and", "or", "to", "of", "in", "is", "it", "for", "on",
     "that", "this", "with", "as", "be", "are", "was", "were", "we", "you", "i",
@@ -58,6 +66,8 @@ class RoomCreate(BaseModel):
     topic: str = Field(..., min_length=3, max_length=MAX_TOPIC)
     prompt: Optional[str] = Field(None, max_length=MAX_PROMPT)
     email_updates: Optional[bool] = True
+    organizer_email: Optional[str] = None
+    expires_in: Optional[str] = "7d"
 
     @validator("topic")
     def clean_topic(cls, v):
@@ -72,6 +82,31 @@ class RoomCreate(BaseModel):
             return None
         text = _plain(v)
         return text[:MAX_PROMPT] if text else None
+
+    @validator("organizer_email")
+    def clean_email(cls, v):
+        text = str(v or "").strip().lower()
+        if not text:
+            return None
+        if "@" not in text or "." not in text.split("@")[-1]:
+            raise ValueError("That email does not look right")
+        return text[:120]
+
+    @validator("expires_in")
+    def clean_expires(cls, v):
+        key = str(v or "7d").strip().lower()
+        if key not in EXPIRE_CHOICES:
+            raise ValueError("Pick when this link should close")
+        return key
+
+
+class OrganizerLookup(BaseModel):
+    manage_tokens: List[str] = Field(default_factory=list)
+
+    @validator("manage_tokens")
+    def cap_tokens(cls, v):
+        items = [str(t).strip() for t in (v or []) if str(t).strip()]
+        return items[:40]
 
 
 class ContributionCreate(BaseModel):
@@ -93,8 +128,47 @@ def _plain(value: Any) -> str:
     return text.strip()
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return _now().isoformat()
+
+
+def _parse_iso(value: Any) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def expires_at_for(choice: str, now: Optional[datetime] = None) -> Optional[str]:
+    delta = EXPIRE_DELTAS.get(choice)
+    if not delta:
+        return None
+    return ((now or _now()) + delta).isoformat()
+
+
+def is_expired(room: dict, now: Optional[datetime] = None) -> bool:
+    exp = _parse_iso(room.get("expires_at"))
+    if not exp:
+        return False
+    stamp = now or _now()
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return exp <= stamp
+
+
+def is_concluded(room: dict, now: Optional[datetime] = None) -> bool:
+    if (room.get("status") or "open") == "closed":
+        return True
+    return is_expired(room, now)
 
 
 TOKEN_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -102,6 +176,10 @@ TOKEN_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 def new_share_token(length: int = 16) -> str:
     return "".join(secrets.choice(TOKEN_ALPHABET) for _ in range(length))
+
+
+def hash_manage_token(token: str, secret_key: str) -> str:
+    return hashlib.sha256(f"unbiassly-manage|{secret_key}|{token}".encode("utf-8")).hexdigest()
 
 
 def share_url(app_base_url: str, token: str) -> str:
@@ -117,47 +195,98 @@ def public_post(doc: dict) -> dict:
     }
 
 
-def public_room_payload(room: dict, posts: List[dict], *, app_base_url: str) -> dict:
+def sealed_summary(room: dict, n: int) -> dict:
+    topic = room.get("topic") or "this discussion"
+    if n == 0:
+        headline = "No contributions yet."
+        overview = f'Share the Unbiassly link. People can weigh in on "{topic}" without names attached. Answers stay hidden until you conclude.'
+    else:
+        headline = f"{n} anonymous note{'s' if n != 1 else ''} so far. Conclude to read them."
+        overview = "Answers stay sealed until you conclude this link or it expires. That way titles and names cannot shape what people write."
     return {
-        "topic": room.get("topic") or "",
-        "prompt": room.get("prompt") or "",
-        "status": room.get("status") or "open",
-        "created_at": room.get("created_at"),
-        "contribution_count": int(room.get("contribution_count") or len(posts)),
-        "posts": [public_post(p) for p in posts],
-        "share_url": share_url(app_base_url, room.get("share_token") or ""),
-        "brand": "Unbiassly",
-        "tagline": "An unbiased link for an unbiased discussion.",
+        "headline": headline,
+        "overview": overview,
+        "highlights": [],
+        "trends": [],
+        "generated_at": _now_iso(),
+        "contribution_count": n,
+        "source": "sealed",
     }
 
 
-def organizer_room_payload(room: dict, posts: List[dict], *, app_base_url: str) -> dict:
+def public_room_payload(room: dict, posts: List[dict], *, app_base_url: str) -> dict:
+    concluded = is_concluded(room)
+    status = "closed" if concluded else (room.get("status") or "open")
+    return {
+        "topic": room.get("topic") or "",
+        "prompt": room.get("prompt") or "",
+        "status": status,
+        "created_at": room.get("created_at"),
+        "expires_at": room.get("expires_at"),
+        "contribution_count": int(room.get("contribution_count") or len(posts)),
+        "posts": [],
+        "answers_visible": False,
+        "answers_hidden": True,
+        "concluded": concluded,
+        "share_url": share_url(app_base_url, room.get("share_token") or ""),
+        "brand": "Unbiassly",
+        "tagline": "People hold back when names and titles are in the room.",
+    }
+
+
+def organizer_room_payload(
+    room: dict,
+    posts: List[dict],
+    *,
+    app_base_url: str,
+    manage_token: Optional[str] = None,
+) -> dict:
+    concluded = is_concluded(room)
     payload = public_room_payload(room, posts, app_base_url=app_base_url)
+    n = int(room.get("contribution_count") or len(posts))
     payload.update({
         "id": room.get("id"),
         "share_token": room.get("share_token"),
         "email_updates": bool(room.get("email_updates", True)),
         "closed_at": room.get("closed_at"),
-        "summary": room.get("summary") or empty_summary(room, posts),
+        "expires_at": room.get("expires_at"),
         "organizer": True,
+        "concluded": concluded,
+        "answers_visible": concluded,
+        "answers_hidden": not concluded,
+        "posts": [public_post(p) for p in posts] if concluded else [],
+        "summary": (
+            (room.get("summary") or empty_summary(room, posts))
+            if concluded
+            else sealed_summary(room, n)
+        ),
     })
+    if manage_token:
+        payload["manage_token"] = manage_token
     return payload
 
 
 def organizer_list_item(room: dict, *, app_base_url: str) -> dict:
     summary = room.get("summary") or {}
+    concluded = is_concluded(room)
+    n = int(room.get("contribution_count") or 0)
     return {
         "id": room.get("id"),
         "topic": room.get("topic") or "",
         "prompt": room.get("prompt") or "",
-        "status": room.get("status") or "open",
+        "status": "closed" if concluded else (room.get("status") or "open"),
         "created_at": room.get("created_at"),
         "closed_at": room.get("closed_at"),
-        "contribution_count": int(room.get("contribution_count") or 0),
+        "expires_at": room.get("expires_at"),
+        "contribution_count": n,
         "share_token": room.get("share_token"),
         "share_url": share_url(app_base_url, room.get("share_token") or ""),
-        "headline": summary.get("headline") or "",
+        "headline": (summary.get("headline") or "") if concluded else (
+            f"{n} note{'s' if n != 1 else ''}. Sealed until you conclude." if n else "Waiting on notes."
+        ),
         "email_updates": bool(room.get("email_updates", True)),
+        "concluded": concluded,
+        "answers_visible": concluded,
     }
 
 
@@ -411,14 +540,16 @@ def register_unbiassly_routes(
     get_client_ip: Callable,
     app_base_url: str,
     secret_key: str,
+    get_optional_user: Optional[Callable] = None,
 ):
     """Attach Unbiassly HTTP routes to the shared /api router."""
+    optional_user = get_optional_user or get_current_user
 
     async def _room_by_token(token: str) -> dict:
         room = await db.unbiassly_rooms.find_one({"share_token": token}, {"_id": 0})
         if not room:
             raise HTTPException(status_code=404, detail="This Unbiassly link was not found")
-        return room
+        return await _ensure_fresh(room)
 
     async def _owned_room(room_id: str, user: dict) -> dict:
         room = await db.unbiassly_rooms.find_one({"id": room_id}, {"_id": 0})
@@ -426,6 +557,32 @@ def register_unbiassly_routes(
             raise HTTPException(status_code=404, detail="Discussion not found")
         if room.get("organizer_id") != user.get("id"):
             raise HTTPException(status_code=403, detail="Only the organizer can see this")
+        return await _ensure_fresh(room)
+
+    async def _room_by_manage_token(token: str) -> dict:
+        raw = str(token or "").strip()
+        if not raw:
+            raise HTTPException(status_code=404, detail="Discussion not found")
+        digest = hash_manage_token(raw, secret_key)
+        room = await db.unbiassly_rooms.find_one({"manage_token_hash": digest}, {"_id": 0})
+        if not room:
+            raise HTTPException(status_code=404, detail="Discussion not found")
+        return await _ensure_fresh(room)
+
+    async def _ensure_fresh(room: dict) -> dict:
+        if (room.get("status") or "open") == "open" and is_expired(room):
+            now = _now_iso()
+            await db.unbiassly_rooms.update_one(
+                {"id": room["id"]},
+                {"$set": {
+                    "status": "closed",
+                    "closed_at": room.get("closed_at") or now,
+                    "closed_reason": "expired",
+                }},
+            )
+            room["status"] = "closed"
+            room["closed_at"] = room.get("closed_at") or now
+            room["closed_reason"] = "expired"
         return room
 
     async def _posts_for(room_id: str) -> List[dict]:
@@ -464,23 +621,63 @@ def register_unbiassly_routes(
             {"$set": {"summary_emailed_at": _now_iso()}},
         )
 
+    async def _conclude_room(room: dict, background_tasks: BackgroundTasks) -> dict:
+        room_id = room["id"]
+        if room.get("status") == "closed":
+            posts = await _posts_for(room_id)
+            return organizer_room_payload(room, posts, app_base_url=app_base_url)
+        summary = await _refresh_summary(room)
+        now = _now_iso()
+        await db.unbiassly_rooms.update_one(
+            {"id": room_id},
+            {"$set": {"status": "closed", "closed_at": now, "closed_reason": "manual"}},
+        )
+        room["status"] = "closed"
+        room["closed_at"] = now
+        if room.get("email_updates") and int(room.get("contribution_count") or 0) > 0:
+            background_tasks.add_task(_email_summary, room, summary)
+        posts = await _posts_for(room_id)
+        return organizer_room_payload(room, posts, app_base_url=app_base_url)
+
     @api_router.post("/unbiassly/rooms")
-    async def create_room(body: RoomCreate, current_user: dict = Depends(get_current_user)):
-        existing = await db.unbiassly_rooms.count_documents({"organizer_id": current_user["id"]})
-        if existing >= MAX_ROOMS_PER_USER:
-            raise HTTPException(status_code=429, detail="You have a lot of Unbiassly rooms. Close or delete one first.")
+    async def create_room(
+        body: RoomCreate,
+        request: Request,
+        current_user: Optional[dict] = Depends(optional_user),
+    ):
+        user = current_user if isinstance(current_user, dict) and current_user.get("id") else None
+        ip = get_client_ip(request)
+        ip_fp = hash_ip(ip, salt=f"unbiassly-create|{secret_key}") or hashlib.sha256(
+            f"unbiassly-create|{secret_key}|unknown".encode()
+        ).hexdigest()[:32]
+        if user:
+            existing = await db.unbiassly_rooms.count_documents({"organizer_id": user["id"]})
+            if existing >= MAX_ROOMS_PER_USER:
+                raise HTTPException(status_code=429, detail="You have a lot of Unbiassly rooms. Close or delete one first.")
+        else:
+            window_start = (_now() - timedelta(hours=GUEST_ROOM_WINDOW_HOURS)).isoformat()
+            recent = await db.unbiassly_rooms.count_documents({
+                "created_ip_hash": ip_fp,
+                "created_at": {"$gte": window_start},
+            })
+            if recent >= MAX_GUEST_ROOMS_PER_IP:
+                raise HTTPException(status_code=429, detail="That is a lot of links from here. Conclude one, or try again later.")
         token = new_share_token()
         for _ in range(6):
             clash = await db.unbiassly_rooms.find_one({"share_token": token}, {"_id": 1})
             if not clash:
                 break
             token = new_share_token()
+        manage_token = new_share_token(22)
         now = _now_iso()
+        organizer_email = (user.get("email") if user else None) or body.organizer_email or ""
+        organizer_email = organizer_email.strip().lower()
         room = {
             "id": str(uuid.uuid4()),
             "share_token": token,
-            "organizer_id": current_user["id"],
-            "organizer_email": (current_user.get("email") or "").strip().lower(),
+            "manage_token_hash": hash_manage_token(manage_token, secret_key),
+            "organizer_id": user["id"] if user else None,
+            "organizer_email": organizer_email,
             "topic": body.topic,
             "prompt": body.prompt or "",
             "status": "open",
@@ -488,11 +685,14 @@ def register_unbiassly_routes(
             "contribution_count": 0,
             "summary": empty_summary({"topic": body.topic, "prompt": body.prompt}, []),
             "created_at": now,
+            "expires_at": expires_at_for(body.expires_in or "7d"),
+            "expires_in": body.expires_in or "7d",
             "closed_at": None,
             "last_summary_at": now,
+            "created_ip_hash": ip_fp,
         }
         await db.unbiassly_rooms.insert_one(room)
-        return organizer_room_payload(room, [], app_base_url=app_base_url)
+        return organizer_room_payload(room, [], app_base_url=app_base_url, manage_token=manage_token)
 
     @api_router.get("/unbiassly/rooms")
     async def list_rooms(current_user: dict = Depends(get_current_user)):
@@ -511,11 +711,60 @@ def register_unbiassly_routes(
     @api_router.post("/unbiassly/rooms/{room_id}/summary")
     async def refresh_room_summary(room_id: str, current_user: dict = Depends(get_current_user)):
         room = await _owned_room(room_id, current_user)
-        summary = await _refresh_summary(room)
+        await _refresh_summary(room)
         posts = await _posts_for(room_id)
-        payload = organizer_room_payload(room, posts, app_base_url=app_base_url)
-        payload["summary"] = summary
-        return payload
+        return organizer_room_payload(room, posts, app_base_url=app_base_url)
+
+    @api_router.post("/unbiassly/organizer/lookup")
+    async def lookup_organizer_rooms(body: OrganizerLookup):
+        items = []
+        seen = set()
+        for token in body.manage_tokens:
+            try:
+                room = await _room_by_manage_token(token)
+            except HTTPException:
+                continue
+            if room.get("id") in seen:
+                continue
+            seen.add(room.get("id"))
+            items.append(organizer_list_item(room, app_base_url=app_base_url))
+        return {"rooms": items}
+
+    @api_router.get("/unbiassly/organizer/{manage_token}")
+    async def get_organizer_room(manage_token: str):
+        room = await _room_by_manage_token(manage_token)
+        posts = await _posts_for(room["id"])
+        return organizer_room_payload(room, posts, app_base_url=app_base_url)
+
+    @api_router.post("/unbiassly/organizer/{manage_token}/summary")
+    async def refresh_organizer_summary(manage_token: str):
+        room = await _room_by_manage_token(manage_token)
+        await _refresh_summary(room)
+        posts = await _posts_for(room["id"])
+        return organizer_room_payload(room, posts, app_base_url=app_base_url)
+
+    @api_router.post("/unbiassly/organizer/{manage_token}/email-summary")
+    async def email_organizer_summary(manage_token: str, background_tasks: BackgroundTasks):
+        room = await _room_by_manage_token(manage_token)
+        if not is_concluded(room):
+            raise HTTPException(status_code=400, detail="Conclude the link first, then we can email the summary.")
+        summary = room.get("summary") or await _refresh_summary(room)
+        if int((summary or {}).get("contribution_count") or room.get("contribution_count") or 0) == 0:
+            raise HTTPException(status_code=400, detail="Nothing to email yet")
+        background_tasks.add_task(_email_summary, room, summary)
+        return {"ok": True, "message": "Summary is on its way to your email."}
+
+    @api_router.post("/unbiassly/organizer/{manage_token}/close")
+    async def close_organizer_room(manage_token: str, background_tasks: BackgroundTasks):
+        room = await _room_by_manage_token(manage_token)
+        return await _conclude_room(room, background_tasks)
+
+    @api_router.delete("/unbiassly/organizer/{manage_token}")
+    async def delete_organizer_room(manage_token: str):
+        room = await _room_by_manage_token(manage_token)
+        await db.unbiassly_posts.delete_many({"room_id": room["id"]})
+        await db.unbiassly_rooms.delete_one({"id": room["id"]})
+        return {"ok": True}
 
     @api_router.post("/unbiassly/rooms/{room_id}/email-summary")
     async def email_room_summary(
@@ -524,6 +773,8 @@ def register_unbiassly_routes(
         current_user: dict = Depends(get_current_user),
     ):
         room = await _owned_room(room_id, current_user)
+        if not is_concluded(room):
+            raise HTTPException(status_code=400, detail="Conclude the link first, then we can email the summary.")
         summary = room.get("summary") or await _refresh_summary(room)
         if int((summary or {}).get("contribution_count") or room.get("contribution_count") or 0) == 0:
             raise HTTPException(status_code=400, detail="Nothing to email yet")
@@ -537,21 +788,7 @@ def register_unbiassly_routes(
         current_user: dict = Depends(get_current_user),
     ):
         room = await _owned_room(room_id, current_user)
-        if room.get("status") == "closed":
-            posts = await _posts_for(room_id)
-            return organizer_room_payload(room, posts, app_base_url=app_base_url)
-        summary = await _refresh_summary(room)
-        now = _now_iso()
-        await db.unbiassly_rooms.update_one(
-            {"id": room_id},
-            {"$set": {"status": "closed", "closed_at": now}},
-        )
-        room["status"] = "closed"
-        room["closed_at"] = now
-        if room.get("email_updates") and int(room.get("contribution_count") or 0) > 0:
-            background_tasks.add_task(_email_summary, room, summary)
-        posts = await _posts_for(room_id)
-        return organizer_room_payload(room, posts, app_base_url=app_base_url)
+        return await _conclude_room(room, background_tasks)
 
     @api_router.delete("/unbiassly/rooms/{room_id}")
     async def delete_room(room_id: str, current_user: dict = Depends(get_current_user)):
@@ -574,7 +811,7 @@ def register_unbiassly_routes(
         background_tasks: BackgroundTasks,
     ):
         room = await _room_by_token(token)
-        if room.get("status") != "open":
+        if is_concluded(room) or room.get("status") != "open":
             raise HTTPException(status_code=403, detail="This discussion is closed")
         count = int(room.get("contribution_count") or 0)
         if count >= MAX_POSTS_PER_ROOM:

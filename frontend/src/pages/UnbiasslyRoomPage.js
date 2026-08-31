@@ -1,22 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { formatDistanceToNow, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getErrorMessage } from '@/lib/utils';
 import { Loader2, Scale, Send } from 'lucide-react';
-
-const relative = (iso) => {
-    if (!iso) return '';
-    try {
-        return formatDistanceToNow(parseISO(iso), { addSuffix: true });
-    } catch {
-        return '';
-    }
-};
 
 const UnbiasslyRoomPage = () => {
     const { token } = useParams();
@@ -68,7 +58,7 @@ const UnbiasslyRoomPage = () => {
             const res = await axios.post(`${API}/unbiassly/${token}/posts`, { body: text });
             setRoom(res.data);
             setBody('');
-            toast.success('Posted anonymously');
+            toast.success('Posted anonymously. It stays hidden until the organizer concludes.');
         } catch (err) {
             toast.error(getErrorMessage(err, 'Could not post'));
         } finally {
@@ -76,7 +66,7 @@ const UnbiasslyRoomPage = () => {
         }
     };
 
-    const closed = room?.status === 'closed';
+    const closed = room?.status === 'closed' || room?.concluded;
 
     return (
         <div className="unbiassly-public min-h-screen flex flex-col" data-testid="unbiassly-public">
@@ -89,7 +79,7 @@ const UnbiasslyRoomPage = () => {
                         <p className="text-sm font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="unbiassly-public-brand">
                             Unbiassly
                         </p>
-                        <p className="text-[11px] text-slate-500 truncate">Create a link. Get the discussion going. You get the summary.</p>
+                        <p className="text-[11px] text-slate-500 truncate">People hold back when names and titles are in the room.</p>
                     </div>
                     <Link to="/" className="ml-auto text-xs text-slate-500 hover:text-teal-800" data-testid="unbiassly-to-tskflow">
                         TskFlow
@@ -119,32 +109,20 @@ const UnbiasslyRoomPage = () => {
                                 </p>
                             ) : null}
                             <p className="mt-3 text-xs text-slate-500" data-testid="unbiassly-public-count">
-                                {room.contribution_count || 0} anonymous note{(room.contribution_count || 0) === 1 ? '' : 's'}
-                                {closed ? ' · Closed' : ''}
+                                {room.contribution_count || 0} {(room.contribution_count || 0) === 1 ? 'person has' : 'people have'} written
+                                {closed ? ' · Concluded' : '. Answers stay hidden until this link is concluded.'}
                             </p>
                         </section>
 
-                        <ol className="space-y-3 mb-8" data-testid="unbiassly-public-thread">
-                            {(room.posts || []).length === 0 ? (
-                                <li className="text-sm text-slate-500 py-6">Be the first. No name is attached.</li>
-                            ) : room.posts.map((post) => (
-                                <li
-                                    key={post.id}
-                                    className="rounded-2xl bg-white/80 border border-stone-200 px-4 py-3.5 shadow-sm"
-                                    data-testid={`unbiassly-public-post-${post.id}`}
-                                >
-                                    <p className="text-[11px] uppercase tracking-wider text-slate-400 mb-1.5">Anonymous</p>
-                                    <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">{post.body}</p>
-                                    <p className="text-[11px] text-slate-400 mt-2">{relative(post.created_at)}</p>
-                                </li>
-                            ))}
-                        </ol>
-
                         {closed ? (
-                            <p className="text-sm text-slate-500 text-center py-6" data-testid="unbiassly-public-closed">
-                                This discussion is closed. New notes are not being taken.
+                            <p className="text-sm text-slate-500 py-6" data-testid="unbiassly-public-closed">
+                                This link is concluded. Notes were collected for the organizer. New notes are not being taken.
                             </p>
                         ) : (
+                            <>
+                            <p className="text-sm text-slate-600 py-4 rounded-2xl bg-white/70 border border-stone-200 px-4 mb-8" data-testid="unbiassly-answers-hidden">
+                                Nobody sees the answers until the organizer concludes this link. Write what you actually think.
+                            </p>
                             <form onSubmit={send} className="sticky bottom-4 rounded-2xl border border-stone-200 bg-white/95 shadow-lg p-4" data-testid="unbiassly-compose">
                                 <label htmlFor="unbiassly-body" className="text-xs font-medium text-slate-600">
                                     Your note stays anonymous
@@ -172,6 +150,7 @@ const UnbiasslyRoomPage = () => {
                                     </Button>
                                 </div>
                             </form>
+                            </>
                         )}
                     </>
                 )}

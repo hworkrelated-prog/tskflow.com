@@ -116,6 +116,7 @@ const UnbiasslyHub = () => {
     const [loading, setLoading] = useState(true);
     const [topic, setTopic] = useState('');
     const [prompt, setPrompt] = useState('');
+    const [expiresIn, setExpiresIn] = useState('7d');
     const [creating, setCreating] = useState(false);
     const [selectedId, setSelectedId] = useState(searchParams.get('room') || '');
     const [detail, setDetail] = useState(null);
@@ -182,6 +183,7 @@ const UnbiasslyHub = () => {
             const res = await axios.post(`${API}/unbiassly/rooms`, {
                 topic: topic.trim(),
                 prompt: prompt.trim() || undefined,
+                expires_in: expiresIn,
                 email_updates: true,
             });
             const room = res.data;
@@ -231,7 +233,7 @@ const UnbiasslyHub = () => {
     const closeRoom = () => runAction(
         'close',
         async () => (await axios.post(`${API}/unbiassly/rooms/${detail.id}/close`)).data,
-        'Discussion closed. Summary is on its way.',
+        'Discussion concluded. You can read the notes now.',
     );
 
     const deleteRoom = async () => {
@@ -287,7 +289,7 @@ const UnbiasslyHub = () => {
                             <h1 className="text-xl sm:text-2xl font-bold leading-tight" style={{ fontFamily: 'Outfit' }} data-testid="unbiassly-wordmark">
                                 Unbiassly
                             </h1>
-                            <p className="text-xs text-muted-foreground truncate">Create a link. Get the discussion going. You get the summary.</p>
+                            <p className="text-xs text-muted-foreground truncate">People hold back when names and titles are in the room.</p>
                         </div>
                     </div>
                     <span className="ml-auto hidden sm:inline text-xs text-slate-500">{user?.name}</span>
@@ -300,7 +302,7 @@ const UnbiasslyHub = () => {
                         <Card className="rounded-2xl border-2 shadow-soft" data-testid="unbiassly-create-card">
                             <CardContent className="p-5 sm:p-6">
                                 <h2 className="font-semibold mb-1" style={{ fontFamily: 'Outfit' }}>Create a link</h2>
-                                <p className="text-sm text-muted-foreground mb-4">Share it. People write. You get the summary.</p>
+                                <p className="text-sm text-muted-foreground mb-4">Share it with any group. Answers stay hidden until you conclude.</p>
                                 <form onSubmit={createRoom} className="space-y-3" data-testid="unbiassly-create-form">
                                     <div>
                                         <Label htmlFor="unbiassly-topic">Topic</Label>
@@ -310,7 +312,7 @@ const UnbiasslyHub = () => {
                                             value={topic}
                                             onChange={(e) => setTopic(e.target.value)}
                                             maxLength={160}
-                                            placeholder="What is this discussion about?"
+                                            placeholder="What do you need the truth about?"
                                             className="mt-1 rounded-xl"
                                         />
                                     </div>
@@ -323,9 +325,24 @@ const UnbiasslyHub = () => {
                                             onChange={(e) => setPrompt(e.target.value)}
                                             maxLength={800}
                                             rows={3}
-                                            placeholder="Optional. The question you want answered."
+                                            placeholder="Say what you actually think. No name is attached."
                                             className="mt-1 rounded-xl"
                                         />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="unbiassly-expires">When should this close?</Label>
+                                        <select
+                                            id="unbiassly-expires"
+                                            data-testid="unbiassly-expires"
+                                            value={expiresIn}
+                                            onChange={(e) => setExpiresIn(e.target.value)}
+                                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                        >
+                                            <option value="24h">Closes in 24 hours</option>
+                                            <option value="48h">Closes in 48 hours</option>
+                                            <option value="7d">Closes in 7 days</option>
+                                            <option value="never">Stays open until I conclude it</option>
+                                        </select>
                                     </div>
                                     <Button
                                         type="submit"
@@ -382,7 +399,7 @@ const UnbiasslyHub = () => {
                                     <Scale className="w-10 h-10 mx-auto text-teal-400 mb-3" />
                                     <p className="font-medium">Create a link, or open one you already made</p>
                                     <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-                                        People write with no name attached. You get the summary.
+                                        Names and titles stay off the page. Answers stay sealed until you conclude.
                                     </p>
                                 </CardContent>
                             </Card>
@@ -444,7 +461,7 @@ const UnbiasslyHub = () => {
                                                 {working === 'email' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                                                 Email me the summary
                                             </Button>
-                                            {detail.status === 'open' ? (
+                                            {detail.status === 'open' && !detail.concluded ? (
                                                 <Button
                                                     type="button"
                                                     variant="outline"
@@ -454,11 +471,11 @@ const UnbiasslyHub = () => {
                                                     data-testid="unbiassly-close"
                                                 >
                                                     {working === 'close' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                                                    Close
+                                                    Conclude
                                                 </Button>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 text-xs text-slate-500 px-2">
-                                                    <Check className="w-3.5 h-3.5" /> Closed {relative(detail.closed_at)}
+                                                    <Check className="w-3.5 h-3.5" /> Concluded {relative(detail.closed_at)}
                                                 </span>
                                             )}
                                             <Button
@@ -475,6 +492,8 @@ const UnbiasslyHub = () => {
                                     </CardContent>
                                 </Card>
 
+                                {detail.answers_visible || detail.concluded ? (
+                                <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <Card className="rounded-2xl" data-testid="unbiassly-summary-card">
                                         <CardContent className="p-5 space-y-3">
@@ -529,6 +548,14 @@ const UnbiasslyHub = () => {
                                         )}
                                     </CardContent>
                                 </Card>
+                                </>
+                                ) : (
+                                <Card className="rounded-2xl" data-testid="unbiassly-sealed">
+                                    <CardContent className="p-5 text-sm text-slate-600">
+                                        {detail.contribution_count || 0} {(detail.contribution_count || 0) === 1 ? 'person has' : 'people have'} written. Answers stay hidden until you conclude this link.
+                                    </CardContent>
+                                </Card>
+                                )}
                             </div>
                         ) : null}
                     </section>

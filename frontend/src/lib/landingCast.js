@@ -11,7 +11,7 @@ export const CAST = {
 export const TEAM = [CAST.maya, CAST.chris, CAST.priya, CAST.jordan];
 
 export const TASKS = [
-    { id: 't1', title: 'Follow up with lead', who: 'maya', tone: 'teal', due: 'Friday' },
+    { id: 't1', title: 'Send the Q3 forecast', who: 'maya', tone: 'teal', due: 'Friday' },
     { id: 't2', title: 'Send proposal to Acme', who: 'maya', tone: 'amber' },
     { id: 't3', title: 'Update Salesforce stage', who: 'maya', tone: 'sky' },
     { id: 't4', title: 'Log discovery call', who: 'maya', tone: 'rose' },
@@ -30,7 +30,7 @@ export const GROUP_AVG = Math.round(
 
 export const WEEK = [
     { d: 'Mon', busy: [true, true] },
-    { d: 'Tue', busy: [true, true] },
+    { d: 'Tue', busy: [false, true], open: true },
     { d: 'Wed', busy: [true, true] },
     { d: 'Thu', busy: [false, true], open: true },
     { d: 'Fri', busy: [true, true] },

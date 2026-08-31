@@ -40,7 +40,7 @@ const ColorCodedPrompt = ({ text, className = '', testId, as: Tag = 'p' }) => (
     </Tag>
 );
 
-const LaunchPad = ({ recordingBlob, onRecorded, inputRef, ideaIndex, value, setValue, setIdeaIndex }) => {
+const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIdeaIndex }) => {
     const navigate = useNavigate();
     const { login } = useAuth();
     const [assignee, setAssignee] = useState('');
@@ -162,15 +162,6 @@ const LaunchPad = ({ recordingBlob, onRecorded, inputRef, ideaIndex, value, setV
                             testId="landing-tryit-colorized"
                         />
                     )}
-                    <div className="landing-record-row">
-                        <LandingScreenRecorder
-                            onRecorded={onRecorded}
-                            recorded={Boolean(recordingBlob)}
-                        />
-                        <p className="landing-record-hint">
-                            Optional. Record your screen so they see exactly what you mean.
-                        </p>
-                    </div>
                 </div>
             </section>
 
@@ -301,6 +292,12 @@ const LandingPage = () => {
                         >
                             <TskFlowLogo variant="dark" size="sm" />
                         </button>
+                        {tab === 'story' ? (
+                            <LandingScreenRecorder
+                                onRecorded={setRecordingBlob}
+                                recorded={Boolean(recordingBlob)}
+                            />
+                        ) : null}
                     </div>
                     <nav className="landing-tabs ml-auto flex min-w-0" data-testid="landing-tabs">
                         <button
@@ -320,14 +317,16 @@ const LandingPage = () => {
                             Unbiassly
                         </button>
                     </nav>
-                    <button
-                        type="button"
-                        className="landing-tabs-link"
-                        onClick={() => navigate('/login')}
-                        data-testid="landing-sign-in"
-                    >
-                        Sign in
-                    </button>
+                    <div className="landing-toolbar-actions">
+                        <button
+                            type="button"
+                            className="landing-tabs-link"
+                            onClick={() => navigate('/login')}
+                            data-testid="landing-sign-in"
+                        >
+                            Sign in
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -345,11 +344,9 @@ const LandingPage = () => {
                     <p className="landing-hero-sub" data-testid="landing-point">
                         They said yes in the meeting. Then Slack ate it. You became the reminder.
                     </p>
-                    <ol className="landing-point-steps" data-testid="landing-how">
-                        <li>Assign the work in one sentence.</li>
-                        <li>They accept. It lands on their calendar.</li>
-                        <li>If they go quiet, TskFlow follows up. You see when it is actually done.</li>
-                    </ol>
+                    <p className="landing-hero-pain" data-testid="landing-pain-more">
+                        You ask again. They swear they have it. The work is still not done.
+                    </p>
                 </section>
 
                 <LandingAssignBeat />
@@ -365,7 +362,6 @@ const LandingPage = () => {
                     <p className="landing-final-line">Try it. No account. No password.</p>
                     <LaunchPad
                         recordingBlob={recordingBlob}
-                        onRecorded={setRecordingBlob}
                         inputRef={inputRef}
                         ideaIndex={ideaIndex}
                         value={value}

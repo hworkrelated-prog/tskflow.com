@@ -10,8 +10,10 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from unbiassly import (  # noqa: E402
     TOKEN_ALPHABET,
+    expires_at_for,
     extract_trends,
     fallback_summary,
+    is_concluded,
     new_share_token,
     organizer_room_payload,
     public_post,
@@ -60,7 +62,8 @@ def test_public_payload_never_leaks_organizer_or_ip():
     assert "organizer_email" not in blob
     assert "organizer_id" not in blob
     assert public["topic"] == "Office snacks"
-    assert public["posts"][0]["body"] == "Fruit is better than candy."
+    assert public["posts"] == []
+    assert public["answers_hidden"] is True
     assert public["share_url"].endswith("/u/tok123")
     assert public_post(posts[0]) == {
         "id": "p1",
@@ -85,7 +88,35 @@ def test_organizer_payload_includes_summary_not_emails():
     payload = organizer_room_payload(room, [], app_base_url="https://tskflow.com")
     assert payload["organizer"] is True
     assert payload["id"] == "room-1"
+    assert payload["answers_hidden"] is True
+    assert payload["posts"] == []
     assert "owner@acme.test" not in json.dumps(payload)
+
+
+def test_answers_stay_sealed_until_concluded():
+    room = {
+        "id": "room-1",
+        "share_token": "tok123",
+        "topic": "Office snacks",
+        "prompt": "",
+        "status": "open",
+        "contribution_count": 1,
+        "created_at": "2026-08-30T00:00:00+00:00",
+    }
+    posts = [{"id": "p1", "body": "Fruit is better than candy.", "created_at": "2026-08-30T00:01:00+00:00"}]
+    assert is_concluded(room) is False
+    public = public_room_payload(room, posts, app_base_url="https://tskflow.com")
+    org = organizer_room_payload(room, posts, app_base_url="https://tskflow.com")
+    assert public["posts"] == []
+    assert org["posts"] == []
+    room["status"] = "closed"
+    assert is_concluded(room) is True
+    org_done = organizer_room_payload(room, posts, app_base_url="https://tskflow.com")
+    public_done = public_room_payload(room, posts, app_base_url="https://tskflow.com")
+    assert org_done["posts"][0]["body"] == "Fruit is better than candy."
+    assert public_done["posts"] == []
+    assert expires_at_for("never") is None
+    assert expires_at_for("24h")
 
 
 def test_fallback_summary_finds_trends_and_highlights():
@@ -130,15 +161,18 @@ def test_frontend_wires_unbiassly():
     assert 'data-testid="unbiassly-copy-link"' in hub
     assert 'data-testid="unbiassly-refresh-insights"' in hub
     assert 'data-testid="unbiassly-email-summary"' in hub
-    assert "Create a link. Get the discussion going." in hub
-    assert 'data-testid="unbiassly-public"' in public
+    assert "People hold back when names and titles are in the room." in hub
+    assert 'data-testid="unbiassly-expires"' in hub
+    assert "Conclude" in hub
+    assert "unbiassly-answers-hidden" in public
+    assert "unbiasslyGuest" in _read("components", "LandingUnbiassly.js") or "rememberUnbiasslyRoom" in _read("components", "LandingUnbiassly.js")
+    assert "/login?next=/unbiassly" not in _read("components", "LandingUnbiassly.js")
     assert 'data-testid="unbiassly-send"' in public
     assert "Post anonymously" in public
     assert 'data-testid="unbiassly-button"' in dash
     assert 'data-testid="landing-unbiassly"' in landing
     assert "Unbiassly" in help_src
     assert "LandingUnbiassly" in hub
-    assert "Create a link. Get the discussion going." in hub
     assert "user.is_guest" in hub
     assert "pinDocumentTheme('dark')" in hub
     assert "startsWith('/u/')" in dock
@@ -192,12 +226,14 @@ def test_live_anonymous_discussion_and_organizer_insights():
         headers = live_app.caller_headers("unbiassly-live")
 
         async with live_app.client(server) as api:
-            denied = await api.post(
+            guest = await api.post(
                 "/api/unbiassly/rooms",
-                json={"topic": "Should we keep Friday demos?"},
+                json={"topic": "Should we keep Friday demos?", "expires_in": "48h"},
                 headers=headers,
             )
-            assert denied.status_code in (401, 403)
+            assert guest.status_code == 200, guest.text
+            assert guest.json().get("manage_token")
+            assert guest.json()["answers_hidden"] is True
 
             created = await api.post(
                 "/api/unbiassly/rooms",
@@ -237,7 +273,8 @@ def test_live_anonymous_discussion_and_organizer_insights():
             )
             assert first.status_code == 200, first.text
             assert first.json()["contribution_count"] == 1
-            assert set(first.json()["posts"][0]) == {"id", "body", "created_at"}
+            assert first.json()["posts"] == []
+            assert first.json()["answers_hidden"] is True
 
             second = await api.post(
                 f"/api/unbiassly/{token}/posts",
@@ -270,13 +307,11 @@ def test_live_anonymous_discussion_and_organizer_insights():
                 headers={**org_auth, **headers},
             )
             assert insights.status_code == 200, insights.text
-            summary = insights.json()["summary"]
-            assert summary["contribution_count"] == 2
-            assert summary["headline"]
-            assert "trends" in summary
-            labels = " ".join(t.get("label", "") for t in summary.get("trends") or [])
-            assert "demo" in labels or "friday" in labels or "demos" in (summary.get("overview") or "").lower()
-            assert summary["highlights"]
+            assert insights.json()["answers_hidden"] is True
+            assert insights.json()["posts"] == []
+            sealed = insights.json()["summary"]
+            assert sealed["contribution_count"] == 2
+            assert sealed.get("highlights") == []
 
             closed = await api.post(
                 f"/api/unbiassly/rooms/{room_id}/close",
@@ -284,6 +319,14 @@ def test_live_anonymous_discussion_and_organizer_insights():
             )
             assert closed.status_code == 200
             assert closed.json()["status"] == "closed"
+            assert closed.json()["answers_visible"] is True
+            assert len(closed.json()["posts"]) == 2
+            summary = closed.json()["summary"]
+            assert summary["headline"]
+            assert "trends" in summary
+            labels = " ".join(t.get("label", "") for t in summary.get("trends") or [])
+            assert "demo" in labels or "friday" in labels or "demos" in (summary.get("overview") or "").lower()
+            assert summary["highlights"]
 
             blocked = await api.post(
                 f"/api/unbiassly/{token}/posts",

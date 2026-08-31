@@ -15549,6 +15549,7 @@ register_unbiassly_routes(
     api_router,
     db=db,
     get_current_user=get_current_user,
+    get_optional_user=get_optional_user,
     send_email_notification=send_email_notification,
     get_client_ip=_get_client_ip,
     app_base_url=APP_BASE_URL,

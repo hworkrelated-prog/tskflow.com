@@ -75,7 +75,7 @@ const topics = [
         id: 'unbiassly',
         icon: <MessageSquare className="w-4 h-4" />, title: 'Unbiassly', category: 'Side Feature',
         body: (
-            <p className="text-sm">Create a shareable link. Anyone can write anonymously. You get the summary, trends, and highlights.</p>
+            <p className="text-sm">Create a shareable link. No login. People write anonymously. Answers stay hidden until you conclude the link or it expires.</p>
         )
     },
     {
