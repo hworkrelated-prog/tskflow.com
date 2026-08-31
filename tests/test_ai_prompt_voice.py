@@ -21,6 +21,9 @@ def test_composer_has_voice_mic_that_auto_sends():
     assert "webkitSpeechRecognition" in helper
     assert "runPreviewRef.current" in src
     assert "Speak to send" in src
+    assert "Start voice conversation" in src
+    assert "handleVoiceTurn" in src
+    assert "speakChatGptVoice" in src
     assert "is-listening" in src
     assert "MicOff" in src
     assert "needsIosScreenRecordFlow" in src
