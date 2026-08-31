@@ -417,9 +417,14 @@ def test_landing_story_is_shown_not_told():
     assert "/founder.jpg" in founder
     assert "landing-founder-linkedin" in founder
     assert "landing-founder-book" in founder
-    assert "5 years leading sales teams" in founder
+    assert "almost a decade in sales" in founder
+    assert "Regional Director" in founder
+    assert "~10 yrs in sales" in founder
+    assert "5 years leading sales teams" not in founder
+    assert "IC + Manager" not in founder
+    assert "5 yrs leading" not in founder
     assert "tired of chasing my own team" in founder
-    assert "20+ AEs" in founder
+    assert "AEs + managers" in founder
     assert "His own problem" in founder
     assert 'data-testid="landing-tab-founder"' in landing
     assert "Ask engineering to record a demo of the fix by tomorrow" not in landing
@@ -434,6 +439,8 @@ def test_landing_founder_is_a_one_screen_profile():
     assert "calendly.com/hashim-tskflow" in founder
     assert 'to="/contact"' not in founder
     assert "linkedin.com/in/hashim-mahmood" in founder
+    assert "almost a decade in sales" in founder
+    assert "Regional Director" in founder
     assert "landing-founder-photo" in css
     assert "100svh" in css.split(".landing-founder {")[1].split(".landing-founder-photo")[0]
     assert "landing-founder-cred li" in css

@@ -4,8 +4,8 @@ import { Briefcase, Users, Sparkles, Linkedin, Calendar } from 'lucide-react';
 export const FOUNDER_CALENDAR_URL = 'https://calendly.com/hashim-tskflow/30min';
 
 const CRED = [
-    { id: 'yrs', Icon: Briefcase, label: '5 yrs leading' },
-    { id: 'aes', Icon: Users, label: '20+ AEs' },
+    { id: 'yrs', Icon: Briefcase, label: '~10 yrs in sales' },
+    { id: 'aes', Icon: Users, label: 'AEs + managers' },
     { id: 'own', Icon: Sparkles, label: 'His own problem' },
 ];
 
@@ -24,7 +24,7 @@ export default function LandingFounder() {
             <div className="landing-founder-copy">
                 <h2 className="landing-founder-name" data-testid="landing-founder-name">Hashim Mahmood</h2>
                 <p className="landing-founder-role" data-testid="landing-founder-title">
-                    Founder, TskFlow — 5 years leading sales teams, IC + Manager
+                    Founder, TskFlow — almost a decade in sales, Regional Director
                 </p>
                 <p className="landing-founder-origin" data-testid="landing-founder-origin">
                     Built this because I was tired of chasing my own team for updates.
