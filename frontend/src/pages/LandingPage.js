@@ -8,12 +8,11 @@ import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
-import LandingHeroStory from '@/components/LandingHeroStory';
-import LandingWeek from '@/components/LandingWeek';
+import LandingPayoff from '@/components/LandingPayoff';
+import LandingLived from '@/components/LandingLived';
 import LandingCost from '@/components/LandingCost';
 import LandingDifference from '@/components/LandingDifference';
 import LandingBeforeAfter from '@/components/LandingBeforeAfter';
-import LandingPayoff from '@/components/LandingPayoff';
 import LandingFounder from '@/components/LandingFounder';
 import LandingUnbiassly from '@/components/LandingUnbiassly';
 import TskFlowLogo from '@/components/TskFlowLogo';
@@ -340,15 +339,14 @@ const LandingPage = () => {
                     <LandingUnbiassly />
                 ) : (
                     <>
-                <LandingHeroStory
+                <LandingPayoff
                     onTry={() => scrollToId('landing-tryit')}
-                    onHow={() => scrollToId('landing-week')}
+                    onHow={() => scrollToId('landing-lived')}
                 />
-                <LandingWeek />
+                <LandingLived />
                 <LandingCost />
                 <LandingDifference />
                 <LandingBeforeAfter />
-                <LandingPayoff />
 
                 <section className="landing-final" data-testid="landing-final">
                     <p className="landing-section-kicker">Start</p>

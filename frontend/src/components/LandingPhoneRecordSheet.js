@@ -33,7 +33,7 @@ export default function LandingPhoneRecordSheet({
             >
                 <DialogHeader>
                     <DialogTitle className="text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Record a walkthrough
+                        Record
                     </DialogTitle>
                     <DialogDescription className="text-white/60">
                         Show them the screen, or attach a clip from your phone.

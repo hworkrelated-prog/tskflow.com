@@ -35,14 +35,12 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "landing-brand" in page_tree
     assert "LandingScreenRecorder" in page_tree
     assert "LandingScreenRecorder" not in src.split("const LaunchPad")[1].split("const LandingPage")[0]
-    assert "LandingHeroStory" in src
-    assert "LandingWeek" in src
+    assert "LandingPayoff" in src
+    assert "LandingLived" in src
     assert "LandingCost" in src
     assert "LandingDifference" in src
     assert "LandingBeforeAfter" in src
-    assert "LandingPayoff" in src
     assert "LandingFounder" in src
-    assert "LandingPinBeat" in (FRONT / "components" / "LandingWeek.js").read_text(encoding="utf-8")
     assert "useScroll" in (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     assert "What needs to get done?" not in src
     assert "Who should own this?" not in src
@@ -62,7 +60,7 @@ def test_landing_voice_guide_is_guest_safe():
 
 def test_landing_opens_straight_into_a_launch():
     src = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
-    hero = (FRONT / "components" / "LandingHeroStory.js").read_text(encoding="utf-8")
+    hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     assert 'data-testid="landing-hero"' in hero
     assert 'data-testid="landing-tryit"' in src
@@ -117,18 +115,15 @@ def test_landing_record_is_a_walkthrough_of_the_ask():
     assert "LandingScreenRecorder" not in composer
     assert "landing-toolbar-actions" in chrome
     assert "landing-ask-rec" in rec
-    assert "Record a walkthrough" in rec
+    assert "'Record'" in rec or '"Record"' in rec
     assert "landing-ask-rec-label" in rec
-    assert "landing-ask-rec-chip is-who" in rec
-    assert "landing-ask-rec-chip is-work" in rec
-    assert "landing-ask-rec-chip is-when" in rec
-    assert "landing-ask-rec-pip" in rec
-    assert "landing-ask-rec-screen" in rec
-    assert "landing-ask-rec-scan" in css
-    assert "landing-ask-rec-marquee" in css
+    assert "landing-loom-rec" in rec
+    assert "landing-loom-dot" in rec
+    assert "Record a walkthrough" not in rec
     assert "Record screen" not in rec
     assert "Walkthrough ready" not in rec
     assert "prominent ? 'Record'" not in rec
+    assert "landing-loom-rec" in css
 
 
 def test_landing_examples_are_short_manager_asks():
@@ -338,10 +333,10 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
 
 
 def test_landing_story_is_shown_not_told():
-    """Pain first, then the week, the cost, TskFlow, then the try-it composer."""
+    """Pain first, then real Meet / Slack / Gmail, the cost, TskFlow, then the composer."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
-    hero = (FRONT / "components" / "LandingHeroStory.js").read_text(encoding="utf-8")
-    week = (FRONT / "components" / "LandingWeek.js").read_text(encoding="utf-8")
+    hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
+    lived = (FRONT / "components" / "LandingLived.js").read_text(encoding="utf-8")
     cost = (FRONT / "components" / "LandingCost.js").read_text(encoding="utf-8")
     diff = (FRONT / "components" / "LandingDifference.js").read_text(encoding="utf-8")
     compare = (FRONT / "components" / "LandingBeforeAfter.js").read_text(encoding="utf-8")
@@ -350,13 +345,11 @@ def test_landing_story_is_shown_not_told():
     pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
     unbiassly = (FRONT / "components" / "LandingUnbiassly.js").read_text(encoding="utf-8")
-    clock = (FRONT / "lib" / "useStoryClock.js").read_text(encoding="utf-8")
 
-    assert "Your managers shouldn't have to remember for everyone." in hero
-    assert "Managers should not be the reminder system." in hero
+    assert "Imagine not having to ask." in hero
+    assert "You already know." in hero
     assert "Stop being the chase." in hero
     assert "See how it works" in hero
-    assert "You stop being the chase." in hero
     assert 'data-testid="landing-point"' in hero
     assert 'data-testid="landing-pain-more"' in hero
     assert 'data-testid="landing-how"' not in landing
@@ -383,15 +376,18 @@ def test_landing_story_is_shown_not_told():
     assert "landing-pin-caption" in css
     assert "position: sticky" in css
     assert "landing-cta-ghost" in css
-    assert "landing-hero-story" in css
-    assert "landing-reel" in css
+    assert "landing-payoff-hero" in css
+    assert "gmeet" in css and "slack-side" in css and "gmail-read" in css
     assert "useScroll" in pin
     assert "useReducedMotion" in pin
-    assert "useReducedMotion" in clock
     assert "caption" in pin
-    assert "Yes, I\\'ll handle it." in week
-    assert "Oh shit. I forgot." in week
-    assert "Watch the yes disappear." in week
+    assert "Google Meet" in lived
+    assert "Yep, I'll have this done by Friday." in lived
+    assert "# q3-forecast" in lived
+    assert "Gmail" in lived
+    assert "Hey - quick update on this?" in lived
+    assert "CAST.alex" in lived
+    assert "Maya Chen" in lived
     assert "WEEKLY_HOURS = 1.5" in cost
     assert "YEARLY_HOURS = 78" in cost
     assert "WORK_DAYS = 10" in cost
@@ -407,12 +403,11 @@ def test_landing_story_is_shown_not_told():
     assert "You already know." in payoff
     assert "managing reminders" in payoff
     tree = landing.split("const LandingPage")[-1]
-    assert tree.index("LandingHeroStory") < tree.index("LandingWeek")
-    assert tree.index("LandingWeek") < tree.index("LandingCost")
+    assert tree.index("LandingPayoff") < tree.index("LandingLived")
+    assert tree.index("LandingLived") < tree.index("LandingCost")
     assert tree.index("LandingCost") < tree.index("LandingDifference")
     assert tree.index("LandingDifference") < tree.index("LandingBeforeAfter")
-    assert tree.index("LandingBeforeAfter") < tree.index("LandingPayoff")
-    assert tree.index("LandingPayoff") < tree.index("<LaunchPad")
+    assert tree.index("LandingBeforeAfter") < tree.index("<LaunchPad")
     assert "You send it. We run after them until it is done." not in landing
     assert "We email first, then run after them." not in landing
     assert "landing-send-visual" in landing
@@ -456,20 +451,22 @@ def test_landing_founder_is_a_one_screen_profile():
 
 def test_landing_story_cast_is_sales_and_consistent():
     cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
-    week = (FRONT / "components" / "LandingWeek.js").read_text(encoding="utf-8")
-    hero = (FRONT / "components" / "LandingHeroStory.js").read_text(encoding="utf-8")
+    lived = (FRONT / "components" / "LandingLived.js").read_text(encoding="utf-8")
     pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
     turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
     assert "Send the Q3 forecast" in cast
     assert "Send proposal to Acme" in cast
     assert "Update Salesforce stage" in cast
-    assert "Send the Q3 forecast" in week
-    assert "Send the Q3 forecast" in hero
+    assert "Q3 forecast" in lived
+    assert "who: 'alex'" in lived
+    assert "Maya Chen" in lived
+    assert "/avatars/maya.svg" in cast
+    assert "Alex Rivera" in cast
     assert "TASKS" in pile and "TASKS" in turn
     assert "hashim" in cast and "maya" in cast and "chris" in cast and "priya" in cast
     assert "QA signoff" not in pile
     assert "record a demo of the fix" not in pile
-    assert "QA signoff" not in week
+    assert "QA signoff" not in lived
 
 
 
