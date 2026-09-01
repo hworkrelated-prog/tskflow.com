@@ -26,6 +26,7 @@ export default function LandingPinBeat({
     return (
         <section
             ref={ref}
+            id={testId}
             className={`landing-pin${tone ? ` landing-pin--${tone}` : ''}`}
             style={{ height: reduce ? '100svh' : `${spans * 100}svh` }}
             data-testid={testId}
