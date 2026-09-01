@@ -42,8 +42,8 @@ function ChaseFrame({ progress }) {
             style={{ filter: gray, opacity: fade }}
         >
             <div className="landing-chase-who">
-                <LandingCastMark who="hashim" />
-                <span>{CAST.hashim.name}</span>
+                <LandingCastMark who="alex" />
+                <span>{CAST.alex.name}</span>
             </div>
             <div className="landing-chase-col">
                 {PINGS.map((ping, i) => (

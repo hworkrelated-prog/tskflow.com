@@ -1,14 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
-import { Mail, MessageSquare, Send } from 'lucide-react';
+import { ArrowUp, Check, Loader2, Mail, MessageSquare } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingPayoff from '@/components/LandingPayoff';
+import LandingWeek from '@/components/LandingWeek';
+import LandingAssignBeat from '@/components/LandingAssignBeat';
+import LandingPileUp from '@/components/LandingPileUp';
+import LandingDeadline from '@/components/LandingDeadline';
+import LandingChase from '@/components/LandingChase';
+import LandingHalfDone from '@/components/LandingHalfDone';
+import LandingTurn from '@/components/LandingTurn';
+import LandingPeace from '@/components/LandingPeace';
 import LandingLived from '@/components/LandingLived';
 import LandingCost from '@/components/LandingCost';
 import LandingDifference from '@/components/LandingDifference';
@@ -116,15 +123,67 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
 
     return (
         <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit" id="landing-tryit">
-            <div className="landing-composer rounded-[28px] border border-white/12 bg-black/35 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md px-4 sm:px-6 py-6 sm:py-7">
-            <section
-                className="landing-step flex flex-col justify-center"
-                data-testid="landing-step-ask"
-                id="landing-step-ask"
-            >
-                <p className="landing-step-kicker">Ask</p>
-                <p className="landing-step-hint">Type what needs to get done. Or tap an example.</p>
-                <div className="landing-ask-box">
+            {preview ? (
+                <div className="landing-confirm" data-testid="landing-tryit-result">
+                    <p className="landing-confirm-msg">
+                        I&apos;ll ask{' '}
+                        <span className="landing-confirm-chip">{assignee.trim() || preview.who}</span>
+                        {' '}to{' '}
+                        <span className="landing-confirm-title">{preview.title}</span>
+                        {preview.when ? (
+                            <>
+                                {' '}by <span className="landing-confirm-chip">{preview.when}</span>
+                            </>
+                        ) : null}
+                        .
+                    </p>
+                    <p className="sr-only" data-testid="landing-no-account">
+                        No account. No password.
+                    </p>
+                    <p className="landing-send-visual" data-testid="landing-send-promise">
+                        We send it. If they go quiet, we follow up.
+                    </p>
+                    <button
+                        type="button"
+                        className="landing-confirm-send"
+                        onClick={sendIt}
+                        disabled={sending}
+                        data-testid="landing-send-it"
+                    >
+                        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        {sending ? 'Sending…' : 'Send'}
+                    </button>
+                </div>
+            ) : (
+                <div data-testid="landing-tryit-result" className="sr-only">
+                    <p data-testid="landing-no-account">No account. No password.</p>
+                    <p className="landing-send-visual" data-testid="landing-send-promise">
+                        We send it. If they go quiet, we follow up.
+                    </p>
+                </div>
+            )}
+
+            <div className="landing-ask-actions mb-2" data-testid="landing-examples">
+                {LANDING_EXAMPLES.map((ex, i) => (
+                    <button
+                        key={ex.id}
+                        type="button"
+                        onClick={() => pickExample(ex)}
+                        className={`landing-example-chip${i === ideaIndex ? ' is-on' : ''}`}
+                        data-testid={`landing-example-${ex.id}`}
+                    >
+                        {ex.chip}
+                    </button>
+                ))}
+            </div>
+
+            <div className="ai-composer-shell landing-composer" data-testid="landing-composer-shell">
+                <section
+                    className="landing-step"
+                    data-testid="landing-step-ask"
+                    id="landing-step-ask"
+                >
+                    <p className="sr-only landing-step-kicker">Ask</p>
                     <textarea
                         ref={inputRef}
                         value={value}
@@ -135,117 +194,89 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                focusEmail();
+                                if (looksLikeEmail(assignee)) sendIt();
+                                else focusEmail();
                             }
                         }}
-                        rows={filled ? 4 : 3}
-                        className="landing-ask-input relative w-full resize-none bg-transparent font-medium leading-relaxed outline-none caret-teal-300 text-white selection:bg-teal-400/30"
+                        rows={2}
+                        className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none rounded-none outline-none caret-teal-300 selection:bg-teal-400/30"
                         placeholder={idea.text}
                         data-testid="landing-tryit-input"
                         aria-label="What needs to get done"
                     />
-                    <div className="landing-ask-actions" data-testid="landing-examples">
-                        {LANDING_EXAMPLES.map((ex, i) => (
-                            <button
-                                key={ex.id}
-                                type="button"
-                                onClick={() => pickExample(ex)}
-                                className={`landing-example-chip${i === ideaIndex ? ' is-on' : ''}`}
-                                data-testid={`landing-example-${ex.id}`}
-                            >
-                                {ex.chip}
-                            </button>
-                        ))}
-                    </div>
-                    {filled && (
+                    {filled ? (
                         <ColorCodedPrompt
                             text={value}
-                            className="landing-ask-parsed"
+                            className="sr-only"
                             testId="landing-tryit-colorized"
                         />
-                    )}
-                </div>
-            </section>
+                    ) : null}
+                </section>
 
-            <section
-                className="landing-step landing-who-step flex flex-col justify-center"
-                data-testid="landing-step-who"
-                id="landing-step-who"
-            >
-                <p className="landing-step-kicker">Who</p>
-                <p className="sr-only" data-testid="landing-who-cue">
-                    Your email. To try it.
-                </p>
-                <p className="landing-step-hint">Your email. No password. We send the ask from here.</p>
-                <Input
-                    type="email"
-                    value={assignee}
-                    onChange={(e) => {
-                        setAssignee(e.target.value);
-                        if (whoNeeded) setWhoNeeded(false);
-                    }}
-                    placeholder="you@company.com"
-                    className={`landing-who-input ${whoNeeded ? 'is-needed' : ''}`}
-                    data-testid="landing-assignee-email"
-                    id="landing-assignee-email"
-                    aria-label="Your email"
-                    autoComplete="email"
-                />
-                <div className="landing-channel-row" data-testid="landing-channel">
-                    <button
-                        type="button"
-                        onClick={() => setChannel('email')}
-                        className={channel === 'email' ? 'is-on' : ''}
-                        data-testid="landing-channel-email"
-                    >
-                        <Mail className="w-3.5 h-3.5" /> Email
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setChannel('slack')}
-                        className={channel === 'slack' ? 'is-on' : ''}
-                        data-testid="landing-channel-slack"
-                    >
-                        <MessageSquare className="w-3.5 h-3.5" /> Slack
-                    </button>
-                </div>
-            </section>
-
-            <section
-                className="landing-step flex flex-col justify-center"
-                data-testid="landing-step-send"
-                id="landing-step-send"
-            >
-                <p className="landing-step-kicker">Send</p>
-                <div className="landing-send-row">
-                    <div data-testid="landing-tryit-result" className="min-w-0">
-                        {preview && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <p className="text-sm text-white/80 leading-relaxed truncate" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    {preview.title}
-                                    <span className="text-white/40"> · {assignee.trim() || preview.who} · {preview.when}</span>
-                                </p>
-                            </motion.div>
-                        )}
-                        <p className="sr-only" data-testid="landing-no-account">
-                            No account. No password.
-                        </p>
-                        <p className="landing-send-visual" data-testid="landing-send-promise">
-                            We send it. If they go quiet, we follow up.
-                        </p>
+                <section
+                    className="landing-who-step px-3 pb-1"
+                    data-testid="landing-step-who"
+                    id="landing-step-who"
+                >
+                    <p className="sr-only landing-step-kicker">Who</p>
+                    <p className="sr-only" data-testid="landing-who-cue">
+                        Your email. To try it.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <Input
+                            type="email"
+                            value={assignee}
+                            onChange={(e) => {
+                                setAssignee(e.target.value);
+                                if (whoNeeded) setWhoNeeded(false);
+                            }}
+                            placeholder="you@company.com"
+                            className={`landing-who-input ${whoNeeded ? 'is-needed' : ''}`}
+                            data-testid="landing-assignee-email"
+                            id="landing-assignee-email"
+                            aria-label="Your email"
+                            autoComplete="email"
+                        />
+                        <div className="landing-channel-row" data-testid="landing-channel">
+                            <button
+                                type="button"
+                                onClick={() => setChannel('email')}
+                                className={channel === 'email' ? 'is-on' : ''}
+                                data-testid="landing-channel-email"
+                            >
+                                <Mail className="w-3.5 h-3.5" /> Email
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setChannel('slack')}
+                                className={channel === 'slack' ? 'is-on' : ''}
+                                data-testid="landing-channel-slack"
+                            >
+                                <MessageSquare className="w-3.5 h-3.5" /> Slack
+                            </button>
+                        </div>
                     </div>
-                    <button
-                        type="button"
-                        className="landing-cta landing-send-cta"
-                        onClick={sendIt}
-                        disabled={sending}
-                        data-testid="landing-send-it"
-                    >
-                        <Send className="w-4 h-4" />
-                        {sending ? 'Opening…' : 'Send it'}
-                    </button>
+                </section>
+
+                <div className="relative z-[1] flex items-center justify-end gap-2 px-2 pb-2 pt-0.5">
+                    <section data-testid="landing-step-send" id="landing-step-send">
+                        <p className="sr-only landing-step-kicker">Send</p>
+                        <button
+                            type="button"
+                            onClick={sendIt}
+                            disabled={sending}
+                            className={`ai-composer-send h-8 w-8 rounded-full inline-flex items-center justify-center transition-colors ${
+                                filled || sending ? 'is-ready' : ''
+                            }`}
+                            aria-label="Send"
+                            title="Send"
+                        >
+                            {sending
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <ArrowUp className="w-4 h-4" strokeWidth={2.25} />}
+                        </button>
+                    </section>
                 </div>
-            </section>
             </div>
         </div>
     );
@@ -341,8 +372,16 @@ const LandingPage = () => {
                     <>
                 <LandingPayoff
                     onTry={() => scrollToId('landing-tryit')}
-                    onHow={() => scrollToId('landing-lived')}
+                    onHow={() => scrollToId('landing-week')}
                 />
+                <LandingWeek />
+                <LandingAssignBeat />
+                <LandingPileUp />
+                <LandingDeadline />
+                <LandingChase />
+                <LandingHalfDone />
+                <LandingTurn />
+                <LandingPeace />
                 <LandingLived />
                 <LandingCost />
                 <LandingDifference />

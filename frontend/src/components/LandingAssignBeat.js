@@ -6,7 +6,7 @@ import LandingCastMark from '@/components/LandingCastMark';
 import { CAST } from '@/lib/landingCast';
 
 const TILES = [
-    { person: CAST.hashim, you: true },
+    { person: CAST.alex, you: true },
     { person: CAST.maya, agree: '✅', at: 0.16 },
     { person: CAST.chris, agree: '👍', at: 0.22 },
     { person: CAST.priya, agree: '👍', at: 0.28 },
@@ -74,8 +74,8 @@ function AssignFrames({ progress }) {
                 style={{ opacity: slackOp, y: slackY }}
             >
                 <div className="landing-slack-head">
-                    <LandingCastMark who="hashim" size="sm" />
-                    <span className="landing-slack-name">{CAST.hashim.name}</span>
+                    <LandingCastMark who="alex" size="sm" />
+                    <span className="landing-slack-name">{CAST.alex.name}</span>
                     <span className="landing-slack-time">2:14</span>
                 </div>
                 <p className="landing-slack-body">Send the Q3 forecast.</p>
