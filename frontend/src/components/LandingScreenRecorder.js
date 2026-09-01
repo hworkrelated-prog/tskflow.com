@@ -154,47 +154,23 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
 
     const live = recording;
     const ready = recorded && !live;
-    const label = live
-        ? `Stop recording ${fmt(seconds)}`
-        : ready
-            ? 'Walkthrough saved. Record again'
-            : starting
-                ? 'Starting recording'
-                : 'Record a walkthrough';
+    const label = live ? fmt(seconds) : ready ? 'Saved' : starting ? 'Starting' : 'Record';
 
     return (
         <>
             <button
                 type="button"
-                className={`landing-ask-rec${live ? ' is-live' : ''}${ready ? ' is-ready' : ''}${starting && !live ? ' is-starting' : ''}`}
+                className={`landing-ask-rec landing-loom-rec${live ? ' is-live' : ''}${ready ? ' is-ready' : ''}${starting && !live ? ' is-starting' : ''}`}
                 onClick={live ? stop : start}
                 disabled={starting && !live}
                 data-testid={live ? 'landing-record-stop' : 'landing-record-screen'}
-                aria-label={label}
-                title={label}
+                aria-label={live ? `Stop ${fmt(seconds)}` : ready ? 'Saved. Record again' : starting ? 'Starting' : 'Record'}
+                title={live ? 'Stop' : ready ? 'Record again' : 'Record'}
                 aria-pressed={live}
             >
-                <span className="landing-ask-rec-stage" aria-hidden>
-                    <span className="landing-ask-rec-screen">
-                        <span className="landing-ask-rec-scan" />
-                        <span className="landing-ask-rec-marquee" />
-                        <span className="landing-ask-rec-chips">
-                            <span className="landing-ask-rec-chip is-who" />
-                            <span className="landing-ask-rec-chip is-work" />
-                            <span className="landing-ask-rec-chip is-when" />
-                        </span>
-                        <span className="landing-ask-rec-cursor" />
-                        {ready ? <span className="landing-ask-rec-play" /> : null}
-                    </span>
-                    <span className="landing-ask-rec-pip">
-                        {live ? <Square className="landing-ask-rec-stop" /> : ready ? <Check className="landing-ask-rec-check" /> : null}
-                    </span>
+                <span className="landing-loom-dot" aria-hidden>
+                    {live ? <Square className="landing-ask-rec-stop" /> : ready ? <Check className="landing-ask-rec-check" /> : null}
                 </span>
-                {live ? (
-                    <span className="landing-ask-rec-hud" aria-hidden>
-                        {fmt(seconds)}
-                    </span>
-                ) : null}
                 <span className="landing-ask-rec-label">{label}</span>
             </button>
 
