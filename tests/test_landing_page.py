@@ -36,6 +36,14 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "LandingScreenRecorder" in page_tree
     assert "LandingScreenRecorder" not in src.split("const LaunchPad")[1].split("const LandingPage")[0]
     assert "LandingPayoff" in src
+    assert "LandingWeek" in src
+    assert "LandingAssignBeat" in src
+    assert "LandingPileUp" in src
+    assert "LandingDeadline" in src
+    assert "LandingChase" in src
+    assert "LandingHalfDone" in src
+    assert "LandingTurn" in src
+    assert "LandingPeace" in src
     assert "LandingLived" in src
     assert "LandingCost" in src
     assert "LandingDifference" in src
@@ -78,6 +86,8 @@ def test_landing_opens_straight_into_a_launch():
     assert "landing-step-ask" in src
     assert "landing-step-who" in src
     assert "landing-step-send" in src
+    assert "ai-composer-shell" in src
+    assert "landing-confirm" in src
     assert 'data-testid="landing-send-it"' in src
     assert 'data-testid="landing-assignee-email"' in src
     assert 'data-testid="landing-channel-slack"' in src
@@ -90,7 +100,11 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
     assert 'data-testid="landing-assignee-email"' in src
     assert 'data-testid="landing-channel-email"' in src
     assert 'data-testid="landing-channel-slack"' in src
-    assert "Send it" in src
+    assert "ai-composer-shell" in src
+    assert "ai-composer-send" in src
+    assert "ArrowUp" in src
+    assert "{sending ? 'Sending…' : 'Send'}" in src
+    assert "Send it" not in src
     assert "No account. No password." in src
     assert "Send this for real" not in src
     assert "See the ask" not in src
@@ -333,7 +347,7 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
 
 
 def test_landing_story_is_shown_not_told():
-    """Pain first, then real Meet / Slack / Gmail, the cost, TskFlow, then the composer."""
+    """Pain first, then the scroll-pin week, real Meet / Slack / Gmail, the cost, TskFlow, then the in-app composer."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
     lived = (FRONT / "components" / "LandingLived.js").read_text(encoding="utf-8")
@@ -398,12 +412,27 @@ def test_landing_story_is_shown_not_told():
     assert 'TskFlow keeps the "yes."' in diff
     assert "Capture" in diff and "Schedule" in diff and "Follow up" in diff and "Verify" in diff
     assert "Did you get this?" in compare
-    assert "No chasing. No Slack archaeology. No guessing." in compare
+    assert "There is no clear way to hold people accountable." in compare
+    assert "Record the 1:1" in compare
+    assert "Screenshot Slack" in compare
+    assert "Hope HR can use it" in compare
+    assert "Team performance" in compare
+    assert "Leaders see who follows through. HR already has the record." in compare
+    assert "AccountabilityScore" in compare
+    assert "No chasing. No Slack archaeology. No guessing." not in compare
     assert "Imagine not having to ask." in payoff
     assert "You already know." in payoff
     assert "managing reminders" in payoff
     tree = landing.split("const LandingPage")[-1]
-    assert tree.index("LandingPayoff") < tree.index("LandingLived")
+    assert tree.index("LandingPayoff") < tree.index("LandingWeek")
+    assert tree.index("LandingWeek") < tree.index("LandingAssignBeat")
+    assert tree.index("LandingAssignBeat") < tree.index("LandingPileUp")
+    assert tree.index("LandingPileUp") < tree.index("LandingDeadline")
+    assert tree.index("LandingDeadline") < tree.index("LandingChase")
+    assert tree.index("LandingChase") < tree.index("LandingHalfDone")
+    assert tree.index("LandingHalfDone") < tree.index("LandingTurn")
+    assert tree.index("LandingTurn") < tree.index("LandingPeace")
+    assert tree.index("LandingPeace") < tree.index("LandingLived")
     assert tree.index("LandingLived") < tree.index("LandingCost")
     assert tree.index("LandingCost") < tree.index("LandingDifference")
     assert tree.index("LandingDifference") < tree.index("LandingBeforeAfter")
@@ -464,6 +493,17 @@ def test_landing_story_cast_is_sales_and_consistent():
     assert "Alex Rivera" in cast
     assert "TASKS" in pile and "TASKS" in turn
     assert "hashim" in cast and "maya" in cast and "chris" in cast and "priya" in cast
+    assert "CAST.alex" in lived
+    assign = (FRONT / "components" / "LandingAssignBeat.js").read_text(encoding="utf-8")
+    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
+    week = (FRONT / "components" / "LandingWeek.js").read_text(encoding="utf-8")
+    assert 'who="alex"' in assign
+    assert 'who="hashim"' not in assign
+    assert 'who="alex"' in chase
+    assert 'who="alex"' in week
+    mark = (FRONT / "components" / "LandingCastMark.js").read_text(encoding="utf-8")
+    assert "LandingFace" in mark
+    assert "person.photo" in mark
     assert "QA signoff" not in pile
     assert "record a demo of the fix" not in pile
     assert "QA signoff" not in lived

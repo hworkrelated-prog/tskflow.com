@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import LandingCastMark from '@/components/LandingCastMark';
+import LandingFace from '@/components/LandingFace';
+import { CAST } from '@/lib/landingCast';
+import AccountabilityScore from '@/components/AccountabilityScore';
 
 const CHASE = [
     'Did you get this?',
@@ -10,6 +12,20 @@ const CHASE = [
     'Can you send me that?',
     "What's the status?",
     'Did you remember?',
+];
+
+const FILE_STEPS = [
+    'Record the 1:1',
+    'Screenshot Slack',
+    'Write it up yourself',
+    'Hope HR can use it',
+];
+
+const PERF = [
+    { who: 'priya', score: 94, label: 'Strong', done: 12, assigned: 12 },
+    { who: 'chris', score: 71, label: 'Solid', done: 9, assigned: 12 },
+    { who: 'maya', score: 41, label: 'At risk', done: 4, assigned: 10 },
+    { who: 'jordan', score: 18, label: 'Needs work', done: 2, assigned: 11 },
 ];
 
 export default function LandingBeforeAfter() {
@@ -27,13 +43,13 @@ export default function LandingBeforeAfter() {
         if (side === 'without' && shown >= CHASE.length) {
             const id = window.setTimeout(() => {
                 setSide('with');
-            }, 1100);
+            }, 1400);
             return () => window.clearTimeout(id);
         }
         const id = window.setTimeout(() => {
             setSide('without');
             setShown(1);
-        }, 4200);
+        }, 5200);
         return () => window.clearTimeout(id);
     }, [held, reduce, shown, side]);
 
@@ -75,15 +91,29 @@ export default function LandingBeforeAfter() {
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.35 }}
                     >
-                        <p className="landing-compare-label">Manager</p>
+                        <p className="landing-compare-label">No paper trail</p>
+                        <p className="landing-compare-lead" data-testid="landing-compare-without-lead">
+                            There is no clear way to hold people accountable.
+                        </p>
                         <ul className="landing-chase-list">
                             {CHASE.slice(0, shown).map((line, i) => (
                                 <li key={line} style={{ opacity: 0.42 + (i / CHASE.length) * 0.58 }}>
-                                    <LandingCastMark who="hashim" size="sm" />
+                                    <LandingFace who="alex" size={28} radius={8} />
                                     {line}
                                 </li>
                             ))}
                         </ul>
+                        <div className="landing-hr-file" data-testid="landing-compare-file">
+                            <p className="landing-compare-label">If someone is a problem</p>
+                            <p className="landing-compare-file-lead">
+                                You start documenting. Record meetings. Pull Slack. Build a file.
+                            </p>
+                            <ul>
+                                {FILE_STEPS.map((step) => (
+                                    <li key={step}>{step}</li>
+                                ))}
+                            </ul>
+                        </div>
                     </motion.div>
                 ) : (
                     <motion.div
@@ -95,15 +125,32 @@ export default function LandingBeforeAfter() {
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.35 }}
                     >
-                        <p className="landing-compare-label">Manager dashboard</p>
-                        <ul className="landing-board-nums">
-                            <li><b>12</b> commitments</li>
-                            <li><b>9</b> completed</li>
-                            <li><b>2</b> in progress</li>
-                            <li className="is-risk"><b>1</b> at risk</li>
+                        <p className="landing-compare-label">Team performance</p>
+                        <p className="landing-compare-lead">
+                            The same view leaders and HR already use after sign in.
+                        </p>
+                        <ul className="landing-perf-list" data-testid="landing-compare-perf">
+                            {PERF.map((row) => {
+                                const person = CAST[row.who];
+                                return (
+                                    <li key={row.who} data-testid={`landing-perf-${row.who}`}>
+                                        <LandingFace who={row.who} size={32} radius={999} />
+                                        <span className="landing-perf-who">
+                                            <b>{person.name}</b>
+                                            <span>{row.done}/{row.assigned} done</span>
+                                        </span>
+                                        <AccountabilityScore
+                                            score={row.score}
+                                            label={row.label}
+                                            size="sm"
+                                            testId={`landing-perf-score-${row.who}`}
+                                        />
+                                    </li>
+                                );
+                            })}
                         </ul>
                         <p className="landing-compare-calm" data-testid="landing-compare-calm">
-                            No chasing. No Slack archaeology. No guessing.
+                            Leaders see who follows through. HR already has the record.
                         </p>
                     </motion.div>
                 )}

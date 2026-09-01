@@ -1,9 +1,24 @@
 import React from 'react';
+import LandingFace from '@/components/LandingFace';
 import { CAST } from '@/lib/landingCast';
+
+const FACE_PX = { sm: 25, md: 34, lg: 46 };
 
 export default function LandingCastMark({ who, size = 'md', className = '' }) {
     const person = typeof who === 'string' ? CAST[String(who).toLowerCase()] : who;
     if (!person) return null;
+    if (person.photo) {
+        return (
+            <span className="inline-flex shrink-0" data-testid={`landing-cast-${person.id}`}>
+                <LandingFace
+                    who={person}
+                    size={FACE_PX[size] || FACE_PX.md}
+                    radius={999}
+                    className={`landing-cast landing-cast--${size} ${className}`.trim()}
+                />
+            </span>
+        );
+    }
     return (
         <span
             className={`landing-cast landing-cast--${size} ${className}`.trim()}

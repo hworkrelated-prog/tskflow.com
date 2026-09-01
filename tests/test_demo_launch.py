@@ -336,7 +336,9 @@ def test_landing_composer_sends_for_real_instead_of_dead_ending_at_register():
     assert 'data-testid="landing-send-it"' in landing
     assert 'data-testid="landing-assignee-email"' in landing
     assert "/demo/launch" in landing
-    assert "Send it" in landing
+    assert "ai-composer-shell" in landing
+    assert "{sending ? 'Sending…' : 'Send'}" in landing
+    assert "Send it" not in landing
     assert "Send this for real" not in landing
     assert "navigate('/register')" not in landing
     assert "environment_url" in landing

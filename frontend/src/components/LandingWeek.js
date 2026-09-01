@@ -71,7 +71,7 @@ function WeekFrame({ progress }) {
                 </motion.p>
                 <div className="landing-week-friday">
                     <motion.p className="landing-week-msg is-you" style={{ opacity: friAsk }} data-testid="landing-week-friday-ask">
-                        <LandingCastMark who="hashim" size="sm" />
+                        <LandingCastMark who="alex" size="sm" />
                         <span>Hey, any update on this?</span>
                     </motion.p>
                     <motion.p className="landing-week-msg" style={{ opacity: friReply }} data-testid="landing-week-friday-reply">
