@@ -1,11 +1,57 @@
 /** One visual cast for the landing scroll story. Sales-flavored throughout. */
 
 export const CAST = {
+    alex: {
+        id: 'alex',
+        name: 'Alex Rivera',
+        short: 'Alex',
+        initial: 'A',
+        bg: '#0f766e',
+        fg: '#ecfdf5',
+        photo: '/avatars/alex.svg',
+        email: 'alex@acmecorp.com',
+    },
     hashim: { id: 'hashim', name: 'Hashim', initial: 'H', bg: '#0f766e', fg: '#ecfdf5' },
-    maya: { id: 'maya', name: 'Maya', initial: 'M', bg: '#0e7490', fg: '#ecfeff' },
-    chris: { id: 'chris', name: 'Chris', initial: 'C', bg: '#b45309', fg: '#fffbeb' },
-    priya: { id: 'priya', name: 'Priya', initial: 'P', bg: '#6d28d9', fg: '#f5f3ff' },
-    jordan: { id: 'jordan', name: 'Jordan', initial: 'J', bg: '#be123c', fg: '#fff1f2' },
+    maya: {
+        id: 'maya',
+        name: 'Maya Chen',
+        short: 'Maya',
+        initial: 'M',
+        bg: '#0e7490',
+        fg: '#ecfeff',
+        photo: '/avatars/maya.svg',
+        email: 'maya@acmecorp.com',
+    },
+    chris: {
+        id: 'chris',
+        name: 'Chris Park',
+        short: 'Chris',
+        initial: 'C',
+        bg: '#b45309',
+        fg: '#fffbeb',
+        photo: '/avatars/chris.svg',
+        email: 'chris@acmecorp.com',
+    },
+    priya: {
+        id: 'priya',
+        name: 'Priya Shah',
+        short: 'Priya',
+        initial: 'P',
+        bg: '#6d28d9',
+        fg: '#f5f3ff',
+        photo: '/avatars/priya.svg',
+        email: 'priya@acmecorp.com',
+    },
+    jordan: {
+        id: 'jordan',
+        name: 'Jordan Hale',
+        short: 'Jordan',
+        initial: 'J',
+        bg: '#be123c',
+        fg: '#fff1f2',
+        photo: '/avatars/jordan.svg',
+        email: 'jordan@acmecorp.com',
+    },
 };
 
 export const TEAM = [CAST.maya, CAST.chris, CAST.priya, CAST.jordan];
