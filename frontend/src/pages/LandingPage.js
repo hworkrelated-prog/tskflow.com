@@ -8,14 +8,12 @@ import { Mail, MessageSquare, Send } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
-import LandingAssignBeat from '@/components/LandingAssignBeat';
-import LandingPileUp from '@/components/LandingPileUp';
-import LandingDeadline from '@/components/LandingDeadline';
-import LandingChase from '@/components/LandingChase';
-import LandingHalfDone from '@/components/LandingHalfDone';
-import LandingTurn from '@/components/LandingTurn';
-import LandingPeace from '@/components/LandingPeace';
-import LandingIntegrations from '@/components/LandingIntegrations';
+import LandingHeroStory from '@/components/LandingHeroStory';
+import LandingWeek from '@/components/LandingWeek';
+import LandingCost from '@/components/LandingCost';
+import LandingDifference from '@/components/LandingDifference';
+import LandingBeforeAfter from '@/components/LandingBeforeAfter';
+import LandingPayoff from '@/components/LandingPayoff';
 import LandingFounder from '@/components/LandingFounder';
 import LandingUnbiassly from '@/components/LandingUnbiassly';
 import TskFlowLogo from '@/components/TskFlowLogo';
@@ -29,6 +27,11 @@ import {
     colorizeAssignPrompt,
 } from '@/lib/landingAssignDemo';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
+
+const scrollToId = (id) => {
+    const node = document.getElementById(id);
+    node?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 const ColorCodedPrompt = ({ text, className = '', testId, as: Tag = 'p' }) => (
     <Tag className={className} data-testid={testId}>
@@ -337,28 +340,45 @@ const LandingPage = () => {
                     <LandingUnbiassly />
                 ) : (
                     <>
-                <section className="landing-hero-visual landing-hero-pain-only" data-testid="landing-hero">
-                    <h1 className="landing-hero-line" data-testid="landing-pain-line">
-                        Managers waste hours chasing people for work they already agreed to do.
-                    </h1>
-                    <p className="landing-hero-sub" data-testid="landing-point">
-                        They said yes in the meeting. Then Slack ate it. You became the reminder.
-                    </p>
-                    <p className="landing-hero-pain" data-testid="landing-pain-more">
-                        You ask again. They swear they have it. The work is still not done.
-                    </p>
-                </section>
-
-                <LandingAssignBeat />
-                <LandingPileUp />
-                <LandingDeadline />
-                <LandingChase />
-                <LandingHalfDone />
-                <LandingTurn />
-                <LandingPeace />
-                <LandingIntegrations />
+                <LandingHeroStory
+                    onTry={() => scrollToId('landing-tryit')}
+                    onHow={() => scrollToId('landing-week')}
+                />
+                <LandingWeek />
+                <LandingCost />
+                <LandingDifference />
+                <LandingBeforeAfter />
+                <LandingPayoff />
 
                 <section className="landing-final" data-testid="landing-final">
+                    <p className="landing-section-kicker">Start</p>
+                    <h2 className="landing-final-headline" data-testid="landing-final-headline">
+                        Stop being the reminder system.
+                    </h2>
+                    <p className="landing-final-support" data-testid="landing-final-support">
+                        Your team already said yes. TskFlow makes sure the commitment doesn't disappear.
+                    </p>
+                    <div className="landing-final-ctas">
+                        <button
+                            type="button"
+                            className="landing-cta"
+                            onClick={() => {
+                                scrollToId('landing-tryit');
+                                window.setTimeout(() => inputRef.current?.focus?.(), 240);
+                            }}
+                            data-testid="landing-final-cta"
+                        >
+                            Start using TskFlow
+                        </button>
+                        <button
+                            type="button"
+                            className="landing-cta-ghost"
+                            onClick={() => scrollToId('landing-difference')}
+                            data-testid="landing-final-how"
+                        >
+                            See how it works
+                        </button>
+                    </div>
                     <p className="landing-final-line">Try it. No account. No password.</p>
                     <LaunchPad
                         recordingBlob={recordingBlob}

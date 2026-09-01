@@ -591,11 +591,7 @@ body.landing-active {
     color: #ffffff !important;
 }
 .landing-page.landing-tool {
-    background-image:
-        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-    background-size: 56px 56px;
-    background-position: center top;
+    background-image: none;
 }
 html:has(body.landing-active) {
     scroll-behavior: smooth;
@@ -636,7 +632,7 @@ html:has(body.landing-active) {
 }
 .landing-hero-line {
     margin: 0;
-    max-width: 11.4em;
+    max-width: 14.6em;
     font-family: Outfit, sans-serif;
     font-size: clamp(1.7rem, 5.4vw, 3.35rem);
     font-weight: 600;
@@ -3312,3 +3308,714 @@ html:has(body.landing-active) {
         linear-gradient(180deg, #f6f3ec 0%, #eef4f1 100%);
     color: #0f172a;
 }
+
+/* Editorial landing story */
+.landing-hero-story {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.25rem;
+    width: min(72rem, 100%);
+    margin: 0 auto;
+    padding: 1.75rem 1.25rem 3.25rem;
+    min-height: calc(100svh - 4.5rem);
+    align-items: center;
+}
+.landing-hero-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.15rem;
+    text-align: left;
+}
+.landing-hero-kicker {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(94, 234, 212, 0.92);
+}
+.landing-hero-story .landing-hero-line {
+    max-width: 13.5em;
+    font-size: clamp(2.05rem, 6.2vw, 4.05rem);
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    line-height: 1.04;
+}
+.landing-hero-story .landing-hero-sub {
+    max-width: 34rem;
+    font-size: clamp(1.02rem, 2.1vw, 1.22rem);
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.68);
+}
+.landing-hero-ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    padding-top: 0.35rem;
+}
+.landing-page .landing-cta-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 3rem;
+    padding: 0 1.35rem;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.78) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    box-shadow: none;
+}
+.landing-page .landing-cta-ghost:hover {
+    border-color: rgba(94, 234, 212, 0.55) !important;
+    color: #ccfbf1 !important;
+}
+
+.landing-reel {
+    width: min(28.5rem, 100%);
+    justify-self: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 22px;
+    background: #090d0c;
+    overflow: hidden;
+}
+.landing-reel-head {
+    display: flex;
+    gap: 1rem;
+    padding: 0.85rem 1.1rem 0.7rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.32);
+}
+.landing-reel-head span.is-on {
+    color: #99f6e4;
+}
+.landing-reel-stage {
+    position: relative;
+    height: 22.5rem;
+}
+.landing-reel-layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+    transition: opacity 0.4s ease, transform 0.45s ease;
+}
+.landing-reel-layer.is-on {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+}
+.landing-reel-layer.is-pause {
+    filter: grayscale(0.35);
+}
+.landing-meet--reel {
+    width: 100%;
+}
+.landing-meet-grid--two {
+    grid-template-columns: 1fr 1fr;
+}
+.landing-reel-meet .landing-meet-agree {
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.landing-reel-meet .landing-meet-agree.is-on {
+    opacity: 1;
+    transform: scale(1);
+}
+.landing-slack--reel {
+    width: 100%;
+    max-height: 100%;
+    overflow: hidden;
+}
+.landing-commit-line.is-buried {
+    opacity: 0.28;
+    filter: blur(0.4px);
+}
+.landing-slack-noise {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+}
+.landing-noise,
+.landing-chase-ask,
+.landing-week-msg {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+.landing-noise {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.landing-noise.is-on {
+    opacity: 1;
+    transform: none;
+}
+.landing-noise.is-cover {
+    background: rgba(12, 18, 16, 0.92);
+}
+.landing-chase-ask {
+    margin-top: 0.65rem;
+    border-color: rgba(251, 113, 133, 0.35);
+    color: #fecdd3;
+}
+.landing-flow-card {
+    width: 100%;
+    padding: 1.15rem 1.2rem 1.25rem;
+    border-radius: 18px;
+    border: 1px solid rgba(45, 212, 191, 0.28);
+    background: rgba(8, 18, 16, 0.94);
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+.landing-flow-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    font-family: Outfit, sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+.landing-cal-chip--inline {
+    width: fit-content;
+}
+.landing-progress {
+    height: 0.38rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+.landing-progress span {
+    display: block;
+    height: 100%;
+    width: 8%;
+    border-radius: inherit;
+    background: #2dd4bf;
+    transition: width 0.55s ease;
+}
+.landing-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.landing-status {
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.landing-status.is-done {
+    background: rgba(45, 212, 191, 0.16);
+    color: #5eead4;
+}
+.landing-status.is-risk {
+    background: rgba(251, 113, 133, 0.14);
+    color: #fda4af;
+}
+.landing-status.is-wait {
+    background: rgba(252, 211, 77, 0.12);
+    color: #fde68a;
+}
+.landing-relief {
+    margin: 0;
+    font-family: Outfit, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #99f6e4;
+}
+.landing-reel-line {
+    margin: 0;
+    min-height: 2.6rem;
+    padding: 0.7rem 1.1rem 0.45rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+}
+.landing-reel-meter {
+    height: 2px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.landing-reel-meter span {
+    display: block;
+    height: 100%;
+    background: #2dd4bf;
+}
+
+.landing-section-kicker {
+    margin: 0 0 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(94, 234, 212, 0.88);
+}
+.landing-section-title {
+    margin: 0;
+    max-width: 16em;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.7rem, 4.4vw, 2.85rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.12;
+    color: #f8fafc;
+}
+
+.landing-week-story {
+    display: grid;
+    gap: 1.1rem;
+    width: min(58rem, 100%);
+    align-items: center;
+}
+.landing-week-rail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+.landing-week-rail li {
+    display: grid;
+    grid-template-columns: 0.55rem 1fr;
+    column-gap: 0.7rem;
+    row-gap: 0.12rem;
+}
+.landing-week-rail b {
+    grid-column: 2;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #f8fafc;
+}
+.landing-week-rail li > span:last-child {
+    grid-column: 2;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+.landing-week-dot {
+    grid-row: 1 / span 2;
+    width: 0.42rem;
+    height: 0.42rem;
+    margin-top: 0.28rem;
+    border-radius: 999px;
+    background: #2dd4bf;
+    box-shadow: 0 0 10px rgba(45, 212, 191, 0.7);
+}
+.landing-week-stage {
+    position: relative;
+    min-height: 18.5rem;
+}
+.landing-commit-card {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 0.7rem;
+    width: min(22rem, 100%);
+    margin: 0 auto;
+    padding: 1rem 1.05rem;
+    border-radius: 16px;
+    border: 1px solid rgba(45, 212, 191, 0.38);
+    background: rgba(8, 18, 16, 0.94);
+}
+.landing-commit-card p {
+    margin: 0;
+    font-weight: 600;
+}
+.landing-commit-card span {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+.landing-week-bury {
+    position: absolute;
+    inset: 1.4rem 0 0;
+    pointer-events: none;
+}
+.landing-bury-card {
+    position: absolute;
+    left: 50%;
+    width: min(20.5rem, 86%);
+    margin-left: calc(min(20.5rem, 86%) / -2);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(14, 18, 17, 0.94);
+    font-size: 0.86rem;
+}
+.landing-week-thought {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 5.4rem;
+    margin: 0;
+    text-align: center;
+    font-family: Outfit, sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.72);
+}
+.landing-week-friday {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: min(22rem, 92%);
+    margin-left: calc(min(22rem, 92%) / -2);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.landing-week-msg.is-you {
+    border-color: rgba(251, 113, 133, 0.32);
+}
+
+.landing-cost,
+.landing-diff,
+.landing-compare,
+.landing-final {
+    width: min(52rem, 100%);
+    margin: 0 auto;
+    padding: 4.5rem 1.25rem;
+    scroll-margin-top: 4.5rem;
+}
+.landing-cost-nums {
+    display: grid;
+    gap: 1.5rem;
+    margin: 2.2rem 0 1.6rem;
+}
+.landing-cost-nums article {
+    padding-bottom: 1.3rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.landing-cost-nums b {
+    display: block;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(3.4rem, 10vw, 5.6rem);
+    font-weight: 600;
+    letter-spacing: -0.06em;
+    line-height: 0.9;
+    color: #f8fafc;
+    font-variant-numeric: tabular-nums;
+}
+.landing-cost-nums span {
+    display: block;
+    margin: 0.55rem 0 0.4rem;
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: #99f6e4;
+}
+.landing-cost-nums p,
+.landing-cost-days,
+.landing-cost-point,
+.landing-cost-note {
+    margin: 0;
+    max-width: 28rem;
+    color: rgba(255, 255, 255, 0.62);
+    line-height: 1.45;
+}
+.landing-cost-days {
+    margin-bottom: 1.1rem;
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.82);
+}
+.landing-cost-point {
+    margin-bottom: 0.85rem;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.25rem, 3vw, 1.7rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: #f8fafc;
+}
+.landing-cost-note {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.landing-diff-steps {
+    list-style: none;
+    margin: 2.4rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+.landing-diff-step {
+    display: grid;
+    grid-template-columns: 3.2rem 1fr;
+    gap: 1rem;
+    padding-top: 1.3rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.landing-diff-n {
+    font-family: Outfit, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #5eead4;
+}
+.landing-diff-step h3 {
+    margin: 0 0 0.45rem;
+    font-size: 1.35rem;
+}
+.landing-diff-step p {
+    margin: 0 0 0.35rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+.landing-diff-quote {
+    font-family: Outfit, sans-serif;
+    font-size: 1.15rem !important;
+    font-weight: 600;
+    color: #f8fafc !important;
+}
+.landing-diff-body {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.landing-compare-tabs {
+    display: flex;
+    gap: 0.45rem;
+    margin: 1.4rem 0 1.6rem;
+}
+.landing-compare-tabs button {
+    height: 2.4rem;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.landing-compare-tabs button.is-on {
+    border-color: transparent;
+    background: #f8fafc;
+    color: #042f2e;
+}
+.landing-compare-pane {
+    min-height: 18rem;
+    padding: 1.3rem 1.35rem 1.5rem;
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #090d0c;
+}
+.landing-compare-pane--calm {
+    border-color: rgba(45, 212, 191, 0.28);
+}
+.landing-compare-label {
+    margin: 0 0 1rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+}
+.landing-chase-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+.landing-chase-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 1.02rem;
+    font-weight: 500;
+}
+.landing-board-nums {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.2rem;
+}
+.landing-board-nums li {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.62);
+}
+.landing-board-nums b {
+    display: block;
+    font-family: Outfit, sans-serif;
+    font-size: 2.4rem;
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    color: #f8fafc;
+    line-height: 1;
+    margin-bottom: 0.2rem;
+}
+.landing-board-nums .is-risk b {
+    color: #fda4af;
+}
+.landing-compare-calm {
+    margin: 1.4rem 0 0;
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #99f6e4;
+}
+
+.landing-payoff {
+    width: min(40rem, 100%);
+    text-align: center;
+}
+.landing-payoff-title {
+    margin: 0 0 1.6rem;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(2.1rem, 7vw, 4.1rem);
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    line-height: 1.02;
+}
+.landing-payoff-qs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    min-height: 7.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.landing-payoff-qs li {
+    font-size: clamp(1.05rem, 2.6vw, 1.35rem);
+    color: rgba(255, 255, 255, 0.42);
+}
+.landing-payoff-know {
+    margin: 0.4rem 0 0.7rem;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.4rem);
+    font-weight: 600;
+    color: #99f6e4;
+}
+.landing-payoff-after {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 1.08rem;
+    line-height: 1.45;
+}
+
+.landing-final {
+    text-align: left;
+    padding-top: 3.5rem;
+    padding-bottom: 4.25rem;
+}
+.landing-final-headline {
+    margin: 0 0 0.85rem;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.9rem, 5vw, 3.2rem);
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1.08;
+}
+.landing-final-support {
+    margin: 0 0 1.4rem;
+    max-width: 28rem;
+    font-size: 1.08rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.66);
+}
+.landing-final-ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-bottom: 2rem;
+}
+
+@media (min-width: 800px) {
+    .landing-week-story {
+        grid-template-columns: 14.5rem minmax(0, 1fr);
+        gap: 2rem;
+    }
+    .landing-cost-nums {
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+    }
+    .landing-cost-nums article {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+}
+@media (min-width: 960px) {
+    .landing-hero-story {
+        grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 26rem);
+        gap: 3.4rem;
+        padding: 2.5rem 1.5rem 4.5rem;
+        text-align: left;
+    }
+    .landing-reel {
+        justify-self: stretch;
+        width: 100%;
+    }
+}
+@media (max-width: 47.99rem) {
+    .landing-hero-story {
+        min-height: 0;
+        padding-top: 1.25rem;
+        padding-bottom: 2.4rem;
+    }
+    .landing-reel-stage {
+        height: 20.5rem;
+    }
+    .landing-meet--reel .landing-meet-tile {
+        min-height: 5.6rem;
+    }
+    .landing-week-rail {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 0.85rem;
+        padding-bottom: 0.3rem;
+    }
+    .landing-week-rail li {
+        min-width: 8.4rem;
+        grid-template-columns: 0.45rem 1fr;
+    }
+    .landing-week-stage {
+        min-height: 20rem;
+    }
+    .landing-cost,
+    .landing-diff,
+    .landing-compare,
+    .landing-final {
+        padding: 3.1rem 1.15rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .landing-reel-layer,
+    .landing-reel-meet .landing-meet-agree,
+    .landing-noise,
+    .landing-progress span,
+    .landing-reel-meter span {
+        transition: none !important;
+    }
+    .landing-reel-layer.is-pause {
+        filter: none;
+    }
+}
+
