@@ -1344,6 +1344,29 @@ html:has(body.landing-active) {
     color: #f8fafc;
     flex-shrink: 0;
 }
+.landing-pin-thesis {
+    margin: 0;
+    max-width: 22em;
+    text-align: center;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.15rem, 3.1vw, 1.7rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.25;
+    color: #f8fafc;
+    flex-shrink: 0;
+}
+.landing-pin-now {
+    margin: 0;
+    max-width: 28em;
+    min-height: 1.45em;
+    text-align: center;
+    font-size: 0.98rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: rgba(204, 251, 241, 0.82);
+    flex-shrink: 0;
+}
 .landing-pin-kicker {
     display: flex;
     flex-direction: column;
@@ -4202,13 +4225,53 @@ html:has(body.landing-active) {
     margin-bottom: 0.65rem;
 }
 .landing-payoff-title {
-    margin: 0 0 0.55rem;
+    margin: 0 0 0.7rem;
     font-family: Outfit, sans-serif;
-    font-size: clamp(1.85rem, 6.2vw, 3.35rem);
+    font-size: clamp(1.7rem, 5.6vw, 2.85rem);
     font-weight: 600;
     letter-spacing: -0.05em;
-    line-height: 1.02;
+    line-height: 1.08;
     color: #f8fafc;
+    max-width: 18ch;
+}
+.landing-hero-plot {
+    list-style: none;
+    margin: 0 auto 1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: min(26rem, 100%);
+    text-align: left;
+}
+.landing-hero-plot li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    font-size: 1.02rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.78);
+}
+.landing-hero-plot i {
+    flex-shrink: 0;
+    width: 1.4rem;
+    height: 1.4rem;
+    margin-top: 0.05rem;
+    border-radius: 999px;
+    background: rgba(45, 212, 191, 0.18);
+    color: #99f6e4;
+    font-style: normal;
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+}
+.landing-hero-plot b {
+    color: #f8fafc;
+    font-weight: 600;
+}
+.landing-final-plot {
+    margin: 0 0 1.35rem;
 }
 .landing-payoff-qs {
     list-style: none;

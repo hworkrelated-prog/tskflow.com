@@ -390,6 +390,11 @@ const LandingPage = () => {
                                     <p className="landing-final-support" data-testid="landing-final-support">
                                         Your team already said yes. TskFlow makes sure the commitment doesn't disappear.
                                     </p>
+                                    <ol className="landing-hero-plot landing-final-plot" data-testid="landing-final-plot">
+                                        <li><i>1</i><span><b>They said yes</b> in the meeting.</span></li>
+                                        <li><i>2</i><span><b>You used to chase</b> them after.</span></li>
+                                        <li><i>3</i><span><b>TskFlow chases</b> them now. Try it below.</span></li>
+                                    </ol>
                                     <div className="landing-final-ctas">
                                         <button
                                             type="button"

@@ -39,25 +39,25 @@ const MEET_PEOPLE = [
 ];
 
 const MEET_CAPTIONS = [
-    { at: 0, text: 'A group of people.' },
-    { at: 0.16, text: 'The organizer assigned a task.' },
-    { at: 0.48, text: 'Everyone acknowledged.' },
-    { at: 0.74, text: 'The meeting concluded.' },
+    { at: 0, lock: 'A group of people.', text: 'Four people on a call. One of them is you — Alex.' },
+    { at: 0.16, lock: 'The organizer assigned a task.', text: 'Alex asks Maya to send the Q3 forecast by Friday.' },
+    { at: 0.48, lock: 'Everyone acknowledged.', text: 'Maya says yes. Chris and Priya say yes too.' },
+    { at: 0.74, lock: 'The meeting concluded.', text: 'The meeting ends. The promises just walk out the door.' },
 ];
 
 const CATCH_CAPTIONS = [
-    { at: 0, text: 'Now you inspect what you expected.' },
-    { at: 0.20, text: 'Build the report.' },
-    { at: 0.40, text: 'Catch people.' },
-    { at: 0.58, text: 'Have the tough conversation.' },
-    { at: 0.76, text: 'Document the continuous misses.' },
+    { at: 0, lock: 'Now you inspect what you expected.', text: 'Friday. The forecast is not there. Now you go looking.' },
+    { at: 0.20, lock: 'Build the report.', text: 'You build a list of who missed.' },
+    { at: 0.40, lock: 'Catch people.', text: 'Then you ping them. You are the nag now.' },
+    { at: 0.58, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1: this is the third Friday.' },
+    { at: 0.76, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
 ];
 
 const FLOW_CAPTIONS = [
-    { at: 0, text: 'TskFlow joins your meet.' },
-    { at: 0.28, text: 'Leaves with every task.' },
-    { at: 0.52, text: 'Gets after the assignees.' },
-    { at: 0.80, text: 'Your relationship stays intact.' },
+    { at: 0, lock: 'TskFlow joins your meet.', text: 'Same meeting. TskFlow is on the call too.' },
+    { at: 0.28, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
+    { at: 0.52, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
+    { at: 0.80, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
 ];
 
 const LINES = [
@@ -95,11 +95,11 @@ const CHASE_LINES = [
 ];
 
 function captionFor(beats, v) {
-    let text = beats[0].text;
-    for (const beat of beats) {
-        if (v >= beat.at) text = beat.text;
+    let beat = beats[0];
+    for (const item of beats) {
+        if (v >= item.at) beat = item;
     }
-    return text;
+    return beat;
 }
 
 function lineFor(v) {
@@ -111,11 +111,12 @@ function lineFor(v) {
 }
 
 function ScrubCaption({ progress, beats, testId }) {
-    const [text, setText] = useState(() => captionFor(beats, progress.get()));
-    useMotionValueEvent(progress, 'change', (v) => setText(captionFor(beats, v)));
+    const [beat, setBeat] = useState(() => captionFor(beats, progress.get()));
+    useMotionValueEvent(progress, 'change', (v) => setBeat(captionFor(beats, v)));
     return (
-        <p className="landing-pin-caption" data-testid={testId} aria-live="polite">
-            {text}
+        <p className="landing-pin-now" data-testid={testId} aria-live="polite">
+            {beat.text}
+            <span className="sr-only">{beat.lock}</span>
         </p>
     );
 }
@@ -126,6 +127,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-meet"
                 label="The meeting"
+                thesis="They said yes. Then the meeting ended."
                 step={1}
                 totalSteps={3}
                 spans={3.8}
@@ -145,6 +147,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-catch"
                 label="You chase"
+                thesis="After yes, you become the reminder system."
                 step={2}
                 totalSteps={3}
                 spans={4.6}
@@ -164,6 +167,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-flow"
                 label="TskFlow takes it"
+                thesis="TskFlow does the reminding so you do not."
                 step={3}
                 totalSteps={3}
                 spans={4.2}
