@@ -24,9 +24,10 @@ export default function LandingWeek() {
     return (
         <LandingPinBeat
             testId="landing-week"
-            label="The week"
+            label="The Ask"
             caption="Watch the yes disappear."
             spans={2.8}
+            step={1}
         >
             {(progress) => <WeekFrame progress={progress} />}
         </LandingPinBeat>

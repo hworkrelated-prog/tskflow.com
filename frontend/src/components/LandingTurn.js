@@ -23,10 +23,11 @@ export default function LandingTurn() {
     return (
         <LandingPinBeat
             testId="landing-turn"
-            label="TskFlow"
+            label="Enter TskFlow"
             caption="TskFlow keeps the yes."
             spans={2.7}
             tone="turn"
+            step={7}
         >
             {(progress) => <TurnFrame progress={progress} />}
         </LandingPinBeat>
