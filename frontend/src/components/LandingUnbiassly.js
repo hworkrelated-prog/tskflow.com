@@ -3,24 +3,8 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Check, Copy, Link2, Loader2, Lock } from 'lucide-react';
 import { API } from '@/App';
-import { FOUNDER_CALENDAR_URL } from '@/components/LandingFounder';
 import { getErrorMessage } from '@/lib/utils';
 import { forgetUnbiasslyRoom, listUnbiasslyGuestRooms, rememberUnbiasslyRoom } from '@/lib/unbiasslyGuest';
-
-const EXPIRES = [
-    { id: '24h', label: 'Closes in 24 hours' },
-    { id: '48h', label: 'Closes in 48 hours' },
-    { id: '7d', label: 'Closes in 7 days' },
-    { id: 'never', label: 'Stays open until I conclude it' },
-];
-
-const HOURS = [
-    { d: 'Mon', open: false },
-    { d: 'Tue', open: true },
-    { d: 'Wed', open: false },
-    { d: 'Thu', open: true },
-    { d: 'Fri', open: false },
-];
 
 const copyText = async (value) => {
     try {
@@ -34,13 +18,10 @@ const copyText = async (value) => {
 };
 
 /**
- * Anonymous feedback links. No login. Answers stay hidden until the organizer concludes.
+ * Anonymous feedback links. No names on the page, even for the organizer.
  */
 export default function LandingUnbiassly() {
     const [topic, setTopic] = useState('');
-    const [prompt, setPrompt] = useState('');
-    const [expiresIn, setExpiresIn] = useState('7d');
-    const [email, setEmail] = useState('');
     const [creating, setCreating] = useState(false);
     const [working, setWorking] = useState('');
     const [room, setRoom] = useState(null);
@@ -75,17 +56,13 @@ export default function LandingUnbiassly() {
         try {
             const res = await axios.post(`${API}/unbiassly/rooms`, {
                 topic: topic.trim(),
-                prompt: prompt.trim() || undefined,
-                expires_in: expiresIn,
-                organizer_email: email.trim() || undefined,
-                email_updates: Boolean(email.trim()),
+                expires_in: '7d',
             });
             const created = res.data;
             rememberUnbiasslyRoom(created);
             setRoom(created);
             setManageToken(created.manage_token || '');
             setTopic('');
-            setPrompt('');
             if (created.share_url) copyText(created.share_url);
             toast.success('Link ready. Share it.');
         } catch (err) {
@@ -137,7 +114,7 @@ export default function LandingUnbiassly() {
                 People hold back their honest thoughts when names and titles are in the room. If you really want to get to the bottom of something, share a link.
             </p>
             <p className="landing-unbiassly-sub" data-testid="landing-unbiassly-pain">
-                No login. Send it to any group, any size. Answers stay hidden until you conclude the link, or until it expires.
+                No names. Type a topic, send the link, collect the truth.
             </p>
 
             {room ? (
@@ -201,49 +178,17 @@ export default function LandingUnbiassly() {
                     </button>
                 </div>
             ) : (
-                <form className="landing-unbiassly-form" onSubmit={createRoom} data-testid="unbiassly-create-form">
-                    <label className="landing-unbiassly-label" htmlFor="unbiassly-topic">What do you need the truth about?</label>
+                <form className="landing-unbiassly-bar" onSubmit={createRoom} data-testid="unbiassly-create-form">
+                    <label className="sr-only" htmlFor="unbiassly-topic">Topic for discussion or feedback</label>
                     <input
                         id="unbiassly-topic"
                         data-testid="unbiassly-topic"
                         value={topic}
                         onChange={(e) => setTopic(e.target.value)}
                         maxLength={160}
-                        placeholder="Should we keep Friday demos?"
-                        className="landing-unbiassly-input"
-                    />
-                    <label className="landing-unbiassly-label" htmlFor="unbiassly-prompt">Optional prompt</label>
-                    <textarea
-                        id="unbiassly-prompt"
-                        data-testid="unbiassly-prompt"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        maxLength={800}
-                        rows={3}
-                        placeholder="Say what you actually think. No name is attached."
-                        className="landing-unbiassly-input landing-unbiassly-textarea"
-                    />
-                    <label className="landing-unbiassly-label" htmlFor="unbiassly-expires">When should this close?</label>
-                    <select
-                        id="unbiassly-expires"
-                        data-testid="unbiassly-expires"
-                        value={expiresIn}
-                        onChange={(e) => setExpiresIn(e.target.value)}
-                        className="landing-unbiassly-input"
-                    >
-                        {EXPIRES.map((opt) => (
-                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                    </select>
-                    <label className="landing-unbiassly-label" htmlFor="unbiassly-email">Email for the summary (optional)</label>
-                    <input
-                        id="unbiassly-email"
-                        type="email"
-                        data-testid="unbiassly-email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@company.com"
-                        className="landing-unbiassly-input"
+                        placeholder="A topic for discussion or feedback"
+                        className="landing-unbiassly-bar-input"
+                        autoComplete="off"
                     />
                     <button
                         type="submit"
@@ -256,24 +201,6 @@ export default function LandingUnbiassly() {
                     </button>
                 </form>
             )}
-
-            <div className="landing-unbiassly-hours" data-testid="unbiassly-office-hours">
-                <p className="landing-unbiassly-hours-label">Hashim is on the calendar Tuesday and Thursday.</p>
-                <div className="landing-unbiassly-week" aria-hidden>
-                    {HOURS.map((day) => (
-                        <span key={day.d} className={day.open ? 'is-open' : ''}>{day.d}</span>
-                    ))}
-                </div>
-                <a
-                    className="landing-founder-btn landing-founder-btn--ghost"
-                    href={FOUNDER_CALENDAR_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="unbiassly-book"
-                >
-                    Book a meeting
-                </a>
-            </div>
         </section>
     );
 }

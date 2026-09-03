@@ -2509,14 +2509,36 @@ html:has(body.landing-active) {
     gap: 0.65rem;
     margin-top: 0.4rem;
 }
-.landing-unbiassly-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.5);
+.landing-unbiassly-bar {
+    width: 100%;
+    margin-top: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.4rem 0.35rem 1.05rem;
+    border-radius: 999px;
+    background: #1c1c1f;
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        0 8px 24px -10px rgba(0, 0, 0, 0.55);
 }
-.landing-unbiassly-input,
+.landing-unbiassly-bar-input {
+    flex: 1;
+    min-width: 0;
+    border: 0 !important;
+    background: transparent !important;
+    color: #f8fafc !important;
+    padding: 0.85rem 0.2rem;
+    font-size: 1rem;
+    outline: none;
+    box-shadow: none !important;
+}
+.landing-unbiassly-bar .landing-cta {
+    width: auto;
+    height: 2.65rem;
+    padding: 0 1.1rem;
+    flex-shrink: 0;
+}
 .landing-unbiassly-url {
     width: 100%;
     border-radius: 12px;
@@ -2525,10 +2547,6 @@ html:has(body.landing-active) {
     color: #f8fafc !important;
     padding: 0.7rem 0.85rem;
     font-size: 0.95rem;
-}
-.landing-unbiassly-textarea {
-    min-height: 5.5rem;
-    resize: vertical;
 }
 .landing-unbiassly-share,
 .landing-unbiassly-actions {
@@ -2572,39 +2590,6 @@ html:has(body.landing-active) {
     color: rgba(255, 255, 255, 0.78);
     font-size: 0.92rem;
     line-height: 1.45;
-}
-.landing-unbiassly-hours {
-    width: 100%;
-    margin-top: 1.4rem;
-    padding-top: 1.2rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.7rem;
-}
-.landing-unbiassly-hours-label {
-    margin: 0;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.62);
-}
-.landing-unbiassly-week {
-    display: flex;
-    gap: 0.4rem;
-}
-.landing-unbiassly-week span {
-    min-width: 2.4rem;
-    padding: 0.35rem 0.2rem;
-    border-radius: 8px;
-    text-align: center;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.35);
-    background: rgba(255, 255, 255, 0.06);
-}
-.landing-unbiassly-week span.is-open {
-    color: #042f2e;
-    background: #2dd4bf;
 }
 .landing-integ-dots {
     display: flex;
@@ -2865,6 +2850,18 @@ html:has(body.landing-active) {
     .landing-stickies-stage { height: 38rem; }
     .landing-sticky { width: 14.5rem; margin-left: -7.25rem !important; }
     .landing-hero-fly { flex-direction: column; }
+    .landing-unbiassly-bar {
+        flex-direction: column;
+        align-items: stretch;
+        border-radius: 1.25rem;
+        padding: 0.45rem;
+    }
+    .landing-unbiassly-bar-input {
+        padding: 0.7rem 0.7rem 0.35rem;
+    }
+    .landing-unbiassly-bar .landing-cta {
+        width: 100%;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
