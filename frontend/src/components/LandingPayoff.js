@@ -1,12 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import LandingFace from '@/components/LandingFace';
+import { TskFlowMark } from '@/components/TskFlowLogo';
+import { CAST } from '@/lib/landingCast';
+import { phaseOn, useStoryClock } from '@/lib/useStoryClock';
 
-const QUESTIONS = [
-    'Did you do this?',
-    "What's the status?",
-    'Any update?',
-    'Did you remember?',
+const PEEK_PHASES = [
+    { id: 'group', dur: 1.2 },
+    { id: 'assign', dur: 1.35 },
+    { id: 'emoji', dur: 1.4 },
+    { id: 'end', dur: 1.15 },
+];
+
+const PEEK = [
+    { who: 'alex', agree: null },
+    { who: 'maya', agree: '✅' },
+    { who: 'chris', agree: '👍' },
+    { who: 'priya', agree: '👍' },
 ];
 
 export default function LandingPayoff({ onTry, onHow }) {
@@ -15,34 +26,31 @@ export default function LandingPayoff({ onTry, onHow }) {
 
     useEffect(() => {
         if (reduce) return undefined;
-        const id = window.setTimeout(() => setKnow(true), 1200);
+        const id = window.setTimeout(() => setKnow(true), 900);
         return () => window.clearTimeout(id);
     }, [reduce]);
 
     return (
         <section className="landing-payoff-hero" data-testid="landing-hero" id="landing-payoff">
+            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">They already said yes.</p>
             <h1 className="landing-payoff-title" data-testid="landing-payoff-title">
-                Imagine not having to ask.
+                Hand the dirty work to TskFlow.
             </h1>
-            <ul className="landing-payoff-qs" data-testid="landing-payoff-frame">
-                {QUESTIONS.map((line, i) => (
-                    <li key={line} data-testid={`landing-payoff-q-${i}`}>{line}</li>
-                ))}
-            </ul>
+            <HeroPeek />
             <p
                 className={`landing-payoff-know${know ? ' is-on' : ''}`}
                 data-testid="landing-payoff-know"
             >
-                You already know.
+                Cuts the chase. The frustration. The endless back and forth.
             </p>
             <p className="landing-payoff-after" data-testid="landing-payoff-after">
-                You can finally manage the business instead of managing reminders.
+                Your relationship with the team stays intact.
             </p>
             <p className="sr-only" data-testid="landing-pain-line">
-                Imagine not having to ask.
+                Hand the dirty work to TskFlow.
             </p>
             <p className="sr-only" data-testid="landing-point">
-                Someone says yes. Then you spend the week asking if it got done.
+                Someone says yes. Then you spend the week inspecting, reporting, catching people, and having the tough conversations.
             </p>
             <p className="sr-only" data-testid="landing-pain-more">
                 Managers should not be the reminder system.
@@ -76,8 +84,32 @@ function ScrollCue({ onClick }) {
             data-testid="landing-scroll-cue"
             aria-label="Scroll to watch what happens next"
         >
-            <span>Watch a week disappear</span>
+            <span>Watch how it plays out</span>
             <ChevronDown className="landing-scroll-cue-icon" aria-hidden="true" />
         </motion.button>
+    );
+}
+
+function HeroPeek() {
+    const { index, reduce } = useStoryClock(PEEK_PHASES);
+    const assigned = reduce || phaseOn(index, 1, 3);
+    const emoji = reduce || phaseOn(index, 2, 3);
+    const ended = reduce || phaseOn(index, 3, 3);
+
+    return (
+        <div className="landing-peek" data-testid="landing-payoff-frame" aria-hidden>
+            {PEEK.map((tile) => (
+                <span key={tile.who} className={`landing-peek-face${assigned && tile.who === 'maya' ? ' is-ask' : ''}`}>
+                    <LandingFace who={tile.who} size={52} radius={999} />
+                    {tile.agree && emoji ? (
+                        <span className="landing-peek-rx">{tile.agree}</span>
+                    ) : null}
+                </span>
+            ))}
+            <span className={`landing-peek-bot${ended ? ' is-on' : ''}`}>
+                <TskFlowMark size={22} />
+            </span>
+            <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
+        </div>
     );
 }
