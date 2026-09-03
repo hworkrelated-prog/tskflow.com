@@ -7,10 +7,10 @@ import { CAST } from '@/lib/landingCast';
 import { phaseOn, useStoryClock } from '@/lib/useStoryClock';
 
 const PEEK_PHASES = [
-    { id: 'group', dur: 1.2 },
-    { id: 'assign', dur: 1.35 },
-    { id: 'emoji', dur: 1.4 },
-    { id: 'end', dur: 1.15 },
+    { id: 'group', dur: 2.6, line: 'A meeting starts.' },
+    { id: 'assign', dur: 2.8, line: 'Alex assigns Maya the Q3 forecast.' },
+    { id: 'emoji', dur: 2.8, line: 'They all say yes.' },
+    { id: 'end', dur: 2.4, line: 'TskFlow takes the follow-up.' },
 ];
 
 const PEEK = [
@@ -84,7 +84,7 @@ function ScrollCue({ onClick }) {
             data-testid="landing-scroll-cue"
             aria-label="Scroll to watch what happens next"
         >
-            <span>Watch how it plays out</span>
+            <span>Scroll the story · 3 beats</span>
             <ChevronDown className="landing-scroll-cue-icon" aria-hidden="true" />
         </motion.button>
     );
@@ -95,21 +95,25 @@ function HeroPeek() {
     const assigned = reduce || phaseOn(index, 1, 3);
     const emoji = reduce || phaseOn(index, 2, 3);
     const ended = reduce || phaseOn(index, 3, 3);
+    const line = PEEK_PHASES[index]?.line || PEEK_PHASES[0].line;
 
     return (
-        <div className="landing-peek" data-testid="landing-payoff-frame" aria-hidden>
-            {PEEK.map((tile) => (
-                <span key={tile.who} className={`landing-peek-face${assigned && tile.who === 'maya' ? ' is-ask' : ''}`}>
-                    <LandingFace who={tile.who} size={52} radius={999} />
-                    {tile.agree && emoji ? (
-                        <span className="landing-peek-rx">{tile.agree}</span>
-                    ) : null}
+        <div className="landing-peek-wrap">
+            <div className="landing-peek" data-testid="landing-payoff-frame" aria-hidden>
+                {PEEK.map((tile) => (
+                    <span key={tile.who} className={`landing-peek-face${assigned && tile.who === 'maya' ? ' is-ask' : ''}`}>
+                        <LandingFace who={tile.who} size={52} radius={999} />
+                        {tile.agree && emoji ? (
+                            <span className="landing-peek-rx">{tile.agree}</span>
+                        ) : null}
+                    </span>
+                ))}
+                <span className={`landing-peek-bot${ended ? ' is-on' : ''}`}>
+                    <TskFlowMark size={22} />
                 </span>
-            ))}
-            <span className={`landing-peek-bot${ended ? ' is-on' : ''}`}>
-                <TskFlowMark size={22} />
-            </span>
-            <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
+                <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
+            </div>
+            <p className="landing-peek-line" data-testid="landing-peek-line">{line}</p>
         </div>
     );
 }
