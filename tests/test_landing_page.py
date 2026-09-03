@@ -461,6 +461,8 @@ def test_landing_film_is_three_slow_chapters():
     assert "spans={3.8}" in film
     assert "spans={4.6}" in film
     assert "spans={4.2}" in film
+    assert "{step} of {totalSteps}" in pin
+    assert "navLabel" in film
     assert "blur(" not in pin
     assert "frameBlur" not in pin
     assert "dur: 2.6" in hero

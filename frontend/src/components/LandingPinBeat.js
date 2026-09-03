@@ -14,6 +14,7 @@ export default function LandingPinBeat({
     label,
     caption,
     thesis,
+    navLabel,
     spans = 2.15,
     tone,
     step,
@@ -31,7 +32,7 @@ export default function LandingPinBeat({
     const spoken = caption || thesis || label;
 
     const showKicker = Boolean(step);
-    const kickerLabel = label && label !== caption ? label : null;
+    const kickerLabel = navLabel || (label && label !== caption ? label : null);
 
     return (
         <section
@@ -56,7 +57,7 @@ export default function LandingPinBeat({
                             ))}
                         </span>
                         <span className="landing-pin-kicker-text">
-                            {String(step).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}
+                            {step} of {totalSteps}
                             {kickerLabel ? <b>{kickerLabel}</b> : null}
                         </span>
                     </div>

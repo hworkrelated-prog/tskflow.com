@@ -54,7 +54,7 @@ const CATCH_CAPTIONS = [
 ];
 
 const FLOW_CAPTIONS = [
-    { at: 0, lock: 'TskFlow joins your meet.', text: 'Same meeting. TskFlow is on the call too.' },
+    { at: 0, lock: 'TskFlow joins your meet.', text: 'TskFlow sits on the same call and writes down every yes.' },
     { at: 0.28, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
     { at: 0.52, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
     { at: 0.80, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
@@ -127,6 +127,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-meet"
                 label="The meeting"
+                navLabel="They said yes"
                 thesis="They said yes. Then the meeting ended."
                 step={1}
                 totalSteps={3}
@@ -147,6 +148,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-catch"
                 label="You chase"
+                navLabel="You become the nag"
                 thesis="After yes, you become the reminder system."
                 step={2}
                 totalSteps={3}
@@ -167,6 +169,7 @@ export default function LandingFilm() {
             <LandingPinBeat
                 testId="landing-film-flow"
                 label="TskFlow takes it"
+                navLabel="TskFlow follows up"
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
                 totalSteps={3}
@@ -625,7 +628,8 @@ function TskChase({ progress, peaceOp }) {
                     <span key={step}>{step}</span>
                 ))}
                 <p data-testid="landing-compare-calm">
-                    Leaders see who follows through. HR already has the record.
+                    You can see who delivered without asking around.
+                    <span className="sr-only">Leaders see who follows through. HR already has the record.</span>
                 </p>
             </motion.div>
         </div>

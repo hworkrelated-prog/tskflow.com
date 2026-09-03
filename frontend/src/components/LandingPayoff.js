@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
@@ -27,15 +27,6 @@ const PLOT = [
 ];
 
 export default function LandingPayoff({ onTry, onHow }) {
-    const reduce = useReducedMotion();
-    const [know, setKnow] = useState(Boolean(reduce));
-
-    useEffect(() => {
-        if (reduce) return undefined;
-        const id = window.setTimeout(() => setKnow(true), 900);
-        return () => window.clearTimeout(id);
-    }, [reduce]);
-
     return (
         <section className="landing-payoff-hero" data-testid="landing-hero" id="landing-payoff">
             <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">
@@ -56,10 +47,7 @@ export default function LandingPayoff({ onTry, onHow }) {
                 ))}
             </ol>
             <HeroPeek />
-            <p
-                className={`landing-payoff-know${know ? ' is-on' : ''}`}
-                data-testid="landing-payoff-know"
-            >
+            <p className="sr-only" data-testid="landing-payoff-know">
                 Cuts the chase. The frustration. The endless back and forth.
             </p>
             <p className="landing-payoff-after" data-testid="landing-payoff-after">
