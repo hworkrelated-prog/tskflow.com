@@ -448,6 +448,26 @@ def test_landing_story_is_shown_not_told():
     assert "ai productivity platform" not in hero.lower()
 
 
+def test_landing_film_is_three_slow_chapters():
+    """The story is three held pins, not one 12-scene flash."""
+    film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
+    pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
+    hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
+    assert film.count("<LandingPinBeat") >= 3
+    assert "step={1}" in film and "step={2}" in film and "step={3}" in film
+    assert "The meeting" in film
+    assert "You chase" in film
+    assert "TskFlow takes it" in film
+    assert "spans={3.8}" in film
+    assert "spans={4.6}" in film
+    assert "spans={4.2}" in film
+    assert "blur(" not in pin
+    assert "frameBlur" not in pin
+    assert "dur: 2.6" in hero
+    assert "A meeting starts." in hero
+    assert "Scroll the story · 3 beats" in hero
+
+
 def test_landing_founder_is_a_one_screen_profile():
     founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
