@@ -228,11 +228,11 @@ function MeetScene({ progress }) {
 
 function MeetTile({ tile, progress }) {
     const person = CAST[tile.who];
-    const speakIn = tile.speakAt ? tile.speakAt[0] : 2;
-    const speakOut = tile.speakAt ? tile.speakAt[1] : 2;
+    const speakFrom = tile.speakAt ? tile.speakAt[0] : 2;
+    const speakTo = tile.speakAt ? tile.speakAt[1] : 2.2;
     const speaking = useTransform(
         progress,
-        [speakIn, speakIn + 0.03, speakOut, speakOut + 0.03],
+        [speakFrom, speakFrom + 0.04, speakTo, speakTo + 0.04],
         tile.speakAt ? [0, 1, 1, 0] : [0, 0, 0, 0],
     );
     const enter = useTransform(progress, [0.01, 0.07], [0.92, 1]);

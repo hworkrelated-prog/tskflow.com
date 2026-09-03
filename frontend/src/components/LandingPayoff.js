@@ -31,7 +31,7 @@ export default function LandingPayoff({ onTry, onHow }) {
 
     return (
         <section className="landing-payoff-hero" data-testid="landing-hero" id="landing-payoff">
-            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">After the meeting</p>
+            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">They already said yes.</p>
             <h1 className="landing-payoff-title" data-testid="landing-payoff-title">
                 Hand the dirty work to TskFlow.
             </h1>
