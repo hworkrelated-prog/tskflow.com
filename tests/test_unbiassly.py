@@ -162,7 +162,9 @@ def test_frontend_wires_unbiassly():
     assert 'data-testid="unbiassly-refresh-insights"' in hub
     assert 'data-testid="unbiassly-email-summary"' in hub
     assert "People hold back when names and titles are in the room." in hub
-    assert 'data-testid="unbiassly-expires"' in hub
+    assert "A topic for discussion or feedback" in hub
+    assert 'data-testid="unbiassly-expires"' not in hub
+    assert "{user?.name}" not in hub
     assert "Conclude" in hub
     assert "unbiassly-answers-hidden" in public
     assert "unbiasslyGuest" in _read("components", "LandingUnbiassly.js") or "rememberUnbiasslyRoom" in _read("components", "LandingUnbiassly.js")
@@ -180,6 +182,25 @@ def test_frontend_wires_unbiassly():
     assert "searchParams.get('next')" in login
     assert "${API}/unbiassly/rooms" in hub
     assert "${API}/unbiassly/${token}/posts" in public
+
+
+def test_unbiassly_is_a_nameless_topic_bar():
+    landing = _read("components", "LandingUnbiassly.js")
+    hub = _read("pages", "UnbiasslyHub.js")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    for src in (landing, hub):
+        assert "A topic for discussion or feedback" in src
+        assert "Book a meeting" not in src
+        assert "Hashim" not in src
+        assert "calendly" not in src.lower()
+        assert 'data-testid="unbiassly-prompt"' not in src
+        assert 'data-testid="unbiassly-expires"' not in src
+        assert 'data-testid="unbiassly-email"' not in src
+    assert "{user?.name}" not in hub
+    assert "landing-unbiassly-bar" in landing
+    assert "landing-unbiassly-bar" in css
+    assert "unbiassly-office-hours" not in landing
+    assert "FOUNDER_CALENDAR" not in landing
 
 
 def test_copy_avoids_em_dashes():
