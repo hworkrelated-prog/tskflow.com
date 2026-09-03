@@ -378,9 +378,16 @@ def test_landing_story_is_shown_not_told():
     assert "setTab('unbiassly')" in landing
     assert "LandingUnbiassly" in landing
     assert "People hold back their honest thoughts" in unbiassly
-    assert "unbiassly-office-hours" in unbiassly
-    assert "Tuesday and Thursday" in unbiassly
-    assert "unbiassly-expires" in unbiassly
+    assert "unbiassly-topic-bar" in unbiassly or "UnbiasslyTopicBar" in unbiassly
+    assert "unbiassly-office-hours" not in unbiassly
+    assert "Tuesday and Thursday" not in unbiassly
+    assert "Book a meeting" not in unbiassly
+    assert "Hashim" not in unbiassly
+    assert "calendly" not in unbiassly.lower()
+    assert "unbiassly-expires" not in unbiassly
+    assert "A topic for discussion or collecting feedback" in (FRONT / "components" / "UnbiasslyTopicBar.js").read_text(encoding="utf-8")
+    assert "unbiassly-topic-bar" in css
+    assert "landing-unbiassly-hours" not in css
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "Stop being the reminder system." in landing

@@ -7,15 +7,14 @@ import { API, useAuth } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { getErrorMessage } from '@/lib/utils';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
 import LandingUnbiassly from '@/components/LandingUnbiassly';
+import UnbiasslyTopicBar from '@/components/UnbiasslyTopicBar';
 import TskFlowLogo from '@/components/TskFlowLogo';
 import {
-    ArrowLeft, Check, Copy, Link2, Loader2, Mail, RefreshCw, Scale, Trash2, Lock,
+    ArrowLeft, Check, Copy, Loader2, Mail, RefreshCw, Scale, Trash2, Lock,
 } from 'lucide-react';
 
 const relative = (iso) => {
@@ -115,8 +114,6 @@ const UnbiasslyHub = () => {
     const [rooms, setRooms] = useState([]);
     const [loading, setLoading] = useState(true);
     const [topic, setTopic] = useState('');
-    const [prompt, setPrompt] = useState('');
-    const [expiresIn, setExpiresIn] = useState('7d');
     const [creating, setCreating] = useState(false);
     const [selectedId, setSelectedId] = useState(searchParams.get('room') || '');
     const [detail, setDetail] = useState(null);
@@ -182,14 +179,11 @@ const UnbiasslyHub = () => {
         try {
             const res = await axios.post(`${API}/unbiassly/rooms`, {
                 topic: topic.trim(),
-                prompt: prompt.trim() || undefined,
-                expires_in: expiresIn,
                 email_updates: true,
             });
             const room = res.data;
             toast.success('Link ready. Share it.');
             setTopic('');
-            setPrompt('');
             await fetchRooms();
             selectRoom(room.id);
             if (room.share_url) copyText(room.share_url);
@@ -292,7 +286,6 @@ const UnbiasslyHub = () => {
                             <p className="text-xs text-muted-foreground truncate">People hold back when names and titles are in the room.</p>
                         </div>
                     </div>
-                    <span className="ml-auto hidden sm:inline text-xs text-slate-500">{user?.name}</span>
                 </div>
             </header>
 
@@ -300,60 +293,16 @@ const UnbiasslyHub = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] gap-6 items-start">
                     <section className="space-y-4">
                         <Card className="rounded-2xl border-2 shadow-soft" data-testid="unbiassly-create-card">
-                            <CardContent className="p-5 sm:p-6">
-                                <h2 className="font-semibold mb-1" style={{ fontFamily: 'Outfit' }}>Create a link</h2>
-                                <p className="text-sm text-muted-foreground mb-4">Share it with any group. Answers stay hidden until you conclude.</p>
-                                <form onSubmit={createRoom} className="space-y-3" data-testid="unbiassly-create-form">
-                                    <div>
-                                        <Label htmlFor="unbiassly-topic">Topic</Label>
-                                        <Input
-                                            id="unbiassly-topic"
-                                            data-testid="unbiassly-topic"
-                                            value={topic}
-                                            onChange={(e) => setTopic(e.target.value)}
-                                            maxLength={160}
-                                            placeholder="What do you need the truth about?"
-                                            className="mt-1 rounded-xl"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="unbiassly-prompt">Optional prompt</Label>
-                                        <Textarea
-                                            id="unbiassly-prompt"
-                                            data-testid="unbiassly-prompt"
-                                            value={prompt}
-                                            onChange={(e) => setPrompt(e.target.value)}
-                                            maxLength={800}
-                                            rows={3}
-                                            placeholder="Say what you actually think. No name is attached."
-                                            className="mt-1 rounded-xl"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="unbiassly-expires">When should this close?</Label>
-                                        <select
-                                            id="unbiassly-expires"
-                                            data-testid="unbiassly-expires"
-                                            value={expiresIn}
-                                            onChange={(e) => setExpiresIn(e.target.value)}
-                                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                        >
-                                            <option value="24h">Closes in 24 hours</option>
-                                            <option value="48h">Closes in 48 hours</option>
-                                            <option value="7d">Closes in 7 days</option>
-                                            <option value="never">Stays open until I conclude it</option>
-                                        </select>
-                                    </div>
-                                    <Button
-                                        type="submit"
-                                        disabled={creating || topic.trim().length < 3}
-                                        className="rounded-full w-full bg-teal-700 hover:bg-teal-800"
-                                        data-testid="unbiassly-create"
-                                    >
-                                        {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                                        {creating ? 'Creating…' : 'Create shareable link'}
-                                    </Button>
-                                </form>
+                            <CardContent className="p-5 sm:p-6 space-y-3">
+                                <p className="text-sm text-muted-foreground">
+                                    A nameless link for discussion or feedback. Answers stay hidden until you conclude.
+                                </p>
+                                <UnbiasslyTopicBar
+                                    topic={topic}
+                                    onChange={setTopic}
+                                    creating={creating}
+                                    onSubmit={createRoom}
+                                />
                             </CardContent>
                         </Card>
 

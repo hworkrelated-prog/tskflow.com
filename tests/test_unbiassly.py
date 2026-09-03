@@ -151,22 +151,31 @@ def test_frontend_wires_unbiassly():
     help_src = _read("pages", "HelpCenter.js")
     dock = _read("components", "GlobalAIDock.js")
     login = _read("pages", "LoginPage.js")
+    bar = _read("components", "UnbiasslyTopicBar.js")
+    public_create = _read("components", "LandingUnbiassly.js")
 
     assert "UnbiasslyHub" in app
     assert "UnbiasslyRoomPage" in app
     assert 'path="/unbiassly"' in app
     assert 'path="/u/:token"' in app
     assert 'data-testid="unbiassly-hub"' in hub
-    assert 'data-testid="unbiassly-create"' in hub
+    assert 'data-testid="unbiassly-create"' in bar
+    assert 'data-testid="unbiassly-topic"' in bar
+    assert "A topic for discussion or collecting feedback" in bar
     assert 'data-testid="unbiassly-copy-link"' in hub
     assert 'data-testid="unbiassly-refresh-insights"' in hub
     assert 'data-testid="unbiassly-email-summary"' in hub
     assert "People hold back when names and titles are in the room." in hub
-    assert 'data-testid="unbiassly-expires"' in hub
+    assert 'data-testid="unbiassly-expires"' not in hub
+    assert "{user?.name}" not in hub
+    assert "Hashim" not in hub
+    assert "UnbiasslyTopicBar" in hub
     assert "Conclude" in hub
     assert "unbiassly-answers-hidden" in public
-    assert "unbiasslyGuest" in _read("components", "LandingUnbiassly.js") or "rememberUnbiasslyRoom" in _read("components", "LandingUnbiassly.js")
-    assert "/login?next=/unbiassly" not in _read("components", "LandingUnbiassly.js")
+    assert "unbiasslyGuest" in public_create or "rememberUnbiasslyRoom" in public_create
+    assert "/login?next=/unbiassly" not in public_create
+    assert "FOUNDER_CALENDAR" not in public_create
+    assert "Book a meeting" not in public_create
     assert 'data-testid="unbiassly-send"' in public
     assert "Post anonymously" in public
     assert 'data-testid="unbiassly-button"' in dash
@@ -180,6 +189,28 @@ def test_frontend_wires_unbiassly():
     assert "searchParams.get('next')" in login
     assert "${API}/unbiassly/rooms" in hub
     assert "${API}/unbiassly/${token}/posts" in public
+
+
+def test_unbiassly_stays_nameless():
+    """Unbiassly is nameless even for a logged-in organizer. Booking lives on the founder page."""
+    bar = _read("components", "UnbiasslyTopicBar.js")
+    landing = _read("components", "LandingUnbiassly.js")
+    hub = _read("pages", "UnbiasslyHub.js")
+    public = _read("pages", "UnbiasslyRoomPage.js")
+    founder = _read("components", "LandingFounder.js")
+    for src in (bar, landing, hub, public):
+        low = src.lower()
+        assert "hashim" not in low
+        assert "book a meeting" not in low
+        assert "calendly" not in low
+        assert "office-hours" not in src
+        assert "{user?.name}" not in src
+        assert "user.name" not in src
+        assert "\u2014" not in src
+        assert "\u2013" not in src
+    assert "A topic for discussion or collecting feedback" in bar
+    assert "Book a meeting" in founder
+    assert "Hashim Mahmood" in founder
 
 
 def test_copy_avoids_em_dashes():
