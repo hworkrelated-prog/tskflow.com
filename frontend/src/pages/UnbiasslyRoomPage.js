@@ -6,6 +6,7 @@ import { API } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { getErrorMessage } from '@/lib/utils';
+import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
 import { Loader2, Scale, Send } from 'lucide-react';
 
 const UnbiasslyRoomPage = () => {
@@ -15,6 +16,14 @@ const UnbiasslyRoomPage = () => {
     const [loading, setLoading] = useState(true);
     const [body, setBody] = useState('');
     const [sending, setSending] = useState(false);
+
+    // This link goes out to strangers - it must always read as the warm, light card it is,
+    // never whatever theme a returning visitor last picked for the app (or an OS dark mode
+    // that a browser would otherwise force onto an unstyled page).
+    useEffect(() => {
+        pinDocumentTheme('light');
+        return () => restoreDocumentTheme();
+    }, []);
 
     const load = useCallback(async ({ silent } = {}) => {
         if (!token) return;

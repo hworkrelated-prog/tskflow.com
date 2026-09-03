@@ -16,9 +16,10 @@ export default function LandingPileUp() {
     return (
         <LandingPinBeat
             testId="landing-pile"
-            label="Pileup"
+            label="The Pile-Up"
             caption="Then more work landed on top of it."
             spans={2.3}
+            step={3}
         >
             {(progress) => <Tray progress={progress} />}
         </LandingPinBeat>

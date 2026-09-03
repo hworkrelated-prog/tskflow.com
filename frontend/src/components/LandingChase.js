@@ -20,10 +20,11 @@ export default function LandingChase() {
     return (
         <LandingPinBeat
             testId="landing-chase"
-            label="You chase"
+            label="You Chase"
             caption="Now you are the reminder."
             spans={2.2}
             tone="wear"
+            step={5}
         >
             {(progress) => <ChaseFrame progress={progress} />}
         </LandingPinBeat>

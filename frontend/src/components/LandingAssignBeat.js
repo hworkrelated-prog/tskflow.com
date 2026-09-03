@@ -22,9 +22,10 @@ export default function LandingAssignBeat() {
     return (
         <LandingPinBeat
             testId="landing-assign"
-            label="Assignment"
+            label="Confirmed"
             caption="They agreed. In the meeting."
             spans={2.4}
+            step={2}
         >
             {(progress) => <AssignFrames progress={progress} />}
         </LandingPinBeat>

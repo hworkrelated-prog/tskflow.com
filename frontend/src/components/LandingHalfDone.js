@@ -12,9 +12,10 @@ export default function LandingHalfDone() {
     return (
         <LandingPinBeat
             testId="landing-half"
-            label="Half done"
+            label="Fake Done"
             caption="They marked it done. It wasn't."
             spans={2.05}
+            step={6}
         >
             {(progress) => <HalfFrame progress={progress} />}
         </LandingPinBeat>

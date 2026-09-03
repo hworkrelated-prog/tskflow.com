@@ -15,37 +15,41 @@ export default function LandingPeace() {
         <>
             <LandingPinBeat
                 testId="landing-assigner"
-                label="Assigned. Tracked. Done."
+                label="The Fix"
                 caption="Assigned. Tracked. Done."
                 spans={1.85}
                 tone="calm"
+                step={8}
             >
                 {(progress) => <AssignerFrame progress={progress} />}
             </LandingPinBeat>
             <LandingPinBeat
                 testId="landing-receiver"
-                label="Open time"
+                label="The Fix"
                 caption="Accepted work blocks time on their calendar."
                 spans={2.05}
                 tone="calm"
+                step={8}
             >
                 {(progress) => <ReceiverFrame progress={progress} />}
             </LandingPinBeat>
             <LandingPinBeat
                 testId="landing-overload"
-                label="Plan"
+                label="The Fix"
                 caption="If they are packed, it finds a slot."
                 spans={2.05}
                 tone="calm"
+                step={8}
             >
                 {(progress) => <OverloadFrame progress={progress} />}
             </LandingPinBeat>
             <LandingPinBeat
                 testId="landing-group"
-                label="Group"
+                label="The Fix"
                 caption="You see who actually did it."
                 spans={1.9}
                 tone="calm"
+                step={8}
             >
                 {(progress) => <GroupFrame progress={progress} />}
             </LandingPinBeat>

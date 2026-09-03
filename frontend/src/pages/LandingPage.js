@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -7,9 +8,11 @@ import { ArrowUp, Check, Loader2, Mail, MessageSquare } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
+import LandingStoryAtmosphere from '@/components/LandingStoryAtmosphere';
 import LandingPayoff from '@/components/LandingPayoff';
 import LandingFilm from '@/components/LandingFilm';
 import LandingFounder from '@/components/LandingFounder';
+
 import LandingUnbiassly from '@/components/LandingUnbiassly';
 import TskFlowLogo from '@/components/TskFlowLogo';
 import { rememberGuestSession } from '@/lib/guestSession';
@@ -274,10 +277,17 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
 const LandingPage = () => {
     const navigate = useNavigate();
     const inputRef = useRef(null);
+    const storyRef = useRef(null);
+    const reduceMotion = useReducedMotion();
     const [recordingBlob, setRecordingBlob] = useState(null);
     const [ideaIndex, setIdeaIndex] = useState(0);
     const [value, setValue] = useState('');
     const [tab, setTab] = useState('story');
+
+    const tabVariants = reduceMotion
+        ? { initial: { opacity: 1, y: 0 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 1, y: 0 } }
+        : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -10 } };
+    const tabTransition = reduceMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] };
 
     useEffect(() => {
         trackLandingView({ path: '/' });
@@ -302,6 +312,7 @@ const LandingPage = () => {
 
     return (
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
+            {tab === 'story' ? <LandingStoryAtmosphere targetRef={storyRef} /> : null}
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <div className="landing-toolbar-lead">
@@ -353,59 +364,67 @@ const LandingPage = () => {
             </header>
 
             <main className="relative z-10 flex-1 flex flex-col">
-                {tab === 'founder' ? (
-                    <LandingFounder />
-                ) : tab === 'unbiassly' ? (
-                    <LandingUnbiassly />
-                ) : (
-                    <>
-                <LandingPayoff
-                    onTry={() => scrollToId('landing-tryit')}
-                    onHow={() => scrollToId('landing-film')}
-                />
-                <LandingFilm />
+                <AnimatePresence mode="wait" initial={false}>
+                    {tab === 'founder' ? (
+                        <motion.div key="founder" variants={tabVariants} initial="initial" animate="animate" exit="exit" transition={tabTransition}>
+                            <LandingFounder />
+                        </motion.div>
+                    ) : tab === 'unbiassly' ? (
+                        <motion.div key="unbiassly" variants={tabVariants} initial="initial" animate="animate" exit="exit" transition={tabTransition}>
+                            <LandingUnbiassly />
+                        </motion.div>
+                    ) : (
+                        <motion.div key="story" variants={tabVariants} initial="initial" animate="animate" exit="exit" transition={tabTransition}>
+                            <div ref={storyRef} className="landing-story-track">
+                                <LandingPayoff
+                                    onTry={() => scrollToId('landing-tryit')}
+                                    onHow={() => scrollToId('landing-film')}
+                                />
+                                <LandingFilm />
 
-                <section className="landing-final" data-testid="landing-final">
-                    <p className="landing-section-kicker">Start</p>
-                    <h2 className="landing-final-headline" data-testid="landing-final-headline">
-                        Stop being the reminder system.
-                    </h2>
-                    <p className="landing-final-support" data-testid="landing-final-support">
-                        Your team already said yes. TskFlow makes sure the commitment doesn't disappear.
-                    </p>
-                    <div className="landing-final-ctas">
-                        <button
-                            type="button"
-                            className="landing-cta"
-                            onClick={() => {
-                                scrollToId('landing-tryit');
-                                window.setTimeout(() => inputRef.current?.focus?.(), 240);
-                            }}
-                            data-testid="landing-final-cta"
-                        >
-                            Start using TskFlow
-                        </button>
-                        <button
-                            type="button"
-                            className="landing-cta-ghost"
-                            onClick={() => scrollToId('landing-film')}
-                            data-testid="landing-final-how"
-                        >
-                            See how it works
-                        </button>
-                    </div>
-                    <p className="landing-final-line">Try it. No account. No password.</p>
-                    <LaunchPad
-                        recordingBlob={recordingBlob}
-                        inputRef={inputRef}
-                        ideaIndex={ideaIndex}
-                        value={value}
-                        setValue={setValue}
-                        setIdeaIndex={setIdeaIndex}
-                    />
-                </section>
-                    </>
-                )}
+                                <section className="landing-final" data-testid="landing-final">
+                                    <p className="landing-section-kicker">Start</p>
+                                    <h2 className="landing-final-headline" data-testid="landing-final-headline">
+                                        Stop being the reminder system.
+                                    </h2>
+                                    <p className="landing-final-support" data-testid="landing-final-support">
+                                        Your team already said yes. TskFlow makes sure the commitment doesn't disappear.
+                                    </p>
+                                    <div className="landing-final-ctas">
+                                        <button
+                                            type="button"
+                                            className="landing-cta landing-cta-glow"
+                                            onClick={() => {
+                                                scrollToId('landing-tryit');
+                                                window.setTimeout(() => inputRef.current?.focus?.(), 240);
+                                            }}
+                                            data-testid="landing-final-cta"
+                                        >
+                                            Start using TskFlow
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="landing-cta-ghost"
+                                            onClick={() => scrollToId('landing-film')}
+                                            data-testid="landing-final-how"
+                                        >
+                                            See how it works
+                                        </button>
+                                    </div>
+                                    <p className="landing-final-line">Try it. No account. No password.</p>
+                                    <LaunchPad
+                                        recordingBlob={recordingBlob}
+                                        inputRef={inputRef}
+                                        ideaIndex={ideaIndex}
+                                        value={value}
+                                        setValue={setValue}
+                                        setIdeaIndex={setIdeaIndex}
+                                    />
+                                </section>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </main>
 
             <footer className="relative z-10 shrink-0 border-t border-white/8 py-4">

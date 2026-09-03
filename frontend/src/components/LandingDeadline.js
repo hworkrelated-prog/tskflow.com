@@ -16,9 +16,10 @@ export default function LandingDeadline() {
     return (
         <LandingPinBeat
             testId="landing-deadline"
-            label="Deadline"
+            label="Deadline Day"
             caption="Friday. Still sitting there."
             spans={2.05}
+            step={4}
         >
             {(progress) => <DeadlineFrame progress={progress} />}
         </LandingPinBeat>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
 import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST } from '@/lib/landingCast';
@@ -55,14 +56,37 @@ export default function LandingPayoff({ onTry, onHow }) {
                 Managers should not be the reminder system.
             </p>
             <div className="landing-hero-ctas landing-payoff-ctas">
-                <button type="button" className="landing-cta" onClick={onTry} data-testid="landing-hero-cta">
+                <button type="button" className="landing-cta landing-cta-glow" onClick={onTry} data-testid="landing-hero-cta">
                     Stop being the chase.
                 </button>
                 <button type="button" className="landing-cta-ghost" onClick={onHow} data-testid="landing-hero-how">
                     See how it works
                 </button>
             </div>
+            <ScrollCue onClick={onHow} />
         </section>
+    );
+}
+
+/** Most first-time visitors don't know there's a scroll-driven story below the
+ * fold - this makes that undeniable instead of hoping they find it. */
+function ScrollCue({ onClick }) {
+    const reduce = useReducedMotion();
+    const { scrollY } = useScroll();
+    const fade = useTransform(scrollY, [0, 240], [1, 0]);
+
+    return (
+        <motion.button
+            type="button"
+            className="landing-scroll-cue"
+            style={reduce ? undefined : { opacity: fade }}
+            onClick={onClick}
+            data-testid="landing-scroll-cue"
+            aria-label="Scroll to watch what happens next"
+        >
+            <span>Watch how it plays out</span>
+            <ChevronDown className="landing-scroll-cue-icon" aria-hidden="true" />
+        </motion.button>
     );
 }
 
