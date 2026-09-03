@@ -1,16 +1,13 @@
 import React, { useRef } from 'react';
-import { motion, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion';
-
-const TOTAL_STORY_STEPS = 8;
+import { motion, useMotionValue, useReducedMotion, useScroll } from 'framer-motion';
 
 /**
  * Tall section with a sticky viewport. Animation scrubs with scroll.
  * Reduced motion: one screen, end state (progress = 1).
  *
- * The frame itself now arrives and resolves at the edges of its own scroll
- * range (fade + soften + a hair of scale) instead of hard-cutting to the next
- * beat - that handoff was the biggest source of the "transitions feel
- * minimal" feedback. Content choreography inside each beat is untouched.
+ * The frame stays fully visible for the whole pin. Fading / blurring the
+ * sticky stage made the story look drunk and unreadable; chapter kickers
+ * are the handoff, not a visual dissolve.
  */
 export default function LandingPinBeat({
     testId,
@@ -19,7 +16,7 @@ export default function LandingPinBeat({
     spans = 2.15,
     tone,
     step,
-    totalSteps = TOTAL_STORY_STEPS,
+    totalSteps = 3,
     children,
 }) {
     const ref = useRef(null);
@@ -31,15 +28,6 @@ export default function LandingPinBeat({
     });
     const progress = reduce ? done : scrollYProgress;
     const spoken = caption || label;
-
-    // 0 -> 1 -> 1 -> 0 across the beat: invisible for an instant at both edges,
-    // full strength through the middle. Springing it (rather than the content
-    // progress above) keeps every existing beat's internal timing untouched.
-    const edge = useTransform(scrollYProgress, [0, 0.09, 0.91, 1], [0, 1, 1, 0]);
-    const edgeSmooth = useSpring(edge, { stiffness: 300, damping: 40, mass: 0.5 });
-    const frameOpacity = useTransform(edgeSmooth, (v) => (reduce ? 1 : 0.1 + v * 0.9));
-    const frameScale = useTransform(edgeSmooth, (v) => (reduce ? 1 : 0.965 + v * 0.035));
-    const frameBlur = useTransform(edgeSmooth, (v) => (reduce ? 'blur(0px)' : `blur(${(1 - v) * 5}px)`));
 
     const showKicker = Boolean(step);
     const kickerLabel = label && label !== caption ? label : null;
@@ -53,10 +41,7 @@ export default function LandingPinBeat({
             data-testid={testId}
             aria-label={spoken}
         >
-            <motion.div
-                className="landing-pin-frame"
-                style={{ opacity: frameOpacity, scale: frameScale, filter: frameBlur }}
-            >
+            <div className="landing-pin-frame">
                 {showKicker ? (
                     <div className="landing-pin-kicker" aria-hidden="true" data-testid={`${testId}-kicker`}>
                         <span className="landing-pin-kicker-dots">
@@ -81,7 +66,7 @@ export default function LandingPinBeat({
                     </p>
                 ) : null}
                 {typeof children === 'function' ? children(progress, reduce) : children}
-            </motion.div>
+            </div>
         </section>
     );
 }
