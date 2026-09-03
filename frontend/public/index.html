@@ -8,6 +8,12 @@
         <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <!-- TskFlow's theme is app-controlled (see src/lib/theme.js), not OS-driven, and most
+             routes (login, legal, shared Unbiassly links, etc.) are light-only. Without this,
+             Android/Chrome's Auto Dark Theme silently re-paints those pages near-black for any
+             visitor whose phone is in dark mode. Marketing pages still opt into real dark by
+             setting documentElement.style.colorScheme = 'dark' at runtime, which wins over this. -->
+        <meta name="color-scheme" content="only light" />
         <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
         <meta name="theme-color" content="#14b8a6" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#14b8a6" />
