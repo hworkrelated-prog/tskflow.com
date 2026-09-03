@@ -36,18 +36,13 @@ def test_landing_is_a_tool_not_a_pitch():
     assert "LandingScreenRecorder" in page_tree
     assert "LandingScreenRecorder" not in src.split("const LaunchPad")[1].split("const LandingPage")[0]
     assert "LandingPayoff" in src
-    assert "LandingWeek" in src
-    assert "LandingAssignBeat" in src
-    assert "LandingPileUp" in src
-    assert "LandingDeadline" in src
-    assert "LandingChase" in src
-    assert "LandingHalfDone" in src
-    assert "LandingTurn" in src
-    assert "LandingPeace" in src
-    assert "LandingLived" in src
-    assert "LandingCost" in src
-    assert "LandingDifference" in src
-    assert "LandingBeforeAfter" in src
+    assert "LandingFilm" in src
+    assert "LandingWeek" not in src
+    assert "LandingPileUp" not in src
+    assert "LandingLived" not in src
+    assert "LandingCost" not in src
+    assert "LandingDifference" not in src
+    assert "LandingBeforeAfter" not in src
     assert "LandingFounder" in src
     assert "useScroll" in (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     assert "What needs to get done?" not in src
@@ -347,21 +342,18 @@ def test_prompt_border_is_inset_so_sides_cannot_clip():
 
 
 def test_landing_story_is_shown_not_told():
-    """Pain first, then the scroll-pin week, real Meet / Slack / Gmail, the cost, TskFlow, then the in-app composer."""
+    """Short visual film: meet + emojis, the catch, then TskFlow — then the composer."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
-    lived = (FRONT / "components" / "LandingLived.js").read_text(encoding="utf-8")
-    cost = (FRONT / "components" / "LandingCost.js").read_text(encoding="utf-8")
-    diff = (FRONT / "components" / "LandingDifference.js").read_text(encoding="utf-8")
-    compare = (FRONT / "components" / "LandingBeforeAfter.js").read_text(encoding="utf-8")
-    payoff = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
+    film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     founder = (FRONT / "components" / "LandingFounder.js").read_text(encoding="utf-8")
     unbiassly = (FRONT / "components" / "LandingUnbiassly.js").read_text(encoding="utf-8")
 
-    assert "Imagine not having to ask." in hero
-    assert "You already know." in hero
+    assert "Hand the dirty work to TskFlow." in hero
+    assert "Cuts the chase. The frustration. The endless back and forth." in hero
+    assert "Your relationship with the team stays intact." in hero
     assert "Stop being the chase." in hero
     assert "See how it works" in hero
     assert 'data-testid="landing-point"' in hero
@@ -399,51 +391,38 @@ def test_landing_story_is_shown_not_told():
     assert "landing-cta-ghost" in css
     assert "landing-payoff-hero" in css
     assert "gmeet" in css and "slack-side" in css and "gmail-read" in css
+    assert "landing-film" in css
+    assert "landing-app" in css
     assert "useScroll" in pin
     assert "useReducedMotion" in pin
     assert "caption" in pin
-    assert "Google Meet" in lived
-    assert "Yep, I'll have this done by Friday." in lived
-    assert "# q3-forecast" in lived
-    assert "Gmail" in lived
-    assert "Hey - quick update on this?" in lived
-    assert "CAST.alex" in lived
-    assert "Maya Chen" in lived
-    assert "WEEKLY_HOURS = 1.5" in cost
-    assert "YEARLY_HOURS = 78" in cost
-    assert "WORK_DAYS = 10" in cost
-    assert "Not a product promise" in cost
-    assert "follow-up problem" in cost
-    assert "saves 78" not in cost.lower()
+    assert "Google Meet" in film
+    assert "Yep, I'll have this done by Friday." in film
+    assert "# q3-forecast" in film
+    assert "Gmail" in film
+    assert "Hey - quick update on this?" in film
+    assert 'who="alex"' in film
+    assert "Maya Chen" in film
     assert "save 78" not in landing.lower()
-    assert 'TskFlow keeps the "yes."' in diff
-    assert "Capture" in diff and "Schedule" in diff and "Follow up" in diff and "Verify" in diff
-    assert "Did you get this?" in compare
-    assert "There is no clear way to hold people accountable." in compare
-    assert "Record the 1:1" in compare
-    assert "Screenshot Slack" in compare
-    assert "Hope HR can use it" in compare
-    assert "Team performance" in compare
-    assert "Leaders see who follows through. HR already has the record." in compare
-    assert "AccountabilityScore" in compare
-    assert "No chasing. No Slack archaeology. No guessing." not in compare
-    assert "Imagine not having to ask." in payoff
-    assert "You already know." in payoff
-    assert "managing reminders" in payoff
+    assert "Did you get this?" in film
+    assert "There is no clear way to hold people accountable." in film
+    assert "Record the 1:1" in film
+    assert "Screenshot Slack" in film
+    assert "Hope HR can use it" in film
+    assert "Team performance" in film
+    assert "Leaders see who follows through. HR already has the record." in film
+    assert "AccountabilityScore" in film
+    assert "Capture" in film and "Schedule" in film and "Follow up" in film and "Verify" in film
+    assert "TskFlow joins your meet." in film
+    assert "Leaves with every task." in film
+    assert "Gets after the assignees." in film
+    assert "Meeting ended" in film
+    assert "No chasing. No Slack archaeology. No guessing." not in film
+    assert "Imagine not having to ask." not in hero
+    assert "managing reminders" not in hero
     tree = landing.split("const LandingPage")[-1]
-    assert tree.index("LandingPayoff") < tree.index("LandingWeek")
-    assert tree.index("LandingWeek") < tree.index("LandingAssignBeat")
-    assert tree.index("LandingAssignBeat") < tree.index("LandingPileUp")
-    assert tree.index("LandingPileUp") < tree.index("LandingDeadline")
-    assert tree.index("LandingDeadline") < tree.index("LandingChase")
-    assert tree.index("LandingChase") < tree.index("LandingHalfDone")
-    assert tree.index("LandingHalfDone") < tree.index("LandingTurn")
-    assert tree.index("LandingTurn") < tree.index("LandingPeace")
-    assert tree.index("LandingPeace") < tree.index("LandingLived")
-    assert tree.index("LandingLived") < tree.index("LandingCost")
-    assert tree.index("LandingCost") < tree.index("LandingDifference")
-    assert tree.index("LandingDifference") < tree.index("LandingBeforeAfter")
-    assert tree.index("LandingBeforeAfter") < tree.index("<LaunchPad")
+    assert tree.index("LandingPayoff") < tree.index("LandingFilm")
+    assert tree.index("LandingFilm") < tree.index("<LaunchPad")
     assert "You send it. We run after them until it is done." not in landing
     assert "We email first, then run after them." not in landing
     assert "landing-send-visual" in landing
@@ -487,33 +466,25 @@ def test_landing_founder_is_a_one_screen_profile():
 
 def test_landing_story_cast_is_sales_and_consistent():
     cast = (FRONT / "lib" / "landingCast.js").read_text(encoding="utf-8")
-    lived = (FRONT / "components" / "LandingLived.js").read_text(encoding="utf-8")
-    pile = (FRONT / "components" / "LandingPileUp.js").read_text(encoding="utf-8")
-    turn = (FRONT / "components" / "LandingTurn.js").read_text(encoding="utf-8")
+    film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
     assert "Send the Q3 forecast" in cast
     assert "Send proposal to Acme" in cast
     assert "Update Salesforce stage" in cast
-    assert "Q3 forecast" in lived
-    assert "who: 'alex'" in lived
-    assert "Maya Chen" in lived
+    assert "Q3 forecast" in film
+    assert "who: 'alex'" in film
+    assert "Maya Chen" in film
     assert "/avatars/maya.svg" in cast
     assert "Alex Rivera" in cast
-    assert "TASKS" in pile and "TASKS" in turn
+    assert "TASKS" in film
     assert "hashim" in cast and "maya" in cast and "chris" in cast and "priya" in cast
-    assert "CAST.alex" in lived
-    assign = (FRONT / "components" / "LandingAssignBeat.js").read_text(encoding="utf-8")
-    chase = (FRONT / "components" / "LandingChase.js").read_text(encoding="utf-8")
-    week = (FRONT / "components" / "LandingWeek.js").read_text(encoding="utf-8")
-    assert 'who="alex"' in assign
-    assert 'who="hashim"' not in assign
-    assert 'who="alex"' in chase
-    assert 'who="alex"' in week
+    assert "CAST.alex" in film
+    assert 'who="alex"' in film
+    assert 'who="hashim"' not in film
     mark = (FRONT / "components" / "LandingCastMark.js").read_text(encoding="utf-8")
     assert "LandingFace" in mark
     assert "person.photo" in mark
-    assert "QA signoff" not in pile
-    assert "record a demo of the fix" not in pile
-    assert "QA signoff" not in lived
+    assert "QA signoff" not in film
+    assert "record a demo of the fix" not in film
 
 
 

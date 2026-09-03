@@ -8,18 +8,7 @@ import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
 import LandingPayoff from '@/components/LandingPayoff';
-import LandingWeek from '@/components/LandingWeek';
-import LandingAssignBeat from '@/components/LandingAssignBeat';
-import LandingPileUp from '@/components/LandingPileUp';
-import LandingDeadline from '@/components/LandingDeadline';
-import LandingChase from '@/components/LandingChase';
-import LandingHalfDone from '@/components/LandingHalfDone';
-import LandingTurn from '@/components/LandingTurn';
-import LandingPeace from '@/components/LandingPeace';
-import LandingLived from '@/components/LandingLived';
-import LandingCost from '@/components/LandingCost';
-import LandingDifference from '@/components/LandingDifference';
-import LandingBeforeAfter from '@/components/LandingBeforeAfter';
+import LandingFilm from '@/components/LandingFilm';
 import LandingFounder from '@/components/LandingFounder';
 import LandingUnbiassly from '@/components/LandingUnbiassly';
 import TskFlowLogo from '@/components/TskFlowLogo';
@@ -372,20 +361,9 @@ const LandingPage = () => {
                     <>
                 <LandingPayoff
                     onTry={() => scrollToId('landing-tryit')}
-                    onHow={() => scrollToId('landing-week')}
+                    onHow={() => scrollToId('landing-film')}
                 />
-                <LandingWeek />
-                <LandingAssignBeat />
-                <LandingPileUp />
-                <LandingDeadline />
-                <LandingChase />
-                <LandingHalfDone />
-                <LandingTurn />
-                <LandingPeace />
-                <LandingLived />
-                <LandingCost />
-                <LandingDifference />
-                <LandingBeforeAfter />
+                <LandingFilm />
 
                 <section className="landing-final" data-testid="landing-final">
                     <p className="landing-section-kicker">Start</p>
@@ -410,7 +388,7 @@ const LandingPage = () => {
                         <button
                             type="button"
                             className="landing-cta-ghost"
-                            onClick={() => scrollToId('landing-difference')}
+                            onClick={() => scrollToId('landing-film')}
                             data-testid="landing-final-how"
                         >
                             See how it works
