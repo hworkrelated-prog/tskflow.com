@@ -1327,8 +1327,8 @@ html:has(body.landing-active) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1.15rem;
-    padding: 5.4rem 1.2rem 1.6rem;
+    gap: 0.7rem;
+    padding: 4.6rem 1.2rem 1.4rem;
     overflow: hidden;
 }
 .landing-pin-caption {
@@ -1466,12 +1466,12 @@ html:has(body.landing-active) {
 .landing-story-glow--a {
     top: -18%;
     left: -16%;
-    background: rgba(45, 212, 191, 0.2);
+    background: rgba(45, 212, 191, 0.11);
 }
 .landing-story-glow--b {
     bottom: -22%;
     right: -18%;
-    background: rgba(15, 118, 110, 0.16);
+    background: rgba(15, 118, 110, 0.09);
 }
 
 /* Hero scroll cue: most first-time visitors don't know there's a whole
@@ -2108,7 +2108,7 @@ html:has(body.landing-active) {
         display: none;
     }
     .landing-pin-frame {
-        padding-top: 5.4rem;
+        padding-top: 4.6rem;
         padding-bottom: 1.1rem;
         overflow: hidden;
     }
@@ -4267,30 +4267,30 @@ html:has(body.landing-active) {
     align-items: center;
     justify-content: center;
     text-align: center;
-    min-height: calc(100svh - 3.75rem);
-    padding: 2.4rem 1.25rem 2.1rem;
-    background: radial-gradient(ellipse at 50% 42%, rgba(15, 118, 110, 0.16), transparent 58%);
+    min-height: calc(100svh - 4.5rem);
+    padding: 3rem 1.5rem 2.4rem;
+    background: radial-gradient(ellipse at 50% 38%, rgba(15, 118, 110, 0.12), transparent 62%);
 }
 .landing-payoff-hero .landing-hero-kicker {
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.95rem;
 }
 .landing-payoff-title {
-    margin: 0 0 1rem;
+    margin: 0 auto 1.35rem;
     font-family: Outfit, sans-serif;
-    font-size: clamp(1.7rem, 5.6vw, 2.85rem);
+    font-size: clamp(1.85rem, 5.2vw, 2.75rem);
     font-weight: 600;
-    letter-spacing: -0.05em;
-    line-height: 1.12;
+    letter-spacing: -0.045em;
+    line-height: 1.18;
     color: #f8fafc;
-    max-width: 14em;
+    max-width: 16em;
 }
 .landing-hero-plot {
     list-style: none;
-    margin: 0 auto 1.25rem;
+    margin: 0 auto 1.5rem;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 0.65rem;
     width: min(26rem, 100%);
     text-align: left;
 }
@@ -4363,7 +4363,7 @@ html:has(body.landing-active) {
 }
 .landing-payoff-ctas {
     justify-content: center;
-    margin-top: 1.15rem;
+    margin-top: 0.35rem;
 }
 
 .landing-final {
@@ -4452,7 +4452,8 @@ html:has(body.landing-active) {
     }
     .landing-payoff-hero {
         min-height: 0;
-        padding: 1.8rem 1.15rem 1.7rem;
+        padding: 2.2rem 1.15rem 1.8rem;
+        justify-content: flex-start;
     }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4902,7 +4903,7 @@ html:has(body.landing-active) {
 .landing-film-stage {
     position: relative;
     width: min(42rem, 100%);
-    min-height: min(26rem, 52svh);
+    min-height: min(22rem, 46svh);
 }
 .landing-film-act {
     position: relative;
@@ -4950,7 +4951,10 @@ html:has(body.landing-active) {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin: 0.85rem 0 0.7rem;
+    margin: 0 0 1.55rem;
+}
+.landing-peek-wrap--still {
+    margin: 0.15rem 0 1.55rem;
 }
 .landing-peek-line {
     margin: 0.45rem 0 0;
@@ -5335,7 +5339,7 @@ html:has(body.landing-active) {
 }
 @media (max-width: 47.99rem) {
     .landing-film-stage {
-        min-height: 24.5rem;
+        min-height: 18.5rem;
     }
     .gmeet--film .gmeet-tile {
         min-height: 5.4rem;

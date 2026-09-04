@@ -470,9 +470,9 @@ def test_landing_film_is_three_slow_chapters():
     assert "The meeting" in film
     assert "You chase" in film
     assert "TskFlow takes it" in film
-    assert "spans={6.4}" in film
-    assert "spans={7.6}" in film
-    assert "spans={6.8}" in film
+    assert "spans={9.5}" in film
+    assert "spans={11.5}" in film
+    assert "spans={10}" in film
     assert "{step} of {totalSteps}" in pin
     assert "navLabel" in film
     assert "blur(" not in pin
@@ -480,6 +480,10 @@ def test_landing_film_is_three_slow_chapters():
     assert "dur: 4.8" in hero
     assert "A meeting starts." in hero
     assert "Scroll to watch it happen" in hero
+    assert "useStoryClock" not in hero
+    assert "landing-peek-wrap--still" in hero
+    assert "[0, 0.2, 0.8, 1]" in pin
+    assert 'className="sr-only landing-pin-thesis"' in pin
 
 
 def test_landing_says_the_point_in_plain_english():

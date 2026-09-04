@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { motion, useMotionValue, useReducedMotion, useScroll } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 
 /**
  * Tall section with a sticky viewport. Animation scrubs with scroll.
@@ -28,7 +28,9 @@ export default function LandingPinBeat({
         target: ref,
         offset: ['start start', 'end end'],
     });
-    const progress = reduce ? done : scrollYProgress;
+    // Hold the first and last stretch still so a wheel flick cannot skip a beat.
+    const held = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0, 0, 1, 1]);
+    const progress = reduce ? done : held;
     const spoken = caption || thesis || label;
 
     const showKicker = Boolean(step);
@@ -63,7 +65,7 @@ export default function LandingPinBeat({
                     </div>
                 ) : null}
                 {thesis ? (
-                    <p className="landing-pin-thesis" data-testid={`${testId}-thesis`}>
+                    <p className="sr-only landing-pin-thesis" data-testid={`${testId}-thesis`}>
                         {thesis}
                     </p>
                 ) : null}
