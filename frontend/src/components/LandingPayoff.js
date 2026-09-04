@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
@@ -7,10 +7,10 @@ import { CAST } from '@/lib/landingCast';
 import { phaseOn, useStoryClock } from '@/lib/useStoryClock';
 
 const PEEK_PHASES = [
-    { id: 'group', dur: 2.6, line: 'A meeting starts.' },
-    { id: 'assign', dur: 2.8, line: 'Alex assigns Maya the Q3 forecast.' },
-    { id: 'emoji', dur: 2.8, line: 'They all say yes.' },
-    { id: 'end', dur: 2.4, line: 'TskFlow takes the follow-up.' },
+    { id: 'group', dur: 2.6, line: 'A meeting starts. Work gets a name and a date.' },
+    { id: 'assign', dur: 2.8, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
+    { id: 'emoji', dur: 2.8, line: 'They all say yes. The meeting still ends.' },
+    { id: 'end', dur: 2.4, line: 'TskFlow takes the follow-up, so you do not have to.' },
 ];
 
 const PEEK = [
@@ -20,27 +20,34 @@ const PEEK = [
     { who: 'priya', agree: '👍' },
 ];
 
+const PLOT = [
+    { n: '1', lead: 'They say yes', rest: ' in the meeting.' },
+    { n: '2', lead: 'You chase them', rest: ' all week after.' },
+    { n: '3', lead: 'TskFlow chases them', rest: ' instead.' },
+];
+
 export default function LandingPayoff({ onTry, onHow }) {
-    const reduce = useReducedMotion();
-    const [know, setKnow] = useState(Boolean(reduce));
-
-    useEffect(() => {
-        if (reduce) return undefined;
-        const id = window.setTimeout(() => setKnow(true), 900);
-        return () => window.clearTimeout(id);
-    }, [reduce]);
-
     return (
         <section className="landing-payoff-hero" data-testid="landing-hero" id="landing-payoff">
-            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">They already said yes.</p>
+            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">
+                After the meeting, they already said yes.
+            </p>
             <h1 className="landing-payoff-title" data-testid="landing-payoff-title">
-                Hand the dirty work to TskFlow.
+                TskFlow follows up so you do not have to.
             </h1>
+            <ol className="landing-hero-plot" data-testid="landing-hero-plot">
+                {PLOT.map((row) => (
+                    <li key={row.n}>
+                        <i>{row.n}</i>
+                        <span>
+                            <b>{row.lead}</b>
+                            {row.rest}
+                        </span>
+                    </li>
+                ))}
+            </ol>
             <HeroPeek />
-            <p
-                className={`landing-payoff-know${know ? ' is-on' : ''}`}
-                data-testid="landing-payoff-know"
-            >
+            <p className="sr-only" data-testid="landing-payoff-know">
                 Cuts the chase. The frustration. The endless back and forth.
             </p>
             <p className="landing-payoff-after" data-testid="landing-payoff-after">
@@ -84,7 +91,7 @@ function ScrollCue({ onClick }) {
             data-testid="landing-scroll-cue"
             aria-label="Scroll to watch what happens next"
         >
-            <span>Scroll the story · 3 beats</span>
+            <span>Scroll to watch it happen</span>
             <ChevronDown className="landing-scroll-cue-icon" aria-hidden="true" />
         </motion.button>
     );

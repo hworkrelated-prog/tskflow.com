@@ -13,6 +13,8 @@ export default function LandingPinBeat({
     testId,
     label,
     caption,
+    thesis,
+    navLabel,
     spans = 2.15,
     tone,
     step,
@@ -27,10 +29,10 @@ export default function LandingPinBeat({
         offset: ['start start', 'end end'],
     });
     const progress = reduce ? done : scrollYProgress;
-    const spoken = caption || label;
+    const spoken = caption || thesis || label;
 
     const showKicker = Boolean(step);
-    const kickerLabel = label && label !== caption ? label : null;
+    const kickerLabel = navLabel || (label && label !== caption ? label : null);
 
     return (
         <section
@@ -55,10 +57,15 @@ export default function LandingPinBeat({
                             ))}
                         </span>
                         <span className="landing-pin-kicker-text">
-                            {String(step).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}
+                            {step} of {totalSteps}
                             {kickerLabel ? <b>{kickerLabel}</b> : null}
                         </span>
                     </div>
+                ) : null}
+                {thesis ? (
+                    <p className="landing-pin-thesis" data-testid={`${testId}-thesis`}>
+                        {thesis}
+                    </p>
                 ) : null}
                 {caption ? (
                     <p className="landing-pin-caption" data-testid={`${testId}-caption`}>

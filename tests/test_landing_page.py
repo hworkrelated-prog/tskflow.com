@@ -461,11 +461,35 @@ def test_landing_film_is_three_slow_chapters():
     assert "spans={3.8}" in film
     assert "spans={4.6}" in film
     assert "spans={4.2}" in film
+    assert "{step} of {totalSteps}" in pin
+    assert "navLabel" in film
     assert "blur(" not in pin
     assert "frameBlur" not in pin
     assert "dur: 2.6" in hero
     assert "A meeting starts." in hero
-    assert "Scroll the story · 3 beats" in hero
+    assert "Scroll to watch it happen" in hero
+
+
+def test_landing_says_the_point_in_plain_english():
+    """A stranger can read the point on the first screen without decoding jargon."""
+    hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
+    film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    assert "TskFlow follows up so you do not have to." in hero
+    assert "They say yes" in hero
+    assert "You chase them" in hero
+    assert "TskFlow chases them" in hero
+    assert 'data-testid="landing-hero-plot"' in hero
+    assert "They said yes. Then the meeting ended." in film
+    assert "After yes, you become the reminder system." in film
+    assert "TskFlow does the reminding so you do not." in film
+    assert 'data-testid="landing-final-plot"' in landing
+    assert "TskFlow chases" in landing
+    # Locked phrases still live in the files even if they are no longer the headline.
+    assert "Hand the dirty work to TskFlow." in hero
+    assert "A group of people." in film
+    assert "Catch people." in film
+    assert "TskFlow joins your meet." in film
 
 
 def test_landing_founder_is_a_one_screen_profile():
