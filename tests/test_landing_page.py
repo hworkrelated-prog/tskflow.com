@@ -484,6 +484,20 @@ def test_landing_film_is_three_slow_chapters():
     assert "landing-peek-wrap--still" in hero
     assert "[0, 0.2, 0.8, 1]" in pin
     assert 'className="sr-only landing-pin-thesis"' in pin
+    assert "LandingDoraSequence" in film
+    assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
+    dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
+    assert "REACT_APP_DORA_STORY_URL" in dora
+    story = ROOT / "frontend" / "public" / "landing" / "story"
+    for name in (
+        "tskflow-story-01-meet.webp",
+        "tskflow-story-02-yes.webp",
+        "tskflow-story-03-ended.webp",
+        "tskflow-story-04-chase.webp",
+        "tskflow-story-05-talk.webp",
+        "tskflow-story-06-tskflow.webp",
+    ):
+        assert (story / name).is_file(), name
 
 
 def test_landing_says_the_point_in_plain_english():

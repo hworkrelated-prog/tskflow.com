@@ -25,6 +25,12 @@ import {
     Video,
 } from 'lucide-react';
 import LandingPinBeat, { BeatStage } from '@/components/LandingPinBeat';
+import LandingDoraSequence, {
+    CATCH_FRAMES,
+    FLOW_FRAMES,
+    LandingDoraEmbed,
+    MEET_FRAMES,
+} from '@/components/LandingDoraSequence';
 import LandingFace from '@/components/LandingFace';
 import LandingCastMark from '@/components/LandingCastMark';
 import AccountabilityScore from '@/components/AccountabilityScore';
@@ -124,6 +130,7 @@ function ScrubCaption({ progress, beats, testId }) {
 export default function LandingFilm() {
     return (
         <div id="landing-film" data-testid="landing-film">
+            <LandingDoraEmbed />
             <LandingPinBeat
                 testId="landing-film-meet"
                 label="The meeting"
@@ -136,8 +143,9 @@ export default function LandingFilm() {
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-meet-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
+                            <div className="sr-only" data-testid="landing-meet-act">
                                 <MeetScene progress={progress} />
                             </div>
                         </BeatStage>
@@ -157,8 +165,9 @@ export default function LandingFilm() {
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-catch-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
+                            <div className="sr-only" data-testid="landing-catch-act">
                                 <CatchScene progress={progress} />
                             </div>
                         </BeatStage>
@@ -178,8 +187,9 @@ export default function LandingFilm() {
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-flow-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
+                            <div className="sr-only" data-testid="landing-flow-act">
                                 <FlowScene progress={progress} />
                             </div>
                         </BeatStage>
