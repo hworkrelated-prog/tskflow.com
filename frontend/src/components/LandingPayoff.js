@@ -4,13 +4,12 @@ import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
 import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST } from '@/lib/landingCast';
-import { phaseOn, useStoryClock } from '@/lib/useStoryClock';
 
 const PEEK_PHASES = [
-    { id: 'group', dur: 2.6, line: 'A meeting starts. Work gets a name and a date.' },
-    { id: 'assign', dur: 2.8, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
-    { id: 'emoji', dur: 2.8, line: 'They all say yes. The meeting still ends.' },
-    { id: 'end', dur: 2.4, line: 'TskFlow takes the follow-up, so you do not have to.' },
+    { id: 'group', dur: 4.8, line: 'A meeting starts. Work gets a name and a date.' },
+    { id: 'assign', dur: 5.2, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
+    { id: 'emoji', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
+    { id: 'end', dur: 4.6, line: 'TskFlow takes the follow-up, so you do not have to.' },
 ];
 
 const PEEK = [
@@ -50,7 +49,7 @@ export default function LandingPayoff({ onTry, onHow }) {
             <p className="sr-only" data-testid="landing-payoff-know">
                 Cuts the chase. The frustration. The endless back and forth.
             </p>
-            <p className="landing-payoff-after" data-testid="landing-payoff-after">
+            <p className="sr-only" data-testid="landing-payoff-after">
                 Your relationship with the team stays intact.
             </p>
             <p className="sr-only" data-testid="landing-pain-line">
@@ -98,29 +97,28 @@ function ScrollCue({ onClick }) {
 }
 
 function HeroPeek() {
-    const { index, reduce } = useStoryClock(PEEK_PHASES);
-    const assigned = reduce || phaseOn(index, 1, 3);
-    const emoji = reduce || phaseOn(index, 2, 3);
-    const ended = reduce || phaseOn(index, 3, 3);
-    const line = PEEK_PHASES[index]?.line || PEEK_PHASES[0].line;
-
     return (
-        <div className="landing-peek-wrap">
-            <div className="landing-peek" data-testid="landing-payoff-frame" aria-hidden>
+        <div className="landing-peek-wrap landing-peek-wrap--still">
+            <div className="landing-peek landing-peek--still" data-testid="landing-payoff-frame" aria-hidden>
                 {PEEK.map((tile) => (
-                    <span key={tile.who} className={`landing-peek-face${assigned && tile.who === 'maya' ? ' is-ask' : ''}`}>
-                        <LandingFace who={tile.who} size={52} radius={999} />
-                        {tile.agree && emoji ? (
+                    <span key={tile.who} className="landing-peek-face">
+                        <LandingFace who={tile.who} size={44} radius={999} />
+                        {tile.agree ? (
                             <span className="landing-peek-rx">{tile.agree}</span>
                         ) : null}
                     </span>
                 ))}
-                <span className={`landing-peek-bot${ended ? ' is-on' : ''}`}>
-                    <TskFlowMark size={22} />
+                <span className="landing-peek-bot is-on">
+                    <TskFlowMark size={20} />
                 </span>
                 <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
             </div>
-            <p className="landing-peek-line" data-testid="landing-peek-line">{line}</p>
+            <p className="sr-only" data-testid="landing-peek-line">{PEEK_PHASES[0].line}</p>
+            <ul className="sr-only">
+                {PEEK_PHASES.slice(1).map((phase) => (
+                    <li key={phase.id}>{phase.line}</li>
+                ))}
+            </ul>
         </div>
     );
 }

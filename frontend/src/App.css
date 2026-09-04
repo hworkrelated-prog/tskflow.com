@@ -1327,8 +1327,8 @@ html:has(body.landing-active) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1.15rem;
-    padding: 5.4rem 1.2rem 1.6rem;
+    gap: 0.7rem;
+    padding: 4.6rem 1.2rem 1.4rem;
     overflow: hidden;
 }
 .landing-pin-caption {
@@ -1466,12 +1466,12 @@ html:has(body.landing-active) {
 .landing-story-glow--a {
     top: -18%;
     left: -16%;
-    background: rgba(45, 212, 191, 0.2);
+    background: rgba(45, 212, 191, 0.11);
 }
 .landing-story-glow--b {
     bottom: -22%;
     right: -18%;
-    background: rgba(15, 118, 110, 0.16);
+    background: rgba(15, 118, 110, 0.09);
 }
 
 /* Hero scroll cue: most first-time visitors don't know there's a whole
@@ -1481,7 +1481,7 @@ html:has(body.landing-active) {
     flex-direction: column;
     align-items: center;
     gap: 0.3rem;
-    margin-top: 2.4rem;
+    margin-top: 1.6rem;
     background: transparent;
     border: 0;
     padding: 0.4rem;
@@ -2108,7 +2108,7 @@ html:has(body.landing-active) {
         display: none;
     }
     .landing-pin-frame {
-        padding-top: 5.4rem;
+        padding-top: 4.6rem;
         padding-bottom: 1.1rem;
         overflow: hidden;
     }
@@ -3111,6 +3111,56 @@ html:has(body.landing-active) {
     box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.12),
         0 8px 24px -10px rgba(0, 0, 0, 0.55);
+}
+.landing-page .landing-prompt-readback.landing-confirm {
+    margin: 0;
+    padding: 0 0.9rem 0.35rem;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: rgba(204, 251, 241, 0.88);
+}
+.landing-prompt-readback .landing-confirm-chip {
+    color: #5eead4;
+}
+.landing-prompt-readback .landing-confirm-title {
+    color: rgba(248, 250, 252, 0.88);
+    font-weight: 500;
+}
+.landing-prompt-readback .landing-confirm-when {
+    color: #fcd34d;
+    font-weight: 500;
+}
+.landing-prompt-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    padding: 0 0.5rem 0.55rem;
+}
+.landing-prompt-tools.is-open {
+    justify-content: flex-start;
+}
+.landing-who-step.is-open {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+.landing-prompt-hint {
+    text-align: center;
+    margin-top: 0.75rem;
+    color: rgba(255, 255, 255, 0.48);
+}
+.landing-page .landing-composer .ai-prompt-placeholder {
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 0.95rem;
+    line-height: 1.45;
+    white-space: normal;
+}
+.landing-page .landing-composer textarea::placeholder {
+    color: transparent !important;
 }
 .landing-composer .landing-step {
     padding-top: 0;
@@ -4217,30 +4267,30 @@ html:has(body.landing-active) {
     align-items: center;
     justify-content: center;
     text-align: center;
-    min-height: 0;
-    padding: 1.7rem 1.25rem 1.35rem;
-    background: radial-gradient(ellipse at 50% 42%, rgba(15, 118, 110, 0.16), transparent 58%);
+    min-height: calc(100svh - 4.5rem);
+    padding: 3rem 1.5rem 2.4rem;
+    background: radial-gradient(ellipse at 50% 38%, rgba(15, 118, 110, 0.12), transparent 62%);
 }
 .landing-payoff-hero .landing-hero-kicker {
-    margin-bottom: 0.65rem;
+    margin-bottom: 0.95rem;
 }
 .landing-payoff-title {
-    margin: 0 0 0.7rem;
+    margin: 0 auto 1.35rem;
     font-family: Outfit, sans-serif;
-    font-size: clamp(1.7rem, 5.6vw, 2.85rem);
+    font-size: clamp(1.85rem, 5.2vw, 2.75rem);
     font-weight: 600;
-    letter-spacing: -0.05em;
-    line-height: 1.08;
+    letter-spacing: -0.045em;
+    line-height: 1.18;
     color: #f8fafc;
-    max-width: 18ch;
+    max-width: 16em;
 }
 .landing-hero-plot {
     list-style: none;
-    margin: 0 auto 1rem;
+    margin: 0 auto 1.5rem;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.65rem;
     width: min(26rem, 100%);
     text-align: left;
 }
@@ -4313,7 +4363,7 @@ html:has(body.landing-active) {
 }
 .landing-payoff-ctas {
     justify-content: center;
-    margin-top: 1.15rem;
+    margin-top: 0.35rem;
 }
 
 .landing-final {
@@ -4399,6 +4449,11 @@ html:has(body.landing-active) {
     .landing-compare,
     .landing-final {
         padding: 3.1rem 1.15rem;
+    }
+    .landing-payoff-hero {
+        min-height: 0;
+        padding: 2.2rem 1.15rem 1.8rem;
+        justify-content: flex-start;
     }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4847,8 +4902,49 @@ html:has(body.landing-active) {
 }
 .landing-film-stage {
     position: relative;
-    width: min(42rem, 100%);
-    min-height: min(26rem, 52svh);
+    width: min(44rem, 100%);
+    min-height: min(22rem, 46svh);
+}
+.landing-dora-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+}
+.landing-dora-sequence {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    max-height: min(28rem, 52svh);
+    border-radius: 1.35rem;
+    overflow: hidden;
+    background: #070b0a;
+    box-shadow:
+        0 28px 70px rgba(0, 0, 0, 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.landing-dora-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+.landing-dora-live {
+    width: min(44rem, calc(100% - 2rem));
+    margin: 2.5rem auto 0;
+    aspect-ratio: 16 / 10;
+    border-radius: 1.35rem;
+    overflow: hidden;
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
+}
+.landing-dora-embed {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #070b0a;
 }
 .landing-film-act {
     position: relative;
@@ -4896,14 +4992,19 @@ html:has(body.landing-active) {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin: 0.2rem 0 0.55rem;
+    margin: 0 0 1.55rem;
+}
+.landing-peek-wrap--still {
+    margin: 0.15rem 0 1.55rem;
 }
 .landing-peek-line {
-    margin: 0.15rem 0 0;
-    min-height: 1.35em;
+    margin: 0.45rem 0 0;
+    min-height: 2.7em;
+    max-width: 22em;
     text-align: center;
     font-size: 0.95rem;
     font-weight: 500;
+    line-height: 1.4;
     color: rgba(204, 251, 241, 0.78);
 }
 .landing-peek {
@@ -5279,7 +5380,7 @@ html:has(body.landing-active) {
 }
 @media (max-width: 47.99rem) {
     .landing-film-stage {
-        min-height: 24.5rem;
+        min-height: 18.5rem;
     }
     .gmeet--film .gmeet-tile {
         min-height: 5.4rem;

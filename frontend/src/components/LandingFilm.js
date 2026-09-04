@@ -25,6 +25,12 @@ import {
     Video,
 } from 'lucide-react';
 import LandingPinBeat, { BeatStage } from '@/components/LandingPinBeat';
+import LandingDoraSequence, {
+    CATCH_FRAMES,
+    FLOW_FRAMES,
+    LandingDoraEmbed,
+    MEET_FRAMES,
+} from '@/components/LandingDoraSequence';
 import LandingFace from '@/components/LandingFace';
 import LandingCastMark from '@/components/LandingCastMark';
 import AccountabilityScore from '@/components/AccountabilityScore';
@@ -32,37 +38,37 @@ import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST, TASKS } from '@/lib/landingCast';
 
 const MEET_PEOPLE = [
-    { who: 'alex', you: true, mute: false, speakAt: [0.12, 0.40], agree: null, task: null },
-    { who: 'maya', you: false, mute: false, speakAt: [0.40, 0.62], agree: '✅', agreeAt: 0.54, task: TASKS[0] },
-    { who: 'chris', you: false, mute: true, speakAt: null, agree: '👍', agreeAt: 0.60, task: TASKS[1] },
-    { who: 'priya', you: false, mute: false, speakAt: null, agree: '👍', agreeAt: 0.66, task: TASKS[2] },
+    { who: 'alex', you: true, mute: false, speakAt: [0.18, 0.46], agree: null, task: null },
+    { who: 'maya', you: false, mute: false, speakAt: [0.46, 0.70], agree: '✅', agreeAt: 0.58, task: TASKS[0] },
+    { who: 'chris', you: false, mute: true, speakAt: null, agree: '👍', agreeAt: 0.66, task: TASKS[1] },
+    { who: 'priya', you: false, mute: false, speakAt: null, agree: '👍', agreeAt: 0.74, task: TASKS[2] },
 ];
 
 const MEET_CAPTIONS = [
     { at: 0, lock: 'A group of people.', text: 'Four people on a call. One of them is you — Alex.' },
-    { at: 0.16, lock: 'The organizer assigned a task.', text: 'Alex asks Maya to send the Q3 forecast by Friday.' },
-    { at: 0.48, lock: 'Everyone acknowledged.', text: 'Maya says yes. Chris and Priya say yes too.' },
-    { at: 0.74, lock: 'The meeting concluded.', text: 'The meeting ends. The promises just walk out the door.' },
+    { at: 0.28, lock: 'The organizer assigned a task.', text: 'Alex asks Maya to send the Q3 forecast by Friday.' },
+    { at: 0.56, lock: 'Everyone acknowledged.', text: 'Maya says yes. Chris and Priya say yes too.' },
+    { at: 0.82, lock: 'The meeting concluded.', text: 'The meeting ends. The promises just walk out the door.' },
 ];
 
 const CATCH_CAPTIONS = [
     { at: 0, lock: 'Now you inspect what you expected.', text: 'Friday. The forecast is not there. Now you go looking.' },
-    { at: 0.20, lock: 'Build the report.', text: 'You build a list of who missed.' },
-    { at: 0.40, lock: 'Catch people.', text: 'Then you ping them. You are the nag now.' },
-    { at: 0.58, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1: this is the third Friday.' },
-    { at: 0.76, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
+    { at: 0.22, lock: 'Build the report.', text: 'You build a list of who missed.' },
+    { at: 0.42, lock: 'Catch people.', text: 'Then you ping them. You are the nag now.' },
+    { at: 0.64, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1: this is the third Friday.' },
+    { at: 0.84, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
 ];
 
 const FLOW_CAPTIONS = [
     { at: 0, lock: 'TskFlow joins your meet.', text: 'TskFlow sits on the same call and writes down every yes.' },
-    { at: 0.28, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
-    { at: 0.52, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
-    { at: 0.80, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
+    { at: 0.30, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
+    { at: 0.58, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
+    { at: 0.82, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
 ];
 
 const LINES = [
-    { at: 0.14, who: 'alex', text: 'Maya, send the Q3 forecast by Friday.' },
-    { at: 0.42, who: 'maya', text: "Yep, I'll have this done by Friday." },
+    { at: 0.22, who: 'alex', text: 'Maya, send the Q3 forecast by Friday.' },
+    { at: 0.50, who: 'maya', text: "Yep, I'll have this done by Friday." },
 ];
 
 const FILE_STEPS = [
@@ -124,6 +130,7 @@ function ScrubCaption({ progress, beats, testId }) {
 export default function LandingFilm() {
     return (
         <div id="landing-film" data-testid="landing-film">
+            <LandingDoraEmbed />
             <LandingPinBeat
                 testId="landing-film-meet"
                 label="The meeting"
@@ -131,13 +138,14 @@ export default function LandingFilm() {
                 thesis="They said yes. Then the meeting ended."
                 step={1}
                 totalSteps={3}
-                spans={3.8}
+                spans={9.5}
             >
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-meet-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
+                            <div className="sr-only" data-testid="landing-meet-act">
                                 <MeetScene progress={progress} />
                             </div>
                         </BeatStage>
@@ -152,13 +160,14 @@ export default function LandingFilm() {
                 thesis="After yes, you become the reminder system."
                 step={2}
                 totalSteps={3}
-                spans={4.6}
+                spans={11.5}
             >
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-catch-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
+                            <div className="sr-only" data-testid="landing-catch-act">
                                 <CatchScene progress={progress} />
                             </div>
                         </BeatStage>
@@ -173,13 +182,14 @@ export default function LandingFilm() {
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
                 totalSteps={3}
-                spans={4.2}
+                spans={10}
             >
                 {(progress) => (
                     <>
                         <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
-                        <BeatStage className="landing-film-stage">
-                            <div className="landing-film-act" data-testid="landing-flow-act">
+                        <BeatStage className="landing-film-stage landing-dora-stage">
+                            <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
+                            <div className="sr-only" data-testid="landing-flow-act">
                                 <FlowScene progress={progress} />
                             </div>
                         </BeatStage>
@@ -191,10 +201,10 @@ export default function LandingFilm() {
 }
 
 function MeetScene({ progress }) {
-    const askOp = useTransform(progress, [0.10, 0.18], [0, 1]);
-    const endedOp = useTransform(progress, [0.76, 0.86], [0, 1]);
-    const leaveScale = useTransform(progress, [0.72, 0.84], [1, 1.18]);
-    const gridDim = useTransform(progress, [0.76, 0.86], [1, 0.38]);
+    const askOp = useTransform(progress, [0.18, 0.28], [0, 1]);
+    const endedOp = useTransform(progress, [0.80, 0.90], [0, 1]);
+    const leaveScale = useTransform(progress, [0.78, 0.90], [1, 1.18]);
+    const gridDim = useTransform(progress, [0.80, 0.90], [1, 0.38]);
     const [line, setLine] = useState(() => lineFor(progress.get()));
     useMotionValueEvent(progress, 'change', (v) => setLine(lineFor(v)));
 
@@ -253,7 +263,7 @@ function MeetTile({ tile, progress }) {
                 {person.short}
                 {tile.you ? ' (You)' : ''}
             </span>
-            {tile.task ? <TaskChip task={tile.task} progress={progress} at={0.20} /> : null}
+            {tile.task ? <TaskChip task={tile.task} progress={progress} at={0.28} /> : null}
             {tile.agree ? <Agree mark={tile.agree} progress={progress} at={tile.agreeAt} /> : null}
         </motion.div>
     );
@@ -281,11 +291,11 @@ function Agree({ mark, progress, at }) {
 }
 
 function CatchScene({ progress }) {
-    const inspectOp = useTransform(progress, [0, 0.04, 0.16, 0.22], [1, 1, 1, 0]);
-    const reportOp = useTransform(progress, [0.18, 0.24, 0.36, 0.42], [0, 1, 1, 0]);
-    const catchOp = useTransform(progress, [0.38, 0.44, 0.54, 0.60], [0, 1, 1, 0]);
-    const talkOp = useTransform(progress, [0.56, 0.62, 0.72, 0.78], [0, 1, 1, 0]);
-    const fileOp = useTransform(progress, [0.74, 0.82, 1], [0, 1, 1]);
+    const inspectOp = useTransform(progress, [0, 0.02, 0.18, 0.26], [1, 1, 1, 0]);
+    const reportOp = useTransform(progress, [0.20, 0.28, 0.40, 0.48], [0, 1, 1, 0]);
+    const catchOp = useTransform(progress, [0.42, 0.50, 0.60, 0.68], [0, 1, 1, 0]);
+    const talkOp = useTransform(progress, [0.62, 0.70, 0.80, 0.88], [0, 1, 1, 0]);
+    const fileOp = useTransform(progress, [0.82, 0.90, 1], [0, 1, 1]);
 
     return (
         <div className="landing-catch" data-testid="landing-catch-frame">
@@ -356,7 +366,7 @@ function ReportCard({ progress }) {
 }
 
 function ReportRow({ row, index, progress }) {
-    const at = 0.22 + index * 0.04;
+    const at = 0.24 + index * 0.04;
     const opacity = useTransform(progress, [at, at + 0.05], [0, 1]);
     const x = useTransform(progress, [at, at + 0.06], [18, 0]);
     const person = CAST[row.who];
@@ -438,7 +448,7 @@ function FileCard({ progress }) {
 }
 
 function FileStep({ step, index, progress }) {
-    const at = 0.78 + index * 0.04;
+    const at = 0.84 + index * 0.03;
     const opacity = useTransform(progress, [at, at + 0.05], [0.35, 1]);
     const x = useTransform(progress, [at, at + 0.05], [10, 0]);
     return (
@@ -447,11 +457,11 @@ function FileStep({ step, index, progress }) {
 }
 
 function FlowScene({ progress }) {
-    const joinOp = useTransform(progress, [0, 0.05, 0.22, 0.30], [1, 1, 1, 0]);
-    const tasksOp = useTransform(progress, [0.26, 0.34, 0.46, 0.54], [0, 1, 1, 0]);
-    const appOp = useTransform(progress, [0.50, 0.58, 0.68, 0.76], [0, 1, 1, 0]);
-    const chaseOp = useTransform(progress, [0.72, 0.82, 1], [0, 1, 1]);
-    const peaceOp = useTransform(progress, [0.86, 0.94], [0, 1]);
+    const joinOp = useTransform(progress, [0, 0.04, 0.22, 0.32], [1, 1, 1, 0]);
+    const tasksOp = useTransform(progress, [0.26, 0.36, 0.50, 0.60], [0, 1, 1, 0]);
+    const appOp = useTransform(progress, [0.54, 0.64, 0.74, 0.82], [0, 1, 1, 0]);
+    const chaseOp = useTransform(progress, [0.76, 0.84, 1], [0, 1, 1]);
+    const peaceOp = useTransform(progress, [0.88, 0.96], [0, 1]);
 
     return (
         <div className="landing-flow-act" data-testid="landing-flow-frame">
@@ -519,7 +529,7 @@ function TaskFlyout({ progress }) {
 }
 
 function FlyTask({ task, index, progress }) {
-    const at = 0.30 + index * 0.05;
+    const at = 0.36 + index * 0.05;
     const opacity = useTransform(progress, [at, at + 0.06], [0, 1]);
     const y = useTransform(progress, [at, at + 0.07], [28 - index * 6, index * 8]);
     const rotate = useTransform(progress, [at, at + 0.07], [index % 2 === 0 ? -8 : 7, index % 2 === 0 ? -2 : 2]);
@@ -539,9 +549,9 @@ function FlyTask({ task, index, progress }) {
 }
 
 function AppCard({ progress }) {
-    const rx1 = useTransform(progress, [0.54, 0.60], [0, 1]);
-    const rx2 = useTransform(progress, [0.58, 0.64], [0, 1]);
-    const rx3 = useTransform(progress, [0.62, 0.68], [0, 1]);
+    const rx1 = useTransform(progress, [0.60, 0.66], [0, 1]);
+    const rx2 = useTransform(progress, [0.64, 0.70], [0, 1]);
+    const rx3 = useTransform(progress, [0.68, 0.74], [0, 1]);
     return <ProductCard rx1={rx1} rx2={rx2} rx3={rx3} />;
 }
 
@@ -585,8 +595,8 @@ function ProductCard({ rx1, rx2, rx3 }) {
 }
 
 function TskChase({ progress, peaceOp }) {
-    const mailOp = useTransform(progress, [0.74, 0.82], [0, 1]);
-    const slackOp = useTransform(progress, [0.80, 0.88], [0, 1]);
+    const mailOp = useTransform(progress, [0.78, 0.86], [0, 1]);
+    const slackOp = useTransform(progress, [0.84, 0.92], [0, 1]);
 
     return (
         <div className="landing-flow-end">

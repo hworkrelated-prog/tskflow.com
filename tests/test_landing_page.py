@@ -72,6 +72,7 @@ def test_landing_opens_straight_into_a_launch():
     assert "What needs to get done" in src  # aria-label
     assert 'data-testid="landing-examples"' in src
     assert "LANDING_EXAMPLES" in src
+    assert "ai-prompt-placeholder" in src
     assert "pipeline update" in demo
     assert "best deal" in demo
     assert 'data-testid="landing-send-promise"' in src
@@ -139,9 +140,9 @@ def test_landing_examples_are_short_manager_asks():
     demo = (FRONT / "lib" / "landingAssignDemo.js").read_text(encoding="utf-8")
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     assert "LANDING_EXAMPLES" in demo
-    assert "landing-example-${ex.id}" in landing
     assert "setInterval" in landing
-    assert "landing-example-chip" in landing
+    assert "ai-prompt-placeholder" in landing
+    assert "landing-example-chip" not in landing
     assert "Use this idea" not in landing
     assert "Try one" not in landing
     assert "id: 'pipeline'" in demo
@@ -241,6 +242,17 @@ if (/tell my manager/i.test(a.ask)) process.exit(4);
 const b = distillLandingPrompt('Ask the org to submit their best deal, with all the details.');
 if (b.who !== 'Your org') process.exit(5);
 if (!/best deal/i.test(b.title)) process.exit(6);
+if (!b.crowd) process.exit(7);
+const c = distillLandingPrompt('Ask Maya to send the Q3 forecast by Friday.');
+if (c.who !== 'Maya') process.exit(8);
+if (c.crowd) process.exit(9);
+if (!/q3 forecast/i.test(c.title)) process.exit(10);
+const d = distillLandingPrompt('Remind my team to log every call by 5 each day.');
+if (!d.crowd) process.exit(11);
+const e = distillLandingPrompt('Ask the sales team for their weekly forecasts');
+if (!e.crowd) process.exit(12);
+if (!/forecast/i.test(e.title)) process.exit(13);
+if (/ask the sales team/i.test(e.title)) process.exit(14);
 console.log('ok');
 """
     result = subprocess.run(
@@ -322,14 +334,14 @@ def test_landing_ignores_app_theme_preference():
 
 
 def test_landing_rotating_idea_does_not_stack_on_placeholder():
-    """The ask box uses one rotating placeholder, not a second overlay."""
+    """The ask box uses the in-app rotating overlay, not a second native placeholder."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
     assert 'placeholder="Or type your own"' not in landing
     assert "landing-example pointer-events-none" not in landing
-    textarea_ph = css.split(".landing-page textarea::placeholder")[1].split(".landing-page input::placeholder")[0]
-    assert "transparent" not in textarea_ph
-    assert "0.38" in textarea_ph
+    assert "ai-prompt-placeholder" in landing
+    overlay = css.split(".landing-page .landing-composer textarea::placeholder")[1].split("{")[1].split("}")[0]
+    assert "transparent" in overlay
     assert "textarea::placeholder,\n.landing-page input::placeholder" not in css
 
 
@@ -383,7 +395,7 @@ def test_landing_story_is_shown_not_told():
     assert "Try it." in landing
     assert "Your email. To try it." in landing
     assert "Stop being the reminder system." in landing
-    assert "Start using TskFlow" in landing
+    assert "One person or a 30+ team" in landing
     assert "landing-who-input" in css
     assert "landing-pin-frame" in css
     assert "landing-pin-caption" in css
@@ -458,16 +470,34 @@ def test_landing_film_is_three_slow_chapters():
     assert "The meeting" in film
     assert "You chase" in film
     assert "TskFlow takes it" in film
-    assert "spans={3.8}" in film
-    assert "spans={4.6}" in film
-    assert "spans={4.2}" in film
+    assert "spans={9.5}" in film
+    assert "spans={11.5}" in film
+    assert "spans={10}" in film
     assert "{step} of {totalSteps}" in pin
     assert "navLabel" in film
     assert "blur(" not in pin
     assert "frameBlur" not in pin
-    assert "dur: 2.6" in hero
+    assert "dur: 4.8" in hero
     assert "A meeting starts." in hero
     assert "Scroll to watch it happen" in hero
+    assert "useStoryClock" not in hero
+    assert "landing-peek-wrap--still" in hero
+    assert "[0, 0.2, 0.8, 1]" in pin
+    assert 'className="sr-only landing-pin-thesis"' in pin
+    assert "LandingDoraSequence" in film
+    assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
+    dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
+    assert "REACT_APP_DORA_STORY_URL" in dora
+    story = ROOT / "frontend" / "public" / "landing" / "story"
+    for name in (
+        "tskflow-story-01-meet.webp",
+        "tskflow-story-02-yes.webp",
+        "tskflow-story-03-ended.webp",
+        "tskflow-story-04-chase.webp",
+        "tskflow-story-05-talk.webp",
+        "tskflow-story-06-tskflow.webp",
+    ):
+        assert (story / name).is_file(), name
 
 
 def test_landing_says_the_point_in_plain_english():
@@ -484,7 +514,12 @@ def test_landing_says_the_point_in_plain_english():
     assert "After yes, you become the reminder system." in film
     assert "TskFlow does the reminding so you do not." in film
     assert 'data-testid="landing-final-plot"' in landing
-    assert "TskFlow chases" in landing
+    assert "landing-prompt-readback" in landing
+    assert "DEMO_PEOPLE.length" in landing
+    assert "ai-prompt-placeholder" in landing
+    assert "landing-example-chip" not in landing
+    assert "ai-prompt-placeholder" in landing
+    assert "DEMO_PEOPLE.length" in landing
     # Locked phrases still live in the files even if they are no longer the headline.
     assert "Hand the dirty work to TskFlow." in hero
     assert "A group of people." in film
@@ -553,4 +588,26 @@ def test_tskflow_logo_is_a_lockup_not_plain_type():
     assert "TskFlowLogo" in hub
     assert "TskFlowLogo" in login
     assert "Tsk" in lockup and "Flow" in lockup
+
+
+def test_landing_tryit_is_the_app_prompt_bar():
+    """Try-it is the in-app composer: type English, it names who — one person or the team."""
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    composer = landing.split("const LaunchPad")[1].split("const LandingPage")[0]
+    assert "ai-composer-shell" in composer
+    assert "ai-prompt-placeholder" in composer
+    assert "ai-composer-send" in composer
+    assert "landing-example-chip" not in landing
+    assert "idea.chip" not in landing
+    assert "DEMO_PEOPLE.length" in composer
+    assert "isLargeTeamPrompt" in composer
+    assert "preview?.crowd" in composer or "preview.crowd" in composer
+    assert "landing-prompt-readback" in composer
+    assert "One person or a 30+ team" in composer
+    assert "landing-prompt-tools.is-open" in css
+    assert "color: transparent" in css.split(".landing-page .landing-composer textarea::placeholder")[1].split("}")[0]
+    hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
+    assert "max-width: 18ch" not in css.split(".landing-payoff-title")[1].split("}")[0]
+    assert "dur: 4.8" in hero
 
