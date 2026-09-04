@@ -76,3 +76,6 @@ TskFlow is positioned as an **Accountability Management Platform**. It goes beyo
 - bob@acmecorp.com / Password123 (Teams member)
 - prouser@acmecorp.com / Password123 (Pro tier)
 - freeuser@example.org / Password123 (Free tier)
+
+## Mobile app
+The iOS/Android plan (Emergent web → mobile conversion, shared backend, v1 scope, store fees) lives in `memory/MOBILE_APP_PLAN.md`. Do not treat the web React app as the mobile client — conversion creates a separate Expo frontend.
