@@ -7,10 +7,10 @@ import { CAST } from '@/lib/landingCast';
 import { phaseOn, useStoryClock } from '@/lib/useStoryClock';
 
 const PEEK_PHASES = [
-    { id: 'group', dur: 2.6, line: 'A meeting starts. Work gets a name and a date.' },
-    { id: 'assign', dur: 2.8, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
-    { id: 'emoji', dur: 2.8, line: 'They all say yes. The meeting still ends.' },
-    { id: 'end', dur: 2.4, line: 'TskFlow takes the follow-up, so you do not have to.' },
+    { id: 'group', dur: 4.8, line: 'A meeting starts. Work gets a name and a date.' },
+    { id: 'assign', dur: 5.2, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
+    { id: 'emoji', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
+    { id: 'end', dur: 4.6, line: 'TskFlow takes the follow-up, so you do not have to.' },
 ];
 
 const PEEK = [

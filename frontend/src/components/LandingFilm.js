@@ -131,7 +131,7 @@ export default function LandingFilm() {
                 thesis="They said yes. Then the meeting ended."
                 step={1}
                 totalSteps={3}
-                spans={3.8}
+                spans={6.4}
             >
                 {(progress) => (
                     <>
@@ -152,7 +152,7 @@ export default function LandingFilm() {
                 thesis="After yes, you become the reminder system."
                 step={2}
                 totalSteps={3}
-                spans={4.6}
+                spans={7.6}
             >
                 {(progress) => (
                     <>
@@ -173,7 +173,7 @@ export default function LandingFilm() {
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
                 totalSteps={3}
-                spans={4.2}
+                spans={6.8}
             >
                 {(progress) => (
                     <>

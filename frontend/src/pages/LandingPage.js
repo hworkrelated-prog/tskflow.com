@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
-import { ArrowUp, Check, Loader2, Mail, MessageSquare } from 'lucide-react';
+import { ArrowUp, Loader2, Mail, MessageSquare } from 'lucide-react';
 import { useAuth, API } from '@/App';
 import { distillLandingPrompt } from '@/lib/demoDistill';
 import LandingScreenRecorder from '@/components/LandingScreenRecorder';
@@ -20,9 +20,11 @@ import { recordingFilename } from '@/lib/recordingCapabilities';
 import { uploadBlob } from '@/lib/upload';
 import { trackLandingView, trackLandingInteract, sessionId } from '@/lib/productAnalytics';
 import {
+    DEMO_PEOPLE,
     LANDING_EXAMPLES,
     PROMPT_SEGMENT_CLASS,
     colorizeAssignPrompt,
+    isLargeTeamPrompt,
 } from '@/lib/landingAssignDemo';
 import { pinDocumentTheme, restoreDocumentTheme } from '@/lib/theme';
 
@@ -41,7 +43,7 @@ const ColorCodedPrompt = ({ text, className = '', testId, as: Tag = 'p' }) => (
     </Tag>
 );
 
-const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIdeaIndex }) => {
+const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     const navigate = useNavigate();
     const { login } = useAuth();
     const [assignee, setAssignee] = useState('');
@@ -52,13 +54,8 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
     const filled = Boolean(value.trim());
     const preview = distillLandingPrompt(filled ? value : '');
     const idea = LANDING_EXAMPLES[ideaIndex] || LANDING_EXAMPLES[0];
-
-    const pickExample = (ex) => {
-        setValue(ex.text);
-        setIdeaIndex(LANDING_EXAMPLES.findIndex((item) => item.id === ex.id));
-        trackLandingInteract('sample');
-        window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 40);
-    };
+    const crowd = Boolean(preview?.crowd || (filled && isLargeTeamPrompt(value)));
+    const whoLabel = crowd ? `${DEMO_PEOPLE.length} people` : preview?.who;
 
     const attachRecording = async (taskId) => {
         if (!recordingBlob) return;
@@ -80,8 +77,8 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
     const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
     const focusEmail = () => {
-        document.getElementById('landing-assignee-email')?.focus();
-        setWhoNeeded(!looksLikeEmail(assignee));
+        setWhoNeeded(true);
+        window.setTimeout(() => document.getElementById('landing-assignee-email')?.focus(), 40);
     };
 
     const sendIt = async () => {
@@ -115,67 +112,20 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
 
     return (
         <div className="w-full max-w-3xl mx-auto flex flex-col" data-testid="landing-tryit" id="landing-tryit">
-            {preview ? (
-                <div className="landing-confirm" data-testid="landing-tryit-result">
-                    <p className="landing-confirm-msg">
-                        I&apos;ll ask{' '}
-                        <span className="landing-confirm-chip">{assignee.trim() || preview.who}</span>
-                        {' '}to{' '}
-                        <span className="landing-confirm-title">{preview.title}</span>
-                        {preview.when ? (
-                            <>
-                                {' '}by <span className="landing-confirm-chip">{preview.when}</span>
-                            </>
-                        ) : null}
-                        .
-                    </p>
-                    <p className="sr-only" data-testid="landing-no-account">
-                        No account. No password.
-                    </p>
-                    <p className="landing-send-visual" data-testid="landing-send-promise">
-                        We send it. If they go quiet, we follow up.
-                    </p>
-                    <button
-                        type="button"
-                        className="landing-confirm-send"
-                        onClick={sendIt}
-                        disabled={sending}
-                        data-testid="landing-send-it"
-                    >
-                        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        {sending ? 'Sending…' : 'Send'}
-                    </button>
-                </div>
-            ) : (
-                <div data-testid="landing-tryit-result" className="sr-only">
-                    <p data-testid="landing-no-account">No account. No password.</p>
-                    <p className="landing-send-visual" data-testid="landing-send-promise">
-                        We send it. If they go quiet, we follow up.
-                    </p>
-                </div>
-            )}
-
-            <div className="landing-ask-actions mb-2" data-testid="landing-examples">
-                {LANDING_EXAMPLES.map((ex, i) => (
-                    <button
-                        key={ex.id}
-                        type="button"
-                        onClick={() => pickExample(ex)}
-                        className={`landing-example-chip${i === ideaIndex ? ' is-on' : ''}`}
-                        data-testid={`landing-example-${ex.id}`}
-                    >
-                        {ex.chip}
-                    </button>
-                ))}
-            </div>
-
             <div className="ai-composer-shell landing-composer" data-testid="landing-composer-shell">
                 <section
-                    className="landing-step"
+                    className="landing-step ai-prompt-field relative"
                     data-testid="landing-step-ask"
                     id="landing-step-ask"
                 >
                     <p className="sr-only landing-step-kicker">Ask</p>
+                    {!filled ? (
+                        <div className="ai-prompt-placeholder" data-testid="landing-examples" aria-hidden>
+                            <span key={idea.id} className="ai-prompt-placeholder-fade">
+                                {idea.text}
+                            </span>
+                        </div>
+                    ) : null}
                     <textarea
                         ref={inputRef}
                         value={value}
@@ -190,9 +140,9 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
                                 else focusEmail();
                             }
                         }}
-                        rows={2}
+                        rows={1}
                         className="min-h-[44px] max-h-[40dvh] sm:max-h-[220px] w-full resize-none border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm leading-relaxed shadow-none rounded-none outline-none caret-teal-300 selection:bg-teal-400/30"
-                        placeholder={idea.text}
+                        placeholder=""
                         data-testid="landing-tryit-input"
                         aria-label="What needs to get done"
                     />
@@ -205,53 +155,82 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
                     ) : null}
                 </section>
 
-                <section
-                    className="landing-who-step px-3 pb-1"
-                    data-testid="landing-step-who"
-                    id="landing-step-who"
-                >
-                    <p className="sr-only landing-step-kicker">Who</p>
-                    <p className="sr-only" data-testid="landing-who-cue">
-                        Your email. To try it.
+                {preview ? (
+                    <p className="landing-confirm landing-prompt-readback" data-testid="landing-tryit-result">
+                        <span className="landing-confirm-chip">{whoLabel}</span>
+                        {' · '}
+                        <span className="landing-confirm-title">{preview.title}</span>
+                        {preview.when && preview.when !== 'When you set a time' ? (
+                            <>
+                                {' · '}
+                                <span className="landing-confirm-when">{preview.when}</span>
+                            </>
+                        ) : null}
                     </p>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                ) : (
+                    <div data-testid="landing-tryit-result" className="sr-only">
+                        <p data-testid="landing-no-account">No account. No password.</p>
+                        <p className="landing-send-visual" data-testid="landing-send-promise">
+                            We send it. If they go quiet, we follow up.
+                        </p>
+                    </div>
+                )}
+                {preview ? (
+                    <>
+                        <p className="sr-only" data-testid="landing-no-account">No account. No password.</p>
+                        <p className="sr-only landing-send-visual" data-testid="landing-send-promise">
+                            We send it. If they go quiet, we follow up.
+                        </p>
+                    </>
+                ) : null}
+
+                <div className={`landing-prompt-tools${whoNeeded ? ' is-open' : ''}`}>
+                    <section
+                        className={`landing-who-step${whoNeeded ? ' is-open' : ' sr-only'}`}
+                        data-testid="landing-step-who"
+                        id="landing-step-who"
+                    >
+                        <p className="sr-only landing-step-kicker">Who</p>
+                        <p className="sr-only" data-testid="landing-who-cue">
+                            Your email. To try it.
+                        </p>
                         <Input
                             type="email"
                             value={assignee}
-                            onChange={(e) => {
-                                setAssignee(e.target.value);
-                                if (whoNeeded) setWhoNeeded(false);
-                            }}
+                            onChange={(e) => setAssignee(e.target.value)}
                             placeholder="you@company.com"
-                            className={`landing-who-input ${whoNeeded ? 'is-needed' : ''}`}
+                            className={`landing-who-input${whoNeeded ? ' is-needed' : ' sr-only'}`}
                             data-testid="landing-assignee-email"
                             id="landing-assignee-email"
                             aria-label="Your email"
                             autoComplete="email"
+                            tabIndex={whoNeeded ? 0 : -1}
                         />
-                        <div className="landing-channel-row" data-testid="landing-channel">
-                            <button
-                                type="button"
-                                onClick={() => setChannel('email')}
-                                className={channel === 'email' ? 'is-on' : ''}
-                                data-testid="landing-channel-email"
-                            >
-                                <Mail className="w-3.5 h-3.5" /> Email
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setChannel('slack')}
-                                className={channel === 'slack' ? 'is-on' : ''}
-                                data-testid="landing-channel-slack"
-                            >
-                                <MessageSquare className="w-3.5 h-3.5" /> Slack
-                            </button>
-                        </div>
+                    </section>
+                    <div
+                        className={`landing-channel-row${whoNeeded ? '' : ' sr-only'}`}
+                        data-testid="landing-channel"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setChannel('email')}
+                            className={channel === 'email' ? 'is-on' : ''}
+                            data-testid="landing-channel-email"
+                            aria-label="Email"
+                        >
+                            <Mail className="w-3.5 h-3.5" /> Email
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setChannel('slack')}
+                            className={channel === 'slack' ? 'is-on' : ''}
+                            data-testid="landing-channel-slack"
+                            aria-label="Slack"
+                        >
+                            <MessageSquare className="w-3.5 h-3.5" /> Slack
+                        </button>
                     </div>
-                </section>
-
-                <div className="relative z-[1] flex items-center justify-end gap-2 px-2 pb-2 pt-0.5">
-                    <section data-testid="landing-step-send" id="landing-step-send">
+                    <section className="ml-auto" data-testid="landing-step-send" id="landing-step-send">
                         <p className="sr-only landing-step-kicker">Send</p>
                         <button
                             type="button"
@@ -262,14 +241,19 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue, setIde
                             }`}
                             aria-label="Send"
                             title="Send"
+                            data-testid="landing-send-it"
                         >
                             {sending
                                 ? <Loader2 className="w-4 h-4 animate-spin" />
                                 : <ArrowUp className="w-4 h-4" strokeWidth={2.25} />}
+                            <span className="sr-only">{sending ? 'Sending…' : 'Send'}</span>
                         </button>
                     </section>
                 </div>
             </div>
+            <p className="landing-final-line landing-prompt-hint">
+                One sentence. One person or a 30+ team.
+            </p>
         </div>
     );
 };
@@ -395,35 +379,13 @@ const LandingPage = () => {
                                         <li><i>2</i><span><b>You used to chase</b> them after.</span></li>
                                         <li><i>3</i><span><b>TskFlow chases</b> them now. Try it below.</span></li>
                                     </ol>
-                                    <div className="landing-final-ctas">
-                                        <button
-                                            type="button"
-                                            className="landing-cta landing-cta-glow"
-                                            onClick={() => {
-                                                scrollToId('landing-tryit');
-                                                window.setTimeout(() => inputRef.current?.focus?.(), 240);
-                                            }}
-                                            data-testid="landing-final-cta"
-                                        >
-                                            Start using TskFlow
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="landing-cta-ghost"
-                                            onClick={() => scrollToId('landing-film')}
-                                            data-testid="landing-final-how"
-                                        >
-                                            See how it works
-                                        </button>
-                                    </div>
-                                    <p className="landing-final-line">Try it. No account. No password.</p>
+                                    <p className="sr-only">Try it. No account. No password.</p>
                                     <LaunchPad
                                         recordingBlob={recordingBlob}
                                         inputRef={inputRef}
                                         ideaIndex={ideaIndex}
                                         value={value}
                                         setValue={setValue}
-                                        setIdeaIndex={setIdeaIndex}
                                     />
                                 </section>
                             </div>
