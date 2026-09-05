@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import {
+    AnimatePresence,
     motion,
     useMotionValueEvent,
+    useReducedMotion,
     useTransform,
 } from 'framer-motion';
 import {
@@ -45,17 +47,17 @@ const MEET_PEOPLE = [
 ];
 
 const MEET_CAPTIONS = [
-    { at: 0, lock: 'A group of people.', text: 'Four people on a call. One of them is you — Alex.' },
-    { at: 0.28, lock: 'The organizer assigned a task.', text: 'Alex asks Maya to send the Q3 forecast by Friday.' },
-    { at: 0.56, lock: 'Everyone acknowledged.', text: 'Maya says yes. Chris and Priya say yes too.' },
-    { at: 0.82, lock: 'The meeting concluded.', text: 'The meeting ends. The promises just walk out the door.' },
+    { at: 0, lock: 'A group of people.', text: 'They are on a call. Work is about to get a name and a date.' },
+    { at: 0.28, lock: 'The organizer assigned a task.', text: 'Alex asked Maya for the Q3 forecast by Friday.' },
+    { at: 0.56, lock: 'Everyone acknowledged.', text: 'Maya said yes. Chris and Priya said yes too.' },
+    { at: 0.82, lock: 'The meeting concluded.', text: 'The meeting ended. The promises walked out the door.' },
 ];
 
 const CATCH_CAPTIONS = [
     { at: 0, lock: 'Now you inspect what you expected.', text: 'Friday. The forecast is not there. Now you go looking.' },
     { at: 0.22, lock: 'Build the report.', text: 'You build a list of who missed.' },
-    { at: 0.42, lock: 'Catch people.', text: 'Then you ping them. You are the nag now.' },
-    { at: 0.64, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1: this is the third Friday.' },
+    { at: 0.42, lock: 'Catch people.', text: 'You ping them yourself. You are the nag now.' },
+    { at: 0.64, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1. This is the third Friday.' },
     { at: 0.84, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
 ];
 
@@ -117,13 +119,30 @@ function lineFor(v) {
 }
 
 function ScrubCaption({ progress, beats, testId }) {
+    const reduce = useReducedMotion();
     const [beat, setBeat] = useState(() => captionFor(beats, progress.get()));
     useMotionValueEvent(progress, 'change', (v) => setBeat(captionFor(beats, v)));
+    const n = Math.max(1, beats.indexOf(beat) + 1);
+
     return (
-        <p className="landing-pin-now" data-testid={testId} aria-live="polite">
-            {beat.text}
-            <span className="sr-only">{beat.lock}</span>
-        </p>
+        <div className="landing-dora-caption" data-testid={testId} aria-live="polite">
+            <p className="landing-pin-beat-count">
+                {n} of {beats.length}
+            </p>
+            <AnimatePresence mode="wait" initial={false}>
+                <motion.p
+                    key={beat.text}
+                    className="landing-pin-now"
+                    initial={reduce ? false : { opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduce ? { opacity: 1 } : { opacity: 0, y: -10 }}
+                    transition={reduce ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                >
+                    {beat.text}
+                    <span className="sr-only">{beat.lock}</span>
+                </motion.p>
+            </AnimatePresence>
+        </div>
     );
 }
 
@@ -142,9 +161,11 @@ export default function LandingFilm() {
             >
                 {(progress) => (
                     <>
-                        <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
                         <BeatStage className="landing-film-stage landing-dora-stage">
-                            <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
+                            <div className="landing-dora-card">
+                                <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
+                                <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
+                            </div>
                             <div className="sr-only" data-testid="landing-meet-act">
                                 <MeetScene progress={progress} />
                             </div>
@@ -164,9 +185,11 @@ export default function LandingFilm() {
             >
                 {(progress) => (
                     <>
-                        <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
                         <BeatStage className="landing-film-stage landing-dora-stage">
-                            <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
+                            <div className="landing-dora-card">
+                                <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
+                                <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
+                            </div>
                             <div className="sr-only" data-testid="landing-catch-act">
                                 <CatchScene progress={progress} />
                             </div>
@@ -186,9 +209,11 @@ export default function LandingFilm() {
             >
                 {(progress) => (
                     <>
-                        <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
                         <BeatStage className="landing-film-stage landing-dora-stage">
-                            <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
+                            <div className="landing-dora-card">
+                                <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
+                                <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
+                            </div>
                             <div className="sr-only" data-testid="landing-flow-act">
                                 <FlowScene progress={progress} />
                             </div>

@@ -1357,15 +1357,28 @@ html:has(body.landing-active) {
     flex-shrink: 0;
 }
 .landing-pin-now {
-    margin: 0;
-    max-width: 28em;
-    min-height: 1.45em;
+    margin: 0 auto;
+    max-width: 16em;
+    min-height: 2.5em;
     text-align: center;
-    font-size: 0.98rem;
-    font-weight: 500;
-    line-height: 1.35;
-    color: rgba(204, 251, 241, 0.82);
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.55rem, 4.4vw, 2.55rem);
+    font-weight: 650;
+    letter-spacing: -0.045em;
+    line-height: 1.12;
+    color: #ffffff;
+    text-wrap: balance;
     flex-shrink: 0;
+}
+.landing-pin-beat-count {
+    margin: 0 0 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5eead4;
+    font-variant-numeric: tabular-nums;
 }
 .landing-pin-kicker {
     display: flex;
@@ -4911,6 +4924,11 @@ html:has(body.landing-active) {
     align-items: center;
     justify-content: center;
     min-height: 0;
+    width: min(44rem, 100%);
+}
+.landing-dora-card {
+    position: relative;
+    width: 100%;
 }
 .landing-dora-sequence {
     position: relative;
@@ -4923,6 +4941,23 @@ html:has(body.landing-active) {
     box-shadow:
         0 28px 70px rgba(0, 0, 0, 0.55),
         inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.landing-dora-caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    padding: 5.2rem 1.35rem 1.5rem;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(5, 8, 7, 0.35) 28%,
+        rgba(5, 8, 7, 0.88) 72%,
+        rgba(5, 8, 7, 0.96) 100%
+    );
+    text-align: center;
+    pointer-events: none;
 }
 .landing-dora-frame {
     position: absolute;
@@ -5381,6 +5416,12 @@ html:has(body.landing-active) {
 @media (max-width: 47.99rem) {
     .landing-film-stage {
         min-height: 18.5rem;
+    }
+    .landing-dora-caption {
+        padding: 3.2rem 1rem 1.15rem;
+    }
+    .landing-pin-now {
+        max-width: 18em;
     }
     .gmeet--film .gmeet-tile {
         min-height: 5.4rem;
