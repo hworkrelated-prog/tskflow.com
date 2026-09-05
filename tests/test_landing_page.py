@@ -485,6 +485,14 @@ def test_landing_film_is_three_slow_chapters():
     assert "[0, 0.2, 0.8, 1]" in pin
     assert 'className="sr-only landing-pin-thesis"' in pin
     assert "LandingDoraSequence" in film
+    assert "landing-dora-caption" in film
+    assert "landing-dora-card" in film
+    assert "You ping them yourself. You are the nag now." in film
+    assert "It follows up with Maya. Not you." in film
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    now = css.split(".landing-pin-now {")[1].split("}")[0]
+    assert "clamp(1.55rem" in now
+    assert "landing-dora-caption" in css
     assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     assert "REACT_APP_DORA_STORY_URL" in dora
