@@ -33,10 +33,10 @@ export default function LandingPhoneRecordSheet({
             >
                 <DialogHeader>
                     <DialogTitle className="text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Record
+                        Record screen
                     </DialogTitle>
                     <DialogDescription className="text-white/60">
-                        Show them the screen, or attach a clip from your phone.
+                        Capture your screen for the ask. On iPhone, use Control Center.
                     </DialogDescription>
                 </DialogHeader>
 

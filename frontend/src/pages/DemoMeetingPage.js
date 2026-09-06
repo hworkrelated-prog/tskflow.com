@@ -19,8 +19,8 @@ const DemoMeetingPage = () => {
     }, []);
 
     return (
-        <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="demo-meeting-page">
-            <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm">
+        <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#09090b' }} data-testid="demo-meeting-page">
+            <header className="relative z-20 shrink-0 sticky top-0 bg-[#09090b]">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <Link to="/" data-testid="demo-meeting-home" className="landing-brand-btn" aria-label="TskFlow home">
                         <TskFlowLogo variant="dark" size="sm" />

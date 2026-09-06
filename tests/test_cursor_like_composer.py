@@ -27,7 +27,7 @@ def test_composer_uses_plus_menu_and_arrow_send():
     # Record is one tap away next to +; other extras stay in the plus menu.
     assert toolbar.index("ai-plus-btn") < toolbar.index("ai-record-btn")
     assert toolbar.index("ai-record-btn") < toolbar.index("ai-screen-record-btn")
-    assert ">Record</span>" in toolbar
+    assert ">Record screen</span>" in toolbar
 
 
 def test_format_toolbar_is_overlay_only_when_open():

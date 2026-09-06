@@ -113,7 +113,7 @@ def test_landing_tryit_sends_for_real_instead_of_pushing_to_register():
 
 
 def test_landing_record_is_a_walkthrough_of_the_ask():
-    """Record sits at the top of the page, labeled, not buried in the composer."""
+    """Record screen sits at the top of the page, labeled as a screen recorder."""
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     rec = (FRONT / "components" / "LandingScreenRecorder.js").read_text(encoding="utf-8")
     css = (FRONT / "App.css").read_text(encoding="utf-8")
@@ -125,15 +125,16 @@ def test_landing_record_is_a_walkthrough_of_the_ask():
     assert "LandingScreenRecorder" not in composer
     assert "landing-toolbar-actions" in chrome
     assert "landing-ask-rec" in rec
-    assert "'Record'" in rec or '"Record"' in rec
+    assert "Record screen" in rec
+    assert "Monitor" in rec
     assert "landing-ask-rec-label" in rec
-    assert "landing-loom-rec" in rec
-    assert "landing-loom-dot" in rec
+    assert "landing-screen-rec" in rec
+    assert "landing-loom-dot" not in rec
+    assert "landing-loom-rec" not in rec
     assert "Record a walkthrough" not in rec
-    assert "Record screen" not in rec
     assert "Walkthrough ready" not in rec
-    assert "prominent ? 'Record'" not in rec
-    assert "landing-loom-rec" in css
+    assert "landing-screen-rec" in css
+    assert "landing-screen-rec-monitor" in css
 
 
 def test_landing_examples_are_short_manager_asks():
@@ -577,8 +578,8 @@ def test_landing_story_cast_is_sales_and_consistent():
 
 
 
-def test_tskflow_logo_is_a_lockup_not_plain_type():
-    """Mark + Tsk/Flow wordmark, reused on splash, landing, and chrome."""
+def test_tskflow_logo_is_a_clean_wordmark():
+    """Plain TskFlow type in chrome. A simple T tile exists for film/favicon only."""
     logo = (FRONT / "components" / "TskFlowLogo.js").read_text(encoding="utf-8")
     css = (FRONT / "index.css").read_text(encoding="utf-8")
     splash = (ROOT / "frontend" / "public" / "index.html").read_text(encoding="utf-8")
@@ -587,17 +588,21 @@ def test_tskflow_logo_is_a_lockup_not_plain_type():
     landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
     hub = (FRONT / "pages" / "TaskHub.js").read_text(encoding="utf-8")
     login = (FRONT / "pages" / "LoginPage.js").read_text(encoding="utf-8")
-    assert "tskflow-logo-flow" in logo
+    assert 'className="tskflow-logo-word">TskFlow</span>' in logo
+    assert "tskflow-logo-tsk" not in logo
+    assert "tskflow-logo-flow" not in logo
+    assert "withMark = false" in logo
     assert "TskFlowMark" in logo
-    assert "M8 16.7" in logo
-    assert "M8 16.7" in mark
+    assert "M8 16.7" not in logo
+    assert "M8 16.7" not in mark
     assert "logo.svg" in splash
-    assert 'content: "TskFlow"' not in splash
+    assert "drop-shadow" not in splash
     assert "tskflow-logo--dark" in css
     assert "TskFlowLogo" in landing
     assert "TskFlowLogo" in hub
     assert "TskFlowLogo" in login
-    assert "Tsk" in lockup and "Flow" in lockup
+    assert "TskFlow" in lockup
+    assert "check" not in mark.lower()
 
 
 def test_landing_tryit_is_the_app_prompt_bar():

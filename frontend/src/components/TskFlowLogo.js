@@ -1,11 +1,7 @@
-import React, { useId } from 'react';
+import React from 'react';
 
-/** Check that becomes a current — the TskFlow mark. */
+/** Flat T tile — used in the film as the product, not as the brand lockup. */
 export function TskFlowMark({ size = 28, className = '' }) {
-    const raw = useId().replace(/[^a-zA-Z0-9]/g, '');
-    const g = `tf-mark-${raw}`;
-    const s = `tf-shine-${raw}`;
-
     return (
         <svg
             className={`tskflow-logo-mark ${className}`.trim()}
@@ -15,27 +11,8 @@ export function TskFlowMark({ size = 28, className = '' }) {
             aria-hidden
             focusable="false"
         >
-            <defs>
-                <linearGradient id={g} x1="3" y1="1" x2="30" y2="31" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#5eead4" />
-                    <stop offset="0.48" stopColor="#2dd4bf" />
-                    <stop offset="1" stopColor="#0f766e" />
-                </linearGradient>
-                <linearGradient id={s} x1="16" y1="0" x2="16" y2="18" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#fff" stopOpacity="0.3" />
-                    <stop offset="1" stopColor="#fff" stopOpacity="0" />
-                </linearGradient>
-            </defs>
-            <rect width="32" height="32" rx="9" fill={`url(#${g})`} />
-            <rect width="32" height="32" rx="9" fill={`url(#${s})`} />
-            <path
-                fill="none"
-                stroke="#fff"
-                strokeWidth="2.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 16.7 13.2 22 19.1 13.6c2.4-3.4 6.2 0.2 9.4-3.4"
-            />
+            <rect width="32" height="32" rx="8" fill="#0f766e" />
+            <path fill="#fff" d="M8 8.4h16v3.2h-6.2V23.6h-3.6V11.6H8z" />
         </svg>
     );
 }
@@ -47,12 +24,13 @@ const SIZES = {
 };
 
 /**
- * Brand lockup: mark + TskFlow. Dark for the landing, light for app chrome.
+ * Brand lockup is the word TskFlow. The mark is optional (film stills, favicon).
  */
 export default function TskFlowLogo({
     variant = 'light',
     size = 'md',
     withWord = true,
+    withMark = false,
     className = '',
     testId,
 }) {
@@ -63,12 +41,9 @@ export default function TskFlowLogo({
             className={`tskflow-logo tskflow-logo--${size} tskflow-logo--${variant}${className ? ` ${className}` : ''}`}
             data-testid={testId}
         >
-            <TskFlowMark size={markSize} />
+            {withMark ? <TskFlowMark size={markSize} /> : null}
             {withWord ? (
-                <span className="tskflow-logo-word">
-                    <span className="tskflow-logo-tsk">Tsk</span>
-                    <span className="tskflow-logo-flow">Flow</span>
-                </span>
+                <span className="tskflow-logo-word">TskFlow</span>
             ) : (
                 <span className="sr-only">TskFlow</span>
             )}

@@ -52,13 +52,12 @@
 }
 
 .gradient-mesh {
-    background: radial-gradient(ellipse at top right, hsl(168 45% 94%) 0%, hsl(210 20% 98%) 50%, white 100%);
+    background: hsl(var(--background));
 }
 
 .glass-header {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    background: hsl(var(--background));
+    border-bottom: 1px solid hsl(var(--border));
 }
 
 .subscription-badge-free {
@@ -576,7 +575,7 @@
 
 /* Marketing landing is always brand-dark - app light/minimal must not bleach it. */
 body.landing-active {
-    background: #050807 !important;
+    background: #09090b !important;
     color: #ffffff !important;
 }
 .landing-page,
@@ -587,7 +586,7 @@ body.landing-active {
 [data-theme="light"] .landing-page.min-h-screen,
 [data-theme="dark"] .landing-page.min-h-screen,
 [data-theme="minimal"] .landing-page.min-h-screen {
-    background-color: #050807 !important;
+    background-color: #09090b !important;
     color: #ffffff !important;
 }
 .landing-page.landing-tool {
@@ -1469,22 +1468,23 @@ html:has(body.landing-active) {
 }
 .landing-story-glow {
     position: absolute;
-    width: min(62rem, 90vw);
-    height: min(62rem, 90vw);
+    width: min(42rem, 70vw);
+    height: min(42rem, 70vw);
     border-radius: 999px;
-    filter: blur(90px);
+    filter: blur(110px);
     transition: background-color 1.2s ease;
     will-change: background-color;
+    opacity: 0.45;
 }
 .landing-story-glow--a {
     top: -18%;
     left: -16%;
-    background: rgba(45, 212, 191, 0.11);
+    background: rgba(45, 212, 191, 0.06);
 }
 .landing-story-glow--b {
     bottom: -22%;
     right: -18%;
-    background: rgba(15, 118, 110, 0.09);
+    background: rgba(15, 118, 110, 0.05);
 }
 
 /* Hero scroll cue: most first-time visitors don't know there's a whole
@@ -4616,63 +4616,63 @@ html:has(body.landing-active) {
     }
 }
 
-/* Loom-style record control */
-.landing-page .landing-loom-rec {
-    min-height: 2.35rem;
-    padding: 0 0.9rem 0 0.55rem;
+/* Screen recorder — monitor + words, not a red surveillance pip */
+.landing-page .landing-screen-rec {
+    min-height: 2.4rem;
+    padding: 0 0.95rem 0 0.7rem;
     gap: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(12, 16, 15, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: transparent;
     color: #f8fafc;
     box-shadow: none;
+    border-radius: 0.7rem;
 }
-.landing-loom-dot {
-    width: 0.78rem;
-    height: 0.78rem;
-    border-radius: 999px;
-    background: #e11d48;
-    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.18);
+.landing-screen-rec-icon {
+    width: 1.15rem;
+    height: 1.15rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: #99f6e4;
     flex-shrink: 0;
 }
-.landing-page .landing-loom-rec .landing-ask-rec-label {
+.landing-screen-rec-monitor {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+.landing-page .landing-screen-rec .landing-ask-rec-label {
     display: inline;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     font-weight: 600;
     letter-spacing: -0.01em;
 }
-.landing-page .landing-loom-rec.is-live {
+.landing-page .landing-screen-rec:hover {
+    border-color: rgba(45, 212, 191, 0.55);
+    background: rgba(45, 212, 191, 0.08);
+}
+.landing-page .landing-screen-rec.is-live {
     background: #e11d48;
     border-color: transparent;
     color: #fff;
 }
-.landing-page .landing-loom-rec.is-live .landing-loom-dot {
-    background: #fff;
-    box-shadow: none;
-    border-radius: 0.16rem;
-    width: 0.62rem;
-    height: 0.62rem;
-    color: #e11d48;
+.landing-page .landing-screen-rec.is-live .landing-screen-rec-icon {
+    color: #fff;
 }
-.landing-page .landing-loom-rec.is-ready .landing-loom-dot {
-    background: #2dd4bf;
-    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
-    color: #042f2e;
+.landing-page .landing-screen-rec.is-ready .landing-screen-rec-icon {
+    color: #2dd4bf;
 }
-.landing-page .landing-loom-rec:hover {
-    border-color: rgba(225, 29, 72, 0.55);
-}
-.landing-page .landing-loom-rec:focus-visible {
-    outline: 2px solid #fb7185;
+.landing-page .landing-screen-rec:focus-visible {
+    outline: 2px solid #5eead4;
     outline-offset: 3px;
 }
-@media (max-width: 48rem) {
-    .landing-page .landing-loom-rec .landing-ask-rec-label {
-        display: inline;
-    }
+.landing-page .landing-ask-rec-stop {
+    width: 0.7rem;
+    height: 0.7rem;
+    fill: currentColor;
+}
+.landing-page .landing-ask-rec-check {
+    width: 0.95rem;
+    height: 0.95rem;
 }
 
 /* Real Meet / Slack / Gmail */
