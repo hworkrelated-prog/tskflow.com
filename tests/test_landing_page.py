@@ -492,7 +492,11 @@ def test_landing_film_scrubs_one_line_per_scroll():
     assert "Scroll to watch it happen" in hero
     assert "useStoryClock" not in hero
     assert "landing-hero-poster" in hero
+    assert "landing-hero-lane" in hero
     assert "landing-peek-wrap--still" in hero
+    assert "LandingFace" not in hero
+    assert "tskflow-story-" not in hero
+    assert "/avatars/" not in hero
     assert "landing-peek-rx" not in hero
     assert "✅" not in hero
     assert "👍" not in hero
