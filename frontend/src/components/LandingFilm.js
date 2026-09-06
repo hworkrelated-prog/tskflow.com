@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import {
     motion,
-    useMotionValue,
     useMotionValueEvent,
+    useReducedMotion,
     useTransform,
 } from 'framer-motion';
 import {
@@ -34,6 +34,7 @@ import LandingDoraSequence, {
 import LandingFace from '@/components/LandingFace';
 import LandingCastMark from '@/components/LandingCastMark';
 import AccountabilityScore from '@/components/AccountabilityScore';
+import LandingPinBeat from '@/components/LandingPinBeat';
 import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST, TASKS } from '@/lib/landingCast';
 
@@ -46,24 +47,24 @@ const MEET_PEOPLE = [
 
 const MEET_CAPTIONS = [
     { at: 0, lock: 'A group of people.', text: 'They are on a call. Work is about to get a name and a date.' },
-    { at: 0.28, lock: 'The organizer assigned a task.', text: 'Alex asked Maya for the Q3 forecast by Friday.' },
-    { at: 0.56, lock: 'Everyone acknowledged.', text: 'Maya said yes. Chris and Priya said yes too.' },
-    { at: 0.82, lock: 'The meeting concluded.', text: 'The meeting ended. The promises walked out the door.' },
+    { at: 0.25, lock: 'The organizer assigned a task.', text: 'Alex asked Maya for the Q3 forecast by Friday.' },
+    { at: 0.5, lock: 'Everyone acknowledged.', text: 'Maya said yes. Chris and Priya said yes too.' },
+    { at: 0.75, lock: 'The meeting concluded.', text: 'The meeting ended. The promises walked out the door.' },
 ];
 
 const CATCH_CAPTIONS = [
     { at: 0, lock: 'Now you inspect what you expected.', text: 'Friday. The forecast is not there. Now you go looking.' },
-    { at: 0.22, lock: 'Build the report.', text: 'You build a list of who missed.' },
-    { at: 0.42, lock: 'Catch people.', text: 'You ping them yourself. You are the nag now.' },
-    { at: 0.64, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1. This is the third Friday.' },
-    { at: 0.84, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
+    { at: 0.2, lock: 'Build the report.', text: 'You build a list of who missed.' },
+    { at: 0.4, lock: 'Catch people.', text: 'You ping them yourself. You are the nag now.' },
+    { at: 0.6, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1. This is the third Friday.' },
+    { at: 0.8, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
 ];
 
 const FLOW_CAPTIONS = [
     { at: 0, lock: 'TskFlow joins your meet.', text: 'TskFlow sits on the same call and writes down every yes.' },
-    { at: 0.30, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
-    { at: 0.58, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
-    { at: 0.82, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
+    { at: 0.25, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
+    { at: 0.5, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
+    { at: 0.75, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
 ];
 
 const LINES = [
@@ -108,64 +109,81 @@ function lineFor(v) {
     return line;
 }
 
-function StoryBeat({
+function captionAt(captions, v) {
+    let beat = captions[0];
+    for (const item of captions) {
+        if (v >= item.at) beat = item;
+    }
+    return beat;
+}
+
+/** Overlay line on the still. Updates as pin progress crosses each `at`. */
+function ScrubCaption({ progress, captions, testId }) {
+    const reduce = useReducedMotion();
+    const [beat, setBeat] = useState(() => captionAt(captions, progress.get()));
+    useMotionValueEvent(progress, 'change', (v) => {
+        const next = captionAt(captions, v);
+        setBeat((cur) => (cur.lock === next.lock ? cur : next));
+    });
+
+    return (
+        <div className="landing-dora-caption" data-testid={testId}>
+            <motion.p
+                key={beat.lock}
+                className="landing-pin-now"
+                initial={reduce ? false : { opacity: 0.28, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+            >
+                {beat.text}
+                {captions.map((row) => (
+                    <span className="sr-only" key={row.lock}>{row.lock}</span>
+                ))}
+            </motion.p>
+        </div>
+    );
+}
+
+function FilmChapter({
     testId,
     doraId,
     captionId,
     actId,
     step,
-    totalSteps = 3,
     label,
     navLabel,
     thesis,
     frames,
-    line,
     captions,
+    spans,
+    tone,
     children,
 }) {
-    const progress = useMotionValue(1);
     return (
-        <section
-            className="landing-story-beat"
-            id={testId}
-            data-testid={testId}
-            aria-label={thesis || label}
+        <LandingPinBeat
+            testId={testId}
+            label={label}
+            navLabel={navLabel}
+            thesis={thesis}
+            step={step}
+            totalSteps={3}
+            spans={spans}
+            tone={tone}
         >
-            <div className="landing-pin-kicker" aria-hidden="true" data-testid={`${testId}-kicker`}>
-                <span className="landing-pin-kicker-dots">
-                    {Array.from({ length: totalSteps }, (_, i) => (
-                        <i
-                            key={i}
-                            className={i + 1 === step ? 'is-now' : i + 1 < step ? 'is-done' : ''}
-                        />
-                    ))}
-                </span>
-                <span className="landing-pin-kicker-text">
-                    {step} of {totalSteps}
-                    {navLabel ? <b>{navLabel}</b> : null}
-                </span>
-            </div>
-            <p className="sr-only landing-pin-thesis" data-testid={`${testId}-thesis`}>
-                {thesis}
-            </p>
-            <div className="landing-film-stage landing-dora-stage">
-                <div className="landing-dora-card">
-                    <LandingDoraSequence progress={progress} frames={frames} testId={doraId} />
-                    <div className="landing-dora-caption" data-testid={captionId}>
-                        <p className="landing-pin-beat-count">{step} of {totalSteps}</p>
-                        <p className="landing-pin-now">
-                            {line}
-                            {captions.map((beat) => (
-                                <span className="sr-only" key={beat.lock}>{beat.lock}</span>
-                            ))}
-                        </p>
+            {(progress) => (
+                <>
+                    <div className="landing-film-stage landing-dora-stage">
+                        <div className="landing-dora-card">
+                            <LandingDoraSequence progress={progress} frames={frames} testId={doraId} />
+                            <ScrubCaption progress={progress} captions={captions} testId={captionId} />
+                        </div>
                     </div>
-                </div>
-                <div className="sr-only" data-testid={actId}>
-                    {children(progress)}
-                </div>
-            </div>
-        </section>
+                    <div className="sr-only" data-testid={actId}>
+                        {children(progress)}
+                    </div>
+                </>
+            )}
+        </LandingPinBeat>
     );
 }
 
@@ -173,7 +191,7 @@ export default function LandingFilm() {
     return (
         <div id="landing-film" data-testid="landing-film">
             <LandingDoraEmbed />
-            <StoryBeat
+            <FilmChapter
                 testId="landing-film-meet"
                 doraId="landing-dora-meet"
                 captionId="landing-film-caption"
@@ -182,14 +200,14 @@ export default function LandingFilm() {
                 navLabel="They said yes"
                 thesis="They said yes. Then the meeting ended."
                 step={1}
-                totalSteps={3}
-                frames={[MEET_FRAMES[1]]}
-                line="Maya said yes. Chris and Priya said yes too."
+                frames={MEET_FRAMES}
                 captions={MEET_CAPTIONS}
+                spans={3.4}
+                tone="calm"
             >
                 {(progress) => <MeetScene progress={progress} />}
-            </StoryBeat>
-            <StoryBeat
+            </FilmChapter>
+            <FilmChapter
                 testId="landing-film-catch"
                 doraId="landing-dora-catch"
                 captionId="landing-film-caption-catch"
@@ -198,14 +216,14 @@ export default function LandingFilm() {
                 navLabel="You become the nag"
                 thesis="After yes, you become the reminder system."
                 step={2}
-                totalSteps={3}
-                frames={[CATCH_FRAMES[0]]}
-                line="You ping them yourself. You are the nag now."
+                frames={CATCH_FRAMES}
                 captions={CATCH_CAPTIONS}
+                spans={4.2}
+                tone="wear"
             >
                 {(progress) => <CatchScene progress={progress} />}
-            </StoryBeat>
-            <StoryBeat
+            </FilmChapter>
+            <FilmChapter
                 testId="landing-film-flow"
                 doraId="landing-dora-flow"
                 captionId="landing-film-caption-flow"
@@ -214,13 +232,13 @@ export default function LandingFilm() {
                 navLabel="TskFlow follows up"
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
-                totalSteps={3}
                 frames={FLOW_FRAMES}
-                line="It follows up with Maya. Not you."
                 captions={FLOW_CAPTIONS}
+                spans={3.4}
+                tone="calm"
             >
                 {(progress) => <FlowScene progress={progress} />}
-            </StoryBeat>
+            </FilmChapter>
         </div>
     );
 }

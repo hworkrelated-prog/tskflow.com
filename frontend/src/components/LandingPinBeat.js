@@ -1,9 +1,13 @@
 import React, { useRef } from 'react';
-import { motion, useMotionValue, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion, useScroll } from 'framer-motion';
 
 /**
  * Tall section with a sticky viewport. Animation scrubs with scroll.
  * Reduced motion: one screen, end state (progress = 1).
+ *
+ * Progress maps 0→1 linearly with the pin so each wheel tick can
+ * advance the overlay line. A hold window made the caption freeze
+ * while the user kept scrolling.
  *
  * The frame stays fully visible for the whole pin. Fading / blurring the
  * sticky stage made the story look drunk and unreadable; chapter kickers
@@ -28,9 +32,7 @@ export default function LandingPinBeat({
         target: ref,
         offset: ['start start', 'end end'],
     });
-    // Hold the first and last stretch still so a wheel flick cannot skip a beat.
-    const held = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0, 0, 1, 1]);
-    const progress = reduce ? done : held;
+    const progress = reduce ? done : scrollYProgress;
     const spoken = caption || thesis || label;
 
     const showKicker = Boolean(step);

@@ -461,13 +461,18 @@ def test_landing_story_is_shown_not_told():
     assert "ai productivity platform" not in hero.lower()
 
 
-def test_landing_film_is_three_short_beats():
-    """The story is three stills, not a 30-screen sticky pin."""
+def test_landing_film_scrubs_one_line_per_scroll():
+    """Three short linear pins. Overlay sentence changes with scroll. No 30-screen hold."""
     film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
     pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
-    assert film.count("<StoryBeat") >= 3
-    assert "landing-story-beat" in film
+    landing = (FRONT / "pages" / "LandingPage.js").read_text(encoding="utf-8")
+    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert film.count("<FilmChapter") >= 3
+    assert "<LandingPinBeat" in film
+    assert "ScrubCaption" in film
+    assert "landing-story-beat" not in film
+    assert "<StoryBeat" not in film
     assert "step={1}" in film and "step={2}" in film and "step={3}" in film
     assert "The meeting" in film
     assert "You chase" in film
@@ -475,8 +480,10 @@ def test_landing_film_is_three_short_beats():
     assert "spans={9.5}" not in film
     assert "spans={11.5}" not in film
     assert "spans={10}" not in film
-    assert "<LandingPinBeat" not in film
-    assert "{step} of {totalSteps}" in pin
+    assert "spans={3.4}" in film
+    assert "spans={4.2}" in film
+    assert "[0, 0.2, 0.8, 1]" not in pin
+    assert "scrollYProgress" in pin
     assert "navLabel" in film
     assert "blur(" not in pin
     assert "frameBlur" not in pin
@@ -484,22 +491,26 @@ def test_landing_film_is_three_short_beats():
     assert "A meeting starts." in hero
     assert "Scroll to watch it happen" in hero
     assert "useStoryClock" not in hero
+    assert "landing-hero-poster" in hero
     assert "landing-peek-wrap--still" in hero
     assert "landing-peek-rx" not in hero
     assert "✅" not in hero
     assert "👍" not in hero
-    assert "[0, 0.2, 0.8, 1]" in pin
+    assert "landing-pin-beat-count" not in film
     assert 'className="sr-only landing-pin-thesis"' in pin
     assert "LandingDoraSequence" in film
     assert "landing-dora-caption" in film
     assert "landing-dora-card" in film
     assert "You ping them yourself. You are the nag now." in film
     assert "It follows up with Maya. Not you." in film
-    css = (FRONT / "App.css").read_text(encoding="utf-8")
+    assert "landing-back-top" in landing
+    assert "landing-sign-in" in landing
     now = css.split(".landing-pin-now {")[1].split("}")[0]
     assert "clamp(1.55rem" in now
     assert "landing-dora-caption" in css
-    assert "landing-story-beat" in css
+    assert "landing-hero-poster" in css
+    assert "landing-back-top" in css
+    assert ".landing-sign-in" in css
     assert "min-height: calc(100svh - 4.5rem)" not in css.split(".landing-payoff-hero {")[1].split("}")[0]
     assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
