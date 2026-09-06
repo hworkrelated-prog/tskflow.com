@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -258,6 +258,25 @@ const LaunchPad = ({ recordingBlob, inputRef, ideaIndex, value, setValue }) => {
     );
 };
 
+const LandingBackTop = () => {
+    const { scrollY } = useScroll();
+    const [on, setOn] = useState(false);
+    useMotionValueEvent(scrollY, 'change', (v) => setOn(v > 420));
+
+    return (
+        <button
+            type="button"
+            className={`landing-back-top${on ? ' is-on' : ''}`}
+            data-testid="landing-back-top"
+            aria-label="Back to top"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+            <ArrowUp size={16} aria-hidden />
+            <span>Top</span>
+        </button>
+    );
+};
+
 const LandingPage = () => {
     const navigate = useNavigate();
     const inputRef = useRef(null);
@@ -297,6 +316,7 @@ const LandingPage = () => {
     return (
         <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#09090b' }} data-testid="landing-page">
             {tab === 'story' ? <LandingStoryAtmosphere targetRef={storyRef} /> : null}
+            {tab === 'story' ? <LandingBackTop /> : null}
             <header className="relative z-20 shrink-0 sticky top-0 bg-[#09090b]" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <div className="landing-toolbar-lead">
@@ -337,7 +357,7 @@ const LandingPage = () => {
                     <div className="landing-toolbar-actions">
                         <button
                             type="button"
-                            className="landing-tabs-link"
+                            className="landing-tabs-link landing-sign-in"
                             onClick={() => navigate('/login')}
                             data-testid="landing-sign-in"
                         >

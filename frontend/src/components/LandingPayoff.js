@@ -2,50 +2,82 @@ import React from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
-import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST } from '@/lib/landingCast';
 
 const PEEK_PHASES = [
     { id: 'group', dur: 4.8, line: 'A meeting starts. Work gets a name and a date.' },
     { id: 'assign', dur: 5.2, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
-    { id: 'emoji', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
+    { id: 'yes', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
     { id: 'end', dur: 4.6, line: 'TskFlow takes the follow-up, so you do not have to.' },
 ];
 
-const PEEK = [
-    { who: 'alex', agree: null },
-    { who: 'maya', agree: '✅' },
-    { who: 'chris', agree: '👍' },
-    { who: 'priya', agree: '👍' },
-];
+const PEEK = ['alex', 'maya', 'chris', 'priya'];
 
 const PLOT = [
-    { n: '1', lead: 'They say yes', rest: ' in the meeting.' },
-    { n: '2', lead: 'You chase them', rest: ' all week after.' },
-    { n: '3', lead: 'TskFlow chases them', rest: ' instead.' },
+    {
+        n: '1',
+        lead: 'They say yes',
+        rest: ' in the meeting.',
+        still: '/landing/story/tskflow-story-02-yes.webp',
+        jump: 'landing-film-meet',
+    },
+    {
+        n: '2',
+        lead: 'You chase them',
+        rest: ' all week after.',
+        still: '/landing/story/tskflow-story-04-chase.webp',
+        jump: 'landing-film-catch',
+    },
+    {
+        n: '3',
+        lead: 'TskFlow chases them',
+        rest: ' instead.',
+        still: '/landing/story/tskflow-story-06-tskflow.webp',
+        jump: 'landing-film-flow',
+    },
 ];
+
+const jumpTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 export default function LandingPayoff({ onTry, onHow }) {
     return (
         <section className="landing-payoff-hero" data-testid="landing-hero" id="landing-payoff">
-            <p className="landing-hero-kicker" data-testid="landing-payoff-kicker">
-                After the meeting, they already said yes.
-            </p>
-            <h1 className="landing-payoff-title" data-testid="landing-payoff-title">
-                TskFlow follows up so you do not have to.
-            </h1>
-            <ol className="landing-hero-plot" data-testid="landing-hero-plot">
+            <div className="landing-hero-poster" data-testid="landing-payoff-frame">
+                <img
+                    className="landing-hero-poster-still"
+                    src="/landing/story/tskflow-story-01-meet.webp"
+                    alt=""
+                    draggable={false}
+                />
+                <div className="landing-hero-poster-veil" aria-hidden />
+                <p className="landing-hero-kicker landing-hero-poster-kicker" data-testid="landing-payoff-kicker">
+                    After the meeting, they already said yes.
+                </p>
+                <div className="landing-hero-poster-copy">
+                    <h1 className="landing-payoff-title" data-testid="landing-payoff-title">
+                        TskFlow follows up so you do not have to.
+                    </h1>
+                    <HeroPeek />
+                </div>
+            </div>
+            <ol className="landing-hero-plot landing-hero-plot--dive" data-testid="landing-hero-plot">
                 {PLOT.map((row) => (
                     <li key={row.n}>
-                        <i>{row.n}</i>
-                        <span>
-                            <b>{row.lead}</b>
-                            {row.rest}
-                        </span>
+                        <button type="button" onClick={() => jumpTo(row.jump)}>
+                            <img src={row.still} alt="" />
+                            <span className="landing-hero-plot-copy">
+                                <i>{row.n}</i>
+                                <span>
+                                    <b>{row.lead}</b>
+                                    {row.rest}
+                                </span>
+                            </span>
+                        </button>
                     </li>
                 ))}
             </ol>
-            <HeroPeek />
             <p className="sr-only" data-testid="landing-payoff-know">
                 Cuts the chase. The frustration. The endless back and forth.
             </p>
@@ -99,18 +131,12 @@ function ScrollCue({ onClick }) {
 function HeroPeek() {
     return (
         <div className="landing-peek-wrap landing-peek-wrap--still">
-            <div className="landing-peek landing-peek--still" data-testid="landing-payoff-frame" aria-hidden>
-                {PEEK.map((tile) => (
-                    <span key={tile.who} className="landing-peek-face">
-                        <LandingFace who={tile.who} size={44} radius={999} />
-                        {tile.agree ? (
-                            <span className="landing-peek-rx">{tile.agree}</span>
-                        ) : null}
+            <div className="landing-peek landing-peek--still" aria-hidden>
+                {PEEK.map((who) => (
+                    <span key={who} className="landing-peek-face">
+                        <LandingFace who={who} size={48} radius={999} />
                     </span>
                 ))}
-                <span className="landing-peek-bot is-on">
-                    <TskFlowMark size={20} />
-                </span>
                 <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
             </div>
             <p className="sr-only" data-testid="landing-peek-line">{PEEK_PHASES[0].line}</p>

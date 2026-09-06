@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    AnimatePresence,
     motion,
     useMotionValueEvent,
     useReducedMotion,
@@ -26,7 +25,6 @@ import {
     Users,
     Video,
 } from 'lucide-react';
-import LandingPinBeat, { BeatStage } from '@/components/LandingPinBeat';
 import LandingDoraSequence, {
     CATCH_FRAMES,
     FLOW_FRAMES,
@@ -36,36 +34,37 @@ import LandingDoraSequence, {
 import LandingFace from '@/components/LandingFace';
 import LandingCastMark from '@/components/LandingCastMark';
 import AccountabilityScore from '@/components/AccountabilityScore';
+import LandingPinBeat from '@/components/LandingPinBeat';
 import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST, TASKS } from '@/lib/landingCast';
 
 const MEET_PEOPLE = [
-    { who: 'alex', you: true, mute: false, speakAt: [0.18, 0.46], agree: null, task: null },
-    { who: 'maya', you: false, mute: false, speakAt: [0.46, 0.70], agree: '✅', agreeAt: 0.58, task: TASKS[0] },
-    { who: 'chris', you: false, mute: true, speakAt: null, agree: '👍', agreeAt: 0.66, task: TASKS[1] },
-    { who: 'priya', you: false, mute: false, speakAt: null, agree: '👍', agreeAt: 0.74, task: TASKS[2] },
+    { who: 'alex', you: true, mute: false, speakAt: [0.18, 0.46], task: null },
+    { who: 'maya', you: false, mute: false, speakAt: [0.46, 0.70], task: TASKS[0] },
+    { who: 'chris', you: false, mute: true, speakAt: null, task: TASKS[1] },
+    { who: 'priya', you: false, mute: false, speakAt: null, task: TASKS[2] },
 ];
 
 const MEET_CAPTIONS = [
     { at: 0, lock: 'A group of people.', text: 'They are on a call. Work is about to get a name and a date.' },
-    { at: 0.28, lock: 'The organizer assigned a task.', text: 'Alex asked Maya for the Q3 forecast by Friday.' },
-    { at: 0.56, lock: 'Everyone acknowledged.', text: 'Maya said yes. Chris and Priya said yes too.' },
-    { at: 0.82, lock: 'The meeting concluded.', text: 'The meeting ended. The promises walked out the door.' },
+    { at: 0.25, lock: 'The organizer assigned a task.', text: 'Alex asked Maya for the Q3 forecast by Friday.' },
+    { at: 0.5, lock: 'Everyone acknowledged.', text: 'Maya said yes. Chris and Priya said yes too.' },
+    { at: 0.75, lock: 'The meeting concluded.', text: 'The meeting ended. The promises walked out the door.' },
 ];
 
 const CATCH_CAPTIONS = [
     { at: 0, lock: 'Now you inspect what you expected.', text: 'Friday. The forecast is not there. Now you go looking.' },
-    { at: 0.22, lock: 'Build the report.', text: 'You build a list of who missed.' },
-    { at: 0.42, lock: 'Catch people.', text: 'You ping them yourself. You are the nag now.' },
-    { at: 0.64, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1. This is the third Friday.' },
-    { at: 0.84, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
+    { at: 0.2, lock: 'Build the report.', text: 'You build a list of who missed.' },
+    { at: 0.4, lock: 'Catch people.', text: 'You ping them yourself. You are the nag now.' },
+    { at: 0.6, lock: 'Have the tough conversation.', text: 'Then the awkward 1:1. This is the third Friday.' },
+    { at: 0.8, lock: 'Document the continuous misses.', text: 'If it keeps happening, you start a file for HR.' },
 ];
 
 const FLOW_CAPTIONS = [
     { at: 0, lock: 'TskFlow joins your meet.', text: 'TskFlow sits on the same call and writes down every yes.' },
-    { at: 0.30, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
-    { at: 0.58, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
-    { at: 0.82, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
+    { at: 0.25, lock: 'Leaves with every task.', text: 'It leaves with every task, owner, and date.' },
+    { at: 0.5, lock: 'Gets after the assignees.', text: 'It follows up with Maya. Not you.' },
+    { at: 0.75, lock: 'Your relationship stays intact.', text: 'You stay the manager. Not the reminder.' },
 ];
 
 const LINES = [
@@ -102,14 +101,6 @@ const CHASE_LINES = [
     "What's the status?",
 ];
 
-function captionFor(beats, v) {
-    let beat = beats[0];
-    for (const item of beats) {
-        if (v >= item.at) beat = item;
-    }
-    return beat;
-}
-
 function lineFor(v) {
     let line = LINES[0];
     for (const item of LINES) {
@@ -118,31 +109,81 @@ function lineFor(v) {
     return line;
 }
 
-function ScrubCaption({ progress, beats, testId }) {
+function captionAt(captions, v) {
+    let beat = captions[0];
+    for (const item of captions) {
+        if (v >= item.at) beat = item;
+    }
+    return beat;
+}
+
+/** Overlay line on the still. Updates as pin progress crosses each `at`. */
+function ScrubCaption({ progress, captions, testId }) {
     const reduce = useReducedMotion();
-    const [beat, setBeat] = useState(() => captionFor(beats, progress.get()));
-    useMotionValueEvent(progress, 'change', (v) => setBeat(captionFor(beats, v)));
-    const n = Math.max(1, beats.indexOf(beat) + 1);
+    const [beat, setBeat] = useState(() => captionAt(captions, progress.get()));
+    useMotionValueEvent(progress, 'change', (v) => {
+        const next = captionAt(captions, v);
+        setBeat((cur) => (cur.lock === next.lock ? cur : next));
+    });
 
     return (
-        <div className="landing-dora-caption" data-testid={testId} aria-live="polite">
-            <p className="landing-pin-beat-count">
-                {n} of {beats.length}
-            </p>
-            <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                    key={beat.text}
-                    className="landing-pin-now"
-                    initial={reduce ? false : { opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduce ? { opacity: 1 } : { opacity: 0, y: -10 }}
-                    transition={reduce ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                >
-                    {beat.text}
-                    <span className="sr-only">{beat.lock}</span>
-                </motion.p>
-            </AnimatePresence>
+        <div className="landing-dora-caption" data-testid={testId}>
+            <motion.p
+                key={beat.lock}
+                className="landing-pin-now"
+                initial={reduce ? false : { opacity: 0.28, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+            >
+                {beat.text}
+                {captions.map((row) => (
+                    <span className="sr-only" key={row.lock}>{row.lock}</span>
+                ))}
+            </motion.p>
         </div>
+    );
+}
+
+function FilmChapter({
+    testId,
+    doraId,
+    captionId,
+    actId,
+    step,
+    label,
+    navLabel,
+    thesis,
+    frames,
+    captions,
+    spans,
+    tone,
+    children,
+}) {
+    return (
+        <LandingPinBeat
+            testId={testId}
+            label={label}
+            navLabel={navLabel}
+            thesis={thesis}
+            step={step}
+            totalSteps={3}
+            spans={spans}
+            tone={tone}
+        >
+            {(progress) => (
+                <>
+                    <div className="landing-film-stage landing-dora-stage">
+                        <div className="landing-dora-card">
+                            <LandingDoraSequence progress={progress} frames={frames} testId={doraId} />
+                            <ScrubCaption progress={progress} captions={captions} testId={captionId} />
+                        </div>
+                    </div>
+                    <div className="sr-only" data-testid={actId}>
+                        {children(progress)}
+                    </div>
+                </>
+            )}
+        </LandingPinBeat>
     );
 }
 
@@ -150,77 +191,54 @@ export default function LandingFilm() {
     return (
         <div id="landing-film" data-testid="landing-film">
             <LandingDoraEmbed />
-            <LandingPinBeat
+            <FilmChapter
                 testId="landing-film-meet"
+                doraId="landing-dora-meet"
+                captionId="landing-film-caption"
+                actId="landing-meet-act"
                 label="The meeting"
                 navLabel="They said yes"
                 thesis="They said yes. Then the meeting ended."
                 step={1}
-                totalSteps={3}
-                spans={9.5}
+                frames={MEET_FRAMES}
+                captions={MEET_CAPTIONS}
+                spans={3.4}
+                tone="calm"
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
-                                <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-meet-act">
-                                <MeetScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
-
-            <LandingPinBeat
+                {(progress) => <MeetScene progress={progress} />}
+            </FilmChapter>
+            <FilmChapter
                 testId="landing-film-catch"
+                doraId="landing-dora-catch"
+                captionId="landing-film-caption-catch"
+                actId="landing-catch-act"
                 label="You chase"
                 navLabel="You become the nag"
                 thesis="After yes, you become the reminder system."
                 step={2}
-                totalSteps={3}
-                spans={11.5}
+                frames={CATCH_FRAMES}
+                captions={CATCH_CAPTIONS}
+                spans={4.2}
+                tone="wear"
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
-                                <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-catch-act">
-                                <CatchScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
-
-            <LandingPinBeat
+                {(progress) => <CatchScene progress={progress} />}
+            </FilmChapter>
+            <FilmChapter
                 testId="landing-film-flow"
+                doraId="landing-dora-flow"
+                captionId="landing-film-caption-flow"
+                actId="landing-flow-act"
                 label="TskFlow takes it"
                 navLabel="TskFlow follows up"
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
-                totalSteps={3}
-                spans={10}
+                frames={FLOW_FRAMES}
+                captions={FLOW_CAPTIONS}
+                spans={3.4}
+                tone="calm"
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
-                                <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-flow-act">
-                                <FlowScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
+                {(progress) => <FlowScene progress={progress} />}
+            </FilmChapter>
         </div>
     );
 }
@@ -289,7 +307,6 @@ function MeetTile({ tile, progress }) {
                 {tile.you ? ' (You)' : ''}
             </span>
             {tile.task ? <TaskChip task={tile.task} progress={progress} at={0.28} /> : null}
-            {tile.agree ? <Agree mark={tile.agree} progress={progress} at={tile.agreeAt} /> : null}
         </motion.div>
     );
 }
@@ -300,17 +317,6 @@ function TaskChip({ task, progress, at }) {
     return (
         <motion.span className="landing-meet-task" style={{ opacity, y }} data-testid={`landing-meet-task-${task.id}`}>
             {task.title}
-        </motion.span>
-    );
-}
-
-function Agree({ mark, progress, at }) {
-    const opacity = useTransform(progress, [at, at + 0.07], [0, 1]);
-    const scale = useTransform(progress, [at, at + 0.08], [0.3, 1]);
-    const y = useTransform(progress, [at, at + 0.10], [10, 0]);
-    return (
-        <motion.span className="landing-meet-react" style={{ opacity, scale, y }} aria-hidden>
-            {mark}
         </motion.span>
     );
 }
@@ -497,7 +503,7 @@ function FlowScene({ progress }) {
                 <TaskFlyout progress={progress} />
             </motion.div>
             <motion.div className="landing-film-layer" style={{ opacity: appOp }}>
-                <AppCard progress={progress} />
+                <AppCard />
             </motion.div>
             <motion.div className="landing-film-layer" style={{ opacity: chaseOp }} data-testid="landing-flow-chase">
                 <TskChase progress={progress} peaceOp={peaceOp} />
@@ -530,7 +536,6 @@ function JoinMeet({ progress }) {
                             {CAST[tile.who].short}
                             {tile.you ? ' (You)' : ''}
                         </span>
-                        {tile.agree ? <span className="landing-meet-react" aria-hidden>{tile.agree}</span> : null}
                     </div>
                 ))}
             </div>
@@ -573,15 +578,11 @@ function FlyTask({ task, index, progress }) {
     );
 }
 
-function AppCard({ progress }) {
-    const rx1 = useTransform(progress, [0.60, 0.66], [0, 1]);
-    const rx2 = useTransform(progress, [0.64, 0.70], [0, 1]);
-    const rx3 = useTransform(progress, [0.68, 0.74], [0, 1]);
-    return <ProductCard rx1={rx1} rx2={rx2} rx3={rx3} />;
+function AppCard() {
+    return <ProductCard />;
 }
 
-function ProductCard({ rx1, rx2, rx3 }) {
-
+function ProductCard() {
     return (
         <article className="landing-app" data-testid="landing-app-card">
             <header className="landing-app-head">
@@ -600,13 +601,10 @@ function ProductCard({ rx1, rx2, rx3 }) {
                 <p>
                     <LandingFace who="maya" size={22} radius={999} />
                     <span>Yep, I&apos;ll have this done by Friday.</span>
-                    <motion.em style={{ opacity: rx1 }}>✅</motion.em>
-                    <motion.em style={{ opacity: rx2 }}>👍</motion.em>
                 </p>
                 <p>
                     <TskFlowMark size={18} />
                     <span>Captured from the meet. I&apos;ll follow up if this goes quiet.</span>
-                    <motion.em style={{ opacity: rx3 }}>👀</motion.em>
                 </p>
             </div>
             <div className="landing-app-assigned" data-testid="landing-app-assigned">
