@@ -40,10 +40,10 @@ import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST, TASKS } from '@/lib/landingCast';
 
 const MEET_PEOPLE = [
-    { who: 'alex', you: true, mute: false, speakAt: [0.18, 0.46], agree: null, task: null },
-    { who: 'maya', you: false, mute: false, speakAt: [0.46, 0.70], agree: '✅', agreeAt: 0.58, task: TASKS[0] },
-    { who: 'chris', you: false, mute: true, speakAt: null, agree: '👍', agreeAt: 0.66, task: TASKS[1] },
-    { who: 'priya', you: false, mute: false, speakAt: null, agree: '👍', agreeAt: 0.74, task: TASKS[2] },
+    { who: 'alex', you: true, mute: false, speakAt: [0.18, 0.46], task: null },
+    { who: 'maya', you: false, mute: false, speakAt: [0.46, 0.70], task: TASKS[0] },
+    { who: 'chris', you: false, mute: true, speakAt: null, task: TASKS[1] },
+    { who: 'priya', you: false, mute: false, speakAt: null, task: TASKS[2] },
 ];
 
 const MEET_CAPTIONS = [
@@ -289,7 +289,6 @@ function MeetTile({ tile, progress }) {
                 {tile.you ? ' (You)' : ''}
             </span>
             {tile.task ? <TaskChip task={tile.task} progress={progress} at={0.28} /> : null}
-            {tile.agree ? <Agree mark={tile.agree} progress={progress} at={tile.agreeAt} /> : null}
         </motion.div>
     );
 }
@@ -300,17 +299,6 @@ function TaskChip({ task, progress, at }) {
     return (
         <motion.span className="landing-meet-task" style={{ opacity, y }} data-testid={`landing-meet-task-${task.id}`}>
             {task.title}
-        </motion.span>
-    );
-}
-
-function Agree({ mark, progress, at }) {
-    const opacity = useTransform(progress, [at, at + 0.07], [0, 1]);
-    const scale = useTransform(progress, [at, at + 0.08], [0.3, 1]);
-    const y = useTransform(progress, [at, at + 0.10], [10, 0]);
-    return (
-        <motion.span className="landing-meet-react" style={{ opacity, scale, y }} aria-hidden>
-            {mark}
         </motion.span>
     );
 }
@@ -497,7 +485,7 @@ function FlowScene({ progress }) {
                 <TaskFlyout progress={progress} />
             </motion.div>
             <motion.div className="landing-film-layer" style={{ opacity: appOp }}>
-                <AppCard progress={progress} />
+                <AppCard />
             </motion.div>
             <motion.div className="landing-film-layer" style={{ opacity: chaseOp }} data-testid="landing-flow-chase">
                 <TskChase progress={progress} peaceOp={peaceOp} />
@@ -530,7 +518,6 @@ function JoinMeet({ progress }) {
                             {CAST[tile.who].short}
                             {tile.you ? ' (You)' : ''}
                         </span>
-                        {tile.agree ? <span className="landing-meet-react" aria-hidden>{tile.agree}</span> : null}
                     </div>
                 ))}
             </div>
@@ -573,15 +560,11 @@ function FlyTask({ task, index, progress }) {
     );
 }
 
-function AppCard({ progress }) {
-    const rx1 = useTransform(progress, [0.60, 0.66], [0, 1]);
-    const rx2 = useTransform(progress, [0.64, 0.70], [0, 1]);
-    const rx3 = useTransform(progress, [0.68, 0.74], [0, 1]);
-    return <ProductCard rx1={rx1} rx2={rx2} rx3={rx3} />;
+function AppCard() {
+    return <ProductCard />;
 }
 
-function ProductCard({ rx1, rx2, rx3 }) {
-
+function ProductCard() {
     return (
         <article className="landing-app" data-testid="landing-app-card">
             <header className="landing-app-head">
@@ -600,13 +583,10 @@ function ProductCard({ rx1, rx2, rx3 }) {
                 <p>
                     <LandingFace who="maya" size={22} radius={999} />
                     <span>Yep, I&apos;ll have this done by Friday.</span>
-                    <motion.em style={{ opacity: rx1 }}>✅</motion.em>
-                    <motion.em style={{ opacity: rx2 }}>👍</motion.em>
                 </p>
                 <p>
                     <TskFlowMark size={18} />
                     <span>Captured from the meet. I&apos;ll follow up if this goes quiet.</span>
-                    <motion.em style={{ opacity: rx3 }}>👀</motion.em>
                 </p>
             </div>
             <div className="landing-app-assigned" data-testid="landing-app-assigned">

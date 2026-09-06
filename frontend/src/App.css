@@ -5181,10 +5181,9 @@ html:has(body.landing-active) {
 .landing-peek-face {
     position: relative;
     margin-left: -0.7rem;
-    border: 2px solid #050807;
+    border: 2px solid #09090b;
     border-radius: 999px;
     line-height: 0;
-    transition: transform 0.35s ease, box-shadow 0.35s ease;
 }
 .landing-peek-face:first-child { margin-left: 0; }
 .landing-peek-face.is-ask {

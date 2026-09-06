@@ -483,6 +483,9 @@ def test_landing_film_is_three_slow_chapters():
     assert "Scroll to watch it happen" in hero
     assert "useStoryClock" not in hero
     assert "landing-peek-wrap--still" in hero
+    assert "landing-peek-rx" not in hero
+    assert "✅" not in hero
+    assert "👍" not in hero
     assert "[0, 0.2, 0.8, 1]" in pin
     assert 'className="sr-only landing-pin-thesis"' in pin
     assert "LandingDoraSequence" in film

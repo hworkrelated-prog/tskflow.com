@@ -2,22 +2,16 @@ import React from 'react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import LandingFace from '@/components/LandingFace';
-import { TskFlowMark } from '@/components/TskFlowLogo';
 import { CAST } from '@/lib/landingCast';
 
 const PEEK_PHASES = [
     { id: 'group', dur: 4.8, line: 'A meeting starts. Work gets a name and a date.' },
     { id: 'assign', dur: 5.2, line: 'Alex asks Maya for the Q3 forecast by Friday.' },
-    { id: 'emoji', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
+    { id: 'yes', dur: 5.2, line: 'They all say yes. The meeting still ends.' },
     { id: 'end', dur: 4.6, line: 'TskFlow takes the follow-up, so you do not have to.' },
 ];
 
-const PEEK = [
-    { who: 'alex', agree: null },
-    { who: 'maya', agree: '✅' },
-    { who: 'chris', agree: '👍' },
-    { who: 'priya', agree: '👍' },
-];
+const PEEK = ['alex', 'maya', 'chris', 'priya'];
 
 const PLOT = [
     { n: '1', lead: 'They say yes', rest: ' in the meeting.' },
@@ -100,17 +94,11 @@ function HeroPeek() {
     return (
         <div className="landing-peek-wrap landing-peek-wrap--still">
             <div className="landing-peek landing-peek--still" data-testid="landing-payoff-frame" aria-hidden>
-                {PEEK.map((tile) => (
-                    <span key={tile.who} className="landing-peek-face">
-                        <LandingFace who={tile.who} size={44} radius={999} />
-                        {tile.agree ? (
-                            <span className="landing-peek-rx">{tile.agree}</span>
-                        ) : null}
+                {PEEK.map((who) => (
+                    <span key={who} className="landing-peek-face">
+                        <LandingFace who={who} size={44} radius={999} />
                     </span>
                 ))}
-                <span className="landing-peek-bot is-on">
-                    <TskFlowMark size={20} />
-                </span>
                 <span className="sr-only">{CAST.alex.short} assigned {CAST.maya.short}.</span>
             </div>
             <p className="sr-only" data-testid="landing-peek-line">{PEEK_PHASES[0].line}</p>
