@@ -570,7 +570,7 @@ def test_landing_founder_is_a_one_screen_profile():
     assert "landing-founder-cred" in founder
     assert "landing-founder-origin" in founder
     assert "Book a meeting" in founder
-    assert "calendly.com/hashim-tskflow" in founder
+    assert "calendly.com/hworkrelated" in founder
     assert 'to="/contact"' not in founder
     assert "linkedin.com/in/hashim-mahmood" in founder
     assert "almost a decade in sales" in founder
@@ -651,4 +651,3 @@ def test_landing_tryit_is_the_app_prompt_bar():
     hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
     assert "max-width: 18ch" not in css.split(".landing-payoff-title")[1].split("}")[0]
     assert "dur: 4.8" in hero
-
