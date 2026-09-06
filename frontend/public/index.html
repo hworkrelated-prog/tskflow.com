@@ -32,20 +32,19 @@
         <title>Tskflow | Tasks that flow</title>
         <style>
             /* Instant paint before JS — avoids blank PWA home-screen launch */
-            html, body { margin: 0; min-height: 100%; background: #0f172a; }
+            html, body { margin: 0; min-height: 100%; background: #09090b; }
             #root:empty {
                 min-height: 100vh;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: radial-gradient(ellipse at top, #134e4a 0%, #0f172a 55%, #020617 100%);
+                background: #09090b;
             }
             #root:empty::before {
                 content: "";
-                width: min(280px, 78vw);
-                height: 72px;
+                width: min(220px, 70vw);
+                height: 48px;
                 background: url("%PUBLIC_URL%/logo.svg") center / contain no-repeat;
-                filter: drop-shadow(0 10px 32px rgba(45, 212, 191, 0.28));
             }
         </style>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>

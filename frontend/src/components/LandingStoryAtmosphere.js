@@ -6,17 +6,17 @@ import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'fr
 const STOPS = [0, 0.32, 0.68, 1];
 
 const GLOW_A = [
-    'rgba(45,212,191,0.16)',
-    'rgba(45,212,191,0.14)',
-    'rgba(217,119,6,0.12)',
-    'rgba(20,184,166,0.16)',
+    'rgba(45,212,191,0.07)',
+    'rgba(45,212,191,0.06)',
+    'rgba(217,119,6,0.05)',
+    'rgba(20,184,166,0.07)',
 ];
 
 const GLOW_B = [
-    'rgba(15,118,110,0.12)',
-    'rgba(15,118,110,0.10)',
-    'rgba(180,83,9,0.10)',
-    'rgba(15,118,110,0.12)',
+    'rgba(15,118,110,0.05)',
+    'rgba(15,118,110,0.04)',
+    'rgba(180,83,9,0.04)',
+    'rgba(15,118,110,0.05)',
 ];
 
 const BAR_COLOR = [

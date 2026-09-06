@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
-import { Square, Check } from 'lucide-react';
+import { Square, Check, Monitor } from 'lucide-react';
 import { toast } from 'sonner';
 import { saveRecordingBlob } from '@/lib/recordingStore';
 import { canRecordWithCamera, needsIosScreenRecordFlow, pickRecorderMime } from '@/lib/recordingCapabilities';
@@ -154,22 +154,22 @@ export const LandingScreenRecorder = ({ onRecorded, recorded }) => {
 
     const live = recording;
     const ready = recorded && !live;
-    const label = live ? fmt(seconds) : ready ? 'Saved' : starting ? 'Starting' : 'Record';
+    const label = live ? `Stop ${fmt(seconds)}` : ready ? 'Screen saved' : starting ? 'Starting…' : 'Record screen';
 
     return (
         <>
             <button
                 type="button"
-                className={`landing-ask-rec landing-loom-rec${live ? ' is-live' : ''}${ready ? ' is-ready' : ''}${starting && !live ? ' is-starting' : ''}`}
+                className={`landing-ask-rec landing-screen-rec${live ? ' is-live' : ''}${ready ? ' is-ready' : ''}${starting && !live ? ' is-starting' : ''}`}
                 onClick={live ? stop : start}
                 disabled={starting && !live}
                 data-testid={live ? 'landing-record-stop' : 'landing-record-screen'}
-                aria-label={live ? `Stop ${fmt(seconds)}` : ready ? 'Saved. Record again' : starting ? 'Starting' : 'Record'}
-                title={live ? 'Stop' : ready ? 'Record again' : 'Record'}
+                aria-label={live ? `Stop screen recording ${fmt(seconds)}` : ready ? 'Screen saved. Record screen again' : starting ? 'Starting screen recording' : 'Record screen'}
+                title={live ? 'Stop screen recording' : ready ? 'Record screen again' : 'Record screen'}
                 aria-pressed={live}
             >
-                <span className="landing-loom-dot" aria-hidden>
-                    {live ? <Square className="landing-ask-rec-stop" /> : ready ? <Check className="landing-ask-rec-check" /> : null}
+                <span className="landing-screen-rec-icon" aria-hidden>
+                    {live ? <Square className="landing-ask-rec-stop" /> : ready ? <Check className="landing-ask-rec-check" /> : <Monitor className="landing-screen-rec-monitor" />}
                 </span>
                 <span className="landing-ask-rec-label">{label}</span>
             </button>

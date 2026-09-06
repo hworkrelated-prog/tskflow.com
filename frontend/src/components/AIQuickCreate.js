@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Video, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
+import { Sparkles, X, Users, User as UserIcon, ChevronDown, Check, Loader2, MessageCircleQuestion, Plus, Monitor, Image as ImageIcon, Paperclip, FileText, Mic, MicOff, Bold, Italic, List, ArrowUp, Repeat } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@/components/DateTimePicker';
 import { uploadBlob, fileUrl } from '@/lib/upload';
@@ -3269,8 +3269,8 @@ const AIQuickCreate = ({
                                         aria-label={needsIosScreenRecordFlow() ? 'Speak to send' : 'Record screen'}
                                         data-testid="ai-record-btn"
                                     >
-                                        <Video className="w-4 h-4" strokeWidth={1.75} />
-                                        <span className="text-xs font-medium leading-none">Record</span>
+                                        <Monitor className="w-4 h-4" strokeWidth={1.75} />
+                                        <span className="text-xs font-medium leading-none">Record screen</span>
                                     </button>
                                     {plusOpen && (
                                         <div
@@ -3288,7 +3288,7 @@ const AIQuickCreate = ({
                                                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                                 data-testid="ai-screen-record-btn"
                                             >
-                                                <Video className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+                                                <Monitor className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
                                                 Record screen
                                             </button>
                                             <button

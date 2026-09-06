@@ -52,13 +52,12 @@
 }
 
 .gradient-mesh {
-    background: radial-gradient(ellipse at top right, hsl(168 45% 94%) 0%, hsl(210 20% 98%) 50%, white 100%);
+    background: hsl(var(--background));
 }
 
 .glass-header {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    background: hsl(var(--background));
+    border-bottom: 1px solid hsl(var(--border));
 }
 
 .subscription-badge-free {
@@ -576,7 +575,7 @@
 
 /* Marketing landing is always brand-dark - app light/minimal must not bleach it. */
 body.landing-active {
-    background: #050807 !important;
+    background: #09090b !important;
     color: #ffffff !important;
 }
 .landing-page,
@@ -587,7 +586,7 @@ body.landing-active {
 [data-theme="light"] .landing-page.min-h-screen,
 [data-theme="dark"] .landing-page.min-h-screen,
 [data-theme="minimal"] .landing-page.min-h-screen {
-    background-color: #050807 !important;
+    background-color: #09090b !important;
     color: #ffffff !important;
 }
 .landing-page.landing-tool {
@@ -1469,22 +1468,23 @@ html:has(body.landing-active) {
 }
 .landing-story-glow {
     position: absolute;
-    width: min(62rem, 90vw);
-    height: min(62rem, 90vw);
+    width: min(42rem, 70vw);
+    height: min(42rem, 70vw);
     border-radius: 999px;
-    filter: blur(90px);
+    filter: blur(110px);
     transition: background-color 1.2s ease;
     will-change: background-color;
+    opacity: 0.45;
 }
 .landing-story-glow--a {
     top: -18%;
     left: -16%;
-    background: rgba(45, 212, 191, 0.11);
+    background: rgba(45, 212, 191, 0.06);
 }
 .landing-story-glow--b {
     bottom: -22%;
     right: -18%;
-    background: rgba(15, 118, 110, 0.09);
+    background: rgba(15, 118, 110, 0.05);
 }
 
 /* Hero scroll cue: most first-time visitors don't know there's a whole
@@ -3166,6 +3166,135 @@ html:has(body.landing-active) {
     margin-top: 0.75rem;
     color: rgba(255, 255, 255, 0.48);
 }
+.landing-meet-cta {
+    display: block;
+    width: 100%;
+    max-width: 28rem;
+    margin: 1.35rem auto 0;
+    padding: 0.95rem 1.25rem;
+    border: 0;
+    border-radius: 999px;
+    background: #2dd4bf;
+    color: #042f2e;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(0.78rem, 2.4vw, 0.92rem);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.25;
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(45, 212, 191, 0.28);
+}
+.landing-meet-cta:hover {
+    background: #5eead4;
+}
+.landing-meet-page {
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+}
+.landing-meet-headline {
+    margin: 0 0 0.55rem;
+    font-family: Outfit, sans-serif;
+    font-size: clamp(1.45rem, 4vw, 2.1rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.15;
+}
+.landing-meet-line {
+    margin: 0 0 1.25rem;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 1.02rem;
+}
+.landing-meet-notes {
+    width: 100%;
+    min-height: 12rem;
+    padding: 1rem 1.05rem;
+    border: 0;
+    border-radius: 1.15rem;
+    background: #121816;
+    color: #f8fafc;
+    font-size: 1.02rem;
+    line-height: 1.5;
+    resize: vertical;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    outline: none;
+}
+.landing-meet-notes:focus {
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.55);
+}
+.landing-meet-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+.landing-meet-ghost {
+    height: 3rem;
+    padding: 0 1.15rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: transparent;
+    color: rgba(248, 250, 252, 0.86);
+    font-weight: 600;
+    cursor: pointer;
+}
+.landing-meet-ghost:hover {
+    border-color: rgba(45, 212, 191, 0.45);
+    color: #ccfbf1;
+}
+.landing-meet-list {
+    list-style: none;
+    margin: 1.35rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+.landing-meet-list li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    border-radius: 1rem;
+    background: #121816;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.landing-meet-list li.is-dropped {
+    opacity: 0.4;
+}
+.landing-meet-keep {
+    align-self: start;
+    margin-top: 0.15rem;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(45, 212, 191, 0.18);
+    color: #99f6e4;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.landing-meet-title {
+    margin: 0;
+    font-weight: 600;
+    color: #f8fafc;
+}
+.landing-meet-who {
+    margin: 0.2rem 0 0.55rem;
+    font-size: 0.86rem;
+    color: rgba(204, 251, 241, 0.7);
+}
+.landing-meet-email {
+    height: 2.4rem;
+    background: #0b0f0e !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+.landing-meet-send {
+    margin-top: 1.1rem;
+    width: 100%;
+}
 .landing-page .landing-composer .ai-prompt-placeholder {
     color: rgba(255, 255, 255, 0.38);
     font-size: 0.95rem;
@@ -4487,63 +4616,63 @@ html:has(body.landing-active) {
     }
 }
 
-/* Loom-style record control */
-.landing-page .landing-loom-rec {
-    min-height: 2.35rem;
-    padding: 0 0.9rem 0 0.55rem;
+/* Screen recorder — monitor + words, not a red surveillance pip */
+.landing-page .landing-screen-rec {
+    min-height: 2.4rem;
+    padding: 0 0.95rem 0 0.7rem;
     gap: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(12, 16, 15, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: transparent;
     color: #f8fafc;
     box-shadow: none;
+    border-radius: 0.7rem;
 }
-.landing-loom-dot {
-    width: 0.78rem;
-    height: 0.78rem;
-    border-radius: 999px;
-    background: #e11d48;
-    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.18);
+.landing-screen-rec-icon {
+    width: 1.15rem;
+    height: 1.15rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: #99f6e4;
     flex-shrink: 0;
 }
-.landing-page .landing-loom-rec .landing-ask-rec-label {
+.landing-screen-rec-monitor {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+.landing-page .landing-screen-rec .landing-ask-rec-label {
     display: inline;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     font-weight: 600;
     letter-spacing: -0.01em;
 }
-.landing-page .landing-loom-rec.is-live {
+.landing-page .landing-screen-rec:hover {
+    border-color: rgba(45, 212, 191, 0.55);
+    background: rgba(45, 212, 191, 0.08);
+}
+.landing-page .landing-screen-rec.is-live {
     background: #e11d48;
     border-color: transparent;
     color: #fff;
 }
-.landing-page .landing-loom-rec.is-live .landing-loom-dot {
-    background: #fff;
-    box-shadow: none;
-    border-radius: 0.16rem;
-    width: 0.62rem;
-    height: 0.62rem;
-    color: #e11d48;
+.landing-page .landing-screen-rec.is-live .landing-screen-rec-icon {
+    color: #fff;
 }
-.landing-page .landing-loom-rec.is-ready .landing-loom-dot {
-    background: #2dd4bf;
-    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
-    color: #042f2e;
+.landing-page .landing-screen-rec.is-ready .landing-screen-rec-icon {
+    color: #2dd4bf;
 }
-.landing-page .landing-loom-rec:hover {
-    border-color: rgba(225, 29, 72, 0.55);
-}
-.landing-page .landing-loom-rec:focus-visible {
-    outline: 2px solid #fb7185;
+.landing-page .landing-screen-rec:focus-visible {
+    outline: 2px solid #5eead4;
     outline-offset: 3px;
 }
-@media (max-width: 48rem) {
-    .landing-page .landing-loom-rec .landing-ask-rec-label {
-        display: inline;
-    }
+.landing-page .landing-ask-rec-stop {
+    width: 0.7rem;
+    height: 0.7rem;
+    fill: currentColor;
+}
+.landing-page .landing-ask-rec-check {
+    width: 0.95rem;
+    height: 0.95rem;
 }
 
 /* Real Meet / Slack / Gmail */

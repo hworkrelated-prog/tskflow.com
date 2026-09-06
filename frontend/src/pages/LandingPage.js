@@ -295,9 +295,9 @@ const LandingPage = () => {
     }, [value]);
 
     return (
-        <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#050807' }} data-testid="landing-page">
+        <div className="landing-page landing-tool landing-visual min-h-screen text-white flex flex-col" style={{ background: '#09090b' }} data-testid="landing-page">
             {tab === 'story' ? <LandingStoryAtmosphere targetRef={storyRef} /> : null}
-            <header className="relative z-20 shrink-0 sticky top-0 bg-[#050807]/90 backdrop-blur-sm" data-testid="landing-toolbar">
+            <header className="relative z-20 shrink-0 sticky top-0 bg-[#09090b]" data-testid="landing-toolbar">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 landing-toolbar-row flex items-center gap-3">
                     <div className="landing-toolbar-lead">
                         <button
@@ -367,14 +367,14 @@ const LandingPage = () => {
                                 <LandingFilm />
 
                                 <section className="landing-final" data-testid="landing-final">
-                                    <p className="landing-section-kicker">Start</p>
-                                    <h2 className="landing-final-headline" data-testid="landing-final-headline">
+                                    <p className="sr-only landing-section-kicker">Start</p>
+                                    <h2 className="sr-only landing-final-headline" data-testid="landing-final-headline">
                                         Stop being the reminder system.
                                     </h2>
-                                    <p className="landing-final-support" data-testid="landing-final-support">
+                                    <p className="sr-only landing-final-support" data-testid="landing-final-support">
                                         Your team already said yes. TskFlow makes sure the commitment doesn't disappear.
                                     </p>
-                                    <ol className="landing-hero-plot landing-final-plot" data-testid="landing-final-plot">
+                                    <ol className="sr-only landing-hero-plot landing-final-plot" data-testid="landing-final-plot">
                                         <li><i>1</i><span><b>They said yes</b> in the meeting.</span></li>
                                         <li><i>2</i><span><b>You used to chase</b> them after.</span></li>
                                         <li><i>3</i><span><b>TskFlow chases</b> them now. Try it below.</span></li>
@@ -387,6 +387,17 @@ const LandingPage = () => {
                                         value={value}
                                         setValue={setValue}
                                     />
+                                    <button
+                                        type="button"
+                                        className="landing-meet-cta"
+                                        data-testid="landing-meeting-cta"
+                                        onClick={() => {
+                                            trackLandingInteract('meeting');
+                                            navigate('/demo/meeting');
+                                        }}
+                                    >
+                                        TAKE TSKFLOW TO YOUR NEXT MEETING
+                                    </button>
                                 </section>
                             </div>
                         </motion.div>

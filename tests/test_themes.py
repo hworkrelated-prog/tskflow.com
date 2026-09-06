@@ -19,6 +19,16 @@ def test_theme_helper_persists_and_validates():
     assert "['light', 'dark', 'minimal']" in src or '"light", "dark", "minimal"' in src
 
 
+def test_app_surfaces_are_flat_not_glassy():
+    css = _read("App.css")
+    mesh = css.split(".gradient-mesh {")[1].split("}")[0]
+    header = css.split(".glass-header {")[1].split("}")[0]
+    assert "radial-gradient" not in mesh
+    assert "backdrop-filter" not in header
+    assert "hsl(var(--background))" in mesh
+    assert "hsl(var(--background))" in header
+
+
 def test_theme_applies_on_auth_and_settings():
     app = _read("App.js")
     settings = _read("pages", "SettingsPage.js")
