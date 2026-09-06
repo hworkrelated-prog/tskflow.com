@@ -13,6 +13,7 @@ axios.interceptors.response.use((res) => {
 });
 
 import LandingPage from '@/pages/LandingPage';
+import DemoMeetingPage from '@/pages/DemoMeetingPage';
 import RegistrationPage from '@/pages/RegistrationPage';
 import JoinInvitePage from '@/pages/JoinInvitePage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
@@ -483,6 +484,11 @@ function App() {
                     <Route path="/" element={
                         <PublicRoute>
                             <LandingPage />
+                        </PublicRoute>
+                    } />
+                    <Route path="/demo/meeting" element={
+                        <PublicRoute>
+                            <DemoMeetingPage />
                         </PublicRoute>
                     } />
                     <Route path="/register" element={<RegistrationPage />} />

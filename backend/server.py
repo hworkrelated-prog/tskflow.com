@@ -176,6 +176,16 @@ from demo_launch import (
     room_copy,
     split_task_text,
 )
+from demo_meeting import (
+    MAX_NOTES_CHARS,
+    MIN_NOTES_CHARS,
+    SAMPLE_MEETING,
+    drafts_for_client,
+    due_date_for_send,
+    extract_meeting_tasks,
+    meeting_notes_text,
+    sendable_tasks,
+)
 from product_analytics import (
     DAILY_SEND_HOUR_PST,
     DIGEST_COLLECTION,
@@ -360,6 +370,26 @@ class RecordingCreateRequest(BaseModel):
 class DemoLaunchRequest(BaseModel):
     task: str
     assignee_email: Optional[str] = None
+    channel: Optional[str] = "email"
+    session_id: Optional[str] = None
+
+
+class DemoMeetingNotesRequest(BaseModel):
+    transcript: Optional[str] = None
+    use_sample: Optional[bool] = False
+    session_id: Optional[str] = None
+
+
+class DemoMeetingSendItem(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assignee_email: str
+    assignee_name: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+class DemoMeetingSendRequest(BaseModel):
+    tasks: List[DemoMeetingSendItem]
     channel: Optional[str] = "email"
     session_id: Optional[str] = None
 
@@ -5890,6 +5920,136 @@ async def demo_launch(
         "delivery": delivery,
         "due_date": payload.due_date,
         "copy": room_copy(assignee_name=assignee_name, delivered=deliver_for_real),
+    }
+
+
+@api_router.post("/demo/meeting-notes")
+async def demo_meeting_notes(body: DemoMeetingNotesRequest, http_request: HTTPRequest):
+    """Parse pasted meeting notes into a short keep/drop list. No account."""
+    text = meeting_notes_text(body.transcript, bool(body.use_sample))
+    if len(text) < MIN_NOTES_CHARS:
+        raise HTTPException(status_code=400, detail="Type or paste what people said.")
+    if len(text) > MAX_NOTES_CHARS:
+        text = text[:MAX_NOTES_CHARS]
+
+    now = get_pst_now()
+    drafts = drafts_for_client(extract_meeting_tasks(text, now, parse_date=_fallback_parse_date_expression))
+    if not drafts:
+        raise HTTPException(status_code=400, detail="No assignable tasks. Name who will do what.")
+    return {
+        "transcript": SAMPLE_MEETING.strip() if body.use_sample else text,
+        "sample": bool(body.use_sample),
+        "drafts": drafts,
+    }
+
+
+@api_router.post("/demo/meeting-send")
+async def demo_meeting_send(
+    body: DemoMeetingSendRequest,
+    http_request: HTTPRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Turn kept meeting tasks into a guest session and send each one. Free."""
+    tasks = sendable_tasks(
+        [item.model_dump() if hasattr(item, "model_dump") else item.dict() for item in (body.tasks or [])],
+        is_valid_email=is_valid_assignee_email,
+    )
+    if not tasks:
+        raise HTTPException(status_code=400, detail="Add an email next to who owns it.")
+
+    ip_hash = _request_ip_hash(http_request)
+    now = get_pst_now()
+    if ip_hash:
+        hour_ago = (now - timedelta(hours=1)).isoformat()
+        recent = await db.users.count_documents(
+            {"is_guest": True, "guest_ip_hash": ip_hash, "created_at": {"$gte": hour_ago}}
+        )
+        if launch_rate_limited(recent, LAUNCHES_PER_HOUR):
+            raise HTTPException(
+                status_code=429,
+                detail="That is a lot of demo sends. Create an account to keep going.",
+            )
+
+    channel = demo_channel(body.channel)
+    guest_id = str(uuid.uuid4())
+    guest = guest_user_doc(
+        guest_id=guest_id,
+        now=now,
+        ip_hash=ip_hash,
+        email=guest_email(guest_id),
+    )
+    guest["password_hash"] = get_password_hash(secrets.token_urlsafe(24))
+    await db.users.insert_one(dict(guest))
+
+    created_ids = []
+    first_assignee = None
+    fallback_due = eod_due_date(now)
+    resend_ready = bool(os.getenv("RESEND_API_KEY"))
+    for item in tasks:
+        email = normalize_assignee_email(item["assignee_email"])
+        name = item["assignee_name"] or assignee_display_name(email)
+        payload = TaskCreate(
+            title=item["title"],
+            description=item["description"],
+            assigned_to=email,
+            due_date=due_date_for_send(item.get("due_date"), fallback_due),
+            priority="Medium",
+            category="General",
+        )
+        created = await create_task(payload, background_tasks, current_user=guest)
+        await db.tasks.update_one(
+            {"id": created.id},
+            {"$set": {
+                "source": "landing_demo",
+                "company_domain": guest.get("company_domain"),
+                "demo_channel": channel,
+                "demo_delivered": True,
+                "assigned_to_name": name,
+                "demo_from_meeting": True,
+            }},
+        )
+        task = await db.tasks.find_one({"id": created.id}, {"_id": 0})
+        await _seed_robot_room(task or {"id": created.id, "title": item["title"]}, guest, name, channel, True)
+        created_ids.append(created.id)
+        if first_assignee is None:
+            first_assignee = {"email": email, "name": name}
+
+    delivery = "sent" if resend_ready else "queued"
+    await record_product_event(
+        "demo_launch",
+        session_id=body.session_id,
+        ip_hash=ip_hash,
+        user_id=guest_id,
+        meta={"channel": channel, "delivery": delivery, "source": "meeting", "count": len(created_ids)},
+    )
+    await record_product_event(
+        "demo_send",
+        session_id=body.session_id,
+        ip_hash=ip_hash,
+        user_id=guest_id,
+        meta={"channel": channel, "delivery": delivery, "source": "meeting", "count": len(created_ids)},
+    )
+
+    first_id = created_ids[0]
+    access_token = create_access_token(data={"sub": guest_id})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": guest_id,
+            "name": guest["name"],
+            "email": guest["email"],
+            "subscription_tier": "free",
+            "email_verified": True,
+            "is_guest": True,
+        },
+        "task_id": first_id,
+        "task_ids": created_ids,
+        "environment_url": f"/env/{first_id}",
+        "assignee": {**(first_assignee or {}), "sample": False},
+        "channel": channel,
+        "delivery": delivery,
+        "copy": room_copy(assignee_name=(first_assignee or {}).get("name") or "your assignee", delivered=True),
     }
 
 

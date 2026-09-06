@@ -522,6 +522,8 @@ def test_landing_says_the_point_in_plain_english():
     assert "After yes, you become the reminder system." in film
     assert "TskFlow does the reminding so you do not." in film
     assert 'data-testid="landing-final-plot"' in landing
+    assert "TAKE TSKFLOW TO YOUR NEXT MEETING" in landing
+    assert 'data-testid="landing-meeting-cta"' in landing
     assert "landing-prompt-readback" in landing
     assert "DEMO_PEOPLE.length" in landing
     assert "ai-prompt-placeholder" in landing
