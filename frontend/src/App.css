@@ -1612,7 +1612,6 @@ html:has(body.landing-active) {
     }
     .landing-scroll-cue-icon,
     .landing-page .landing-cta-glow::after,
-    .landing-hero-poster-still,
     .landing-sign-in {
         animation: none !important;
     }
@@ -4483,87 +4482,30 @@ html:has(body.landing-active) {
     justify-content: flex-start;
     text-align: center;
     min-height: 0;
-    padding: 0.85rem 1.15rem 1.5rem;
+    padding: 1.6rem 1.15rem 1.5rem;
     background: #09090b;
 }
 .landing-hero-poster {
     position: relative;
     width: min(52rem, 100%);
-    aspect-ratio: 16 / 10;
-    max-height: min(38rem, 64svh);
-    margin: 0 auto 1.25rem;
-    border-radius: 1.45rem;
-    overflow: hidden;
-    background: #070b0a;
-    box-shadow:
-        0 32px 80px rgba(0, 0, 0, 0.58),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-}
-.landing-hero-poster-still {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transform-origin: 58% 38%;
-    animation: landing-hero-drift 22s ease-out forwards;
-}
-@keyframes landing-hero-drift {
-    from { transform: scale(1.02); }
-    to { transform: scale(1.1) translate3d(-1.4%, 1.1%, 0); }
-}
-.landing-hero-poster-veil {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: linear-gradient(
-        180deg,
-        rgba(5, 8, 7, 0.42) 0%,
-        rgba(5, 8, 7, 0.12) 34%,
-        rgba(5, 8, 7, 0.55) 64%,
-        rgba(5, 8, 7, 0.94) 100%
-    );
-}
-.landing-hero-poster-kicker {
-    position: absolute;
-    top: 1.05rem;
-    left: 1rem;
-    right: 1rem;
-    z-index: 2;
-    margin: 0;
-}
-.landing-hero-poster-copy {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 1.2rem 1.35rem 1.25rem;
-}
-.landing-hero-poster .landing-payoff-title {
-    margin: 0;
-    max-width: 13.5em;
-    font-size: clamp(1.7rem, 4.8vw, 2.85rem);
-    text-shadow: 0 2px 28px rgba(0, 0, 0, 0.7);
-}
-.landing-hero-poster .landing-peek-wrap--still {
-    margin: 0.85rem 0 0;
+    margin: 0 auto 1.35rem;
+    padding: 0.7rem;
+    border-radius: 1.25rem;
+    background: #0c0f0e;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 .landing-payoff-hero .landing-hero-kicker {
-    margin-bottom: 0;
+    margin-bottom: 0.95rem;
 }
 .landing-payoff-title {
     margin: 0 auto 1.35rem;
     font-family: Outfit, sans-serif;
-    font-size: clamp(1.85rem, 5.2vw, 2.75rem);
-    font-weight: 600;
-    letter-spacing: -0.045em;
-    line-height: 1.18;
+    font-size: clamp(1.95rem, 5.6vw, 3.05rem);
+    font-weight: 650;
+    letter-spacing: -0.05em;
+    line-height: 1.12;
     color: #f8fafc;
-    max-width: 16em;
+    max-width: 14em;
 }
 .landing-hero-plot {
     list-style: none;
@@ -4575,21 +4517,22 @@ html:has(body.landing-active) {
     width: min(26rem, 100%);
     text-align: left;
 }
-.landing-hero-plot--dive {
+.landing-hero-plot--lanes {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.7rem;
-    width: min(52rem, 100%);
-    margin: 0 auto 1.35rem;
+    gap: 0.6rem;
+    width: 100%;
+    margin: 0;
 }
-.landing-hero-plot--dive > li {
+.landing-hero-plot--lanes > li {
     display: block;
 }
-.landing-hero-plot--dive button {
+.landing-hero-plot--lanes button {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.55rem;
     width: 100%;
+    height: 100%;
     padding: 0;
     border: 0;
     background: transparent;
@@ -4597,26 +4540,51 @@ html:has(body.landing-active) {
     text-align: left;
     cursor: pointer;
 }
-.landing-hero-plot--dive img {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    border-radius: 0.9rem;
-    box-shadow:
-        0 16px 36px rgba(0, 0, 0, 0.42),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-.landing-hero-plot--dive button:hover img {
-    transform: translateY(-3px);
-    box-shadow:
-        0 22px 44px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(45, 212, 191, 0.35);
-}
 .landing-hero-plot-copy {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
+}
+.landing-hero-lane {
+    flex: 1;
+    padding: 0.7rem 0.75rem 0.8rem;
+    border-radius: 0.9rem;
+    background: #141716;
+    text-align: left;
+}
+.landing-hero-lane em {
+    display: block;
+    margin: 0 0 0.45rem;
+    font-style: normal;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.38);
+}
+.landing-hero-lane p {
+    margin: 0.4rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.72);
+}
+.landing-hero-lane p b {
+    display: block;
+    margin-bottom: 0.08rem;
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    font-weight: 650;
+}
+.landing-hero-lane--flow {
+    background: rgba(15, 42, 39, 0.92);
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.28);
+}
+.landing-hero-lane--flow em {
+    color: #5eead4;
+}
+.landing-hero-plot--lanes button:hover .landing-hero-lane {
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.4);
 }
 .landing-hero-plot li {
     display: flex;
@@ -4626,7 +4594,7 @@ html:has(body.landing-active) {
     line-height: 1.35;
     color: rgba(255, 255, 255, 0.78);
 }
-.landing-hero-plot--dive li {
+.landing-hero-plot--lanes li {
     font-size: 0.92rem;
 }
 .landing-hero-plot i {
@@ -4779,18 +4747,16 @@ html:has(body.landing-active) {
     }
     .landing-payoff-hero {
         min-height: 0;
-        padding: 0.7rem 0.9rem 1.5rem;
+        padding: 1.15rem 0.9rem 1.5rem;
         justify-content: flex-start;
     }
     .landing-hero-poster {
-        max-height: min(28rem, 52svh);
-        border-radius: 1.15rem;
+        padding: 0.55rem;
+        border-radius: 1.05rem;
     }
-    .landing-hero-plot--dive {
-        gap: 0.45rem;
-    }
-    .landing-hero-plot--dive li {
-        font-size: 0.8rem;
+    .landing-hero-plot--lanes {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
     }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4808,11 +4774,6 @@ html:has(body.landing-active) {
     .landing-payoff-know {
         opacity: 1;
         transform: none;
-    }
-    .landing-hero-poster-still,
-    .landing-hero-plot--dive img {
-        animation: none !important;
-        transform: none !important;
     }
 }
 
