@@ -511,6 +511,10 @@ def test_landing_film_scrubs_one_line_per_scroll():
     assert "landing-hero-poster" in css
     assert "landing-back-top" in css
     assert ".landing-sign-in" in css
+    sign = css.split(".landing-sign-in {")[1].split("}")[0]
+    assert "#2dd4bf" in sign
+    assert "#042f2e" in sign
+    assert "landing-sign-in-pulse" in css
     assert "min-height: calc(100svh - 4.5rem)" not in css.split(".landing-payoff-hero {")[1].split("}")[0]
     assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")

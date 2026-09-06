@@ -728,16 +728,42 @@ html:has(body.landing-active) {
     color: #ffffff;
 }
 .landing-sign-in {
-    border: 1px solid rgba(45, 212, 191, 0.58) !important;
-    background: rgba(45, 212, 191, 0.18) !important;
-    color: #ccfbf1 !important;
-    font-weight: 650;
-    box-shadow: 0 0 18px rgba(45, 212, 191, 0.28);
+    height: 2.4rem !important;
+    padding: 0 1.15rem !important;
+    border: 0 !important;
+    background: #2dd4bf !important;
+    color: #042f2e !important;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    box-shadow:
+        0 0 0 1px rgba(45, 212, 191, 0.35),
+        0 8px 22px rgba(45, 212, 191, 0.4);
+    animation: landing-sign-in-pulse 2.8s ease-out infinite;
 }
 .landing-sign-in:hover {
-    background: rgba(45, 212, 191, 0.3) !important;
-    color: #f0fdfa !important;
-    box-shadow: 0 0 22px rgba(45, 212, 191, 0.4);
+    background: #5eead4 !important;
+    color: #042f2e !important;
+    box-shadow:
+        0 0 0 1px rgba(94, 234, 212, 0.5),
+        0 10px 26px rgba(45, 212, 191, 0.55);
+}
+@keyframes landing-sign-in-pulse {
+    0% {
+        box-shadow:
+            0 0 0 0 rgba(45, 212, 191, 0.5),
+            0 8px 22px rgba(45, 212, 191, 0.4);
+    }
+    70% {
+        box-shadow:
+            0 0 0 10px rgba(45, 212, 191, 0),
+            0 8px 22px rgba(45, 212, 191, 0.4);
+    }
+    100% {
+        box-shadow:
+            0 0 0 0 rgba(45, 212, 191, 0),
+            0 8px 22px rgba(45, 212, 191, 0.4);
+    }
 }
 .landing-brand-btn {
     display: inline-flex;
@@ -1586,7 +1612,8 @@ html:has(body.landing-active) {
     }
     .landing-scroll-cue-icon,
     .landing-page .landing-cta-glow::after,
-    .landing-hero-poster-still {
+    .landing-hero-poster-still,
+    .landing-sign-in {
         animation: none !important;
     }
 }
