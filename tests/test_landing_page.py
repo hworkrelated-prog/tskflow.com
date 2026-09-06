@@ -461,19 +461,21 @@ def test_landing_story_is_shown_not_told():
     assert "ai productivity platform" not in hero.lower()
 
 
-def test_landing_film_is_three_slow_chapters():
-    """The story is three held pins, not one 12-scene flash."""
+def test_landing_film_is_three_short_beats():
+    """The story is three stills, not a 30-screen sticky pin."""
     film = (FRONT / "components" / "LandingFilm.js").read_text(encoding="utf-8")
     pin = (FRONT / "components" / "LandingPinBeat.js").read_text(encoding="utf-8")
     hero = (FRONT / "components" / "LandingPayoff.js").read_text(encoding="utf-8")
-    assert film.count("<LandingPinBeat") >= 3
+    assert film.count("<StoryBeat") >= 3
+    assert "landing-story-beat" in film
     assert "step={1}" in film and "step={2}" in film and "step={3}" in film
     assert "The meeting" in film
     assert "You chase" in film
     assert "TskFlow takes it" in film
-    assert "spans={9.5}" in film
-    assert "spans={11.5}" in film
-    assert "spans={10}" in film
+    assert "spans={9.5}" not in film
+    assert "spans={11.5}" not in film
+    assert "spans={10}" not in film
+    assert "<LandingPinBeat" not in film
     assert "{step} of {totalSteps}" in pin
     assert "navLabel" in film
     assert "blur(" not in pin
@@ -497,6 +499,8 @@ def test_landing_film_is_three_slow_chapters():
     now = css.split(".landing-pin-now {")[1].split("}")[0]
     assert "clamp(1.55rem" in now
     assert "landing-dora-caption" in css
+    assert "landing-story-beat" in css
+    assert "min-height: calc(100svh - 4.5rem)" not in css.split(".landing-payoff-hero {")[1].split("}")[0]
     assert "/landing/story/" in (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     dora = (FRONT / "components" / "LandingDoraSequence.js").read_text(encoding="utf-8")
     assert "REACT_APP_DORA_STORY_URL" in dora

@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import {
-    AnimatePresence,
     motion,
+    useMotionValue,
     useMotionValueEvent,
-    useReducedMotion,
     useTransform,
 } from 'framer-motion';
 import {
@@ -26,7 +25,6 @@ import {
     Users,
     Video,
 } from 'lucide-react';
-import LandingPinBeat, { BeatStage } from '@/components/LandingPinBeat';
 import LandingDoraSequence, {
     CATCH_FRAMES,
     FLOW_FRAMES,
@@ -102,14 +100,6 @@ const CHASE_LINES = [
     "What's the status?",
 ];
 
-function captionFor(beats, v) {
-    let beat = beats[0];
-    for (const item of beats) {
-        if (v >= item.at) beat = item;
-    }
-    return beat;
-}
-
 function lineFor(v) {
     let line = LINES[0];
     for (const item of LINES) {
@@ -118,31 +108,64 @@ function lineFor(v) {
     return line;
 }
 
-function ScrubCaption({ progress, beats, testId }) {
-    const reduce = useReducedMotion();
-    const [beat, setBeat] = useState(() => captionFor(beats, progress.get()));
-    useMotionValueEvent(progress, 'change', (v) => setBeat(captionFor(beats, v)));
-    const n = Math.max(1, beats.indexOf(beat) + 1);
-
+function StoryBeat({
+    testId,
+    doraId,
+    captionId,
+    actId,
+    step,
+    totalSteps = 3,
+    label,
+    navLabel,
+    thesis,
+    frames,
+    line,
+    captions,
+    children,
+}) {
+    const progress = useMotionValue(1);
     return (
-        <div className="landing-dora-caption" data-testid={testId} aria-live="polite">
-            <p className="landing-pin-beat-count">
-                {n} of {beats.length}
+        <section
+            className="landing-story-beat"
+            id={testId}
+            data-testid={testId}
+            aria-label={thesis || label}
+        >
+            <div className="landing-pin-kicker" aria-hidden="true" data-testid={`${testId}-kicker`}>
+                <span className="landing-pin-kicker-dots">
+                    {Array.from({ length: totalSteps }, (_, i) => (
+                        <i
+                            key={i}
+                            className={i + 1 === step ? 'is-now' : i + 1 < step ? 'is-done' : ''}
+                        />
+                    ))}
+                </span>
+                <span className="landing-pin-kicker-text">
+                    {step} of {totalSteps}
+                    {navLabel ? <b>{navLabel}</b> : null}
+                </span>
+            </div>
+            <p className="sr-only landing-pin-thesis" data-testid={`${testId}-thesis`}>
+                {thesis}
             </p>
-            <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                    key={beat.text}
-                    className="landing-pin-now"
-                    initial={reduce ? false : { opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduce ? { opacity: 1 } : { opacity: 0, y: -10 }}
-                    transition={reduce ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                >
-                    {beat.text}
-                    <span className="sr-only">{beat.lock}</span>
-                </motion.p>
-            </AnimatePresence>
-        </div>
+            <div className="landing-film-stage landing-dora-stage">
+                <div className="landing-dora-card">
+                    <LandingDoraSequence progress={progress} frames={frames} testId={doraId} />
+                    <div className="landing-dora-caption" data-testid={captionId}>
+                        <p className="landing-pin-beat-count">{step} of {totalSteps}</p>
+                        <p className="landing-pin-now">
+                            {line}
+                            {captions.map((beat) => (
+                                <span className="sr-only" key={beat.lock}>{beat.lock}</span>
+                            ))}
+                        </p>
+                    </div>
+                </div>
+                <div className="sr-only" data-testid={actId}>
+                    {children(progress)}
+                </div>
+            </div>
+        </section>
     );
 }
 
@@ -150,77 +173,54 @@ export default function LandingFilm() {
     return (
         <div id="landing-film" data-testid="landing-film">
             <LandingDoraEmbed />
-            <LandingPinBeat
+            <StoryBeat
                 testId="landing-film-meet"
+                doraId="landing-dora-meet"
+                captionId="landing-film-caption"
+                actId="landing-meet-act"
                 label="The meeting"
                 navLabel="They said yes"
                 thesis="They said yes. Then the meeting ended."
                 step={1}
                 totalSteps={3}
-                spans={9.5}
+                frames={[MEET_FRAMES[1]]}
+                line="Maya said yes. Chris and Priya said yes too."
+                captions={MEET_CAPTIONS}
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={MEET_FRAMES} testId="landing-dora-meet" />
-                                <ScrubCaption progress={progress} beats={MEET_CAPTIONS} testId="landing-film-caption" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-meet-act">
-                                <MeetScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
-
-            <LandingPinBeat
+                {(progress) => <MeetScene progress={progress} />}
+            </StoryBeat>
+            <StoryBeat
                 testId="landing-film-catch"
+                doraId="landing-dora-catch"
+                captionId="landing-film-caption-catch"
+                actId="landing-catch-act"
                 label="You chase"
                 navLabel="You become the nag"
                 thesis="After yes, you become the reminder system."
                 step={2}
                 totalSteps={3}
-                spans={11.5}
+                frames={[CATCH_FRAMES[0]]}
+                line="You ping them yourself. You are the nag now."
+                captions={CATCH_CAPTIONS}
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={CATCH_FRAMES} testId="landing-dora-catch" />
-                                <ScrubCaption progress={progress} beats={CATCH_CAPTIONS} testId="landing-film-caption-catch" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-catch-act">
-                                <CatchScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
-
-            <LandingPinBeat
+                {(progress) => <CatchScene progress={progress} />}
+            </StoryBeat>
+            <StoryBeat
                 testId="landing-film-flow"
+                doraId="landing-dora-flow"
+                captionId="landing-film-caption-flow"
+                actId="landing-flow-act"
                 label="TskFlow takes it"
                 navLabel="TskFlow follows up"
                 thesis="TskFlow does the reminding so you do not."
                 step={3}
                 totalSteps={3}
-                spans={10}
+                frames={FLOW_FRAMES}
+                line="It follows up with Maya. Not you."
+                captions={FLOW_CAPTIONS}
             >
-                {(progress) => (
-                    <>
-                        <BeatStage className="landing-film-stage landing-dora-stage">
-                            <div className="landing-dora-card">
-                                <LandingDoraSequence progress={progress} frames={FLOW_FRAMES} testId="landing-dora-flow" />
-                                <ScrubCaption progress={progress} beats={FLOW_CAPTIONS} testId="landing-film-caption-flow" />
-                            </div>
-                            <div className="sr-only" data-testid="landing-flow-act">
-                                <FlowScene progress={progress} />
-                            </div>
-                        </BeatStage>
-                    </>
-                )}
-            </LandingPinBeat>
+                {(progress) => <FlowScene progress={progress} />}
+            </StoryBeat>
         </div>
     );
 }
