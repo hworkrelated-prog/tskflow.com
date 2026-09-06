@@ -1,7 +1,7 @@
 import React from 'react';
 import { Briefcase, Users, Sparkles, Linkedin, Calendar } from 'lucide-react';
 
-export const FOUNDER_CALENDAR_URL = 'https://calendly.com/hashim-tskflow/30min';
+export const FOUNDER_CALENDAR_URL = 'https://calendly.com/hworkrelated/30min';
 
 const CRED = [
     { id: 'yrs', Icon: Briefcase, label: '~10 yrs in sales' },
